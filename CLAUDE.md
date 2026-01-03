@@ -12,6 +12,7 @@ Migraphe is a migration orchestration tool that manages database/infrastructure 
 
 - **Language**: Java 21 LTS
 - **Build Tool**: Gradle 8.5 (Kotlin DSL)
+- **Dependency Management**: Gradle Version Catalog (centralized in settings.gradle.kts)
 - **Design Approach**: Domain-Driven Design (DDD)
 - **Development Method**: TDD (t-wada style)
 - **Code Formatter**: Spotless (mandatory)
@@ -104,6 +105,33 @@ UP execution → serialize DownTask → store in ExecutionRecord
 - DOWN execution MUST NOT have `serializedDownTask`
 - FAILURE status MUST have `errorMessage`
 
+#### 6. Gradle Version Catalog
+
+**Decision**: Use Gradle Version Catalog for centralized dependency management
+
+**Location**: `settings.gradle.kts`
+
+**Rationale**:
+- Centralized version management across all modules
+- Type-safe dependency references (e.g., `libs.junit.jupiter`)
+- Easier version upgrades and consistency
+- Better IDE support with auto-completion
+
+**Defined versions**:
+- JUnit: 5.10.1
+- AssertJ: 3.25.1
+- Spotless: 6.25.0
+- Google Java Format: 1.19.2
+
+**Usage**:
+```kotlin
+// In build.gradle.kts
+dependencies {
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+}
+```
+
 ### Package Structure
 
 ```
@@ -160,9 +188,9 @@ io.github.migraphe.core/
 ## Critical Files
 
 ### Gradle Configuration
-- `/Users/kakusuke/github/migraphe/settings.gradle.kts`
-- `/Users/kakusuke/github/migraphe/build.gradle.kts`
-- `/Users/kakusuke/github/migraphe/migraphe-core/build.gradle.kts`
+- `settings.gradle.kts` - Project settings + **Version Catalog** (centralized dependency versions)
+- `build.gradle.kts` - Root build configuration (multi-module setup, Spotless)
+- `migraphe-core/build.gradle.kts` - Core module dependencies (uses version catalog)
 
 ### Core Interfaces (Plugins implement these)
 - `MigrationNode.java` - **INTERFACE**
@@ -305,6 +333,21 @@ See `.mise.toml` for configured versions.
 4. Commit changes if working on a feature
 
 This ensures continuity across sessions and maintains project knowledge.
+
+---
+
+## Changelog
+
+### 2026-01-03 (Session 2)
+- **Refactoring**: Migrated to Gradle Version Catalog
+  - Centralized all dependency versions in `settings.gradle.kts`
+  - Updated all build files to use type-safe catalog references
+  - Maintains 100% test pass rate (84 tests)
+
+### 2026-01-03 (Session 1)
+- Initial implementation: Phase 1-7 complete
+- 84 tests, 100% passing
+- Graph visualization in terminal
 
 ---
 

@@ -4,12 +4,12 @@ plugins {
 
 dependencies {
     // JUnit 5
-    testImplementation(platform("org.junit:junit-bom:5.10.1"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testRuntimeOnly(libs.junit.platform.launcher)
 
     // AssertJ
-    testImplementation("org.assertj:assertj-core:3.25.1")
+    testImplementation(libs.assertj.core)
 }
 
 tasks.test {

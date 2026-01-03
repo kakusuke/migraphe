@@ -1,6 +1,6 @@
 plugins {
     id("java")
-    id("com.diffplug.spotless") version "6.25.0" apply false
+    alias(libs.plugins.spotless) apply false
 }
 
 allprojects {
@@ -25,7 +25,7 @@ subprojects {
     configure<com.diffplug.gradle.spotless.SpotlessExtension> {
         java {
             target("src/**/*.java")
-            googleJavaFormat("1.19.2").aosp().reflowLongStrings()
+            googleJavaFormat(libs.versions.googleJavaFormat.get()).aosp().reflowLongStrings()
             removeUnusedImports()
             trimTrailingWhitespace()
             endWithNewline()
