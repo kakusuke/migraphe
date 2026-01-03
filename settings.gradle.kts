@@ -10,6 +10,8 @@ dependencyResolutionManagement {
             version("googleJavaFormat", "1.19.2")
             version("postgresql", "42.7.1")
             version("testcontainers", "1.19.3")
+            version("jackson", "2.18.2")
+            version("picocli", "4.7.7")
 
             // Libraries
             library("junit-bom", "org.junit", "junit-bom").versionRef("junit")
@@ -31,6 +33,17 @@ dependencyResolutionManagement {
             library("testcontainers-junit-jupiter", "org.testcontainers", "junit-jupiter")
                 .withoutVersion()
 
+            // CLI Dependencies
+            library("jackson-databind", "com.fasterxml.jackson.core", "jackson-databind")
+                .versionRef("jackson")
+            library(
+                    "jackson-dataformat-toml",
+                    "com.fasterxml.jackson.dataformat",
+                    "jackson-dataformat-toml"
+                )
+                .versionRef("jackson")
+            library("picocli", "info.picocli", "picocli").versionRef("picocli")
+
             // Plugins
             plugin("spotless", "com.diffplug.spotless").versionRef("spotless")
         }
@@ -39,3 +52,4 @@ dependencyResolutionManagement {
 
 include("migraphe-core")
 include("migraphe-postgresql")
+include("migraphe-cli")
