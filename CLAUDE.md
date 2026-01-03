@@ -6,7 +6,7 @@ Migraphe is a migration orchestration tool that manages database/infrastructure 
 
 **Domain Essence**: Orchestration of migration tasks across multiple environments represented as a directed graph.
 
-**Current Milestone**: Graph visualization in terminal (COMPLETED)
+**Current Milestone**: PostgreSQL Plugin with History Abstraction (COMPLETED)
 
 ## Technical Stack
 
@@ -21,20 +21,23 @@ Migraphe is a migration orchestration tool that manages database/infrastructure 
 
 ## Architecture & Design Decisions
 
-### Core Concepts (The Trinity)
+### Core Concepts
 
-1. **MigrationNode (= Task)** - Interface for migration task nodes
+1. **MigrationNode** - Interface for migration task nodes
    - Each node belongs to an Environment
    - Plugins implement this interface
+   - Provides upTask() and downTask()
 
 2. **MigrationGraph** - DAG aggregate root
    - Ensures graph integrity
    - Cycle detection
    - Topological sorting
 
-3. **MigrationHistory** - Execution history per environment
-   - Audit trail
+3. **HistoryRepository** - Pluggable execution history persistence
+   - Audit trail per environment
    - Tracks executed nodes
+   - Supports multiple backends (in-memory, PostgreSQL, file, S3, etc.)
+   - Abstraction introduced to enable different persistence strategies
 
 ### Interface-Driven Design (Pluggable Architecture)
 
@@ -43,14 +46,15 @@ Migraphe is a migration orchestration tool that manages database/infrastructure 
 - `MigrationNode` - Node structure and metadata
 - `Environment` - Environment configuration
 - `Task` - Execution logic (up/down)
+- `HistoryRepository` - Execution history persistence
 
 **Core provides**: Interfaces + orchestration logic
 **Plugins provide**: Concrete implementations
 
-Reference implementations are provided in `plugin` package:
-- `SimpleMigrationNode`
-- `SimpleEnvironment`
-- `SimpleTask`
+Reference implementations:
+- **In `plugin` package**: `SimpleMigrationNode`, `SimpleEnvironment`, `SimpleTask`
+- **In `history` package**: `InMemoryHistoryRepository` (default, no persistence)
+- **In `postgresql` module**: `PostgreSQLEnvironment`, `PostgreSQLMigrationNode`, `PostgreSQLUpTask`, `PostgreSQLDownTask`, `PostgreSQLHistoryRepository`
 
 ### Key Design Decisions
 
@@ -132,6 +136,47 @@ dependencies {
 }
 ```
 
+#### 7. History Abstraction
+
+**Decision**: Abstract history persistence into `HistoryRepository` interface
+
+**Rationale**:
+- Support multiple persistence backends (PostgreSQL, file, S3, etc.)
+- Core should not dictate persistence strategy
+- Plugins choose appropriate persistence for their use case
+
+**Key Design**:
+- `initialize()` method for setup (schema creation, file creation, etc.)
+- `InMemoryHistoryRepository` as default (no persistence, for testing)
+- Each implementation manages its own storage
+
+**Migration**: `MigrationHistory` class deleted, replaced with `HistoryRepository` abstraction
+
+#### 8. PostgreSQL Plugin Architecture
+
+**Decision**: First database plugin implementation with full persistence
+
+**Components**:
+- `PostgreSQLEnvironment` - JDBC connection management
+- `PostgreSQLMigrationNode` - Builder pattern with SQL from file/resource/string
+- `PostgreSQLUpTask` / `PostgreSQLDownTask` - Transaction-managed execution
+- `PostgreSQLHistoryRepository` - Persistent history in PostgreSQL table
+
+**Transaction Management**:
+- Each task manages its own transaction (setAutoCommit(false))
+- Explicit COMMIT on success, ROLLBACK on SQLException
+- PostgreSQL supports transactional DDL (unlike MySQL/Oracle)
+
+**DOWN Task Serialization**:
+- **Decision**: Store DOWN SQL as plain text (not JSON)
+- **Rationale**: Environment context already available in ExecutionRecord
+- Simpler and sufficient for rollback execution
+
+**Testing Strategy**:
+- Unit tests for logic and validation
+- Integration tests with Testcontainers (real PostgreSQL)
+- Test isolation via @AfterEach cleanup (DROP tables, TRUNCATE history)
+
 ### Package Structure
 
 ```
@@ -140,10 +185,19 @@ io.github.migraphe.core/
 │                    # TopologicalSort, ExecutionLevel, GraphVisualizer
 ├── task/            # Task, TaskResult, ExecutionDirection
 ├── environment/     # Environment, EnvironmentId, EnvironmentConfig
-├── history/         # MigrationHistory, ExecutionRecord, ExecutionStatus
+├── history/         # HistoryRepository (interface), InMemoryHistoryRepository,
+│                    # ExecutionRecord, ExecutionStatus
 ├── plugin/          # Reference implementations (SimpleMigrationNode,
 │                    # SimpleEnvironment, SimpleTask)
 └── common/          # Result, ValidationResult
+
+io.github.migraphe.postgresql/
+├── PostgreSQLEnvironment.java
+├── PostgreSQLMigrationNode.java
+├── PostgreSQLUpTask.java
+├── PostgreSQLDownTask.java
+├── PostgreSQLHistoryRepository.java
+└── PostgreSQLException.java
 ```
 
 ## Development Process
@@ -163,7 +217,9 @@ io.github.migraphe.core/
 
 ### Test Coverage
 
-**Current**: 84 tests, 100% passing
+**Current**: 114 tests, 100% passing
+- Core: 93 tests (includes InMemoryHistoryRepository)
+- PostgreSQL: 21 tests (13 unit + 8 integration with Testcontainers)
 
 ## Implementation Status
 
@@ -172,18 +228,38 @@ io.github.migraphe.core/
 - ✅ Phase 1: Gradle project setup
 - ✅ Phase 2: Basic types (NodeId, EnvironmentId, EnvironmentConfig, ExecutionStatus, ValidationResult, Result)
 - ✅ Phase 3: Interface definitions (MigrationNode, Environment, Task, TaskResult, ExecutionDirection, ExecutionRecord)
-- ✅ Phase 4: Aggregate roots (MigrationGraph, MigrationHistory)
+- ✅ Phase 4: Aggregate roots (MigrationGraph, MigrationHistory → refactored to HistoryRepository)
 - ✅ Phase 5: Algorithms (TopologicalSort, ExecutionPlan)
 - ✅ Phase 6: Graph visualization + reference implementations
 - ✅ Phase 7: Testing (84 tests, 100% passing)
 
+### Phase 8: History Abstraction + PostgreSQL Plugin - COMPLETED ✅
+
+**Milestone 1: Core History Abstraction**
+- ✅ Created `HistoryRepository` interface with `initialize()` method
+- ✅ Implemented `InMemoryHistoryRepository` (migrated from MigrationHistory)
+- ✅ Deleted `MigrationHistory` class (breaking change, pre-release)
+- ✅ All core tests updated and passing (93 tests)
+
+**Milestone 2: PostgreSQL Plugin**
+- ✅ Created `migraphe-postgresql` Gradle module
+- ✅ Implemented PostgreSQL-specific components:
+  - `PostgreSQLEnvironment` - JDBC connection management
+  - `PostgreSQLMigrationNode` - Builder with SQL from file/resource/string
+  - `PostgreSQLUpTask` / `PostgreSQLDownTask` - Transaction-managed execution
+  - `PostgreSQLHistoryRepository` - Persistent history in PostgreSQL
+- ✅ Added Testcontainers integration tests (8 tests)
+- ✅ All tests passing (21 PostgreSQL tests: 13 unit + 8 integration)
+- ✅ Total: 114 tests, 100% passing
+
 ### Next Steps (Future Phases)
 
-1. **Database Drivers**: PostgreSQL, MySQL, MongoDB specific implementations
-2. **Parsers**: SQL, YAML, etc.
-3. **Gradle Plugin**: Build integration
-4. **CLI**: Command-line interface
-5. **Virtual Threads**: Parallel execution implementation
+1. **File History Repository**: File-based history persistence
+2. **Additional Database Drivers**: MySQL, MongoDB specific implementations
+3. **Parsers**: SQL file parsers, YAML configuration, etc.
+4. **Gradle Plugin**: Build integration
+5. **CLI**: Command-line interface
+6. **Virtual Threads**: Parallel execution implementation
 
 ## Critical Files
 
@@ -191,27 +267,170 @@ io.github.migraphe.core/
 - `settings.gradle.kts` - Project settings + **Version Catalog** (centralized dependency versions)
 - `build.gradle.kts` - Root build configuration (multi-module setup, Spotless)
 - `migraphe-core/build.gradle.kts` - Core module dependencies (uses version catalog)
+- `migraphe-postgresql/build.gradle.kts` - PostgreSQL plugin dependencies
 
 ### Core Interfaces (Plugins implement these)
 - `MigrationNode.java` - **INTERFACE**
 - `Environment.java` - **INTERFACE**
 - `Task.java` - **INTERFACE**
+- `HistoryRepository.java` - **INTERFACE** (history persistence abstraction)
 
 ### Aggregate Roots
 - `MigrationGraph.java` - DAG with cycle detection
-- `MigrationHistory.java` - Execution history management
+
+### History Management
+- `HistoryRepository.java` - **INTERFACE** for pluggable persistence
+- `InMemoryHistoryRepository.java` - Default in-memory implementation
+- `ExecutionRecord.java` - Execution record value object
+- `ExecutionStatus.java` - Execution status enum
 
 ### Algorithms
 - `TopologicalSort.java` - Kahn's algorithm for execution ordering
 - `ExecutionPlan.java` - Parallel execution plan
 
-### Reference Implementations
+### Reference Implementations (Core)
 - `SimpleMigrationNode.java` - Builder pattern
 - `SimpleEnvironment.java`
 - `SimpleTask.java`
 
+### PostgreSQL Plugin
+- `PostgreSQLEnvironment.java` - JDBC connection management
+- `PostgreSQLMigrationNode.java` - Node with SQL from file/resource/string
+- `PostgreSQLUpTask.java` - UP migration with transaction management
+- `PostgreSQLDownTask.java` - DOWN migration (rollback)
+- `PostgreSQLHistoryRepository.java` - Persistent history in PostgreSQL table
+- `PostgreSQLException.java` - Plugin-specific exception
+- `init_history_table.sql` - Schema definition for history table
+
 ### Visualization
 - `GraphVisualizer.java` - Terminal ASCII output
+
+## Using the PostgreSQL Plugin
+
+### Setup
+
+Add dependency in your `build.gradle.kts`:
+```kotlin
+dependencies {
+    implementation(project(":migraphe-postgresql"))
+}
+```
+
+### Basic Usage
+
+```java
+// 1. Create PostgreSQL environment
+PostgreSQLEnvironment environment = PostgreSQLEnvironment.create(
+    "production",
+    "jdbc:postgresql://localhost:5432/mydb",
+    "username",
+    "password"
+);
+
+// 2. Initialize history repository
+HistoryRepository historyRepo = new PostgreSQLHistoryRepository(environment);
+historyRepo.initialize();  // Creates migraphe_history table
+
+// 3. Create migration nodes
+PostgreSQLMigrationNode node1 = PostgreSQLMigrationNode.builder()
+    .id("V001")
+    .name("Create users table")
+    .environment(environment)
+    .upSql("CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100));")
+    .downSql("DROP TABLE IF EXISTS users;")
+    .build();
+
+PostgreSQLMigrationNode node2 = PostgreSQLMigrationNode.builder()
+    .id("V002")
+    .name("Create posts table")
+    .environment(environment)
+    .dependencies(NodeId.of("V001"))
+    .upSqlFromFile(Path.of("migrations/V002__create_posts.sql"))
+    .downSqlFromFile(Path.of("migrations/V002__drop_posts.sql"))
+    .build();
+
+// 4. Build and execute migration graph
+MigrationGraph graph = MigrationGraph.builder()
+    .nodes(node1, node2)
+    .build();
+
+ExecutionPlan plan = graph.createExecutionPlan();
+
+// 5. Execute migrations and record history
+for (ExecutionLevel level : plan.levels()) {
+    for (MigrationNode node : level.nodes()) {
+        if (!historyRepo.wasExecuted(node.id(), environment.id())) {
+            Result<TaskResult, String> result = node.upTask().execute();
+
+            if (result.isOk()) {
+                ExecutionRecord record = ExecutionRecord.upSuccess(
+                    node.id(),
+                    environment.id(),
+                    node.name(),
+                    result.value().get().serializedDownTask(),
+                    100  // duration in ms
+                );
+                historyRepo.record(record);
+            }
+        }
+    }
+}
+```
+
+### Loading SQL from Resources
+
+```java
+PostgreSQLMigrationNode node = PostgreSQLMigrationNode.builder()
+    .id("V001")
+    .name("Initial schema")
+    .environment(environment)
+    .upSqlFromResource("/migrations/V001__init.sql")
+    .downSqlFromResource("/migrations/V001__rollback.sql")
+    .build();
+```
+
+### Rollback Example
+
+```java
+// Get latest execution record
+Optional<ExecutionRecord> record =
+    historyRepo.findLatestRecord(nodeId, environmentId);
+
+if (record.isPresent() && record.get().serializedDownTask().isPresent()) {
+    // Deserialize and execute DOWN task
+    String downSql = record.get().serializedDownTask().get();
+    PostgreSQLDownTask downTask = PostgreSQLDownTask.create(environment, downSql);
+
+    Result<TaskResult, String> result = downTask.execute();
+
+    if (result.isOk()) {
+        ExecutionRecord rollbackRecord = ExecutionRecord.downSuccess(
+            nodeId,
+            environmentId,
+            "Rollback " + record.get().description(),
+            50  // duration in ms
+        );
+        historyRepo.record(rollbackRecord);
+    }
+}
+```
+
+### History Queries
+
+```java
+// Check if a migration was executed
+boolean executed = historyRepo.wasExecuted(nodeId, environmentId);
+
+// Get all executed nodes for an environment
+List<NodeId> executedNodes = historyRepo.executedNodes(environmentId);
+
+// Get all execution records
+List<ExecutionRecord> allRecords = historyRepo.allRecords(environmentId);
+
+// Find latest record for a specific node
+Optional<ExecutionRecord> latest =
+    historyRepo.findLatestRecord(nodeId, environmentId);
+```
 
 ## Important Patterns & Practices
 
@@ -338,6 +557,22 @@ This ensures continuity across sessions and maintains project knowledge.
 
 ## Changelog
 
+### 2026-01-03 (Session 3)
+- **Phase 8: History Abstraction + PostgreSQL Plugin**
+  - Abstracted history persistence with `HistoryRepository` interface
+  - Migrated `MigrationHistory` to `InMemoryHistoryRepository`
+  - Implemented PostgreSQL plugin:
+    - `PostgreSQLEnvironment` - JDBC connection management
+    - `PostgreSQLMigrationNode` - Builder pattern with SQL from file/resource/string
+    - `PostgreSQLUpTask` / `PostgreSQLDownTask` - Transaction-managed execution
+    - `PostgreSQLHistoryRepository` - Persistent history in PostgreSQL table
+  - Added Testcontainers integration tests
+  - Test coverage: 114 tests (93 core + 21 PostgreSQL), 100% passing
+  - **Design Decisions**:
+    - DOWN SQL stored as plain text (not JSON)
+    - `initialize()` method in HistoryRepository for setup
+    - Breaking change: deleted MigrationHistory (pre-release, no backward compatibility needed)
+
 ### 2026-01-03 (Session 2)
 - **Refactoring**: Migrated to Gradle Version Catalog
   - Centralized all dependency versions in `settings.gradle.kts`
@@ -352,5 +587,5 @@ This ensures continuity across sessions and maintains project knowledge.
 ---
 
 **Last Updated**: 2026-01-03
-**Phase**: 1-7 Complete (Initial Milestone Achieved)
-**Next Milestone**: Database driver implementation
+**Phase**: 1-8 Complete (PostgreSQL Plugin Milestone Achieved)
+**Next Milestone**: File-based history repository / Additional database drivers
