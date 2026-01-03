@@ -1,0 +1,30 @@
+plugins {
+    `java-library`
+}
+
+dependencies {
+    // Core dependency
+    api(project(":migraphe-core"))
+
+    // PostgreSQL JDBC
+    implementation(libs.postgresql)
+
+    // Testing
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testImplementation(libs.assertj.core)
+
+    // Testcontainers
+    testImplementation(platform(libs.testcontainers.bom))
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.junit.jupiter)
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging {
+        events("passed", "skipped", "failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showStandardStreams = false
+    }
+}
