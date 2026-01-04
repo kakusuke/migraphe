@@ -1,0 +1,157 @@
+package io.github.migraphe.core.plugin;
+
+import io.github.migraphe.api.spi.MigraphePlugin;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+/**
+ * プラグインレジストリ - ServiceLoader でプラグインを読み込み、管理する。
+ *
+ * <p>読み込み優先順位:
+ *
+ * <ol>
+ *   <li>クラスパス（testImplementation など）
+ *   <li>個別 JAR ファイル（{@code loadFromJar()}）
+ *   <li>plugins/ ディレクトリ（{@code loadFromDirectory()}）
+ * </ol>
+ *
+ * <p>同じ type のプラグインが複数見つかった場合、後から読み込まれたものが優先される。
+ */
+public final class PluginRegistry {
+
+    private final Map<String, MigraphePlugin> plugins = new ConcurrentHashMap<>();
+
+    /** クラスパスから ServiceLoader を使用してプラグインを読み込む。 */
+    public void loadFromClasspath() {
+        ServiceLoader<MigraphePlugin> loader = ServiceLoader.load(MigraphePlugin.class);
+        for (MigraphePlugin plugin : loader) {
+            register(plugin);
+        }
+    }
+
+    /**
+     * 指定された JAR ファイルからプラグインを読み込む。
+     *
+     * @param jarPath JAR ファイルのパス
+     * @throws PluginLoadException 読み込みに失敗した場合
+     */
+    public void loadFromJar(Path jarPath) {
+        if (!Files.exists(jarPath)) {
+            throw new PluginLoadException("JAR file not found: " + jarPath);
+        }
+
+        if (!jarPath.toString().endsWith(".jar")) {
+            throw new PluginLoadException("Not a JAR file: " + jarPath);
+        }
+
+        try {
+            URL jarUrl = jarPath.toUri().toURL();
+            URLClassLoader classLoader = new URLClassLoader(new URL[] {jarUrl});
+            ServiceLoader<MigraphePlugin> loader =
+                    ServiceLoader.load(MigraphePlugin.class, classLoader);
+
+            int loadedCount = 0;
+            for (MigraphePlugin plugin : loader) {
+                register(plugin);
+                loadedCount++;
+            }
+
+            if (loadedCount == 0) {
+                throw new PluginLoadException("No plugins found in JAR: " + jarPath);
+            }
+        } catch (Exception e) {
+            throw new PluginLoadException("Failed to load plugin from JAR: " + jarPath, e);
+        }
+    }
+
+    /**
+     * 指定されたディレクトリ内の全 JAR ファイルからプラグインを読み込む。
+     *
+     * @param pluginsDir プラグインディレクトリのパス
+     * @throws PluginLoadException 読み込みに失敗した場合
+     */
+    public void loadFromDirectory(Path pluginsDir) {
+        if (!Files.exists(pluginsDir)) {
+            return; // ディレクトリが存在しない場合は何もしない
+        }
+
+        if (!Files.isDirectory(pluginsDir)) {
+            throw new PluginLoadException("Not a directory: " + pluginsDir);
+        }
+
+        try (Stream<Path> files = Files.list(pluginsDir)) {
+            List<Path> jarFiles =
+                    files.filter(path -> path.toString().endsWith(".jar"))
+                            .collect(Collectors.toList());
+
+            for (Path jarFile : jarFiles) {
+                try {
+                    loadFromJar(jarFile);
+                } catch (PluginLoadException e) {
+                    // 個別の JAR 読み込みエラーはログに記録して続行
+                    System.err.println("Warning: " + e.getMessage());
+                }
+            }
+        } catch (Exception e) {
+            throw new PluginLoadException("Failed to scan plugins directory: " + pluginsDir, e);
+        }
+    }
+
+    /**
+     * プラグインを登録する。
+     *
+     * <p>同じ type のプラグインが既に存在する場合、上書きする（後勝ち）。
+     *
+     * @param plugin 登録するプラグイン
+     */
+    void register(MigraphePlugin plugin) {
+        Objects.requireNonNull(plugin, "plugin must not be null");
+        String type = plugin.type();
+        Objects.requireNonNull(type, "plugin.type() must not be null");
+
+        if (type.isBlank()) {
+            throw new PluginLoadException("Plugin type must not be blank");
+        }
+
+        plugins.put(type, plugin);
+    }
+
+    /**
+     * 指定された型のプラグインを取得する。
+     *
+     * @param type プラグインの型識別子
+     * @return プラグイン（存在しない場合は空）
+     */
+    public Optional<MigraphePlugin> getPlugin(String type) {
+        return Optional.ofNullable(plugins.get(type));
+    }
+
+    /**
+     * サポートされているプラグインの型一覧を取得する。
+     *
+     * @return プラグインの型識別子のセット
+     */
+    public Set<String> supportedTypes() {
+        return Set.copyOf(plugins.keySet());
+    }
+
+    /**
+     * 登録されているプラグインの数を取得する。
+     *
+     * @return プラグイン数
+     */
+    public int size() {
+        return plugins.size();
+    }
+
+    /** 全てのプラグインをクリアする（テスト用）。 */
+    void clear() {
+        plugins.clear();
+    }
+}
