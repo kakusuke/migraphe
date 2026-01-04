@@ -300,6 +300,32 @@ io.github.migraphe.cli/
 - Apply before commit: `./gradlew spotlessApply`
 - Check in CI: `./gradlew spotlessCheck`
 
+### Documentation Maintenance - MANDATORY
+
+**Rule**: All user-facing documentation MUST be kept up-to-date with code changes.
+
+**Documentation Files**:
+- `README.md` - English project overview
+- `README.ja.md` - Japanese project overview
+- `docs/USER_GUIDE.md` - English detailed user guide
+- `docs/USER_GUIDE.ja.md` - Japanese detailed user guide
+- `CLAUDE.md` - Architecture and design decisions (this file)
+
+**When to Update Documentation**:
+1. **New Features**: Update user guides with new commands, configuration options, or behaviors
+2. **API Changes**: Update examples in README and user guides
+3. **Configuration Changes**: Update YAML examples and field descriptions
+4. **Breaking Changes**: Highlight in README and provide migration guide
+5. **Bug Fixes**: Update troubleshooting section if relevant
+6. **Design Decisions**: Update CLAUDE.md with new architectural choices
+
+**Language Requirement**:
+- Primary documentation: English (README.md, USER_GUIDE.md)
+- Japanese translation: Must be kept in sync (README.ja.md, USER_GUIDE.ja.md)
+- Both languages must have equivalent content
+
+**IMPORTANT**: Documentation updates are NOT optional. They are part of the Definition of Done for any feature.
+
 ### Test Coverage
 
 **Current**: ~150 tests, 100% passing
@@ -922,17 +948,46 @@ See `.mise.toml` for configured versions.
    - New critical files created
    - Important learnings or gotchas
 
-2. Ensure all tests are passing (100%)
+2. Update user-facing documentation:
+   - Update `README.md` and `README.ja.md` if new features or usage changes
+   - Update `docs/USER_GUIDE.md` and `docs/USER_GUIDE.ja.md` if configuration or commands changed
+   - Ensure English and Japanese versions are in sync
 
-3. Apply Spotless formatting: `./gradlew spotlessApply`
+3. Ensure all tests are passing (100%)
 
-4. Commit changes if working on a feature
+4. Apply Spotless formatting: `./gradlew spotlessApply`
+
+5. Commit changes if working on a feature
 
 This ensures continuity across sessions and maintains project knowledge.
 
 ---
 
 ## Changelog
+
+### 2026-01-05 (Session 6)
+- **Documentation Creation**
+  - Created comprehensive user documentation:
+    - `README.md` - English project overview with quick start guide
+    - `README.ja.md` - Japanese translation of README
+    - `docs/USER_GUIDE.md` - English detailed user guide covering:
+      - Installation and project setup
+      - Configuration (project, targets, tasks, environments)
+      - Writing migrations with best practices
+      - Running migrations (status, up commands)
+      - Environment management
+      - Advanced features (parallel execution, complex dependencies)
+      - Troubleshooting guide
+    - `docs/USER_GUIDE.ja.md` - Japanese translation of user guide
+  - Added **Documentation Maintenance Rules** to CLAUDE.md:
+    - Mandatory documentation updates for all user-facing changes
+    - English and Japanese must be kept in sync
+    - Documentation is part of Definition of Done
+  - Updated Session End Procedure to include documentation checks
+  - **Distribution Strategy**: Decided on Fat JAR as primary distribution method
+    - Simple single-file distribution
+    - Supports plugin dynamic loading
+    - Works on all platforms with Java 21+
 
 ### 2026-01-04 (Session 5)
 - **Phase 10: CLI Implementation - COMPLETED**
