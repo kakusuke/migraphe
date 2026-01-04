@@ -3,6 +3,11 @@ plugins {
 }
 
 dependencies {
+    // MicroProfile Config
+    api(libs.microprofile.config.api)
+    implementation(libs.smallrye.config)
+    implementation(libs.smallrye.config.source.yaml)
+
     // JUnit 5
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

@@ -12,6 +12,8 @@ dependencyResolutionManagement {
             version("testcontainers", "1.19.3")
             version("jackson", "2.18.2")
             version("picocli", "4.7.7")
+            version("microprofile-config", "3.1")
+            version("smallrye-config", "3.9.1")
 
             // Libraries
             library("junit-bom", "org.junit", "junit-bom").versionRef("junit")
@@ -43,6 +45,22 @@ dependencyResolutionManagement {
                 )
                 .versionRef("jackson")
             library("picocli", "info.picocli", "picocli").versionRef("picocli")
+
+            // MicroProfile Config
+            library(
+                    "microprofile-config-api",
+                    "org.eclipse.microprofile.config",
+                    "microprofile-config-api"
+                )
+                .versionRef("microprofile-config")
+            library("smallrye-config", "io.smallrye.config", "smallrye-config")
+                .versionRef("smallrye-config")
+            library(
+                    "smallrye-config-source-yaml",
+                    "io.smallrye.config",
+                    "smallrye-config-source-yaml"
+                )
+                .versionRef("smallrye-config")
 
             // Plugins
             plugin("spotless", "com.diffplug.spotless").versionRef("spotless")

@@ -11,10 +11,6 @@ dependencies {
     // CLI フレームワーク
     implementation(libs.picocli)
 
-    // TOML パース
-    implementation(libs.jackson.databind)
-    implementation(libs.jackson.dataformat.toml)
-
     // テスト
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

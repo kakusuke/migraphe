@@ -6,13 +6,14 @@ Migraphe is a migration orchestration tool that manages database/infrastructure 
 
 **Domain Essence**: Orchestration of migration tasks across multiple environments represented as a directed graph.
 
-**Current Milestone**: PostgreSQL Plugin with History Abstraction (COMPLETED)
+**Current Milestone**: Configuration Management with MicroProfile Config (COMPLETED)
 
 ## Technical Stack
 
 - **Language**: Java 21 LTS
 - **Build Tool**: Gradle 8.5 (Kotlin DSL)
 - **Dependency Management**: Gradle Version Catalog (centralized in settings.gradle.kts)
+- **Configuration**: MicroProfile Config 3.1 + SmallRye Config 3.9.1 (YAML support)
 - **Design Approach**: Domain-Driven Design (DDD)
 - **Development Method**: TDD (t-wada style)
 - **Code Formatter**: Spotless (mandatory)
@@ -126,6 +127,8 @@ UP execution → serialize DownTask → store in ExecutionRecord
 - AssertJ: 3.25.1
 - Spotless: 6.25.0
 - Google Java Format: 1.19.2
+- MicroProfile Config: 3.1
+- SmallRye Config: 3.9.1
 
 **Usage**:
 ```kotlin
@@ -177,6 +180,33 @@ dependencies {
 - Integration tests with Testcontainers (real PostgreSQL)
 - Test isolation via @AfterEach cleanup (DROP tables, TRUNCATE history)
 
+#### 9. Configuration Management with MicroProfile Config
+
+**Decision**: Use MicroProfile Config (SmallRye Config) for all configuration management
+
+**Components**:
+- `ProjectConfig` - Project-level settings (name, history target)
+- `TargetConfig` - Database connection settings (type, jdbc_url, username, password)
+- `TaskConfig` - Migration task definitions (name, target, dependencies, up/down SQL)
+- `ConfigurationException` - Configuration error handling
+
+**Key Features**:
+- **Type-safe binding**: `@ConfigMapping` interfaces for compile-time safety
+- **Automatic variable expansion**: `${VAR}` syntax resolved by MP Config
+- **YAML support**: SmallRye Config YAML ConfigSource for configuration files
+- **Optional properties**: Using `Optional<T>` for non-required fields
+
+**Configuration Format**: YAML (originally planned as TOML, switched to YAML for better ecosystem support)
+
+**Location**: Configuration interfaces in `migraphe-core/config/` package (shared across CLI and Gradle plugin)
+
+**Rationale**:
+- Jakarta EE standard compliance
+- Eliminates need for custom variable expansion logic
+- Extensible ConfigSource architecture (can add environment variables, system properties, etc.)
+- Better type safety than string-based configuration
+- Shared configuration model across multiple tools (CLI, Gradle plugin)
+
 ### Package Structure
 
 ```
@@ -187,6 +217,8 @@ io.github.migraphe.core/
 ├── environment/     # Environment, EnvironmentId, EnvironmentConfig
 ├── history/         # HistoryRepository (interface), InMemoryHistoryRepository,
 │                    # ExecutionRecord, ExecutionStatus
+├── config/          # Configuration interfaces (ProjectConfig, TargetConfig,
+│                    # TaskConfig, ConfigurationException)
 ├── plugin/          # Reference implementations (SimpleMigrationNode,
 │                    # SimpleEnvironment, SimpleTask)
 └── common/          # Result, ValidationResult
@@ -217,8 +249,8 @@ io.github.migraphe.postgresql/
 
 ### Test Coverage
 
-**Current**: 114 tests, 100% passing
-- Core: 93 tests (includes InMemoryHistoryRepository)
+**Current**: 100 tests, 100% passing
+- Core: 79 tests (includes InMemoryHistoryRepository + Config interfaces)
 - PostgreSQL: 21 tests (13 unit + 8 integration with Testcontainers)
 
 ## Implementation Status
@@ -252,13 +284,37 @@ io.github.migraphe.postgresql/
 - ✅ All tests passing (21 PostgreSQL tests: 13 unit + 8 integration)
 - ✅ Total: 114 tests, 100% passing
 
+### Phase 9: Configuration Management - COMPLETED ✅
+
+**Objective**: Standardize configuration management using MicroProfile Config
+
+**Implementation**:
+- ✅ Migrated from Jackson TOML to MicroProfile Config with YAML
+- ✅ Added dependencies: `microprofile-config-api`, `smallrye-config`, `smallrye-config-source-yaml`
+- ✅ Created configuration interfaces in `migraphe-core/config/`:
+  - `ProjectConfig` - Project-level settings with `@ConfigMapping`
+  - `TargetConfig` - Database connection configuration
+  - `TaskConfig` - Migration task definitions with optional fields
+  - `ConfigurationException` - Configuration error handling
+- ✅ Removed custom `VariableExpander` (MP Config handles variable expansion)
+- ✅ Converted from `record` to `interface` for `@ConfigMapping` compatibility
+- ✅ Created MP Config-based tests (7 new tests)
+- ✅ All tests passing: 100 tests, 100% passing
+
+**Benefits**:
+- Jakarta EE standard compliance
+- Automatic `${VAR}` variable expansion
+- Type-safe configuration with compile-time checking
+- Shared configuration model across CLI and Gradle plugin
+- Reduced custom code (eliminated VariableExpander)
+
 ### Next Steps (Future Phases)
 
-1. **File History Repository**: File-based history persistence
-2. **Additional Database Drivers**: MySQL, MongoDB specific implementations
-3. **Parsers**: SQL file parsers, YAML configuration, etc.
-4. **Gradle Plugin**: Build integration
-5. **CLI**: Command-line interface
+1. **CLI Implementation**: Command-line interface with MicroProfile Config
+2. **YAML Configuration Loaders**: File discovery and loading logic
+3. **Gradle Plugin**: Build integration
+4. **File History Repository**: File-based history persistence
+5. **Additional Database Drivers**: MySQL, MongoDB specific implementations
 6. **Virtual Threads**: Parallel execution implementation
 
 ## Critical Files
@@ -266,14 +322,21 @@ io.github.migraphe.postgresql/
 ### Gradle Configuration
 - `settings.gradle.kts` - Project settings + **Version Catalog** (centralized dependency versions)
 - `build.gradle.kts` - Root build configuration (multi-module setup, Spotless)
-- `migraphe-core/build.gradle.kts` - Core module dependencies (uses version catalog)
+- `migraphe-core/build.gradle.kts` - Core module dependencies (includes MicroProfile Config)
 - `migraphe-postgresql/build.gradle.kts` - PostgreSQL plugin dependencies
+- `migraphe-cli/build.gradle.kts` - CLI module dependencies
 
 ### Core Interfaces (Plugins implement these)
 - `MigrationNode.java` - **INTERFACE**
 - `Environment.java` - **INTERFACE**
 - `Task.java` - **INTERFACE**
 - `HistoryRepository.java` - **INTERFACE** (history persistence abstraction)
+
+### Configuration Interfaces (MicroProfile Config)
+- `ProjectConfig.java` - **INTERFACE** with `@ConfigMapping` (project-level settings)
+- `TargetConfig.java` - **INTERFACE** with `@ConfigMapping` (database connection config)
+- `TaskConfig.java` - **INTERFACE** with `@ConfigMapping` (migration task definitions)
+- `ConfigurationException.java` - Configuration error handling
 
 ### Aggregate Roots
 - `MigrationGraph.java` - DAG with cycle detection
@@ -557,6 +620,25 @@ This ensures continuity across sessions and maintains project knowledge.
 
 ## Changelog
 
+### 2026-01-04 (Session 4)
+- **Phase 9: Configuration Management with MicroProfile Config**
+  - Migrated from Jackson TOML to MicroProfile Config with YAML support
+  - Added SmallRye Config dependencies (microprofile-config-api, smallrye-config, smallrye-config-source-yaml)
+  - Created configuration interfaces in `migraphe-core/config/`:
+    - `ProjectConfig` - Project settings
+    - `TargetConfig` - Database connection configuration
+    - `TaskConfig` - Migration task definitions
+    - `ConfigurationException` - Error handling
+  - Converted data models from `record` to `interface` with `@ConfigMapping`
+  - Removed custom `VariableExpander` (MP Config handles variable expansion automatically)
+  - Created MP Config-based tests (7 new tests)
+  - Test coverage: 100 tests (79 core + 21 PostgreSQL), 100% passing
+  - **Design Decisions**:
+    - YAML instead of TOML for better SmallRye Config support
+    - Configuration interfaces in core (shared across CLI and Gradle plugin)
+    - `Optional<T>` for optional configuration properties
+    - Type-safe configuration binding with `@ConfigMapping`
+
 ### 2026-01-03 (Session 3)
 - **Phase 8: History Abstraction + PostgreSQL Plugin**
   - Abstracted history persistence with `HistoryRepository` interface
@@ -586,6 +668,6 @@ This ensures continuity across sessions and maintains project knowledge.
 
 ---
 
-**Last Updated**: 2026-01-03
-**Phase**: 1-8 Complete (PostgreSQL Plugin Milestone Achieved)
-**Next Milestone**: File-based history repository / Additional database drivers
+**Last Updated**: 2026-01-04
+**Phase**: 1-9 Complete (Configuration Management Milestone Achieved)
+**Next Milestone**: CLI Implementation with YAML Configuration
