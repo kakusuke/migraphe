@@ -3,8 +3,8 @@ package io.github.migraphe.postgresql;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.migraphe.core.environment.EnvironmentConfig;
-import io.github.migraphe.core.environment.EnvironmentId;
+import io.github.migraphe.api.environment.EnvironmentConfig;
+import io.github.migraphe.api.environment.EnvironmentId;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 

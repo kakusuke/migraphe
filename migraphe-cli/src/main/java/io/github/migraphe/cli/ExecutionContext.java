@@ -1,12 +1,12 @@
 package io.github.migraphe.cli;
 
+import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.cli.config.ConfigLoader;
 import io.github.migraphe.cli.config.TaskIdGenerator;
 import io.github.migraphe.cli.factory.EnvironmentFactory;
 import io.github.migraphe.cli.factory.MigrationNodeFactory;
 import io.github.migraphe.core.config.TaskConfig;
 import io.github.migraphe.core.graph.MigrationGraph;
-import io.github.migraphe.core.graph.NodeId;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.migraphe.postgresql.PostgreSQLMigrationNode;
 import io.smallrye.config.SmallRyeConfig;

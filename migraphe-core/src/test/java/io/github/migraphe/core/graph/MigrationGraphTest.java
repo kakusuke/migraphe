@@ -4,7 +4,9 @@ import static io.github.migraphe.core.graph.TestHelpers.node;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.migraphe.core.common.ValidationResult;
+import io.github.migraphe.api.common.ValidationResult;
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.graph.NodeId;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 

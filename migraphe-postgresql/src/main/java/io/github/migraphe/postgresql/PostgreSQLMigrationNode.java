@@ -1,9 +1,9 @@
 package io.github.migraphe.postgresql;
 
-import io.github.migraphe.core.environment.Environment;
-import io.github.migraphe.core.graph.MigrationNode;
-import io.github.migraphe.core.graph.NodeId;
-import io.github.migraphe.core.task.Task;
+import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.task.Task;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

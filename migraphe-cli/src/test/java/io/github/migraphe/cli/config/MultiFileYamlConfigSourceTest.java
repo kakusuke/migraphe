@@ -2,7 +2,7 @@ package io.github.migraphe.cli.config;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.migraphe.core.graph.NodeId;
+import io.github.migraphe.api.graph.NodeId;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;

@@ -1,8 +1,8 @@
 package io.github.migraphe.postgresql;
 
-import io.github.migraphe.core.environment.Environment;
-import io.github.migraphe.core.environment.EnvironmentConfig;
-import io.github.migraphe.core.environment.EnvironmentId;
+import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.api.environment.EnvironmentConfig;
+import io.github.migraphe.api.environment.EnvironmentId;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;

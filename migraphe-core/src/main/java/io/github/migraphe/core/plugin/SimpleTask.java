@@ -1,8 +1,8 @@
 package io.github.migraphe.core.plugin;
 
-import io.github.migraphe.core.common.Result;
-import io.github.migraphe.core.task.Task;
-import io.github.migraphe.core.task.TaskResult;
+import io.github.migraphe.api.common.Result;
+import io.github.migraphe.api.task.Task;
+import io.github.migraphe.api.task.TaskResult;
 import java.util.Objects;
 import java.util.Optional;
 

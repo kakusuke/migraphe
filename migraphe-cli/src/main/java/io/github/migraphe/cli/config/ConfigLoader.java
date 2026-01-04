@@ -1,8 +1,8 @@
 package io.github.migraphe.cli.config;
 
+import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.core.config.ConfigurationException;
 import io.github.migraphe.core.config.ProjectConfig;
-import io.github.migraphe.core.graph.NodeId;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import io.smallrye.config.source.yaml.YamlConfigSource;

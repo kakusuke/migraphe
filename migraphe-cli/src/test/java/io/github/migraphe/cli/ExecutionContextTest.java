@@ -2,8 +2,8 @@ package io.github.migraphe.cli;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.core.graph.MigrationGraph;
-import io.github.migraphe.core.graph.NodeId;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.migraphe.postgresql.PostgreSQLMigrationNode;
 import java.io.IOException;

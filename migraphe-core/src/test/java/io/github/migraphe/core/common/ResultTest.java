@@ -3,6 +3,7 @@ package io.github.migraphe.core.common;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.migraphe.api.common.Result;
 import org.junit.jupiter.api.Test;
 
 class ResultTest {

@@ -2,6 +2,7 @@ package io.github.migraphe.core.history;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.migraphe.api.history.ExecutionStatus;
 import org.junit.jupiter.api.Test;
 
 class ExecutionStatusTest {

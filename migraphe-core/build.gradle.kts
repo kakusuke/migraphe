@@ -3,6 +3,9 @@ plugins {
 }
 
 dependencies {
+    // API module
+    api(project(":migraphe-api"))
+
     // MicroProfile Config
     api(libs.microprofile.config.api)
     implementation(libs.smallrye.config)

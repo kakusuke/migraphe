@@ -1,5 +1,7 @@
 package io.github.migraphe.core.graph;
 
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.graph.NodeId;
 import java.util.*;
 
 /** トポロジカルソートによる実行プラン生成。 Kahn's アルゴリズムを使用。 */

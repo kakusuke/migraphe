@@ -1,8 +1,8 @@
 package io.github.migraphe.cli.factory;
 
+import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.core.config.ConfigurationException;
 import io.github.migraphe.core.config.TaskConfig;
-import io.github.migraphe.core.graph.NodeId;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.migraphe.postgresql.PostgreSQLMigrationNode;
 import java.util.ArrayList;

@@ -68,6 +68,7 @@ dependencyResolutionManagement {
     }
 }
 
+include("migraphe-api")
 include("migraphe-core")
 include("migraphe-postgresql")
 include("migraphe-cli")

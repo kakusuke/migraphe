@@ -256,6 +256,8 @@ io.github.migraphe.core/
 │                    # ExecutionRecord, ExecutionStatus
 ├── config/          # Configuration interfaces (ProjectConfig, TargetConfig,
 │                    # TaskConfig, ConfigurationException)
+├── spi/             # Plugin SPI (Phase 11)
+│                    # EnvironmentProvider, HistoryRepositoryProvider
 ├── plugin/          # Reference implementations (SimpleMigrationNode,
 │                    # SimpleEnvironment, SimpleTask)
 └── common/          # Result, ValidationResult
@@ -266,7 +268,10 @@ io.github.migraphe.postgresql/
 ├── PostgreSQLUpTask.java
 ├── PostgreSQLDownTask.java
 ├── PostgreSQLHistoryRepository.java
+├── PostgreSQLEnvironmentProvider.java   # SPI implementation (Phase 11)
 └── PostgreSQLException.java
+└── META-INF/services/                   # ServiceLoader registration (Phase 11)
+    └── io.github.migraphe.core.spi.EnvironmentProvider
 
 io.github.migraphe.cli/
 ├── Main.java                            # CLI entry point
@@ -280,8 +285,11 @@ io.github.migraphe.cli/
 │   ├── MultiFileYamlConfigSource.java   # Multi-file YAML integration
 │   ├── TaskIdGenerator.java             # Generate Task IDs from file paths
 │   └── YamlFileScanner.java             # Discover YAML files
+├── plugin/                              # Plugin loading (Phase 11)
+│   ├── PluginLoader.java                # URLClassLoader-based plugin loading
+│   └── PluginRegistry.java              # Registry of loaded providers
 └── factory/                             # Object factories
-    ├── EnvironmentFactory.java          # Create Environments from config
+    ├── EnvironmentFactory.java          # Create Environments from config (uses PluginRegistry)
     └── MigrationNodeFactory.java        # Create MigrationNodes from config
 ```
 
@@ -457,16 +465,77 @@ migraphe up
 - Reusable factories for clean separation of concerns
 - Comprehensive integration tests with real PostgreSQL
 
-### Next Steps (Future Phases)
+### Phase 11: Plugin System - NEXT MILESTONE 🎯
 
-1. **CLI Executable Packaging**: GraalVM Native Image or application plugin for standalone executable
-2. **Additional CLI Commands**:
+**Current Problem**: PostgreSQL plugin is bundled into CLI Fat JAR, preventing custom plugin usage
+
+**Objective**: Implement runtime plugin loading with ServiceLoader pattern
+
+**Implementation Steps**:
+
+1. **Plugin SPI Definition** (migraphe-core)
+   - Create `PluginRegistry` interface
+   - Create `EnvironmentProvider` SPI interface
+     - Method: `Environment create(String id, TargetConfig config)`
+     - Method: `boolean supports(String type)` - returns true for supported types (e.g., "postgresql")
+   - Create `HistoryRepositoryProvider` SPI interface (optional, for custom history backends)
+   - Document plugin development guide
+
+2. **ServiceLoader Integration** (migraphe-cli)
+   - Implement `PluginLoader` class using `ServiceLoader<EnvironmentProvider>`
+   - Load plugins from:
+     - `plugins/` directory (URLClassLoader)
+     - `--plugin <jar-path>` CLI option
+     - System classpath (for testing)
+   - Registry of loaded providers by type ("postgresql", "mysql", etc.)
+
+3. **CLI Dependency Cleanup**
+   - Remove `implementation(project(":migraphe-postgresql"))` from migraphe-cli
+   - Keep as `testImplementation` for integration tests only
+   - Update EnvironmentFactory to use PluginRegistry
+
+4. **PostgreSQL Plugin Adaptation**
+   - Create `PostgreSQLEnvironmentProvider` implementing `EnvironmentProvider`
+   - Add `META-INF/services/io.github.migraphe.core.plugin.EnvironmentProvider`
+   - List: `io.github.migraphe.postgresql.PostgreSQLEnvironmentProvider`
+   - Build standalone plugin JAR
+
+5. **Configuration Updates**
+   - `TargetConfig.type` maps to provider lookup ("postgresql" → PostgreSQLEnvironmentProvider)
+   - Error handling for missing providers (clear error message)
+
+6. **Testing Strategy**
+   - Unit tests for PluginLoader (mock providers)
+   - Integration tests with real PostgreSQL plugin JAR
+   - Test multiple plugins loaded simultaneously
+   - Test plugin isolation (separate ClassLoaders)
+
+7. **Documentation Updates**
+   - README: How to use plugins (`--plugin` or `plugins/` directory)
+   - USER_GUIDE: Plugin usage examples
+   - New: PLUGIN_DEVELOPMENT.md guide for creating custom plugins
+
+**Benefits**:
+- ✅ True pluggable architecture
+- ✅ Support for custom database implementations (MySQL, MongoDB, S3, etc.)
+- ✅ Plugin versioning independence
+- ✅ Smaller CLI JAR (no bundled plugins)
+- ✅ Users can develop private plugins without forking
+
+**Test Coverage Target**: +30 tests (plugin loading, provider discovery, error handling)
+
+---
+
+### Future Phases (After Phase 11)
+
+1. **Additional CLI Commands**:
    - `down` - Rollback migrations
    - `history` - View execution history
    - `validate` - Validate configuration and dependencies
+2. **CLI Executable Packaging**: GraalVM Native Image or application plugin for standalone executable
 3. **Gradle Plugin**: Build integration for running migrations from Gradle
-4. **File History Repository**: File-based history persistence (alternative to PostgreSQL)
-5. **Additional Database Drivers**: MySQL, MongoDB specific implementations
+4. **File History Repository**: File-based history persistence plugin (alternative to PostgreSQL)
+5. **Additional Database Plugins**: MySQL, MongoDB, S3-based history
 6. **Virtual Threads**: Parallel execution implementation for independent migration levels
 
 ## Critical Files
@@ -532,6 +601,23 @@ migraphe up
 
 ### Visualization
 - `GraphVisualizer.java` - Terminal ASCII output
+
+### Plugin System (Phase 11 - To Be Implemented)
+
+**Core SPI**:
+- `EnvironmentProvider.java` - Plugin SPI for creating Environments
+- `HistoryRepositoryProvider.java` - Plugin SPI for custom history backends (optional)
+
+**CLI Plugin Infrastructure**:
+- `PluginLoader.java` - Loads plugins from JAR files using URLClassLoader
+- `PluginRegistry.java` - Registry of loaded providers, indexed by type
+
+**PostgreSQL Plugin**:
+- `PostgreSQLEnvironmentProvider.java` - Implements EnvironmentProvider SPI
+- `META-INF/services/io.github.migraphe.core.spi.EnvironmentProvider` - ServiceLoader registration
+
+**Documentation** (to be created):
+- `docs/PLUGIN_DEVELOPMENT.md` - Guide for creating custom plugins
 
 ## Using the PostgreSQL Plugin
 
@@ -988,6 +1074,18 @@ This ensures continuity across sessions and maintains project knowledge.
     - Simple single-file distribution
     - Supports plugin dynamic loading
     - Works on all platforms with Java 21+
+- **Phase 11: Plugin System Design**
+  - **Problem Identified**: PostgreSQL plugin bundled into CLI Fat JAR, preventing custom plugin usage
+  - Designed plugin system architecture:
+    - **Core SPI**: `EnvironmentProvider`, `HistoryRepositoryProvider` interfaces
+    - **ServiceLoader Pattern**: Standard Java plugin discovery mechanism
+    - **Runtime Loading**: `PluginLoader` with URLClassLoader for external JARs
+    - **Plugin Sources**: `--plugin` CLI option and `plugins/` directory
+    - **Provider Registry**: Type-based lookup ("postgresql", "mysql", etc.)
+  - Updated package structure with `spi/` and `plugin/` packages
+  - Added Phase 11 implementation plan with 7 detailed steps
+  - Planned test coverage: +30 tests for plugin loading and provider discovery
+  - **Benefits**: True pluggable architecture, smaller CLI JAR, custom plugin support without forking
 
 ### 2026-01-04 (Session 5)
 - **Phase 10: CLI Implementation - COMPLETED**

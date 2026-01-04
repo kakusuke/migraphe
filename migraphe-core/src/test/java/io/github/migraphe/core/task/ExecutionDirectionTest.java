@@ -2,6 +2,7 @@ package io.github.migraphe.core.task;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.migraphe.api.task.ExecutionDirection;
 import org.junit.jupiter.api.Test;
 
 class ExecutionDirectionTest {

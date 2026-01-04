@@ -1,6 +1,6 @@
 package io.github.migraphe.cli.config;
 
-import io.github.migraphe.core.graph.NodeId;
+import io.github.migraphe.api.graph.NodeId;
 import java.nio.file.Path;
 import java.util.Objects;
 

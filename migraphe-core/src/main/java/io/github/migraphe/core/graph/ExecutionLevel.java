@@ -1,5 +1,6 @@
 package io.github.migraphe.core.graph;
 
+import io.github.migraphe.api.graph.MigrationNode;
 import java.util.Set;
 
 /** 実行レベル - 同じレベルのノードは並列実行可能 */

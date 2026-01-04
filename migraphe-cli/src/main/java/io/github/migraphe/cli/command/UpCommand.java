@@ -1,16 +1,16 @@
 package io.github.migraphe.cli.command;
 
+import io.github.migraphe.api.common.Result;
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.history.ExecutionRecord;
+import io.github.migraphe.api.history.HistoryRepository;
+import io.github.migraphe.api.task.ExecutionDirection;
+import io.github.migraphe.api.task.TaskResult;
 import io.github.migraphe.cli.ExecutionContext;
-import io.github.migraphe.core.common.Result;
 import io.github.migraphe.core.graph.ExecutionLevel;
 import io.github.migraphe.core.graph.ExecutionPlan;
-import io.github.migraphe.core.graph.MigrationNode;
 import io.github.migraphe.core.graph.TopologicalSort;
-import io.github.migraphe.core.history.ExecutionRecord;
-import io.github.migraphe.core.history.HistoryRepository;
 import io.github.migraphe.core.history.InMemoryHistoryRepository;
-import io.github.migraphe.core.task.ExecutionDirection;
-import io.github.migraphe.core.task.TaskResult;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.migraphe.postgresql.PostgreSQLHistoryRepository;
 

@@ -1,6 +1,8 @@
 package io.github.migraphe.core.graph;
 
-import io.github.migraphe.core.common.ValidationResult;
+import io.github.migraphe.api.common.ValidationResult;
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.graph.NodeId;
 import java.util.*;
 
 /** マイグレーションノードの有向非巡回グラフ（DAG）。 集約ルート - グラフの整合性を保証する。 */

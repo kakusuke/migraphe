@@ -1,11 +1,11 @@
 package io.github.migraphe.postgresql;
 
-import io.github.migraphe.core.environment.EnvironmentId;
-import io.github.migraphe.core.graph.NodeId;
-import io.github.migraphe.core.history.ExecutionRecord;
-import io.github.migraphe.core.history.ExecutionStatus;
-import io.github.migraphe.core.history.HistoryRepository;
-import io.github.migraphe.core.task.ExecutionDirection;
+import io.github.migraphe.api.environment.EnvironmentId;
+import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.history.ExecutionRecord;
+import io.github.migraphe.api.history.ExecutionStatus;
+import io.github.migraphe.api.history.HistoryRepository;
+import io.github.migraphe.api.task.ExecutionDirection;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;

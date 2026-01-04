@@ -1,4 +1,4 @@
-package io.github.migraphe.core.task;
+package io.github.migraphe.api.task;
 
 /** マイグレーション実行方向。 */
 public enum ExecutionDirection {

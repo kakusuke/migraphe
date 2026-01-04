@@ -1,4 +1,4 @@
-package io.github.migraphe.core.task;
+package io.github.migraphe.api.task;
 
 import java.util.Objects;
 import java.util.Optional;

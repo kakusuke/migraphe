@@ -3,6 +3,7 @@ package io.github.migraphe.core.environment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.migraphe.api.environment.EnvironmentId;
 import org.junit.jupiter.api.Test;
 
 class EnvironmentIdTest {

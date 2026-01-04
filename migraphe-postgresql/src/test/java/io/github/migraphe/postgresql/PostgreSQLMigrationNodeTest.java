@@ -3,7 +3,7 @@ package io.github.migraphe.postgresql;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.migraphe.core.graph.NodeId;
+import io.github.migraphe.api.graph.NodeId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

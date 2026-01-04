@@ -1,4 +1,4 @@
-package io.github.migraphe.core.environment;
+package io.github.migraphe.api.environment;
 
 import java.util.Map;
 import java.util.Objects;

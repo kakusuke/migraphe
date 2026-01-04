@@ -1,4 +1,4 @@
-package io.github.migraphe.core.common;
+package io.github.migraphe.api.common;
 
 import java.util.Objects;
 import java.util.Optional;

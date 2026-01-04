@@ -1,11 +1,13 @@
 package io.github.migraphe.core.graph;
 
-import io.github.migraphe.core.common.Result;
-import io.github.migraphe.core.environment.Environment;
-import io.github.migraphe.core.environment.EnvironmentConfig;
-import io.github.migraphe.core.environment.EnvironmentId;
-import io.github.migraphe.core.task.Task;
-import io.github.migraphe.core.task.TaskResult;
+import io.github.migraphe.api.common.Result;
+import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.api.environment.EnvironmentConfig;
+import io.github.migraphe.api.environment.EnvironmentId;
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.task.Task;
+import io.github.migraphe.api.task.TaskResult;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;

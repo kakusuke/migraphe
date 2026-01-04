@@ -1,6 +1,6 @@
-package io.github.migraphe.core.task;
+package io.github.migraphe.api.task;
 
-import io.github.migraphe.core.common.Result;
+import io.github.migraphe.api.common.Result;
 
 /**
  * マイグレーションタスクのインターフェース。 プラグインがこのインターフェースを実装して、具体的な実行ロジックを定義する。

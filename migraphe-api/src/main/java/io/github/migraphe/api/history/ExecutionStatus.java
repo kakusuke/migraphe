@@ -1,4 +1,4 @@
-package io.github.migraphe.core.history;
+package io.github.migraphe.api.history;
 
 /** マイグレーション実行ステータス。 */
 public enum ExecutionStatus {

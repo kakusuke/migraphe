@@ -1,9 +1,9 @@
 package io.github.migraphe.core.plugin;
 
-import io.github.migraphe.core.environment.Environment;
-import io.github.migraphe.core.graph.MigrationNode;
-import io.github.migraphe.core.graph.NodeId;
-import io.github.migraphe.core.task.Task;
+import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.task.Task;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;

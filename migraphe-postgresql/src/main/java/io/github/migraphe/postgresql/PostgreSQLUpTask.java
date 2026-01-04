@@ -1,8 +1,8 @@
 package io.github.migraphe.postgresql;
 
-import io.github.migraphe.core.common.Result;
-import io.github.migraphe.core.task.Task;
-import io.github.migraphe.core.task.TaskResult;
+import io.github.migraphe.api.common.Result;
+import io.github.migraphe.api.task.Task;
+import io.github.migraphe.api.task.TaskResult;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;

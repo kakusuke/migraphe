@@ -3,8 +3,8 @@ plugins {
 }
 
 dependencies {
-    // Core dependency
-    api(project(":migraphe-core"))
+    // API dependency only (no core implementation needed)
+    implementation(project(":migraphe-api"))
 
     // PostgreSQL JDBC
     implementation(libs.postgresql)

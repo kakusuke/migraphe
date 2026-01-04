@@ -1,7 +1,7 @@
-package io.github.migraphe.core.history;
+package io.github.migraphe.api.history;
 
-import io.github.migraphe.core.environment.EnvironmentId;
-import io.github.migraphe.core.graph.NodeId;
+import io.github.migraphe.api.environment.EnvironmentId;
+import io.github.migraphe.api.graph.NodeId;
 import java.util.List;
 import java.util.Optional;
 

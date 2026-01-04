@@ -1,7 +1,7 @@
 package io.github.migraphe.cli.config;
 
+import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.core.config.ConfigurationException;
-import io.github.migraphe.core.graph.NodeId;
 import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;

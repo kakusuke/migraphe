@@ -2,13 +2,14 @@ package io.github.migraphe.postgresql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.migraphe.core.common.Result;
-import io.github.migraphe.core.graph.NodeId;
-import io.github.migraphe.core.history.ExecutionRecord;
-import io.github.migraphe.core.history.ExecutionStatus;
-import io.github.migraphe.core.history.HistoryRepository;
-import io.github.migraphe.core.task.Task;
-import io.github.migraphe.core.task.TaskResult;
+import io.github.migraphe.api.common.Result;
+import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.history.ExecutionRecord;
+import io.github.migraphe.api.history.ExecutionStatus;
+import io.github.migraphe.api.history.HistoryRepository;
+import io.github.migraphe.api.task.ExecutionDirection;
+import io.github.migraphe.api.task.Task;
+import io.github.migraphe.api.task.TaskResult;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
@@ -273,7 +274,7 @@ class PostgreSQLIntegrationTest {
                 ExecutionRecord.failure(
                         nodeId,
                         environment.id(),
-                        io.github.migraphe.core.task.ExecutionDirection.UP,
+                        ExecutionDirection.UP,
                         "Failed migration",
                         "SQL syntax error");
 

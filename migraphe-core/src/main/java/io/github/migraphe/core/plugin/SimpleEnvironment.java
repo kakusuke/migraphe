@@ -1,8 +1,8 @@
 package io.github.migraphe.core.plugin;
 
-import io.github.migraphe.core.environment.Environment;
-import io.github.migraphe.core.environment.EnvironmentConfig;
-import io.github.migraphe.core.environment.EnvironmentId;
+import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.api.environment.EnvironmentConfig;
+import io.github.migraphe.api.environment.EnvironmentId;
 import java.util.Objects;
 
 /** Environment のシンプルなリファレンス実装。 プラグイン開発者はこれを参考に独自の実装を作成できる。 */

@@ -3,6 +3,7 @@ package io.github.migraphe.core.graph;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.migraphe.api.graph.NodeId;
 import org.junit.jupiter.api.Test;
 
 class NodeIdTest {

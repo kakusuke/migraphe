@@ -1,8 +1,8 @@
 package io.github.migraphe.cli.command;
 
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.history.HistoryRepository;
 import io.github.migraphe.cli.ExecutionContext;
-import io.github.migraphe.core.graph.MigrationNode;
-import io.github.migraphe.core.history.HistoryRepository;
 import io.github.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.migraphe.postgresql.PostgreSQLHistoryRepository;

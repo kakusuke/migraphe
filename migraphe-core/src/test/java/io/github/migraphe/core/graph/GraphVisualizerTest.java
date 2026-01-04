@@ -3,6 +3,8 @@ package io.github.migraphe.core.graph;
 import static io.github.migraphe.core.graph.TestHelpers.node;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.migraphe.api.graph.MigrationNode;
+import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.core.graph.TestHelpers.TestEnvironment;
 import org.junit.jupiter.api.Test;
 

@@ -1,4 +1,4 @@
-package io.github.migraphe.core.graph;
+package io.github.migraphe.api.graph;
 
 import java.util.Objects;
 import java.util.UUID;
