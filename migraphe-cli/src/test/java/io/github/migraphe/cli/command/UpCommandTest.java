@@ -8,14 +8,27 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.Statement;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.HostPortWaitStrategy;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
-@Disabled("Requires real PostgreSQL database. TODO: Add integration tests with Testcontainers")
+@Testcontainers
 class UpCommandTest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres =
+            new PostgreSQLContainer<>("postgres:16-alpine")
+                    .withDatabaseName("migraphe_test")
+                    .withUsername("test")
+                    .withPassword("test")
+                    .waitingFor(new HostPortWaitStrategy().forPorts(5432));
 
     @TempDir Path tempDir;
 
@@ -31,9 +44,25 @@ class UpCommandTest {
     }
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
         // 標準出力を復元
         System.setOut(originalOut);
+
+        // データベースをクリーンアップ
+        ExecutionContext context = ExecutionContext.load(tempDir);
+        var env = context.environments().get("test-db");
+        if (env != null) {
+            try (Connection conn = env.createConnection();
+                    Statement stmt = conn.createStatement()) {
+                // Drop all user tables
+                stmt.execute("DROP TABLE IF EXISTS users CASCADE");
+                stmt.execute("DROP INDEX IF EXISTS idx_users_name");
+                // Clear history
+                stmt.execute("DROP TABLE IF EXISTS migraphe_history CASCADE");
+            } catch (Exception e) {
+                // Ignore cleanup errors
+            }
+        }
     }
 
     @Test
@@ -129,13 +158,16 @@ class UpCommandTest {
         Path targetsDir = baseDir.resolve("targets");
         Files.createDirectories(targetsDir);
 
+        // Testcontainersの実際の接続情報を使用
         String targetYaml =
-                """
+                String.format(
+                        """
                 type: postgresql
-                jdbc_url: jdbc:postgresql://localhost:5432/testdb
-                username: testuser
-                password: testpass
-                """;
+                jdbc_url: %s
+                username: %s
+                password: %s
+                """,
+                        postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         Files.writeString(targetsDir.resolve("test-db.yaml"), targetYaml);
 
         // tasks/test-db/001_create_users.yaml
