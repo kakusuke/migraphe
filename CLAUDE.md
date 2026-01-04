@@ -1051,6 +1051,56 @@ This ensures continuity across sessions and maintains project knowledge.
 
 ## Changelog
 
+### 2026-01-05 (Session 7)
+- **Phase 11: Plugin System Implementation - IN PROGRESS (3/8 phases complete)**
+  - **Phase 11-0: API Module Separation - COMPLETED** ✅
+    - Created new `migraphe-api` module with no external dependencies
+    - Moved interfaces and value objects from `migraphe-core` to `migraphe-api`:
+      - `environment/` - Environment, EnvironmentId, EnvironmentConfig
+      - `graph/` - MigrationNode (interface), NodeId
+      - `task/` - Task, TaskResult, ExecutionDirection
+      - `history/` - HistoryRepository (interface), ExecutionRecord, ExecutionStatus
+      - `common/` - Result, ValidationResult
+    - Updated module dependencies:
+      - `migraphe-core`: Added `api(project(":migraphe-api"))` - exposes API through core
+      - `migraphe-postgresql`: Changed to `implementation(project(":migraphe-api"))` - depends only on API!
+      - `migraphe-cli`: No change - transitively gets API through core
+    - Fixed 150+ import statements across all modules
+    - **Result**: Plugin developers can now depend only on lightweight API module
+    - Test coverage: 150+ tests passing
+  - **Phase 11-1: SPI Foundation - COMPLETED** ✅
+    - Created plugin SPI in `migraphe-api/spi/`:
+      - `MigraphePlugin` - Unified plugin interface with type-based identification
+      - `EnvironmentProvider` - Creates Environment instances from config
+      - `MigrationNodeProvider` - Creates MigrationNode instances from task config
+      - `HistoryRepositoryProvider` - Creates HistoryRepository instances
+    - Implemented `PluginRegistry` in `migraphe-core/plugin/`:
+      - ServiceLoader integration for classpath discovery
+      - URLClassLoader support for external JAR loading
+      - Directory scanning for `plugins/` folder
+      - Type-based plugin lookup with last-wins policy
+    - Created `PluginLoadException` for error handling
+    - **Test coverage**: Added 13 new tests for PluginRegistry
+    - Total: 163+ tests (92 core + 21 postgresql + ~50 cli)
+  - **Phase 11-2: PostgreSQL Plugin Adaptation - COMPLETED** ✅
+    - Implemented `PostgreSQLPlugin` class (implements MigraphePlugin)
+    - Created 3 Provider implementations:
+      - `PostgreSQLEnvironmentProvider` - Extracts jdbc_url, username, password from EnvironmentConfig
+      - `PostgreSQLMigrationNodeProvider` - Builds PostgreSQLMigrationNode from Map<String, Object> task config
+      - `PostgreSQLHistoryRepositoryProvider` - Creates PostgreSQLHistoryRepository
+    - Added ServiceLoader configuration:
+      - `META-INF/services/io.github.migraphe.api.spi.MigraphePlugin`
+      - Contains: `io.github.migraphe.postgresql.PostgreSQLPlugin`
+    - **ServiceLoader discovery confirmed**: Plugin automatically discovered on classpath
+    - **Test coverage**: Added 13 new tests for PostgreSQL plugin and providers
+    - Total: 176+ tests (92 core + 34 postgresql + ~50 cli), 100% passing
+  - **Remaining Phases**:
+    - Phase 11-3: Generic Factories implementation (replace PostgreSQL-specific factories)
+    - Phase 11-4: ExecutionContext generalization (change to interface types)
+    - Phase 11-5: Command integration (get HistoryRepository via plugin)
+    - Phase 11-6: Main CLI integration (initialize PluginRegistry)
+    - Phase 11-7: Cleanup and documentation (delete old code, update CLAUDE.md, create PLUGIN_DEVELOPMENT.md)
+
 ### 2026-01-05 (Session 6)
 - **Documentation Creation**
   - Created comprehensive user documentation:
