@@ -17,6 +17,17 @@ import java.util.Optional;
 public class ConfigLoader {
 
     /**
+     * YAML ファイルから設定をロードして SmallRyeConfig を構築する（環境指定なし）。
+     *
+     * @param baseDir プロジェクトルートディレクトリ
+     * @return SmallRyeConfig
+     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     */
+    public SmallRyeConfig load(Path baseDir) {
+        return loadConfig(baseDir, Optional.empty());
+    }
+
+    /**
      * YAML ファイルから設定をロードして SmallRyeConfig を構築する。
      *
      * @param baseDir プロジェクトルートディレクトリ
@@ -80,5 +91,40 @@ public class ConfigLoader {
         builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // マッピングされていないプロパティを許可
 
         return builder.build();
+    }
+
+    /**
+     * tasks/ ディレクトリから個別の TaskConfig を読み込む。
+     *
+     * @param tasksDir tasks/ ディレクトリのパス
+     * @return Path → SmallRyeConfig のマップ (各ファイルが個別の Config)
+     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     */
+    public Map<Path, SmallRyeConfig> loadTaskConfigs(Path tasksDir) {
+        YamlFileScanner scanner = new YamlFileScanner();
+        Map<Path, SmallRyeConfig> taskConfigs = new HashMap<>();
+
+        // tasks/ ディレクトリ配下の全YAMLファイルをスキャン
+        List<Path> taskFiles = scanner.scanTaskFiles(tasksDir.getParent());
+
+        for (Path taskFile : taskFiles) {
+            try {
+                // 各タスクファイルを個別の Config として読み込む
+                YamlConfigSource taskSource = new YamlConfigSource(taskFile.toUri().toURL());
+
+                SmallRyeConfig taskConfig =
+                        new SmallRyeConfigBuilder()
+                                .withSources(taskSource)
+                                .withMapping(io.github.migraphe.core.config.TaskConfig.class)
+                                .build();
+
+                taskConfigs.put(taskFile, taskConfig);
+
+            } catch (IOException e) {
+                throw new ConfigurationException("Failed to load task file: " + taskFile, e);
+            }
+        }
+
+        return taskConfigs;
     }
 }
