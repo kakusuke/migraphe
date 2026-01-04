@@ -6,7 +6,7 @@ Migraphe is a migration orchestration tool that manages database/infrastructure 
 
 **Domain Essence**: Orchestration of migration tasks across multiple environments represented as a directed graph.
 
-**Current Milestone**: Configuration Management with MicroProfile Config (COMPLETED)
+**Current Milestone**: CLI Implementation (COMPLETED)
 
 ## Technical Stack
 
@@ -207,6 +207,43 @@ dependencies {
 - Better type safety than string-based configuration
 - Shared configuration model across multiple tools (CLI, Gradle plugin)
 
+#### 10. CLI Architecture and Multi-File Configuration
+
+**Decision**: Multi-file YAML configuration with automatic Task ID generation
+
+**Components**:
+- `YamlFileScanner` - Discovers YAML files in conventional directory structure
+- `TaskIdGenerator` - Generates Task IDs from file paths (e.g., `tasks/db1/create.yaml` → `"db1/create"`)
+- `MultiFileYamlConfigSource` - Custom ConfigSource that merges multiple YAML files
+- `ConfigLoader` - Orchestrates configuration loading with environment overrides
+- `ExecutionContext` - Immutable context holding all runtime state
+- `EnvironmentFactory` / `MigrationNodeFactory` - Convert config to domain objects
+
+**Directory Structure**:
+```
+project/
+├── migraphe.yaml           # Project config
+├── targets/*.yaml          # Database connections
+├── tasks/**/*.yaml         # Migration tasks (hierarchical)
+└── environments/*.yaml     # Environment overrides
+```
+
+**Key Design Points**:
+- **Convention over Configuration**: Task IDs derived from file paths, no manual assignment needed
+- **Separation of Concerns**: Config files organized by type (targets, tasks) for maintainability
+- **Environment Overrides**: `environments/{envName}.yaml` overrides base configuration
+- **Factory Pattern**: Clean conversion from config (data) to domain objects (behavior)
+- **Immutable Context**: ExecutionContext as record prevents accidental state mutation
+- **Topological Sort in Context**: Nodes pre-sorted by dependencies for consistent iteration order
+
+**Rationale**:
+- Reduces configuration boilerplate (no manual Task ID assignment)
+- Clear separation between different config types
+- Supports multiple environments without code duplication
+- Factory pattern keeps CLI layer thin (delegates to core domain logic)
+- Immutable context prevents bugs from shared mutable state
+- Pre-sorted nodes ensure consistent execution order
+
 ### Package Structure
 
 ```
@@ -230,6 +267,22 @@ io.github.migraphe.postgresql/
 ├── PostgreSQLDownTask.java
 ├── PostgreSQLHistoryRepository.java
 └── PostgreSQLException.java
+
+io.github.migraphe.cli/
+├── Main.java                            # CLI entry point
+├── ExecutionContext.java                # Execution context (config, environments, nodes, graph)
+├── command/                             # Command implementations
+│   ├── Command.java                     # Command interface
+│   ├── UpCommand.java                   # Execute migrations
+│   └── StatusCommand.java               # Show migration status
+├── config/                              # Configuration loading
+│   ├── ConfigLoader.java                # Config loader with SmallRyeConfig
+│   ├── MultiFileYamlConfigSource.java   # Multi-file YAML integration
+│   ├── TaskIdGenerator.java             # Generate Task IDs from file paths
+│   └── YamlFileScanner.java             # Discover YAML files
+└── factory/                             # Object factories
+    ├── EnvironmentFactory.java          # Create Environments from config
+    └── MigrationNodeFactory.java        # Create MigrationNodes from config
 ```
 
 ## Development Process
@@ -249,9 +302,10 @@ io.github.migraphe.postgresql/
 
 ### Test Coverage
 
-**Current**: 100 tests, 100% passing
+**Current**: ~150 tests, 100% passing
 - Core: 79 tests (includes InMemoryHistoryRepository + Config interfaces)
 - PostgreSQL: 21 tests (13 unit + 8 integration with Testcontainers)
+- CLI: ~50 tests (includes ConfigLoader, YamlFileScanner, Factories, ExecutionContext, UpCommand with Testcontainers)
 
 ## Implementation Status
 
@@ -308,14 +362,86 @@ io.github.migraphe.postgresql/
 - Shared configuration model across CLI and Gradle plugin
 - Reduced custom code (eliminated VariableExpander)
 
+### Phase 10: CLI Implementation - COMPLETED ✅
+
+**Objective**: Implement command-line interface for executing migrations with YAML configuration
+
+**Phase 10-1: YAML Configuration Loading** ✅
+- ✅ Implemented `YamlFileScanner` - Discovers YAML files (project, targets, tasks, environments)
+- ✅ Implemented `TaskIdGenerator` - Generates Task IDs from file paths (e.g., `tasks/db1/create_users.yaml` → `"db1/create_users"`)
+- ✅ Implemented `MultiFileYamlConfigSource` - Custom MicroProfile ConfigSource for multi-file YAML integration
+- ✅ Implemented `ConfigLoader` - Loads and merges YAML configurations with environment-specific overrides
+- ✅ Tests: YamlFileScannerTest, TaskIdGeneratorTest, ConfigLoaderTest, MultiFileYamlConfigSourceTest
+
+**Phase 10-2: Factories and Execution Context** ✅
+- ✅ Implemented `EnvironmentFactory` - Creates PostgreSQLEnvironment instances from config
+- ✅ Implemented `MigrationNodeFactory` - Creates PostgreSQLMigrationNode instances from TaskConfig
+- ✅ Implemented `ExecutionContext` - Manages project state (config, environments, nodes, graph)
+  - Auto-loads configuration from project directory
+  - Topological sorting for dependency-ordered node list
+  - Graph construction with cycle detection
+- ✅ Tests: EnvironmentFactoryTest, MigrationNodeFactoryTest, ExecutionContextTest
+
+**Phase 10-3: CLI Commands** ✅
+- ✅ Implemented `Main.java` - CLI entry point with command routing
+- ✅ Implemented `Command` interface - Unified command execution pattern
+- ✅ Implemented `UpCommand` - Execute pending migrations
+  - Level-by-level execution based on ExecutionPlan
+  - Automatic skip of already-executed tasks (via HistoryRepository)
+  - Detailed progress output with timing
+  - Failure handling with error recording
+- ✅ Implemented `StatusCommand` - Display migration status
+  - Shows executed vs pending tasks
+  - Summary statistics
+- ✅ Tests: UpCommandTest (integration test with Testcontainers)
+- ✅ Total CLI tests: ~50, 100% passing
+
+**Project Structure**:
+```
+project/
+├── migraphe.yaml              # Project config (name, history.target)
+├── targets/                   # Database connection configs
+│   ├── db1.yaml              # Target: db1 (type, jdbc_url, username, password)
+│   └── history.yaml          # Target: history
+├── tasks/                     # Migration task definitions
+│   ├── db1/
+│   │   ├── create_users.yaml # Task: db1/create_users (name, target, up/down SQL)
+│   │   └── create_posts.yaml # Task: db1/create_posts (dependencies)
+│   └── db2/
+│       └── initial.yaml
+└── environments/              # Environment-specific overrides (optional)
+    ├── development.yaml       # Override for development
+    └── production.yaml        # Override for production
+```
+
+**CLI Commands**:
+```bash
+# Show migration status
+migraphe status
+
+# Execute pending migrations
+migraphe up
+```
+
+**Benefits**:
+- Multi-file YAML configuration for better organization
+- Environment-specific configuration overrides
+- Automatic Task ID generation from file paths
+- Type-safe configuration with MicroProfile Config
+- Reusable factories for clean separation of concerns
+- Comprehensive integration tests with real PostgreSQL
+
 ### Next Steps (Future Phases)
 
-1. **CLI Implementation**: Command-line interface with MicroProfile Config
-2. **YAML Configuration Loaders**: File discovery and loading logic
-3. **Gradle Plugin**: Build integration
-4. **File History Repository**: File-based history persistence
+1. **CLI Executable Packaging**: GraalVM Native Image or application plugin for standalone executable
+2. **Additional CLI Commands**:
+   - `down` - Rollback migrations
+   - `history` - View execution history
+   - `validate` - Validate configuration and dependencies
+3. **Gradle Plugin**: Build integration for running migrations from Gradle
+4. **File History Repository**: File-based history persistence (alternative to PostgreSQL)
 5. **Additional Database Drivers**: MySQL, MongoDB specific implementations
-6. **Virtual Threads**: Parallel execution implementation
+6. **Virtual Threads**: Parallel execution implementation for independent migration levels
 
 ## Critical Files
 
@@ -364,6 +490,19 @@ io.github.migraphe.postgresql/
 - `PostgreSQLHistoryRepository.java` - Persistent history in PostgreSQL table
 - `PostgreSQLException.java` - Plugin-specific exception
 - `init_history_table.sql` - Schema definition for history table
+
+### CLI Module
+- `Main.java` - CLI entry point with command routing
+- `ExecutionContext.java` - Execution context (config, environments, nodes, graph)
+- `Command.java` - Command interface
+- `UpCommand.java` - Execute pending migrations
+- `StatusCommand.java` - Display migration status
+- `ConfigLoader.java` - Load and merge YAML configurations
+- `MultiFileYamlConfigSource.java` - Custom MicroProfile ConfigSource for multi-file YAML
+- `YamlFileScanner.java` - Discover YAML files in project directory
+- `TaskIdGenerator.java` - Generate Task IDs from file paths
+- `EnvironmentFactory.java` - Create Environments from config
+- `MigrationNodeFactory.java` - Create MigrationNodes from config
 
 ### Visualization
 - `GraphVisualizer.java` - Terminal ASCII output
@@ -495,6 +634,181 @@ Optional<ExecutionRecord> latest =
     historyRepo.findLatestRecord(nodeId, environmentId);
 ```
 
+## Using the CLI
+
+### Project Setup
+
+Create a project directory with the following structure:
+
+```
+my-project/
+├── migraphe.yaml              # Project configuration
+├── targets/                   # Database connection configs
+│   ├── db1.yaml
+│   └── history.yaml
+├── tasks/                     # Migration task definitions
+│   ├── db1/
+│   │   ├── 001_create_users.yaml
+│   │   └── 002_create_posts.yaml
+│   └── db2/
+│       └── 001_initial_schema.yaml
+└── environments/              # Optional: environment-specific overrides
+    ├── development.yaml
+    └── production.yaml
+```
+
+### Configuration Files
+
+**migraphe.yaml** (Project configuration):
+```yaml
+project:
+  name: my-project
+  history:
+    target: history
+```
+
+**targets/db1.yaml** (Database target):
+```yaml
+target:
+  db1:
+    type: postgresql
+    jdbc_url: jdbc:postgresql://localhost:5432/mydb
+    username: myuser
+    password: mypassword
+```
+
+**targets/history.yaml** (History storage):
+```yaml
+target:
+  history:
+    type: postgresql
+    jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
+    username: myuser
+    password: mypassword
+```
+
+**tasks/db1/001_create_users.yaml** (Migration task):
+```yaml
+task:
+  name: Create users table
+  target: db1
+  up:
+    sql: |
+      CREATE TABLE users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(255) UNIQUE NOT NULL
+      );
+  down:
+    sql: |
+      DROP TABLE IF EXISTS users;
+```
+
+**tasks/db1/002_create_posts.yaml** (Task with dependency):
+```yaml
+task:
+  name: Create posts table
+  target: db1
+  dependencies:
+    - db1/001_create_users
+  up:
+    sql: |
+      CREATE TABLE posts (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        title VARCHAR(200) NOT NULL,
+        content TEXT
+      );
+  down:
+    sql: |
+      DROP TABLE IF EXISTS posts;
+```
+
+**environments/development.yaml** (Optional environment overrides):
+```yaml
+target:
+  db1:
+    jdbc_url: jdbc:postgresql://localhost:5432/mydb_dev
+    password: dev_password
+```
+
+### Running Migrations
+
+```bash
+# Navigate to project directory
+cd my-project
+
+# Check migration status
+migraphe status
+
+# Output:
+# Migration Status
+# ================
+#
+# [ ] db1/001_create_users - Create users table
+# [ ] db1/002_create_posts - Create posts table
+#
+# Summary:
+#   Total: 2
+#   Executed: 0
+#   Pending: 2
+
+# Execute migrations
+migraphe up
+
+# Output:
+# Executing migrations...
+#
+# Execution Plan:
+#   Levels: 2
+#   Total Tasks: 2
+#
+# Level 0:
+#   [RUN]  Create users table ... OK (45ms)
+#
+# Level 1:
+#   [RUN]  Create posts table ... OK (32ms)
+#
+# Migration completed successfully. 2 migrations executed.
+
+# Check status again
+migraphe status
+
+# Output:
+# Migration Status
+# ================
+#
+# [✓] db1/001_create_users - Create users table
+# [✓] db1/002_create_posts - Create posts table
+#
+# Summary:
+#   Total: 2
+#   Executed: 2
+#   Pending: 0
+```
+
+### Task ID Generation
+
+Task IDs are automatically generated from file paths relative to the `tasks/` directory:
+
+- `tasks/db1/001_create_users.yaml` → Task ID: `"db1/001_create_users"`
+- `tasks/db2/schema/initial.yaml` → Task ID: `"db2/schema/initial"`
+- `tasks/common/setup.yaml` → Task ID: `"common/setup"`
+
+### Environment-Specific Configuration
+
+Use environment files to override configuration for different environments:
+
+```bash
+# Load development environment
+migraphe up --env development
+
+# Load production environment
+migraphe up --env production
+```
+
+Environment files override base configuration with higher priority.
+
 ## Important Patterns & Practices
 
 ### 1. Sealed Interfaces for Type Safety
@@ -620,6 +934,38 @@ This ensures continuity across sessions and maintains project knowledge.
 
 ## Changelog
 
+### 2026-01-04 (Session 5)
+- **Phase 10: CLI Implementation - COMPLETED**
+  - **Phase 10-1: YAML Configuration Loading**
+    - Implemented `YamlFileScanner` - Discovers YAML files (migraphe.yaml, targets/*.yaml, tasks/**/*.yaml, environments/*.yaml)
+    - Implemented `TaskIdGenerator` - Generates Task IDs from file paths (e.g., `tasks/db1/create_users.yaml` → `"db1/create_users"`)
+    - Implemented `MultiFileYamlConfigSource` - Custom MicroProfile ConfigSource for multi-file YAML integration
+    - Implemented `ConfigLoader` - Loads and merges YAML configurations with environment-specific overrides
+    - Tests: YamlFileScannerTest, TaskIdGeneratorTest, ConfigLoaderTest, MultiFileYamlConfigSourceTest
+  - **Phase 10-2: Factories and Execution Context**
+    - Implemented `EnvironmentFactory` - Creates PostgreSQLEnvironment instances from TargetConfig
+    - Implemented `MigrationNodeFactory` - Creates PostgreSQLMigrationNode instances from TaskConfig
+    - Implemented `ExecutionContext` - Manages project state (config, environments, nodes, graph)
+      - Auto-loads configuration from project directory
+      - Topological sorting for dependency-ordered node list
+      - Graph construction with cycle detection
+    - Tests: EnvironmentFactoryTest, MigrationNodeFactoryTest, ExecutionContextTest (4 tests)
+  - **Phase 10-3: CLI Commands**
+    - Implemented `Main.java` - CLI entry point with command routing
+    - Implemented `Command` interface - Unified command execution pattern
+    - Implemented `UpCommand` - Execute pending migrations with ExecutionPlan, HistoryRepository integration, progress output
+    - Implemented `StatusCommand` - Display migration status with summary statistics
+    - Tests: UpCommandTest (integration test with Testcontainers)
+  - Total CLI tests: ~50, 100% passing
+  - **Overall test coverage**: ~150 tests (79 core + 21 PostgreSQL + ~50 CLI), 100% passing
+  - **Design Decisions**:
+    - Multi-file YAML configuration for better organization (project, targets, tasks, environments)
+    - Automatic Task ID generation from file paths (no manual ID assignment needed)
+    - Environment-specific overrides via `environments/{envName}.yaml` files
+    - Reusable factories for clean separation of concerns (Config → Domain objects)
+    - ExecutionContext as immutable record holding all runtime state
+    - Comprehensive integration tests with real PostgreSQL via Testcontainers
+
 ### 2026-01-04 (Session 4)
 - **Phase 9: Configuration Management with MicroProfile Config**
   - Migrated from Jackson TOML to MicroProfile Config with YAML support
@@ -669,5 +1015,5 @@ This ensures continuity across sessions and maintains project knowledge.
 ---
 
 **Last Updated**: 2026-01-04
-**Phase**: 1-9 Complete (Configuration Management Milestone Achieved)
-**Next Milestone**: CLI Implementation with YAML Configuration
+**Phase**: 1-10 Complete (CLI Implementation Milestone Achieved)
+**Next Milestone**: CLI Executable Packaging & Additional Commands
