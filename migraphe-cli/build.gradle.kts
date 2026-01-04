@@ -8,6 +8,10 @@ dependencies {
     api(project(":migraphe-core"))
     implementation(project(":migraphe-postgresql"))
 
+    // MicroProfile Config (YAML support)
+    implementation(libs.smallrye.config)
+    implementation(libs.smallrye.config.source.yaml)
+
     // CLI フレームワーク
     implementation(libs.picocli)
 
