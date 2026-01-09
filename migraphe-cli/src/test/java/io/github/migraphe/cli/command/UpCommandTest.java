@@ -2,7 +2,10 @@ package io.github.migraphe.cli.command;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.cli.ExecutionContext;
+import io.github.migraphe.core.plugin.PluginRegistry;
+import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -32,11 +35,16 @@ class UpCommandTest {
 
     @TempDir Path tempDir;
 
+    private PluginRegistry pluginRegistry;
     private ByteArrayOutputStream outputStream;
     private PrintStream originalOut;
 
     @BeforeEach
     void setUp() {
+        // PostgreSQLプラグインをクラスパスからロード
+        pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
         // 標準出力をキャプチャ
         outputStream = new ByteArrayOutputStream();
         originalOut = System.out;
@@ -49,19 +57,22 @@ class UpCommandTest {
         System.setOut(originalOut);
 
         // データベースをクリーンアップ
-        ExecutionContext context = ExecutionContext.load(tempDir);
-        var env = context.environments().get("test-db");
-        if (env != null) {
-            try (Connection conn = env.createConnection();
-                    Statement stmt = conn.createStatement()) {
-                // Drop all user tables
-                stmt.execute("DROP TABLE IF EXISTS users CASCADE");
-                stmt.execute("DROP INDEX IF EXISTS idx_users_name");
-                // Clear history
-                stmt.execute("DROP TABLE IF EXISTS migraphe_history CASCADE");
-            } catch (Exception e) {
-                // Ignore cleanup errors
+        try {
+            createTestProject(tempDir);
+            ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+            Environment env = context.environments().get("test-db");
+            if (env instanceof PostgreSQLEnvironment pgEnv) {
+                try (Connection conn = pgEnv.createConnection();
+                        Statement stmt = conn.createStatement()) {
+                    // Drop all user tables
+                    stmt.execute("DROP TABLE IF EXISTS users CASCADE");
+                    stmt.execute("DROP INDEX IF EXISTS idx_users_name");
+                    // Clear history
+                    stmt.execute("DROP TABLE IF EXISTS migraphe_history CASCADE");
+                }
             }
+        } catch (Exception e) {
+            // Ignore cleanup errors
         }
     }
 
@@ -70,7 +81,7 @@ class UpCommandTest {
         // Given: テスト用のプロジェクト構造
         createTestProject(tempDir);
 
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
         UpCommand command = new UpCommand(context);
 
         // When: UP コマンドを実行
@@ -89,7 +100,7 @@ class UpCommandTest {
         // Given: プロジェクト構造 + 既に実行済みのマイグレーション
         createTestProject(tempDir);
 
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // 最初の実行
         UpCommand command1 = new UpCommand(context);
@@ -114,7 +125,7 @@ class UpCommandTest {
         // Given: 依存関係のあるマイグレーション
         createTestProject(tempDir);
 
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
         UpCommand command = new UpCommand(context);
 
         // When: 実行
@@ -129,7 +140,7 @@ class UpCommandTest {
         // Given: プロジェクト構造
         createTestProject(tempDir);
 
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
         UpCommand command = new UpCommand(context);
 
         // When: 実行

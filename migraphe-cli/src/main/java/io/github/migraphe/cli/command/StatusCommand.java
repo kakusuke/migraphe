@@ -1,11 +1,12 @@
 package io.github.migraphe.cli.command;
 
+import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.history.HistoryRepository;
+import io.github.migraphe.api.spi.MigraphePlugin;
 import io.github.migraphe.cli.ExecutionContext;
+import io.github.migraphe.core.config.ConfigurationException;
 import io.github.migraphe.core.history.InMemoryHistoryRepository;
-import io.github.migraphe.postgresql.PostgreSQLEnvironment;
-import io.github.migraphe.postgresql.PostgreSQLHistoryRepository;
 
 /** マイグレーションの実行状況を表示するコマンド。 */
 public class StatusCommand implements Command {
@@ -59,7 +60,7 @@ public class StatusCommand implements Command {
         }
     }
 
-    /** HistoryRepository を取得する。 */
+    /** HistoryRepository をプラグイン経由で取得する。 */
     private HistoryRepository getHistoryRepository() {
         // プロジェクト設定から history.target を取得
         String historyTarget =
@@ -68,7 +69,7 @@ public class StatusCommand implements Command {
                         .history()
                         .target();
 
-        PostgreSQLEnvironment historyEnv = context.environments().get(historyTarget);
+        Environment historyEnv = context.environments().get(historyTarget);
 
         if (historyEnv == null) {
             // フォールバック: InMemoryHistoryRepository を使用
@@ -77,6 +78,22 @@ public class StatusCommand implements Command {
             return new InMemoryHistoryRepository();
         }
 
-        return new PostgreSQLHistoryRepository(historyEnv);
+        // history.target の type を取得してプラグインを特定
+        String type = context.config().getValue("target." + historyTarget + ".type", String.class);
+
+        MigraphePlugin plugin =
+                context.pluginRegistry()
+                        .getPlugin(type)
+                        .orElseThrow(
+                                () ->
+                                        new ConfigurationException(
+                                                "No plugin found for history target type: "
+                                                        + type
+                                                        + ". Available types: "
+                                                        + context.pluginRegistry()
+                                                                .supportedTypes()));
+
+        // プラグインの HistoryRepositoryProvider で HistoryRepository を生成
+        return plugin.historyRepositoryProvider().createRepository(historyEnv);
     }
 }

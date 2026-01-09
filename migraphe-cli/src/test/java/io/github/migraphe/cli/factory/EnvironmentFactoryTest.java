@@ -2,14 +2,28 @@ package io.github.migraphe.cli.factory;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.core.plugin.PluginRegistry;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.Map;
 import org.eclipse.microprofile.config.spi.ConfigSource;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class EnvironmentFactoryTest {
+
+    private PluginRegistry pluginRegistry;
+    private EnvironmentFactory factory;
+
+    @BeforeEach
+    void setUp() {
+        // PostgreSQLプラグインをクラスパスからロード
+        pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        factory = new EnvironmentFactory(pluginRegistry);
+    }
 
     @Test
     void shouldCreatePostgreSQLEnvironmentFromConfig() {
@@ -29,16 +43,18 @@ class EnvironmentFactoryTest {
                                                 "secret")))
                         .build();
 
-        EnvironmentFactory factory = new EnvironmentFactory();
-
         // When: db1 の Environment を生成
-        PostgreSQLEnvironment environment = factory.createEnvironment(config, "db1");
+        Environment environment = factory.createEnvironment(config, "db1");
 
         // Then: 正しく生成される
+        assertThat(environment).isInstanceOf(PostgreSQLEnvironment.class);
         assertThat(environment.name()).isEqualTo("db1");
-        assertThat(environment.getJdbcUrl()).isEqualTo("jdbc:postgresql://localhost:5432/mydb");
-        assertThat(environment.getUsername()).isEqualTo("dbuser");
-        assertThat(environment.getPassword()).isEqualTo("secret");
+
+        // PostgreSQLEnvironment 固有のプロパティを検証
+        PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) environment;
+        assertThat(pgEnv.getJdbcUrl()).isEqualTo("jdbc:postgresql://localhost:5432/mydb");
+        assertThat(pgEnv.getUsername()).isEqualTo("dbuser");
+        assertThat(pgEnv.getPassword()).isEqualTo("secret");
     }
 
     @Test
@@ -67,22 +83,22 @@ class EnvironmentFactoryTest {
                                                 "pass2")))
                         .build();
 
-        EnvironmentFactory factory = new EnvironmentFactory();
-
         // When: 複数の Environment を生成
-        Map<String, PostgreSQLEnvironment> environments = factory.createEnvironments(config);
+        Map<String, Environment> environments = factory.createEnvironments(config);
 
         // Then: 両方のターゲットが生成される
         assertThat(environments).hasSize(2);
         assertThat(environments).containsKeys("db1", "db2");
 
-        PostgreSQLEnvironment db1 = environments.get("db1");
+        Environment db1 = environments.get("db1");
         assertThat(db1.name()).isEqualTo("db1");
-        assertThat(db1.getJdbcUrl()).isEqualTo("jdbc:postgresql://db1");
+        assertThat(db1).isInstanceOf(PostgreSQLEnvironment.class);
+        assertThat(((PostgreSQLEnvironment) db1).getJdbcUrl()).isEqualTo("jdbc:postgresql://db1");
 
-        PostgreSQLEnvironment db2 = environments.get("db2");
+        Environment db2 = environments.get("db2");
         assertThat(db2.name()).isEqualTo("db2");
-        assertThat(db2.getJdbcUrl()).isEqualTo("jdbc:postgresql://db2");
+        assertThat(db2).isInstanceOf(PostgreSQLEnvironment.class);
+        assertThat(((PostgreSQLEnvironment) db2).getJdbcUrl()).isEqualTo("jdbc:postgresql://db2");
     }
 
     @Test
@@ -91,12 +107,30 @@ class EnvironmentFactoryTest {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder().withSources(new TestConfigSource(Map.of())).build();
 
-        EnvironmentFactory factory = new EnvironmentFactory();
-
         // When & Then: 例外が発生
         assertThatThrownBy(() -> factory.createEnvironment(config, "db1"))
                 .isInstanceOf(io.github.migraphe.core.config.ConfigurationException.class)
                 .hasMessageContaining("Target configuration not found: db1");
+    }
+
+    @Test
+    void shouldThrowExceptionWhenPluginNotFound() {
+        // Given: 未知の type を持つ設定
+        SmallRyeConfig config =
+                new SmallRyeConfigBuilder()
+                        .withSources(
+                                new TestConfigSource(
+                                        Map.of(
+                                                "target.db1.type",
+                                                "unknown-type",
+                                                "target.db1.jdbc_url",
+                                                "jdbc:unknown://localhost")))
+                        .build();
+
+        // When & Then: プラグインが見つからない例外が発生
+        assertThatThrownBy(() -> factory.createEnvironment(config, "db1"))
+                .isInstanceOf(io.github.migraphe.core.config.ConfigurationException.class)
+                .hasMessageContaining("No plugin found for type: unknown-type");
     }
 
     @Test
@@ -105,10 +139,8 @@ class EnvironmentFactoryTest {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder().withSources(new TestConfigSource(Map.of())).build();
 
-        EnvironmentFactory factory = new EnvironmentFactory();
-
         // When: 全ターゲットを生成
-        Map<String, PostgreSQLEnvironment> environments = factory.createEnvironments(config);
+        Map<String, Environment> environments = factory.createEnvironments(config);
 
         // Then: 空のマップが返される
         assertThat(environments).isEmpty();

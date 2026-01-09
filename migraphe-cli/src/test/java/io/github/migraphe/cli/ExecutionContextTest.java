@@ -2,15 +2,18 @@ package io.github.migraphe.cli;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.core.graph.MigrationGraph;
+import io.github.migraphe.core.plugin.PluginRegistry;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
-import io.github.migraphe.postgresql.PostgreSQLMigrationNode;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -18,13 +21,22 @@ class ExecutionContextTest {
 
     @TempDir Path tempDir;
 
+    private PluginRegistry pluginRegistry;
+
+    @BeforeEach
+    void setUp() {
+        // PostgreSQLプラグインをクラスパスからロード
+        pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+    }
+
     @Test
     void shouldLoadProjectFromDirectory() throws IOException {
         // Given: テスト用のプロジェクト構造を作成
         createTestProject(tempDir);
 
         // When: ExecutionContext をロード
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // Then: 正しく読み込まれている
         assertThat(context.baseDir()).isEqualTo(tempDir);
@@ -39,7 +51,7 @@ class ExecutionContextTest {
         createTestProject(tempDir);
 
         // When: ExecutionContext をロード
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // Then: グラフが構築されている
         MigrationGraph graph = context.graph();
@@ -52,13 +64,14 @@ class ExecutionContextTest {
         createTestProject(tempDir);
 
         // When: ExecutionContext をロード
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // Then: ターゲットIDで Environment が取得できる
-        Map<String, PostgreSQLEnvironment> environments = context.environments();
+        Map<String, Environment> environments = context.environments();
         assertThat(environments).containsKey("test-db");
 
-        PostgreSQLEnvironment env = environments.get("test-db");
+        Environment env = environments.get("test-db");
+        assertThat(env).isInstanceOf(PostgreSQLEnvironment.class);
         assertThat(env.id().value()).isEqualTo("test-db");
     }
 
@@ -68,14 +81,14 @@ class ExecutionContextTest {
         createTestProject(tempDir);
 
         // When: ExecutionContext をロード
-        ExecutionContext context = ExecutionContext.load(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // Then: ノードが順序付けられている
-        List<PostgreSQLMigrationNode> nodes = context.nodes();
+        List<MigrationNode> nodes = context.nodes();
         assertThat(nodes).isNotEmpty();
 
         // ノードIDの重複がない
-        List<NodeId> nodeIds = nodes.stream().map(PostgreSQLMigrationNode::id).toList();
+        List<NodeId> nodeIds = nodes.stream().map(MigrationNode::id).toList();
         assertThat(nodeIds).doesNotHaveDuplicates();
     }
 

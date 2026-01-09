@@ -3,6 +3,7 @@ package io.github.migraphe.cli;
 import io.github.migraphe.cli.command.Command;
 import io.github.migraphe.cli.command.StatusCommand;
 import io.github.migraphe.cli.command.UpCommand;
+import io.github.migraphe.core.plugin.PluginRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -22,8 +23,11 @@ public class Main {
             // プロジェクトディレクトリの決定（カレントディレクトリ）
             Path baseDir = Paths.get(System.getProperty("user.dir"));
 
+            // PluginRegistry を初期化
+            PluginRegistry pluginRegistry = initializePluginRegistry(baseDir);
+
             // ExecutionContext をロード
-            ExecutionContext context = ExecutionContext.load(baseDir);
+            ExecutionContext context = ExecutionContext.load(baseDir, pluginRegistry);
 
             // コマンドを実行
             Command command = createCommand(commandName, context);
@@ -42,6 +46,20 @@ public class Main {
             e.printStackTrace();
             System.exit(1);
         }
+    }
+
+    /** PluginRegistry を初期化する。 */
+    private static PluginRegistry initializePluginRegistry(Path baseDir) {
+        PluginRegistry registry = new PluginRegistry();
+
+        // 1. クラスパスからプラグインをロード
+        registry.loadFromClasspath();
+
+        // 2. plugins/ ディレクトリからプラグインをロード
+        Path pluginsDir = baseDir.resolve("plugins");
+        registry.loadFromDirectory(pluginsDir);
+
+        return registry;
     }
 
     /** コマンド名から Command インスタンスを生成する。 */
