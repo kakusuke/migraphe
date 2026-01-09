@@ -5,10 +5,11 @@ import static org.assertj.core.api.Assertions.*;
 import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
-import io.github.migraphe.core.config.TaskConfig;
+import io.github.migraphe.api.spi.TaskDefinition;
 import io.github.migraphe.core.plugin.PluginRegistry;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.migraphe.postgresql.PostgreSQLMigrationNode;
+import io.github.migraphe.postgresql.SqlTaskDefinition;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.*;
@@ -47,29 +48,29 @@ class MigrationNodeFactoryTest {
                 .build();
     }
 
-    /** TaskConfig を作成（基本形） */
-    private TaskConfig createBasicTaskConfig() {
+    /** SqlTaskDefinition を作成（基本形） */
+    private SqlTaskDefinition createBasicTaskDefinition() {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
-                        .withMapping(TaskConfig.class)
+                        .withMapping(SqlTaskDefinition.class)
                         .withDefaultValue("name", "test-task")
                         .withDefaultValue("target", "test-db")
-                        .withDefaultValue("up.sql", "CREATE TABLE users (id SERIAL PRIMARY KEY);")
+                        .withDefaultValue("up", "CREATE TABLE users (id SERIAL PRIMARY KEY);")
                         .build();
-        return config.getConfigMapping(TaskConfig.class);
+        return config.getConfigMapping(SqlTaskDefinition.class);
     }
 
     @Test
-    void shouldCreateNodeFromTaskConfig() {
-        // Given: 基本的なTaskConfig
+    void shouldCreateNodeFromTaskDefinition() {
+        // Given: 基本的なTaskDefinition
         SmallRyeConfig targetConfig = createConfigWithTarget();
         MigrationNodeFactory factory = new MigrationNodeFactory(pluginRegistry, targetConfig);
 
-        TaskConfig taskConfig = createBasicTaskConfig();
+        SqlTaskDefinition taskDef = createBasicTaskDefinition();
         NodeId nodeId = NodeId.of("task-001");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskConfig, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
 
         // Then: 正しく生成されている
         assertThat(node).isInstanceOf(PostgreSQLMigrationNode.class);
@@ -81,25 +82,25 @@ class MigrationNodeFactoryTest {
 
     @Test
     void shouldCreateNodeWithDependencies() {
-        // Given: 依存関係を持つTaskConfig
+        // Given: 依存関係を持つTaskDefinition
         SmallRyeConfig targetConfig = createConfigWithTarget();
         MigrationNodeFactory factory = new MigrationNodeFactory(pluginRegistry, targetConfig);
 
         SmallRyeConfig configWithDeps =
                 new SmallRyeConfigBuilder()
-                        .withMapping(TaskConfig.class)
+                        .withMapping(SqlTaskDefinition.class)
                         .withDefaultValue("name", "test-task")
                         .withDefaultValue("target", "test-db")
-                        .withDefaultValue("up.sql", "ALTER TABLE users ADD COLUMN name VARCHAR;")
+                        .withDefaultValue("up", "ALTER TABLE users ADD COLUMN name VARCHAR;")
                         .withDefaultValue("dependencies[0]", "task-001")
                         .withDefaultValue("dependencies[1]", "task-002")
                         .build();
 
-        TaskConfig taskConfig = configWithDeps.getConfigMapping(TaskConfig.class);
+        SqlTaskDefinition taskDef = configWithDeps.getConfigMapping(SqlTaskDefinition.class);
         NodeId nodeId = NodeId.of("task-003");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskConfig, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
 
         // Then: 依存関係が設定されている
         assertThat(node.dependencies())
@@ -108,15 +109,15 @@ class MigrationNodeFactoryTest {
 
     @Test
     void shouldCreateNodeWithoutDownTask() {
-        // Given: DOWN SQLが無いTaskConfig
+        // Given: DOWN SQLが無いTaskDefinition
         SmallRyeConfig targetConfig = createConfigWithTarget();
         MigrationNodeFactory factory = new MigrationNodeFactory(pluginRegistry, targetConfig);
 
-        TaskConfig taskConfig = createBasicTaskConfig();
+        SqlTaskDefinition taskDef = createBasicTaskDefinition();
         NodeId nodeId = NodeId.of("task-001");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskConfig, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
 
         // Then: downTask()がemptyを返す
         assertThat(node.downTask()).isEmpty();
@@ -124,60 +125,62 @@ class MigrationNodeFactoryTest {
 
     @Test
     void shouldCreateNodeWithDownTask() {
-        // Given: DOWN SQLを持つTaskConfig
+        // Given: DOWN SQLを持つTaskDefinition
         SmallRyeConfig targetConfig = createConfigWithTarget();
         MigrationNodeFactory factory = new MigrationNodeFactory(pluginRegistry, targetConfig);
 
         SmallRyeConfig configWithDown =
                 new SmallRyeConfigBuilder()
-                        .withMapping(TaskConfig.class)
+                        .withMapping(SqlTaskDefinition.class)
                         .withDefaultValue("name", "test-task")
                         .withDefaultValue("target", "test-db")
-                        .withDefaultValue("up.sql", "CREATE TABLE users (id SERIAL PRIMARY KEY);")
-                        .withDefaultValue("down.sql", "DROP TABLE users;")
+                        .withDefaultValue("up", "CREATE TABLE users (id SERIAL PRIMARY KEY);")
+                        .withDefaultValue("down", "DROP TABLE users;")
                         .build();
 
-        TaskConfig taskConfig = configWithDown.getConfigMapping(TaskConfig.class);
+        SqlTaskDefinition taskDef = configWithDown.getConfigMapping(SqlTaskDefinition.class);
         NodeId nodeId = NodeId.of("task-001");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskConfig, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
 
         // Then: downTask()が存在する
         assertThat(node.downTask()).isPresent();
     }
 
     @Test
-    void shouldCreateMultipleNodesFromConfigs() {
-        // Given: 複数のTaskConfigとNodeIdのマップ
+    void shouldCreateMultipleNodesFromTaskDefinitions() {
+        // Given: 複数のTaskDefinitionとNodeIdのマップ
         SmallRyeConfig targetConfig = createConfigWithTarget();
         MigrationNodeFactory factory = new MigrationNodeFactory(pluginRegistry, targetConfig);
 
         SmallRyeConfig config1 =
                 new SmallRyeConfigBuilder()
-                        .withMapping(TaskConfig.class)
+                        .withMapping(SqlTaskDefinition.class)
                         .withDefaultValue("name", "task-1")
                         .withDefaultValue("target", "test-db")
-                        .withDefaultValue("up.sql", "CREATE TABLE t1 (id INT);")
+                        .withDefaultValue("up", "CREATE TABLE t1 (id INT);")
                         .build();
 
         SmallRyeConfig config2 =
                 new SmallRyeConfigBuilder()
-                        .withMapping(TaskConfig.class)
+                        .withMapping(SqlTaskDefinition.class)
                         .withDefaultValue("name", "task-2")
                         .withDefaultValue("target", "test-db")
-                        .withDefaultValue("up.sql", "CREATE TABLE t2 (id INT);")
+                        .withDefaultValue("up", "CREATE TABLE t2 (id INT);")
                         .withDefaultValue("dependencies[0]", "task-001")
                         .build();
 
-        Map<NodeId, TaskConfig> taskConfigs = new LinkedHashMap<>();
-        taskConfigs.put(NodeId.of("task-001"), config1.getConfigMapping(TaskConfig.class));
-        taskConfigs.put(NodeId.of("task-002"), config2.getConfigMapping(TaskConfig.class));
+        Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
+        taskDefinitions.put(
+                NodeId.of("task-001"), config1.getConfigMapping(SqlTaskDefinition.class));
+        taskDefinitions.put(
+                NodeId.of("task-002"), config2.getConfigMapping(SqlTaskDefinition.class));
 
         Map<String, Environment> environments = Map.of("test-db", environment);
 
         // When: 一括生成
-        List<MigrationNode> nodes = factory.createNodes(taskConfigs, environments);
+        List<MigrationNode> nodes = factory.createNodes(taskDefinitions, environments);
 
         // Then: 2つのノードが生成される
         assertThat(nodes).hasSize(2);

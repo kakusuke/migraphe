@@ -7,6 +7,7 @@ import io.github.migraphe.api.spi.EnvironmentProvider;
 import io.github.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.migraphe.api.spi.MigraphePlugin;
 import io.github.migraphe.api.spi.MigrationNodeProvider;
+import io.github.migraphe.api.spi.TaskDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -93,10 +94,15 @@ class PluginRegistryTest {
     @Test
     void shouldThrowExceptionForNullType() {
         // given
-        MigraphePlugin pluginWithNullType =
-                new MigraphePlugin() {
+        MigraphePlugin<?> pluginWithNullType =
+                new MigraphePlugin<>() {
                     @Override
                     public String type() {
+                        return null;
+                    }
+
+                    @Override
+                    public Class<? extends TaskDefinition<Object>> taskDefinitionClass() {
                         return null;
                     }
 
@@ -106,7 +112,7 @@ class PluginRegistryTest {
                     }
 
                     @Override
-                    public MigrationNodeProvider migrationNodeProvider() {
+                    public MigrationNodeProvider<Object> migrationNodeProvider() {
                         return null;
                     }
 
@@ -195,11 +201,16 @@ class PluginRegistryTest {
 
     // ========== テストヘルパー ==========
 
-    private MigraphePlugin createMockPlugin(String type) {
-        return new MigraphePlugin() {
+    private MigraphePlugin<?> createMockPlugin(String type) {
+        return new MigraphePlugin<>() {
             @Override
             public String type() {
                 return type;
+            }
+
+            @Override
+            public Class<? extends TaskDefinition<Object>> taskDefinitionClass() {
+                return null;
             }
 
             @Override
@@ -208,7 +219,7 @@ class PluginRegistryTest {
             }
 
             @Override
-            public MigrationNodeProvider migrationNodeProvider() {
+            public MigrationNodeProvider<Object> migrationNodeProvider() {
                 return (nodeId, task, dependencies, environment) -> null;
             }
 

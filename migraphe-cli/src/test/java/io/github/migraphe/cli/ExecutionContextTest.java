@@ -140,10 +140,8 @@ class ExecutionContextTest {
                 """
                 name: Create users table
                 target: test-db
-                up:
-                  sql: CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100));
-                down:
-                  sql: DROP TABLE users;
+                up: CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100));
+                down: DROP TABLE users;
                 """;
         Files.writeString(tasksDir.resolve("001_create_users.yaml"), task1Yaml);
 
@@ -154,10 +152,8 @@ class ExecutionContextTest {
                 target: test-db
                 dependencies:
                   - test-db/001_create_users
-                up:
-                  sql: CREATE INDEX idx_users_name ON users(name);
-                down:
-                  sql: DROP INDEX idx_users_name;
+                up: CREATE INDEX idx_users_name ON users(name);
+                down: DROP INDEX idx_users_name;
                 """;
         Files.writeString(tasksDir.resolve("002_add_index.yaml"), task2Yaml);
     }

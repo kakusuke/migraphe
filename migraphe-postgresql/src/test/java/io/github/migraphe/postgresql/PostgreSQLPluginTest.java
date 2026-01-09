@@ -9,8 +9,9 @@ import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.history.HistoryRepository;
 import io.github.migraphe.api.spi.MigraphePlugin;
-import io.github.migraphe.api.spi.SqlDefinition;
 import io.github.migraphe.api.spi.TaskDefinition;
+import io.smallrye.config.SmallRyeConfig;
+import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 class PostgreSQLPluginTest {
 
     @Test
+    @SuppressWarnings("rawtypes")
     void shouldBeDiscoverableViaServiceLoader() {
         // when
         ServiceLoader<MigraphePlugin> loader = ServiceLoader.load(MigraphePlugin.class);
@@ -40,6 +42,18 @@ class PostgreSQLPluginTest {
 
         // then
         assertThat(type).isEqualTo("postgresql");
+    }
+
+    @Test
+    void shouldReturnTaskDefinitionClass() {
+        // given
+        PostgreSQLPlugin plugin = new PostgreSQLPlugin();
+
+        // when
+        Class<? extends TaskDefinition<String>> taskDefClass = plugin.taskDefinitionClass();
+
+        // then
+        assertThat(taskDefClass).isEqualTo(SqlTaskDefinition.class);
     }
 
     @Test
@@ -150,12 +164,13 @@ class PostgreSQLPluginTest {
                         "test", "jdbc:postgresql://localhost:5432/test", "user", "pass");
         var nodeId = NodeId.of("V001");
 
-        TaskDefinition task =
-                TaskDefinition.of(
+        SqlTaskDefinition task =
+                createTaskDefinition(
                         "Create users table",
                         "Initial schema",
-                        SqlDefinition.ofSql("CREATE TABLE users (id SERIAL);"),
-                        SqlDefinition.ofSql("DROP TABLE users;"));
+                        "test",
+                        "CREATE TABLE users (id SERIAL);",
+                        "DROP TABLE users;");
 
         // when
         MigrationNode node = provider.createNode(nodeId, task, Set.of(), env);
@@ -190,8 +205,7 @@ class PostgreSQLPluginTest {
                     }
                 };
         var nodeId = NodeId.of("V001");
-        TaskDefinition task =
-                TaskDefinition.of("test", null, SqlDefinition.ofSql("SELECT 1;"), null);
+        SqlTaskDefinition task = createTaskDefinition("test", null, "test", "SELECT 1;", null);
 
         // when & then
         assertThatThrownBy(() -> provider.createNode(nodeId, task, Set.of(), nonPgEnv))
@@ -241,5 +255,26 @@ class PostgreSQLPluginTest {
         assertThatThrownBy(() -> provider.createRepository(nonPgEnv))
                 .isInstanceOf(PostgreSQLException.class)
                 .hasMessageContaining("Environment must be PostgreSQLEnvironment");
+    }
+
+    /** テスト用の SqlTaskDefinition を作成する。 */
+    private SqlTaskDefinition createTaskDefinition(
+            String name, String description, String target, String up, String down) {
+        SmallRyeConfigBuilder builder =
+                new SmallRyeConfigBuilder()
+                        .withMapping(SqlTaskDefinition.class)
+                        .withDefaultValue("name", name)
+                        .withDefaultValue("target", target)
+                        .withDefaultValue("up", up);
+
+        if (description != null) {
+            builder.withDefaultValue("description", description);
+        }
+        if (down != null) {
+            builder.withDefaultValue("down", down);
+        }
+
+        SmallRyeConfig config = builder.build();
+        return config.getConfigMapping(SqlTaskDefinition.class);
     }
 }

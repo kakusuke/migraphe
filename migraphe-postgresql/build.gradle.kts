@@ -9,6 +9,9 @@ dependencies {
     // PostgreSQL JDBC
     implementation(libs.postgresql)
 
+    // MicroProfile Config (for @ConfigMapping)
+    implementation(libs.smallrye.config)
+
     // Testing
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

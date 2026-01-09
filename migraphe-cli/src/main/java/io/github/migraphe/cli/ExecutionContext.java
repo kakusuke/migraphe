@@ -3,16 +3,14 @@ package io.github.migraphe.cli;
 import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.spi.TaskDefinition;
 import io.github.migraphe.cli.config.ConfigLoader;
-import io.github.migraphe.cli.config.TaskIdGenerator;
 import io.github.migraphe.cli.factory.EnvironmentFactory;
 import io.github.migraphe.cli.factory.MigrationNodeFactory;
-import io.github.migraphe.core.config.TaskConfig;
 import io.github.migraphe.core.graph.MigrationGraph;
 import io.github.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -52,13 +50,13 @@ public record ExecutionContext(
         EnvironmentFactory environmentFactory = new EnvironmentFactory(pluginRegistry);
         Map<String, Environment> environments = environmentFactory.createEnvironments(config);
 
-        // 3. TaskIdGenerator でタスクIDを生成し、TaskConfigを取得
-        TaskIdGenerator taskIdGenerator = new TaskIdGenerator();
-        Map<NodeId, TaskConfig> taskConfigs = loadTaskConfigs(baseDir, config, taskIdGenerator);
+        // 3. ConfigLoader で TaskDefinition を読み込み（プラグイン固有の型でマッピング）
+        Map<NodeId, TaskDefinition<?>> taskDefinitions =
+                configLoader.loadTaskDefinitions(baseDir, config, pluginRegistry);
 
         // 4. MigrationNodeFactory でノードを生成
         MigrationNodeFactory nodeFactory = new MigrationNodeFactory(pluginRegistry, config);
-        List<MigrationNode> nodes = nodeFactory.createNodes(taskConfigs, environments);
+        List<MigrationNode> nodes = nodeFactory.createNodes(taskDefinitions, environments);
 
         // 5. MigrationGraph を構築（依存関係順にノードを追加）
         MigrationGraph graph = MigrationGraph.create();
@@ -69,39 +67,6 @@ public record ExecutionContext(
 
         return new ExecutionContext(
                 baseDir, config, pluginRegistry, environments, sortedNodes, graph);
-    }
-
-    /**
-     * tasks/ ディレクトリから TaskConfig を読み込む。
-     *
-     * @param baseDir プロジェクトのルートディレクトリ
-     * @param config SmallRyeConfig
-     * @param taskIdGenerator TaskIdGenerator
-     * @return NodeId → TaskConfig のマップ
-     */
-    private static Map<NodeId, TaskConfig> loadTaskConfigs(
-            Path baseDir, SmallRyeConfig config, TaskIdGenerator taskIdGenerator) {
-
-        Map<NodeId, TaskConfig> taskConfigs = new LinkedHashMap<>();
-        Path tasksDir = baseDir.resolve("tasks");
-
-        // tasks/ ディレクトリ内の全YAMLファイルを探索
-        ConfigLoader configLoader = new ConfigLoader();
-        Map<Path, SmallRyeConfig> taskFileConfigs = configLoader.loadTaskConfigs(tasksDir);
-
-        for (Map.Entry<Path, SmallRyeConfig> entry : taskFileConfigs.entrySet()) {
-            Path taskFile = entry.getKey();
-            SmallRyeConfig taskConfig = entry.getValue();
-
-            // ファイルパスからNodeIdを生成
-            NodeId nodeId = taskIdGenerator.generateTaskId(baseDir, taskFile);
-
-            // TaskConfig として取得
-            TaskConfig task = taskConfig.getConfigMapping(TaskConfig.class);
-            taskConfigs.put(nodeId, task);
-        }
-
-        return taskConfigs;
     }
 
     /**

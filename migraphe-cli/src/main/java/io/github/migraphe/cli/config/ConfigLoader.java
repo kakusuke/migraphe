@@ -1,14 +1,19 @@
 package io.github.migraphe.cli.config;
 
 import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.spi.MigraphePlugin;
+import io.github.migraphe.api.spi.TaskDefinition;
 import io.github.migraphe.core.config.ConfigurationException;
 import io.github.migraphe.core.config.ProjectConfig;
+import io.github.migraphe.core.plugin.PluginRegistry;
+import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -94,37 +99,100 @@ public class ConfigLoader {
     }
 
     /**
-     * tasks/ ディレクトリから個別の TaskConfig を読み込む。
+     * tasks/ ディレクトリから TaskDefinition を読み込む。
      *
-     * @param tasksDir tasks/ ディレクトリのパス
-     * @return Path → SmallRyeConfig のマップ (各ファイルが個別の Config)
+     * <p>各タスクファイルの target フィールドからプラグインを特定し、 プラグイン固有の TaskDefinition サブタイプにマッピングする。
+     *
+     * @param baseDir プロジェクトのベースディレクトリ
+     * @param mainConfig メイン設定（ターゲット情報を含む）
+     * @param pluginRegistry プラグインレジストリ
+     * @return NodeId → TaskDefinition のマップ
      * @throws ConfigurationException 設定ファイルのロードに失敗した場合
      */
-    public Map<Path, SmallRyeConfig> loadTaskConfigs(Path tasksDir) {
+    public Map<NodeId, TaskDefinition<?>> loadTaskDefinitions(
+            Path baseDir, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
+
         YamlFileScanner scanner = new YamlFileScanner();
-        Map<Path, SmallRyeConfig> taskConfigs = new HashMap<>();
+        TaskIdGenerator idGenerator = new TaskIdGenerator();
+        Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
         // tasks/ ディレクトリ配下の全YAMLファイルをスキャン
-        List<Path> taskFiles = scanner.scanTaskFiles(tasksDir.getParent());
+        List<Path> taskFiles = scanner.scanTaskFiles(baseDir);
 
         for (Path taskFile : taskFiles) {
-            try {
-                // 各タスクファイルを個別の Config として読み込む
-                YamlConfigSource taskSource = new YamlConfigSource(taskFile.toUri().toURL());
-
-                SmallRyeConfig taskConfig =
-                        new SmallRyeConfigBuilder()
-                                .withSources(taskSource)
-                                .withMapping(io.github.migraphe.core.config.TaskConfig.class)
-                                .build();
-
-                taskConfigs.put(taskFile, taskConfig);
-
-            } catch (IOException e) {
-                throw new ConfigurationException("Failed to load task file: " + taskFile, e);
-            }
+            NodeId nodeId = idGenerator.generateTaskId(baseDir, taskFile);
+            TaskDefinition<?> taskDef = loadTaskDefinition(taskFile, mainConfig, pluginRegistry);
+            taskDefinitions.put(nodeId, taskDef);
         }
 
-        return taskConfigs;
+        return taskDefinitions;
+    }
+
+    /**
+     * 単一のタスクファイルから TaskDefinition を読み込む。
+     *
+     * @param taskFile タスクファイルのパス
+     * @param mainConfig メイン設定（ターゲット情報を含む）
+     * @param pluginRegistry プラグインレジストリ
+     * @return TaskDefinition
+     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     */
+    public TaskDefinition<?> loadTaskDefinition(
+            Path taskFile, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
+
+        try {
+            YamlConfigSource taskSource = new YamlConfigSource(taskFile.toUri().toURL());
+
+            // 1. まず target フィールドだけを読み取る
+            SmallRyeConfig targetOnlyConfig =
+                    new SmallRyeConfigBuilder()
+                            .withSources(taskSource)
+                            .withMapping(TaskTargetOnly.class)
+                            .withValidateUnknown(false)
+                            .build();
+
+            TaskTargetOnly targetOnly = targetOnlyConfig.getConfigMapping(TaskTargetOnly.class);
+            String targetId = targetOnly.target();
+
+            // 2. target から type を取得
+            String type = mainConfig.getValue("target." + targetId + ".type", String.class);
+            if (type == null) {
+                throw new ConfigurationException(
+                        "Target type not found for target: " + targetId + " in file: " + taskFile);
+            }
+
+            // 3. プラグインを取得
+            MigraphePlugin<?> plugin =
+                    pluginRegistry
+                            .getPlugin(type)
+                            .orElseThrow(
+                                    () ->
+                                            new ConfigurationException(
+                                                    "No plugin found for type: "
+                                                            + type
+                                                            + ". Available types: "
+                                                            + pluginRegistry.supportedTypes()));
+
+            // 4. プラグインの TaskDefinition クラスでマッピング
+            // 注: YamlConfigSource を再作成（SmallRyeConfig はソースを使い切る）
+            YamlConfigSource taskSource2 = new YamlConfigSource(taskFile.toUri().toURL());
+            SmallRyeConfig taskConfig =
+                    new SmallRyeConfigBuilder()
+                            .withSources(taskSource2)
+                            .withMapping(plugin.taskDefinitionClass())
+                            .withValidateUnknown(false)
+                            .build();
+
+            return taskConfig.getConfigMapping(plugin.taskDefinitionClass());
+
+        } catch (IOException e) {
+            throw new ConfigurationException("Failed to load task file: " + taskFile, e);
+        }
+    }
+
+    /** target フィールドのみを読み取るための最小インターフェース。 */
+    @ConfigMapping(prefix = "")
+    interface TaskTargetOnly {
+        String target();
     }
 }

@@ -1,13 +1,17 @@
 package io.github.migraphe.api.spi;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
  * タスク定義インターフェース。
  *
- * <p>プラグインが受け取るタスク定義を表す。依存関係（dependencies）はフレームワークが処理するため、 このインターフェースには含まれない。
+ * <p>プラグインが提供する TaskDefinition サブタイプの基底インターフェース。 各プラグインは {@code @ConfigMapping} 付きのサブタイプを実装し、YAML
+ * から直接マッピングされる。
+ *
+ * @param <T> UP/DOWN アクションの型（例: PostgreSQL では String（SQL文字列））
  */
-public interface TaskDefinition {
+public interface TaskDefinition<T> {
 
     /** タスク名 */
     String name();
@@ -15,43 +19,15 @@ public interface TaskDefinition {
     /** タスクの説明（オプション） */
     Optional<String> description();
 
+    /** 実行対象のターゲットID */
+    String target();
+
+    /** 依存するタスクIDのリスト（オプション） */
+    Optional<List<String>> dependencies();
+
     /** UP マイグレーション定義 */
-    SqlDefinition up();
+    T up();
 
     /** DOWN マイグレーション定義（オプション） */
-    Optional<SqlDefinition> down();
-
-    /**
-     * TaskDefinition を作成する。
-     *
-     * @param name タスク名
-     * @param description 説明
-     * @param up UP SQL 定義
-     * @param down DOWN SQL 定義
-     * @return TaskDefinition
-     */
-    static TaskDefinition of(
-            String name, String description, SqlDefinition up, SqlDefinition down) {
-        return new TaskDefinition() {
-            @Override
-            public String name() {
-                return name;
-            }
-
-            @Override
-            public Optional<String> description() {
-                return Optional.ofNullable(description);
-            }
-
-            @Override
-            public SqlDefinition up() {
-                return up;
-            }
-
-            @Override
-            public Optional<SqlDefinition> down() {
-                return Optional.ofNullable(down);
-            }
-        };
-    }
+    Optional<T> down();
 }

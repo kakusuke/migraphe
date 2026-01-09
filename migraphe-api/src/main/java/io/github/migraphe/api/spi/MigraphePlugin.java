@@ -9,10 +9,15 @@ package io.github.migraphe.api.spi;
  * <p>実装例:
  *
  * <pre>{@code
- * public class PostgreSQLPlugin implements MigraphePlugin {
+ * public class PostgreSQLPlugin implements MigraphePlugin<String> {
  *     @Override
  *     public String type() {
  *         return "postgresql";
+ *     }
+ *
+ *     @Override
+ *     public Class<SqlTaskDefinition> taskDefinitionClass() {
+ *         return SqlTaskDefinition.class;
  *     }
  *
  *     @Override
@@ -21,7 +26,7 @@ package io.github.migraphe.api.spi;
  *     }
  *
  *     @Override
- *     public MigrationNodeProvider migrationNodeProvider() {
+ *     public MigrationNodeProvider<String> migrationNodeProvider() {
  *         return new PostgreSQLMigrationNodeProvider();
  *     }
  *
@@ -31,8 +36,10 @@ package io.github.migraphe.api.spi;
  *     }
  * }
  * }</pre>
+ *
+ * @param <T> TaskDefinition の UP/DOWN アクション型（例: PostgreSQL では String）
  */
-public interface MigraphePlugin {
+public interface MigraphePlugin<T> {
 
     /**
      * プラグインの型識別子を返す。
@@ -42,6 +49,16 @@ public interface MigraphePlugin {
      * @return プラグインの型識別子
      */
     String type();
+
+    /**
+     * プラグイン固有の TaskDefinition サブタイプを返す。
+     *
+     * <p>フレームワークは返されたクラスを使用して YAML から TaskDefinition をマッピングする。 サブタイプは {@code @ConfigMapping}
+     * アノテーション付きで実装する必要がある。
+     *
+     * @return TaskDefinition サブタイプの Class
+     */
+    Class<? extends TaskDefinition<T>> taskDefinitionClass();
 
     /**
      * Environment を生成する Provider を返す。
@@ -55,7 +72,7 @@ public interface MigraphePlugin {
      *
      * @return MigrationNodeProvider
      */
-    MigrationNodeProvider migrationNodeProvider();
+    MigrationNodeProvider<T> migrationNodeProvider();
 
     /**
      * HistoryRepository を生成する Provider を返す。
