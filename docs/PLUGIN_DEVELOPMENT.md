@@ -74,27 +74,37 @@ public class MyDatabaseEnvironmentProvider implements EnvironmentProvider {
 
 #### MigrationNodeProvider
 
+The framework handles dependency resolution. Your provider receives:
+- `TaskDefinition` - Type-safe task configuration (name, up SQL, down SQL)
+- `Set<NodeId>` - Pre-resolved dependencies from the framework
+
 ```java
 public class MyDatabaseMigrationNodeProvider implements MigrationNodeProvider {
 
     @Override
     public MigrationNode createNode(
             NodeId nodeId,
-            Map<String, Object> taskConfig,
+            TaskDefinition task,
+            Set<NodeId> dependencies,
             Environment environment) {
 
-        String name = (String) taskConfig.get("name");
-        Map<String, Object> upConfig = (Map<String, Object>) taskConfig.get("up");
-        String upScript = (String) upConfig.get("sql");
+        // Get SQL from TaskDefinition
+        String upSql = task.up().sql()
+            .orElseThrow(() -> new IllegalArgumentException("up.sql required"));
 
-        // Build dependencies
-        List<NodeId> dependencies = new ArrayList<>();
-        if (taskConfig.containsKey("dependencies")) {
-            List<String> deps = (List<String>) taskConfig.get("dependencies");
-            deps.forEach(dep -> dependencies.add(NodeId.of(dep)));
-        }
+        String downSql = task.down()
+            .flatMap(SqlDefinition::sql)
+            .orElse(null);
 
-        return new MyDatabaseMigrationNode(nodeId, name, environment, dependencies, upScript);
+        return new MyDatabaseMigrationNode(
+            nodeId,
+            task.name(),
+            task.description().orElse(""),
+            environment,
+            dependencies,  // Provided by framework
+            upSql,
+            downSql
+        );
     }
 }
 ```
@@ -185,7 +195,11 @@ public interface EnvironmentProvider {
 
 ```java
 public interface MigrationNodeProvider {
-    MigrationNode createNode(NodeId nodeId, Map<String, Object> taskConfig, Environment environment);
+    MigrationNode createNode(
+        NodeId nodeId,
+        TaskDefinition task,
+        Set<NodeId> dependencies,
+        Environment environment);
 }
 ```
 
@@ -194,6 +208,29 @@ public interface MigrationNodeProvider {
 ```java
 public interface HistoryRepositoryProvider {
     HistoryRepository createRepository(Environment environment);
+}
+```
+
+### TaskDefinition
+
+Type-safe task configuration provided by the framework:
+
+```java
+public interface TaskDefinition {
+    String name();
+    Optional<String> description();
+    SqlDefinition up();
+    Optional<SqlDefinition> down();
+}
+```
+
+### SqlDefinition
+
+```java
+public interface SqlDefinition {
+    Optional<String> sql();
+    Optional<String> file();
+    Optional<String> resource();
 }
 ```
 
@@ -257,3 +294,4 @@ See `migraphe-postgresql` module for a complete example:
 3. **Transaction management**: Handle transactions properly in Task implementations
 4. **Testing**: Use integration tests with real database instances (e.g., Testcontainers)
 5. **ServiceLoader registration**: Don't forget the META-INF/services file
+6. **Dependency handling**: Let the framework handle dependencies; focus on task execution

@@ -3,23 +3,24 @@ package io.github.migraphe.api.spi;
 import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
-import java.util.Map;
+import java.util.Set;
 
 /**
  * MigrationNode を生成する Provider インターフェース。
  *
- * <p>プラグインはタスク設定から MigrationNode インスタンスを生成する責任を持つ。
+ * <p>プラグインはタスク定義から MigrationNode インスタンスを生成する責任を持つ。 依存関係（dependencies）はフレームワークが解決し、引数として渡す。
  */
 public interface MigrationNodeProvider {
 
     /**
-     * タスク設定から MigrationNode を生成する。
+     * タスク定義から MigrationNode を生成する。
      *
      * @param nodeId ノードID
-     * @param taskConfig タスク設定（YAML から読み込まれた設定マップ）
+     * @param task タスク定義（name, up, down）
+     * @param dependencies このノードが依存するノードID（フレームワークが解決済み）
      * @param environment ノードが属する環境
      * @return MigrationNode インスタンス
      */
     MigrationNode createNode(
-            NodeId nodeId, Map<String, Object> taskConfig, Environment environment);
+            NodeId nodeId, TaskDefinition task, Set<NodeId> dependencies, Environment environment);
 }

@@ -209,7 +209,7 @@ class PluginRegistryTest {
 
             @Override
             public MigrationNodeProvider migrationNodeProvider() {
-                return (nodeId, taskConfig, environment) -> null;
+                return (nodeId, task, dependencies, environment) -> null;
             }
 
             @Override

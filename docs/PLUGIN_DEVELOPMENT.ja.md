@@ -74,27 +74,37 @@ public class MyDatabaseEnvironmentProvider implements EnvironmentProvider {
 
 #### MigrationNodeProvider
 
+フレームワークが依存関係を解決します。Provider は以下を受け取ります：
+- `TaskDefinition` - 型安全なタスク設定（name, up SQL, down SQL）
+- `Set<NodeId>` - フレームワークが解決済みの依存関係
+
 ```java
 public class MyDatabaseMigrationNodeProvider implements MigrationNodeProvider {
 
     @Override
     public MigrationNode createNode(
             NodeId nodeId,
-            Map<String, Object> taskConfig,
+            TaskDefinition task,
+            Set<NodeId> dependencies,
             Environment environment) {
 
-        String name = (String) taskConfig.get("name");
-        Map<String, Object> upConfig = (Map<String, Object>) taskConfig.get("up");
-        String upScript = (String) upConfig.get("sql");
+        // TaskDefinition から SQL を取得
+        String upSql = task.up().sql()
+            .orElseThrow(() -> new IllegalArgumentException("up.sql は必須です"));
 
-        // 依存関係の構築
-        List<NodeId> dependencies = new ArrayList<>();
-        if (taskConfig.containsKey("dependencies")) {
-            List<String> deps = (List<String>) taskConfig.get("dependencies");
-            deps.forEach(dep -> dependencies.add(NodeId.of(dep)));
-        }
+        String downSql = task.down()
+            .flatMap(SqlDefinition::sql)
+            .orElse(null);
 
-        return new MyDatabaseMigrationNode(nodeId, name, environment, dependencies, upScript);
+        return new MyDatabaseMigrationNode(
+            nodeId,
+            task.name(),
+            task.description().orElse(""),
+            environment,
+            dependencies,  // フレームワークから提供
+            upSql,
+            downSql
+        );
     }
 }
 ```
@@ -185,7 +195,11 @@ public interface EnvironmentProvider {
 
 ```java
 public interface MigrationNodeProvider {
-    MigrationNode createNode(NodeId nodeId, Map<String, Object> taskConfig, Environment environment);
+    MigrationNode createNode(
+        NodeId nodeId,
+        TaskDefinition task,
+        Set<NodeId> dependencies,
+        Environment environment);
 }
 ```
 
@@ -194,6 +208,29 @@ public interface MigrationNodeProvider {
 ```java
 public interface HistoryRepositoryProvider {
     HistoryRepository createRepository(Environment environment);
+}
+```
+
+### TaskDefinition
+
+フレームワークが提供する型安全なタスク設定：
+
+```java
+public interface TaskDefinition {
+    String name();
+    Optional<String> description();
+    SqlDefinition up();
+    Optional<SqlDefinition> down();
+}
+```
+
+### SqlDefinition
+
+```java
+public interface SqlDefinition {
+    Optional<String> sql();
+    Optional<String> file();
+    Optional<String> resource();
 }
 ```
 
@@ -257,3 +294,4 @@ public interface HistoryRepository {
 3. **トランザクション管理**: Task 実装でトランザクションを適切に処理
 4. **テスト**: 実際のデータベースインスタンスで統合テスト（例: Testcontainers）
 5. **ServiceLoader 登録**: META-INF/services ファイルを忘れずに
+6. **依存関係の処理**: 依存関係はフレームワークに任せ、タスク実行に集中する

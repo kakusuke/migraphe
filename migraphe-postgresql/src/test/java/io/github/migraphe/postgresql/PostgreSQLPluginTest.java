@@ -9,10 +9,12 @@ import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.history.HistoryRepository;
 import io.github.migraphe.api.spi.MigraphePlugin;
-import java.util.HashMap;
+import io.github.migraphe.api.spi.SqlDefinition;
+import io.github.migraphe.api.spi.TaskDefinition;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class PostgreSQLPluginTest {
@@ -148,15 +150,15 @@ class PostgreSQLPluginTest {
                         "test", "jdbc:postgresql://localhost:5432/test", "user", "pass");
         var nodeId = NodeId.of("V001");
 
-        Map<String, Object> taskConfig = new HashMap<>();
-        taskConfig.put("name", "Create users table");
-        taskConfig.put("description", "Initial schema");
-        taskConfig.put("dependencies", List.of());
-        taskConfig.put("up", Map.of("sql", "CREATE TABLE users (id SERIAL);"));
-        taskConfig.put("down", Map.of("sql", "DROP TABLE users;"));
+        TaskDefinition task =
+                TaskDefinition.of(
+                        "Create users table",
+                        "Initial schema",
+                        SqlDefinition.ofSql("CREATE TABLE users (id SERIAL);"),
+                        SqlDefinition.ofSql("DROP TABLE users;"));
 
         // when
-        MigrationNode node = provider.createNode(nodeId, taskConfig, env);
+        MigrationNode node = provider.createNode(nodeId, task, Set.of(), env);
 
         // then
         assertThat(node).isNotNull();
@@ -188,10 +190,11 @@ class PostgreSQLPluginTest {
                     }
                 };
         var nodeId = NodeId.of("V001");
-        var taskConfig = Map.of("name", "test", "up", Map.of("sql", "SELECT 1;"));
+        TaskDefinition task =
+                TaskDefinition.of("test", null, SqlDefinition.ofSql("SELECT 1;"), null);
 
         // when & then
-        assertThatThrownBy(() -> provider.createNode(nodeId, taskConfig, nonPgEnv))
+        assertThatThrownBy(() -> provider.createNode(nodeId, task, Set.of(), nonPgEnv))
                 .isInstanceOf(PostgreSQLException.class)
                 .hasMessageContaining("Environment must be PostgreSQLEnvironment");
     }

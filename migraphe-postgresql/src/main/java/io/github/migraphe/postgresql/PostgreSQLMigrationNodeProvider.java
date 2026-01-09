@@ -4,15 +4,16 @@ import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.spi.MigrationNodeProvider;
-import java.util.List;
-import java.util.Map;
+import io.github.migraphe.api.spi.SqlDefinition;
+import io.github.migraphe.api.spi.TaskDefinition;
+import java.util.Set;
 
 /** PostgreSQL MigrationNode を生成する Provider。 */
 public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvider {
 
     @Override
     public MigrationNode createNode(
-            NodeId nodeId, Map<String, Object> taskConfig, Environment environment) {
+            NodeId nodeId, TaskDefinition task, Set<NodeId> dependencies, Environment environment) {
 
         if (!(environment instanceof PostgreSQLEnvironment)) {
             throw new PostgreSQLException(
@@ -22,36 +23,25 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
 
         PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) environment;
 
-        // タスク設定から情報を取得
-        String name = getRequiredString(taskConfig, "name", nodeId);
-        String description = getString(taskConfig, "description", "");
+        // UP SQL を取得
+        String upSql = resolveSql(task.up(), nodeId, "up");
 
-        // 依存関係を取得
-        @SuppressWarnings("unchecked")
-        List<String> dependencyStrings =
-                (List<String>) taskConfig.getOrDefault("dependencies", List.of());
-        NodeId[] dependencies = dependencyStrings.stream().map(NodeId::of).toArray(NodeId[]::new);
-
-        // UP/DOWN SQL を取得
-        Map<String, Object> upBlock = getRequiredMap(taskConfig, "up", nodeId);
-        String upSql = getRequiredString(upBlock, "sql", nodeId);
-
-        // DOWN は optional
-        Map<String, Object> downBlock = getMap(taskConfig, "down");
-        String downSql = downBlock != null ? getString(downBlock, "sql", null) : null;
+        // DOWN SQL を取得（オプション）
+        String downSql = null;
+        if (task.down().isPresent() && task.down().get().isDefined()) {
+            downSql = resolveSql(task.down().get(), nodeId, "down");
+        }
 
         // PostgreSQLMigrationNode を構築
         var builder =
                 PostgreSQLMigrationNode.builder()
-                        .id(nodeId.value())
-                        .name(name)
+                        .id(nodeId)
+                        .name(task.name())
                         .environment(pgEnv)
                         .dependencies(dependencies)
                         .upSql(upSql);
 
-        if (description != null && !description.isBlank()) {
-            builder.description(description);
-        }
+        task.description().ifPresent(builder::description);
 
         if (downSql != null && !downSql.isBlank()) {
             builder.downSql(downSql);
@@ -60,45 +50,41 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
         return builder.build();
     }
 
-    // ========== ヘルパーメソッド ==========
+    /**
+     * SqlDefinition から SQL 文字列を解決する。
+     *
+     * @param sqlDef SQL 定義
+     * @param nodeId ノードID（エラーメッセージ用）
+     * @param direction "up" or "down"（エラーメッセージ用）
+     * @return SQL 文字列
+     */
+    private String resolveSql(SqlDefinition sqlDef, NodeId nodeId, String direction) {
+        // sql が直接指定されている場合
+        if (sqlDef.sql().isPresent()) {
+            return sqlDef.sql().get();
+        }
 
-    private String getRequiredString(Map<String, Object> map, String key, NodeId nodeId) {
-        Object value = map.get(key);
-        if (value == null) {
+        // file または resource の読み込みは将来対応
+        // 現時点では sql のみサポート
+        if (sqlDef.file().isPresent()) {
             throw new PostgreSQLException(
-                    "Missing required field '" + key + "' for node: " + nodeId.value());
+                    "File-based SQL loading not yet supported for node: "
+                            + nodeId.value()
+                            + " ("
+                            + direction
+                            + ")");
         }
-        return value.toString();
-    }
 
-    private String getString(Map<String, Object> map, String key, String defaultValue) {
-        Object value = map.get(key);
-        return value != null ? value.toString() : defaultValue;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> getRequiredMap(Map<String, Object> map, String key, NodeId nodeId) {
-        Object value = map.get(key);
-        if (value == null) {
+        if (sqlDef.resource().isPresent()) {
             throw new PostgreSQLException(
-                    "Missing required field '" + key + "' for node: " + nodeId.value());
+                    "Resource-based SQL loading not yet supported for node: "
+                            + nodeId.value()
+                            + " ("
+                            + direction
+                            + ")");
         }
-        if (!(value instanceof Map)) {
-            throw new PostgreSQLException(
-                    "Field '" + key + "' must be a map for node: " + nodeId.value());
-        }
-        return (Map<String, Object>) value;
-    }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> getMap(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value == null) {
-            return null;
-        }
-        if (!(value instanceof Map)) {
-            throw new PostgreSQLException("Field '" + key + "' must be a map");
-        }
-        return (Map<String, Object>) value;
+        throw new PostgreSQLException(
+                "No SQL defined for node: " + nodeId.value() + " (" + direction + ")");
     }
 }

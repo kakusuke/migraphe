@@ -4,14 +4,17 @@ import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.spi.MigraphePlugin;
+import io.github.migraphe.api.spi.SqlDefinition;
+import io.github.migraphe.api.spi.TaskDefinition;
 import io.github.migraphe.core.config.ConfigurationException;
 import io.github.migraphe.core.config.TaskConfig;
 import io.github.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /** TaskConfig から MigrationNode を生成する汎用ファクトリ。プラグインを使用して MigrationNode を生成する。 */
 public class MigrationNodeFactory {
@@ -49,11 +52,15 @@ public class MigrationNodeFactory {
                                                         + ". Available types: "
                                                         + pluginRegistry.supportedTypes()));
 
-        // TaskConfig を Map<String, Object> に変換
-        Map<String, Object> taskConfigMap = toMap(taskConfig);
+        // TaskConfig を TaskDefinition に変換
+        TaskDefinition taskDef = toTaskDefinition(taskConfig);
+
+        // 依存関係を解決（フレームワークの責務）
+        Set<NodeId> dependencies = resolveDependencies(taskConfig);
 
         // プラグインの MigrationNodeProvider で MigrationNode を生成
-        return plugin.migrationNodeProvider().createNode(nodeId, taskConfigMap, environment);
+        return plugin.migrationNodeProvider()
+                .createNode(nodeId, taskDef, dependencies, environment);
     }
 
     /**
@@ -89,35 +96,35 @@ public class MigrationNodeFactory {
     }
 
     /**
-     * TaskConfig を Map<String, Object> に変換する。
+     * TaskConfig を TaskDefinition に変換する。
      *
      * @param taskConfig タスク設定
-     * @return 設定のマップ表現
+     * @return TaskDefinition
      */
-    private Map<String, Object> toMap(TaskConfig taskConfig) {
-        Map<String, Object> map = new HashMap<>();
+    private TaskDefinition toTaskDefinition(TaskConfig taskConfig) {
+        // UP SQL
+        SqlDefinition upSql = SqlDefinition.ofSql(taskConfig.up().sql());
 
-        map.put("name", taskConfig.name());
-        map.put("target", taskConfig.target());
+        // DOWN SQL (optional)
+        SqlDefinition downSql = null;
+        if (taskConfig.down().isPresent()) {
+            downSql = SqlDefinition.ofSql(taskConfig.down().get().sql());
+        }
 
-        taskConfig.description().ifPresent(desc -> map.put("description", desc));
-        taskConfig.dependencies().ifPresent(deps -> map.put("dependencies", deps));
+        return TaskDefinition.of(
+                taskConfig.name(), taskConfig.description().orElse(null), upSql, downSql);
+    }
 
-        // up
-        Map<String, Object> upMap = new HashMap<>();
-        upMap.put("sql", taskConfig.up().sql());
-        map.put("up", upMap);
-
-        // down (optional)
-        taskConfig
-                .down()
-                .ifPresent(
-                        down -> {
-                            Map<String, Object> downMap = new HashMap<>();
-                            downMap.put("sql", down.sql());
-                            map.put("down", downMap);
-                        });
-
-        return map;
+    /**
+     * TaskConfig から依存関係を解決する。
+     *
+     * @param taskConfig タスク設定
+     * @return 依存ノードID のセット
+     */
+    private Set<NodeId> resolveDependencies(TaskConfig taskConfig) {
+        return taskConfig
+                .dependencies()
+                .map(deps -> deps.stream().map(NodeId::of).collect(Collectors.toSet()))
+                .orElse(Set.of());
     }
 }
