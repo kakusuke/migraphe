@@ -4,7 +4,7 @@
 
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
-**Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify (@Nullable)
+**Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 12 (Refactoring) - COMPLETE
 **Tests**: 177+, 100% passing
 
@@ -119,6 +119,7 @@ Update when code changes:
 | 11-7 | Cleanup and documentation | ✅ Complete |
 | 12-1 | EnvironmentDefinition generification | ✅ Complete |
 | 12-2 | @Nullable introduction (Optional removal) | ✅ Complete |
+| 12-3 | NullAway compile-time checks enabled | ✅ Complete |
 
 ### Future Phases
 - `down`, `history`, `validate` commands
@@ -134,7 +135,7 @@ Update when code changes:
 3. **Interface Segregation**: Small, focused interfaces
 4. **Dependency Inversion**: Depend on interfaces
 5. **Immutability**: Records and immutable collections
-6. **Null Safety**: `@Nullable` (jspecify) for nullable fields/returns, `Optional` only for SmallRye @ConfigMapping
+6. **Null Safety**: `@Nullable` (jspecify) + NullAway (compile-time checks), `Optional` only for SmallRye @ConfigMapping
 7. **Type Safety**: Sealed interfaces, pattern matching
 
 ## Session End Procedure
@@ -163,6 +164,11 @@ Update when code changes:
   - **Exception**: `TaskDefinition` keeps `Optional` (SmallRye @ConfigMapping requirement)
   - Updated `Result<T,E>`: Ok.value() returns NonNull, Err.error() returns NonNull
   - Updated all tests for @Nullable assertions
+- **Phase 12-3**: NullAway enabled - COMPLETED
+  - NullAway enabled for main source code (compile-time null safety checks)
+  - Test code excluded (intentional null passing for error handling tests)
+  - Fixed `ConfigSource.getValue()` → `@Nullable` return type
+  - Fixed `Main.createCommand()` → `@Nullable` return type
 - Tests: 177+, 100% passing
 
 ### 2026-01-09 (Session 8)

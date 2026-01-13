@@ -134,6 +134,7 @@ Migrapheは以下で構築されています:
 - **インターフェース駆動アーキテクチャ**: プラガブルコンポーネント
 - **Java 21**: モダンな言語機能（record、sealed interface、パターンマッチング）
 - **MicroProfile Config**: 型安全な設定管理
+- **NullAway + jspecify**: コンパイル時のnull安全性チェック
 - **Gradle**: Kotlin DSLによるビルド自動化
 
 ### コア概念
@@ -175,7 +176,7 @@ cd migraphe
 ./gradlew :migraphe-cli:test
 ```
 
-テストカバレッジ: 約150テスト、100%合格
+テストカバレッジ: 177+テスト、100%合格
 
 ## コントリビューション
 

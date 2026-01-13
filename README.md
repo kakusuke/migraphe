@@ -134,6 +134,7 @@ Migraphe is built with:
 - **Interface-Driven Architecture**: Pluggable components
 - **Java 21**: Modern language features (records, sealed interfaces, pattern matching)
 - **MicroProfile Config**: Type-safe configuration management
+- **NullAway + jspecify**: Compile-time null safety checks
 - **Gradle**: Build automation with Kotlin DSL
 
 ### Core Concepts
@@ -175,7 +176,7 @@ cd migraphe
 ./gradlew :migraphe-cli:test
 ```
 
-Test coverage: ~150 tests, 100% passing
+Test coverage: 177+ tests, 100% passing
 
 ## Contributing
 
