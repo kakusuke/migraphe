@@ -105,13 +105,14 @@ At minimum, you need:
 ```yaml
 project:
   name: my-project
-  history:
-    target: history  # Target name for storing execution history
+
+history:
+  target: history  # Target name for storing execution history
 ```
 
 **Fields:**
 - `project.name` (required): Project identifier
-- `project.history.target` (required): Target name where migration history is stored
+- `history.target` (required): Target name where migration history is stored
 
 ### Target Configuration
 
@@ -120,30 +121,27 @@ Target files define database connections. Place them in the `targets/` directory
 **Example: `targets/db1.yaml`**
 
 ```yaml
-target:
-  db1:
-    type: postgresql
-    jdbc_url: jdbc:postgresql://localhost:5432/mydb
-    username: myuser
-    password: mypassword
+type: postgresql
+jdbc_url: jdbc:postgresql://localhost:5432/mydb
+username: myuser
+password: mypassword
 ```
 
 **Fields:**
-- `target.<name>` (required): Unique target identifier
 - `type` (required): Database type (currently only `postgresql` supported)
 - `jdbc_url` (required): JDBC connection URL
 - `username` (required): Database username
 - `password` (required): Database password
 
+Note: The target name is derived from the filename (e.g., `db1.yaml` → target name `db1`).
+
 **Example: `targets/history.yaml`**
 
 ```yaml
-target:
-  history:
-    type: postgresql
-    jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
-    username: historyuser
-    password: historypass
+type: postgresql
+jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
+username: historyuser
+password: historypass
 ```
 
 ### Task Configuration
@@ -158,28 +156,25 @@ Task IDs are automatically generated from the file path relative to `tasks/`:
 **Example: `tasks/db1/001_create_users.yaml`**
 
 ```yaml
-task:
-  name: Create users table
-  target: db1
-  up:
-    sql: |
-      CREATE TABLE users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-  down:
-    sql: |
-      DROP TABLE IF EXISTS users;
+name: Create users table
+target: db1
+up: |
+  CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+down: |
+  DROP TABLE IF EXISTS users;
 ```
 
 **Fields:**
-- `task.name` (required): Human-readable task description
-- `task.target` (required): Target name (must match a target configuration)
-- `task.dependencies` (optional): List of task IDs this task depends on
-- `task.up.sql` (required): SQL to execute for forward migration
-- `task.down.sql` (optional): SQL to execute for rollback
+- `name` (required): Human-readable task description
+- `target` (required): Target name (must match a target configuration)
+- `dependencies` (optional): List of task IDs this task depends on
+- `up` (required): SQL to execute for forward migration
+- `down` (optional): SQL to execute for rollback
 
 ### Environment-Specific Configuration
 
@@ -201,43 +196,37 @@ Variable substitution using `${VAR}` is supported via MicroProfile Config.
 ### Basic Migration
 
 ```yaml
-task:
-  name: Create posts table
-  target: db1
-  up:
-    sql: |
-      CREATE TABLE posts (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(200) NOT NULL,
-        content TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-  down:
-    sql: |
-      DROP TABLE IF EXISTS posts;
+name: Create posts table
+target: db1
+up: |
+  CREATE TABLE posts (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+down: |
+  DROP TABLE IF EXISTS posts;
 ```
 
 ### Migration with Dependencies
 
 ```yaml
-task:
-  name: Create comments table
-  target: db1
-  dependencies:
-    - db1/001_create_users
-    - db1/002_create_posts
-  up:
-    sql: |
-      CREATE TABLE comments (
-        id SERIAL PRIMARY KEY,
-        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-  down:
-    sql: |
-      DROP TABLE IF EXISTS comments;
+name: Create comments table
+target: db1
+dependencies:
+  - db1/001_create_users
+  - db1/002_create_posts
+up: |
+  CREATE TABLE comments (
+    id SERIAL PRIMARY KEY,
+    post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+down: |
+  DROP TABLE IF EXISTS comments;
 ```
 
 ### Multi-Statement Migrations
@@ -245,22 +234,19 @@ task:
 PostgreSQL supports transactional DDL, so multiple statements are safe:
 
 ```yaml
-task:
-  name: Add indexes
-  target: db1
-  dependencies:
-    - db1/001_create_users
-  up:
-    sql: |
-      CREATE INDEX idx_users_email ON users(email);
-      CREATE INDEX idx_users_created_at ON users(created_at);
+name: Add indexes
+target: db1
+dependencies:
+  - db1/001_create_users
+up: |
+  CREATE INDEX idx_users_email ON users(email);
+  CREATE INDEX idx_users_created_at ON users(created_at);
 
-      COMMENT ON TABLE users IS 'User account information';
-      COMMENT ON COLUMN users.email IS 'Unique user email address';
-  down:
-    sql: |
-      DROP INDEX IF EXISTS idx_users_email;
-      DROP INDEX IF EXISTS idx_users_created_at;
+  COMMENT ON TABLE users IS 'User account information';
+  COMMENT ON COLUMN users.email IS 'Unique user email address';
+down: |
+  DROP INDEX IF EXISTS idx_users_email;
+  DROP INDEX IF EXISTS idx_users_created_at;
 ```
 
 ### Best Practices
@@ -393,25 +379,22 @@ You can create complex dependency structures:
 
 ```yaml
 # tasks/db1/005_final_setup.yaml
-task:
-  name: Final setup
-  target: db1
-  dependencies:
-    - db1/001_create_users
-    - db1/002_create_posts
-    - db1/003_create_comments
-    - db1/004_add_indexes
-  up:
-    sql: |
-      -- Final setup that requires all previous migrations
-      CREATE VIEW recent_posts AS
-      SELECT p.*, u.name as author_name
-      FROM posts p
-      JOIN users u ON p.user_id = u.id
-      WHERE p.created_at > NOW() - INTERVAL '30 days';
-  down:
-    sql: |
-      DROP VIEW IF EXISTS recent_posts;
+name: Final setup
+target: db1
+dependencies:
+  - db1/001_create_users
+  - db1/002_create_posts
+  - db1/003_create_comments
+  - db1/004_add_indexes
+up: |
+  -- Final setup that requires all previous migrations
+  CREATE VIEW recent_posts AS
+  SELECT p.*, u.name as author_name
+  FROM posts p
+  JOIN users u ON p.user_id = u.id
+  WHERE p.created_at > NOW() - INTERVAL '30 days';
+down: |
+  DROP VIEW IF EXISTS recent_posts;
 ```
 
 ### Execution History

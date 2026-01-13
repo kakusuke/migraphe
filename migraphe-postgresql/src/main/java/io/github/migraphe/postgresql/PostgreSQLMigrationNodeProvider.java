@@ -21,13 +21,11 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
             Set<NodeId> dependencies,
             Environment environment) {
 
-        if (!(environment instanceof PostgreSQLEnvironment)) {
+        if (!(environment instanceof PostgreSQLEnvironment pgEnv)) {
             throw new PostgreSQLException(
                     "Environment must be PostgreSQLEnvironment, got: "
                             + environment.getClass().getName());
         }
-
-        PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) environment;
 
         // UP SQL を取得
         String upSql = task.up();

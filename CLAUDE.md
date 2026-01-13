@@ -69,9 +69,9 @@ io.github.migraphe.cli/
 
 ```
 project/
-├── migraphe.yaml        # project.name, project.history.target
-├── targets/*.yaml       # target.<name>.{type, jdbc_url, username, password}
-├── tasks/**/*.yaml      # task.{name, target, dependencies, up.sql, down.sql}
+├── migraphe.yaml        # project.name, history.target
+├── targets/*.yaml       # type, jdbc_url, username, password (flat structure)
+├── tasks/**/*.yaml      # name, target, dependencies, up, down (flat structure)
 └── environments/*.yaml  # Environment-specific overrides
 ```
 

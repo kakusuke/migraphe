@@ -48,48 +48,42 @@ mkdir -p targets tasks/db1
 ```yaml
 project:
   name: my-project
-  history:
-    target: history
+
+history:
+  target: history
 ```
 
 4. `targets/db1.yaml`を作成:
 
 ```yaml
-target:
-  db1:
-    type: postgresql
-    jdbc_url: jdbc:postgresql://localhost:5432/mydb
-    username: myuser
-    password: mypassword
+type: postgresql
+jdbc_url: jdbc:postgresql://localhost:5432/mydb
+username: myuser
+password: mypassword
 ```
 
 5. `targets/history.yaml`を作成:
 
 ```yaml
-target:
-  history:
-    type: postgresql
-    jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
-    username: myuser
-    password: mypassword
+type: postgresql
+jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
+username: myuser
+password: mypassword
 ```
 
 6. `tasks/db1/001_create_users.yaml`を作成:
 
 ```yaml
-task:
-  name: Create users table
-  target: db1
-  up:
-    sql: |
-      CREATE TABLE users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL
-      );
-  down:
-    sql: |
-      DROP TABLE IF EXISTS users;
+name: Create users table
+target: db1
+up: |
+  CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL
+  );
+down: |
+  DROP TABLE IF EXISTS users;
 ```
 
 ### マイグレーションの実行

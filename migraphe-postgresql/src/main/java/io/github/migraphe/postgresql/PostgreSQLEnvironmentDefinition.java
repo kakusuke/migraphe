@@ -7,17 +7,15 @@ import io.smallrye.config.WithName;
 /**
  * PostgreSQL 用の EnvironmentDefinition サブタイプ。
  *
- * <p>YAML ファイルから直接マッピングされる。
+ * <p>YAML ファイルから直接マッピングされる。ターゲット名はファイル名から導出される。
  *
- * <p>YAML 例:
+ * <p>YAML 例 (targets/db1.yaml):
  *
  * <pre>{@code
- * target:
- *   db1:
- *     type: postgresql
- *     jdbc_url: jdbc:postgresql://localhost:5432/mydb
- *     username: dbuser
- *     password: secret
+ * type: postgresql
+ * jdbc_url: jdbc:postgresql://localhost:5432/mydb
+ * username: dbuser
+ * password: secret
  * }</pre>
  */
 @ConfigMapping(prefix = "")

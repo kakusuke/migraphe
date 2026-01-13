@@ -105,13 +105,14 @@ my-project/
 ```yaml
 project:
   name: my-project
-  history:
-    target: history  # 実行履歴を保存するターゲット名
+
+history:
+  target: history  # 実行履歴を保存するターゲット名
 ```
 
 **フィールド:**
 - `project.name`（必須）: プロジェクト識別子
-- `project.history.target`（必須）: マイグレーション履歴を保存するターゲット名
+- `history.target`（必須）: マイグレーション履歴を保存するターゲット名
 
 ### ターゲット設定
 
@@ -120,30 +121,27 @@ project:
 **例: `targets/db1.yaml`**
 
 ```yaml
-target:
-  db1:
-    type: postgresql
-    jdbc_url: jdbc:postgresql://localhost:5432/mydb
-    username: myuser
-    password: mypassword
+type: postgresql
+jdbc_url: jdbc:postgresql://localhost:5432/mydb
+username: myuser
+password: mypassword
 ```
 
 **フィールド:**
-- `target.<name>`（必須）: 一意のターゲット識別子
 - `type`（必須）: データベースタイプ（現在は`postgresql`のみサポート）
 - `jdbc_url`（必須）: JDBC接続URL
 - `username`（必須）: データベースユーザー名
 - `password`（必須）: データベースパスワード
 
+注: ターゲット名はファイル名から導出されます（例: `db1.yaml` → ターゲット名 `db1`）。
+
 **例: `targets/history.yaml`**
 
 ```yaml
-target:
-  history:
-    type: postgresql
-    jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
-    username: historyuser
-    password: historypass
+type: postgresql
+jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
+username: historyuser
+password: historypass
 ```
 
 ### タスク設定
@@ -158,28 +156,25 @@ target:
 **例: `tasks/db1/001_create_users.yaml`**
 
 ```yaml
-task:
-  name: Create users table
-  target: db1
-  up:
-    sql: |
-      CREATE TABLE users (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-  down:
-    sql: |
-      DROP TABLE IF EXISTS users;
+name: Create users table
+target: db1
+up: |
+  CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+down: |
+  DROP TABLE IF EXISTS users;
 ```
 
 **フィールド:**
-- `task.name`（必須）: 人間が読めるタスク説明
-- `task.target`（必須）: ターゲット名（ターゲット設定と一致する必要があります）
-- `task.dependencies`（オプション）: このタスクが依存するタスクIDのリスト
-- `task.up.sql`（必須）: フォワードマイグレーション用に実行するSQL
-- `task.down.sql`（オプション）: ロールバック用に実行するSQL
+- `name`（必須）: 人間が読めるタスク説明
+- `target`（必須）: ターゲット名（ターゲット設定と一致する必要があります）
+- `dependencies`（オプション）: このタスクが依存するタスクIDのリスト
+- `up`（必須）: フォワードマイグレーション用に実行するSQL
+- `down`（オプション）: ロールバック用に実行するSQL
 
 ### 環境固有の設定
 
@@ -201,43 +196,37 @@ target:
 ### 基本的なマイグレーション
 
 ```yaml
-task:
-  name: Create posts table
-  target: db1
-  up:
-    sql: |
-      CREATE TABLE posts (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(200) NOT NULL,
-        content TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-  down:
-    sql: |
-      DROP TABLE IF EXISTS posts;
+name: Create posts table
+target: db1
+up: |
+  CREATE TABLE posts (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    content TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+down: |
+  DROP TABLE IF EXISTS posts;
 ```
 
 ### 依存関係のあるマイグレーション
 
 ```yaml
-task:
-  name: Create comments table
-  target: db1
-  dependencies:
-    - db1/001_create_users
-    - db1/002_create_posts
-  up:
-    sql: |
-      CREATE TABLE comments (
-        id SERIAL PRIMARY KEY,
-        post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-  down:
-    sql: |
-      DROP TABLE IF EXISTS comments;
+name: Create comments table
+target: db1
+dependencies:
+  - db1/001_create_users
+  - db1/002_create_posts
+up: |
+  CREATE TABLE comments (
+    id SERIAL PRIMARY KEY,
+    post_id INTEGER REFERENCES posts(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+down: |
+  DROP TABLE IF EXISTS comments;
 ```
 
 ### 複数ステートメントのマイグレーション
@@ -245,22 +234,19 @@ task:
 PostgreSQLはトランザクショナルDDLをサポートしているため、複数のステートメントも安全です:
 
 ```yaml
-task:
-  name: Add indexes
-  target: db1
-  dependencies:
-    - db1/001_create_users
-  up:
-    sql: |
-      CREATE INDEX idx_users_email ON users(email);
-      CREATE INDEX idx_users_created_at ON users(created_at);
+name: Add indexes
+target: db1
+dependencies:
+  - db1/001_create_users
+up: |
+  CREATE INDEX idx_users_email ON users(email);
+  CREATE INDEX idx_users_created_at ON users(created_at);
 
-      COMMENT ON TABLE users IS 'User account information';
-      COMMENT ON COLUMN users.email IS 'Unique user email address';
-  down:
-    sql: |
-      DROP INDEX IF EXISTS idx_users_email;
-      DROP INDEX IF EXISTS idx_users_created_at;
+  COMMENT ON TABLE users IS 'User account information';
+  COMMENT ON COLUMN users.email IS 'Unique user email address';
+down: |
+  DROP INDEX IF EXISTS idx_users_email;
+  DROP INDEX IF EXISTS idx_users_created_at;
 ```
 
 ### ベストプラクティス
@@ -393,25 +379,22 @@ Level 1（Level 0の後に並列実行）:
 
 ```yaml
 # tasks/db1/005_final_setup.yaml
-task:
-  name: Final setup
-  target: db1
-  dependencies:
-    - db1/001_create_users
-    - db1/002_create_posts
-    - db1/003_create_comments
-    - db1/004_add_indexes
-  up:
-    sql: |
-      -- すべての前のマイグレーションが必要な最終セットアップ
-      CREATE VIEW recent_posts AS
-      SELECT p.*, u.name as author_name
-      FROM posts p
-      JOIN users u ON p.user_id = u.id
-      WHERE p.created_at > NOW() - INTERVAL '30 days';
-  down:
-    sql: |
-      DROP VIEW IF EXISTS recent_posts;
+name: Final setup
+target: db1
+dependencies:
+  - db1/001_create_users
+  - db1/002_create_posts
+  - db1/003_create_comments
+  - db1/004_add_indexes
+up: |
+  -- すべての前のマイグレーションが必要な最終セットアップ
+  CREATE VIEW recent_posts AS
+  SELECT p.*, u.name as author_name
+  FROM posts p
+  JOIN users u ON p.user_id = u.id
+  WHERE p.created_at > NOW() - INTERVAL '30 days';
+down: |
+  DROP VIEW IF EXISTS recent_posts;
 ```
 
 ### 実行履歴
