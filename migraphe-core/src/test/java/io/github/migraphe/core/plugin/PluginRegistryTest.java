@@ -52,6 +52,40 @@ class PluginRegistryTest {
     }
 
     @Test
+    void shouldReturnPluginForRequiredPlugin() {
+        // given
+        MigraphePlugin mockPlugin = createMockPlugin("test-db");
+        registry.register(mockPlugin);
+
+        // when
+        var result = registry.getRequiredPlugin("test-db");
+
+        // then
+        assertThat(result).isSameAs(mockPlugin);
+    }
+
+    @Test
+    void shouldThrowExceptionForUnknownRequiredPlugin() {
+        // given
+        registry.register(createMockPlugin("postgresql"));
+
+        // when & then
+        assertThatThrownBy(() -> registry.getRequiredPlugin("mysql"))
+                .isInstanceOf(PluginNotFoundException.class)
+                .hasMessageContaining("No plugin found for type 'mysql'")
+                .hasMessageContaining("Available plugins: [postgresql]")
+                .hasMessageContaining("plugins/ directory");
+    }
+
+    @Test
+    void shouldThrowExceptionWithEmptyPluginsMessage() {
+        // when & then
+        assertThatThrownBy(() -> registry.getRequiredPlugin("any"))
+                .isInstanceOf(PluginNotFoundException.class)
+                .hasMessageContaining("No plugins are currently loaded");
+    }
+
+    @Test
     void shouldOverridePluginWithSameType() {
         // given
         MigraphePlugin plugin1 = createMockPlugin("postgresql");

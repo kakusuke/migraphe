@@ -37,7 +37,6 @@ public class MigrationNodeFactory {
      * @param environment 実行環境
      * @return MigrationNode
      */
-    @SuppressWarnings("unchecked")
     public MigrationNode createNode(
             TaskDefinition<?> taskDef, NodeId nodeId, Environment environment) {
 
@@ -45,15 +44,9 @@ public class MigrationNodeFactory {
         String targetId = taskDef.target();
         String type = config.getValue("target." + targetId + ".type", String.class);
 
-        MigraphePlugin<?> plugin = pluginRegistry.getPlugin(type);
-        if (plugin == null) {
-            throw new ConfigurationException(
-                    "No plugin found for type: "
-                            + type
-                            + ". Available types: "
-                            + pluginRegistry.supportedTypes());
-        }
+        MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
 
+        @SuppressWarnings("unchecked")
         MigraphePlugin<Object> typedPlugin = (MigraphePlugin<Object>) plugin;
 
         // 依存関係を解決（フレームワークの責務）

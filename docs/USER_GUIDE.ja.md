@@ -64,6 +64,40 @@ migraphe status
 migraphe up
 ```
 
+### プラグインのインストール
+
+Migraphe はプラグインアーキテクチャを採用しており、データベースサポートは別のプラグインとして提供されます。
+
+**プラグインの配置:**
+
+プラグイン JAR ファイルをプロジェクトの `plugins/` ディレクトリに配置します:
+
+```
+my-project/
+├── migraphe.yaml
+├── plugins/                      # プラグインディレクトリ
+│   └── migraphe-postgresql-x.x.x.jar
+├── targets/
+└── tasks/
+```
+
+**現在利用可能なプラグイン:**
+
+| プラグイン | 説明 |
+|-----------|------|
+| `migraphe-postgresql` | PostgreSQL データベースサポート |
+
+**プラグイン JAR の取得:**
+
+```bash
+# ソースからビルド
+./gradlew :migraphe-postgresql:jar
+
+# JAR を plugins/ にコピー
+mkdir -p my-project/plugins
+cp migraphe-postgresql/build/libs/migraphe-postgresql-*.jar my-project/plugins/
+```
+
 ## プロジェクトのセットアップ
 
 ### ディレクトリ構造
@@ -427,7 +461,24 @@ WHERE node_id = 'db1/001_create_users';
 
 ### よくある問題
 
-#### 1. "Target not found" エラー
+#### 1. "No plugin found for type" エラー
+
+**問題:**
+```
+No plugin found for type 'postgresql'.
+No plugins are currently loaded.
+
+To use this plugin type:
+  1. Place the plugin JAR file in ./plugins/ directory
+  2. Ensure the JAR contains META-INF/services/io.github.migraphe.api.spi.MigraphePlugin
+```
+
+**解決策:**
+- `plugins/` ディレクトリにプラグイン JAR ファイルを配置
+- プラグイン JAR が正しいバージョンであることを確認
+- [プラグインのインストール](#プラグインのインストール) セクションを参照
+
+#### 2. "Target not found" エラー
 
 **問題:**
 ```

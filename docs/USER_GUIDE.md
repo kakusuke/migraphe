@@ -64,6 +64,40 @@ migraphe status
 migraphe up
 ```
 
+### Installing Plugins
+
+Migraphe uses a plugin architecture where database support is provided by separate plugins.
+
+**Plugin Placement:**
+
+Place plugin JAR files in the `plugins/` directory of your project:
+
+```
+my-project/
+├── migraphe.yaml
+├── plugins/                      # Plugin directory
+│   └── migraphe-postgresql-x.x.x.jar
+├── targets/
+└── tasks/
+```
+
+**Available Plugins:**
+
+| Plugin | Description |
+|--------|-------------|
+| `migraphe-postgresql` | PostgreSQL database support |
+
+**Getting Plugin JARs:**
+
+```bash
+# Build from source
+./gradlew :migraphe-postgresql:jar
+
+# Copy JAR to plugins/
+mkdir -p my-project/plugins
+cp migraphe-postgresql/build/libs/migraphe-postgresql-*.jar my-project/plugins/
+```
+
 ## Project Setup
 
 ### Directory Structure
@@ -427,7 +461,24 @@ WHERE node_id = 'db1/001_create_users';
 
 ### Common Issues
 
-#### 1. "Target not found" Error
+#### 1. "No plugin found for type" Error
+
+**Problem:**
+```
+No plugin found for type 'postgresql'.
+No plugins are currently loaded.
+
+To use this plugin type:
+  1. Place the plugin JAR file in ./plugins/ directory
+  2. Ensure the JAR contains META-INF/services/io.github.migraphe.api.spi.MigraphePlugin
+```
+
+**Solution:**
+- Place plugin JAR file in `plugins/` directory
+- Verify the plugin JAR is the correct version
+- See [Installing Plugins](#installing-plugins) section
+
+#### 2. "Target not found" Error
 
 **Problem:**
 ```

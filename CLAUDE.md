@@ -150,6 +150,16 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-13 (Session 10)
+- **Plugin Dynamic Loading**: migraphe-cli から migraphe-postgresql 依存を分離
+  - `build.gradle.kts`: `implementation` → `testImplementation` に変更
+  - 本番は `./plugins/` ディレクトリから JAR を動的ロード
+  - テストはクラスパスから ServiceLoader でロード（既存テスト維持）
+  - `PluginNotFoundException`: プラグイン未発見時の詳細エラーメッセージ
+  - `PluginRegistry.getRequiredPlugin()`: null チェック不要の必須取得メソッド
+  - ドキュメント更新: `USER_GUIDE.md`/`USER_GUIDE.ja.md` にプラグイン配置方法追加
+- Tests: 180, 100% passing
+
 ### 2026-01-13 (Session 9)
 - **Phase 12-1**: EnvironmentDefinition generification - COMPLETED
   - Created `EnvironmentDefinition` interface in API module

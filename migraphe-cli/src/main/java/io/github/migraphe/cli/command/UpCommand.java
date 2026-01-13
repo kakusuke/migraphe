@@ -9,7 +9,6 @@ import io.github.migraphe.api.spi.MigraphePlugin;
 import io.github.migraphe.api.task.ExecutionDirection;
 import io.github.migraphe.api.task.TaskResult;
 import io.github.migraphe.cli.ExecutionContext;
-import io.github.migraphe.core.config.ConfigurationException;
 import io.github.migraphe.core.graph.ExecutionLevel;
 import io.github.migraphe.core.graph.ExecutionPlan;
 import io.github.migraphe.core.graph.TopologicalSort;
@@ -148,14 +147,7 @@ public class UpCommand implements Command {
         // history.target の type を取得してプラグインを特定
         String type = context.config().getValue("target." + historyTarget + ".type", String.class);
 
-        MigraphePlugin<?> plugin = context.pluginRegistry().getPlugin(type);
-        if (plugin == null) {
-            throw new ConfigurationException(
-                    "No plugin found for history target type: "
-                            + type
-                            + ". Available types: "
-                            + context.pluginRegistry().supportedTypes());
-        }
+        MigraphePlugin<?> plugin = context.pluginRegistry().getRequiredPlugin(type);
 
         // プラグインの HistoryRepositoryProvider で HistoryRepository を生成
         return plugin.historyRepositoryProvider().createRepository(historyEnv);

@@ -4,9 +4,11 @@ plugins {
 }
 
 dependencies {
-    // コアとプラグイン
+    // コア
     api(project(":migraphe-core"))
-    implementation(project(":migraphe-postgresql"))
+
+    // プラグイン（テスト用のみ - 本番は plugins/ ディレクトリから動的ロード）
+    testImplementation(project(":migraphe-postgresql"))
 
     // MicroProfile Config (YAML support)
     implementation(libs.smallrye.config)

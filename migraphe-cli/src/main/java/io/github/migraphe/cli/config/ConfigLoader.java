@@ -176,14 +176,7 @@ public class ConfigLoader {
         }
 
         // 2. プラグインを取得
-        MigraphePlugin<?> plugin = pluginRegistry.getPlugin(type);
-        if (plugin == null) {
-            throw new ConfigurationException(
-                    "No plugin found for type: "
-                            + type
-                            + ". Available types: "
-                            + pluginRegistry.supportedTypes());
-        }
+        MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
 
         // 3. プラグインの EnvironmentDefinition クラスでマッピング
         // プレフィックス付きで EnvironmentDefinition を構築
@@ -249,14 +242,7 @@ public class ConfigLoader {
             }
 
             // 3. プラグインを取得
-            MigraphePlugin<?> plugin = pluginRegistry.getPlugin(type);
-            if (plugin == null) {
-                throw new ConfigurationException(
-                        "No plugin found for type: "
-                                + type
-                                + ". Available types: "
-                                + pluginRegistry.supportedTypes());
-            }
+            MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
 
             // 4. プラグインの TaskDefinition クラスでマッピング
             // 注: YamlConfigSource を再作成（SmallRyeConfig はソースを使い切る）

@@ -29,14 +29,7 @@ public class EnvironmentFactory {
         String type = definition.type();
 
         // プラグインを取得
-        MigraphePlugin<?> plugin = pluginRegistry.getPlugin(type);
-        if (plugin == null) {
-            throw new ConfigurationException(
-                    "No plugin found for type: "
-                            + type
-                            + ". Available types: "
-                            + pluginRegistry.supportedTypes());
-        }
+        MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
 
         // プラグインの EnvironmentProvider で Environment を生成
         return plugin.environmentProvider().createEnvironment(targetId, definition);

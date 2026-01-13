@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.*;
 import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.spi.EnvironmentDefinition;
 import io.github.migraphe.cli.config.ConfigLoader;
+import io.github.migraphe.core.plugin.PluginNotFoundException;
 import io.github.migraphe.core.plugin.PluginRegistry;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.smallrye.config.SmallRyeConfig;
@@ -125,8 +126,8 @@ class EnvironmentFactoryTest {
 
         // When & Then: プラグインが見つからない例外が発生
         assertThatThrownBy(() -> factory.createEnvironment("db1", unknownDefinition))
-                .isInstanceOf(io.github.migraphe.core.config.ConfigurationException.class)
-                .hasMessageContaining("No plugin found for type: unknown-type");
+                .isInstanceOf(PluginNotFoundException.class)
+                .hasMessageContaining("No plugin found for type 'unknown-type'");
     }
 
     @Test

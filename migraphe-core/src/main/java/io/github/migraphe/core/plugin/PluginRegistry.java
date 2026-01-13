@@ -136,6 +136,23 @@ public final class PluginRegistry {
     }
 
     /**
+     * 指定された型のプラグインを取得する（必須）。
+     *
+     * <p>プラグインが見つからない場合、利用可能なプラグイン一覧と解決方法を含む詳細なエラーメッセージを持つ {@link PluginNotFoundException} をスローする。
+     *
+     * @param type プラグインの型識別子
+     * @return プラグイン
+     * @throws PluginNotFoundException 指定された型のプラグインが見つからない場合
+     */
+    public MigraphePlugin<?> getRequiredPlugin(String type) {
+        MigraphePlugin<?> plugin = plugins.get(type);
+        if (plugin == null) {
+            throw new PluginNotFoundException(type, supportedTypes());
+        }
+        return plugin;
+    }
+
+    /**
      * サポートされているプラグインの型一覧を取得する。
      *
      * @return プラグインの型識別子のセット
