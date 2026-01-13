@@ -30,6 +30,7 @@ subprojects {
         "errorprone"(rootProject.libs.errorprone.core)
         "errorprone"(rootProject.libs.nullaway)
         "compileOnly"(rootProject.libs.jspecify)
+        "testCompileOnly"(rootProject.libs.jspecify)
     }
 
     configure<com.diffplug.gradle.spotless.SpotlessExtension> {
@@ -44,9 +45,12 @@ subprojects {
 
     tasks.withType<JavaCompile>().configureEach {
         options.errorprone {
-            // NullAway is configured but disabled until Optional removal is complete
-            // To enable: change "disable" to "error"
-            disable("NullAway")
+            // Enable NullAway only for main source code, not test code
+            if (name == "compileJava") {
+                error("NullAway")
+            } else {
+                disable("NullAway")
+            }
             option("NullAway:AnnotatedPackages", "io.github.migraphe")
         }
     }

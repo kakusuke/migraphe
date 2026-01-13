@@ -10,7 +10,9 @@ import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.Map;
+import java.util.Objects;
 import org.eclipse.microprofile.config.spi.ConfigSource;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -50,7 +52,7 @@ class EnvironmentFactoryTest {
         // When: EnvironmentDefinition を読み込んで Environment を生成
         Map<String, EnvironmentDefinition> definitions =
                 configLoader.loadEnvironmentDefinitions(config, pluginRegistry);
-        EnvironmentDefinition definition = definitions.get("db1");
+        EnvironmentDefinition definition = Objects.requireNonNull(definitions.get("db1"));
         Environment environment = factory.createEnvironment("db1", definition);
 
         // Then: 正しく生成される
@@ -99,12 +101,12 @@ class EnvironmentFactoryTest {
         assertThat(environments).hasSize(2);
         assertThat(environments).containsKeys("db1", "db2");
 
-        Environment db1 = environments.get("db1");
+        Environment db1 = Objects.requireNonNull(environments.get("db1"));
         assertThat(db1.name()).isEqualTo("db1");
         assertThat(db1).isInstanceOf(PostgreSQLEnvironment.class);
         assertThat(((PostgreSQLEnvironment) db1).getJdbcUrl()).isEqualTo("jdbc:postgresql://db1");
 
-        Environment db2 = environments.get("db2");
+        Environment db2 = Objects.requireNonNull(environments.get("db2"));
         assertThat(db2.name()).isEqualTo("db2");
         assertThat(db2).isInstanceOf(PostgreSQLEnvironment.class);
         assertThat(((PostgreSQLEnvironment) db2).getJdbcUrl()).isEqualTo("jdbc:postgresql://db2");
@@ -153,7 +155,7 @@ class EnvironmentFactoryTest {
         }
 
         @Override
-        public String getValue(String propertyName) {
+        public @Nullable String getValue(String propertyName) {
             return properties.get(propertyName);
         }
 

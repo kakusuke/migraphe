@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.eclipse.microprofile.config.spi.ConfigSource;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 複数の YAML ファイルを統合する ConfigSource。
@@ -120,7 +121,7 @@ public class MultiFileYamlConfigSource implements ConfigSource {
     }
 
     @Override
-    public String getValue(String propertyName) {
+    public @Nullable String getValue(String propertyName) {
         return properties.get(propertyName);
     }
 

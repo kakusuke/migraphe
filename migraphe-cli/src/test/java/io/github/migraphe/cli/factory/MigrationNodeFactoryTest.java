@@ -14,6 +14,7 @@ import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.*;
 import org.eclipse.microprofile.config.spi.ConfigSource;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -202,7 +203,7 @@ class MigrationNodeFactoryTest {
         }
 
         @Override
-        public String getValue(String propertyName) {
+        public @Nullable String getValue(String propertyName) {
             return properties.get(propertyName);
         }
 

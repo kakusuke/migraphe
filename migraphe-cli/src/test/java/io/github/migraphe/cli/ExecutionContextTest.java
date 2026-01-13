@@ -13,10 +13,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+@SuppressWarnings("NullAway.Init")
 class ExecutionContextTest {
 
     @TempDir Path tempDir;
@@ -70,7 +72,7 @@ class ExecutionContextTest {
         Map<String, Environment> environments = context.environments();
         assertThat(environments).containsKey("test-db");
 
-        Environment env = environments.get("test-db");
+        Environment env = Objects.requireNonNull(environments.get("test-db"));
         assertThat(env).isInstanceOf(PostgreSQLEnvironment.class);
         assertThat(env.id().value()).isEqualTo("test-db");
     }

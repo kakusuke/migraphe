@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import org.eclipse.microprofile.config.spi.ConfigSource;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 指定されたプレフィックスを持つプロパティを、プレフィックスを除去してエクスポーズする ConfigSource。
@@ -48,7 +49,7 @@ public class PrefixedConfigSource implements ConfigSource {
     }
 
     @Override
-    public String getValue(String propertyName) {
+    public @Nullable String getValue(String propertyName) {
         return properties.get(propertyName);
     }
 

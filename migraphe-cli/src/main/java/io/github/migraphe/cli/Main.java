@@ -6,6 +6,7 @@ import io.github.migraphe.cli.command.UpCommand;
 import io.github.migraphe.core.plugin.PluginRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import org.jspecify.annotations.Nullable;
 
 /** Migraphe CLI のエントリーポイント。 */
 public class Main {
@@ -36,6 +37,7 @@ public class Main {
                 System.err.println("Unknown command: " + commandName);
                 printUsage();
                 System.exit(1);
+                return; // Unreachable, but helps NullAway understand flow
             }
 
             int exitCode = command.execute();
@@ -63,7 +65,7 @@ public class Main {
     }
 
     /** コマンド名から Command インスタンスを生成する。 */
-    private static Command createCommand(String commandName, ExecutionContext context) {
+    private static @Nullable Command createCommand(String commandName, ExecutionContext context) {
         return switch (commandName) {
             case "up" -> new UpCommand(context);
             case "status" -> new StatusCommand(context);
