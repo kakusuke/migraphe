@@ -1,6 +1,60 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="CompilerConfiguration">
+    <annotationProcessing>
+      <profile name="Gradle Imported" enabled="true">
+        <outputRelativeToContentRoot value="true" />
+        <processorPath useClasspath="false">
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_core/2.24.1/f634bd95e498e6a4974fdf2f94256c4f4179e192/error_prone_core-2.24.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.uber.nullaway/nullaway/0.10.26/81169196f043f91410be121b06584898c41f0206/nullaway-0.10.26.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_check_api/2.24.1/ae2ff93c56b327af876d2de89b3063c9b9bfa356/error_prone_check_api-2.24.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_annotation/2.24.1/ca7392e48689b862e317ab3ed7000ecf88ecc726/error_prone_annotation-2.24.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_type_annotations/2.24.1/a7e6da0381ea7ffb5e487f9ec60adfc26cb752b0/error_prone_type_annotations-2.24.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.pcollections/pcollections/3.1.4/e2a87923739024b4befa4701e6fe640af1e7d63e/pcollections-3.1.4.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.auto/auto-common/1.2.1/f6da26895f759010f5f170c8044e84c1b17ef83e/auto-common-1.2.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.inject/guice/5.1.0/da25056c694c54ba16e78e4fc35f17fc60f0d1b4/guice-5.1.0.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.guava/guava/32.1.1-jre/ad575652d84153075dd41ec6177ccb15251262b2/guava-32.1.1-jre.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.code.findbugs/jsr305/3.0.2/25ea2e8b0c338a877313bd4672d3fe056ea78f0d/jsr305-3.0.2.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/io.github.eisop/dataflow-errorprone/3.41.0-eisop1/3fc86eff95c549e42c41fd7c01c2a57ed46a5a94/dataflow-errorprone-3.41.0-eisop1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.auto.value/auto-value-annotations/1.9/25a0fcef915f663679fcdb447541c5d86a9be4ba/auto-value-annotations-1.9.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.github.ben-manes.caffeine/caffeine/3.0.5/3de85488bf535299d5f36d98626605331a10de87/caffeine-3.0.5.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.errorprone/error_prone_annotations/2.24.1/32b299e45105aa9b0df8279c74dc1edfcf313ff0/error_prone_annotations-2.24.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.protobuf/protobuf-java/3.19.6/578a2070b8106d3ea350fc737e777262bdc796b1/protobuf-java-3.19.6.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.auto.service/auto-service-annotations/1.0.1/ac86dacc0eb9285ea9d42eee6aad8629ca3a7432/auto-service-annotations-1.0.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/javax.inject/javax.inject/1/6975da39a7040257bd51d21a231b76c915872d38/javax.inject-1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.checkerframework/dataflow-nullaway/3.40.0/2ee788069fc1422cbb8632cd463a37fdb339cb69/dataflow-nullaway-3.40.0.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/io.github.java-diff-utils/java-diff-utils/4.12/1a712a91324d566eef39817fc5c9980eb10c21db/java-diff-utils-4.12.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.github.kevinstern/software-and-algorithms/1.0/5e77666b72c6c5dd583c36148d17fc47f944dfb5/software-and-algorithms-1.0.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/com.google.guava/failureaccess/1.0.1/1dcf1de382a0bf95a3d8b0849546c88bac1292c9/failureaccess-1.0.1.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/org.checkerframework/checker-qual/3.33.0/de2b60b62da487644fc11f734e73c8b0b431238f/checker-qual-3.33.0.jar" />
+          <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/aopalliance/aopalliance/1.0/235ba8b489512805ac13a8f9ea77a1ca5ebe3e8/aopalliance-1.0.jar" />
+        </processorPath>
+        <module name="migraphe.migraphe-cli.test" />
+        <module name="migraphe.migraphe-postgresql.main" />
+        <module name="migraphe.migraphe-core.test" />
+        <module name="migraphe.migraphe-api.test" />
+        <module name="migraphe.migraphe-core.main" />
+        <module name="migraphe.migraphe-postgresql.test" />
+        <module name="migraphe.migraphe-cli.main" />
+        <module name="migraphe.migraphe-api.main" />
+      </profile>
+    </annotationProcessing>
     <bytecodeTargetLevel target="21" />
+  </component>
+  <component name="JavacSettings">
+    <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="migraphe.migraphe-api" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-api.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-api.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-cli" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-cli.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-cli.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-core" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-core.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-core.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-postgresql" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-postgresql.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-postgresql.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+    </option>
   </component>
 </project>
