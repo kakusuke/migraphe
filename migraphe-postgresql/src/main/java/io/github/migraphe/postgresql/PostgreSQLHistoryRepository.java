@@ -15,6 +15,7 @@ import java.sql.*;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 /** PostgreSQL でマイグレーション履歴を永続化する実装。 */
 public final class PostgreSQLHistoryRepository implements HistoryRepository {
@@ -63,9 +64,9 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
             pstmt.setString(5, record.status().name());
             pstmt.setTimestamp(6, Timestamp.from(record.executedAt()));
             pstmt.setString(7, record.description());
-            pstmt.setString(8, record.serializedDownTask().orElse(null));
+            pstmt.setString(8, record.serializedDownTask());
             pstmt.setLong(9, record.durationMs());
-            pstmt.setString(10, record.errorMessage().orElse(null));
+            pstmt.setString(10, record.errorMessage());
 
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -130,7 +131,7 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
     }
 
     @Override
-    public Optional<ExecutionRecord> findLatestRecord(NodeId nodeId, EnvironmentId environmentId) {
+    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, EnvironmentId environmentId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
@@ -150,9 +151,9 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    return Optional.of(mapToExecutionRecord(rs));
+                    return mapToExecutionRecord(rs);
                 }
-                return Optional.empty();
+                return null;
             }
         } catch (SQLException e) {
             throw new PostgreSQLException("Failed to find latest record", e);
@@ -207,9 +208,9 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
                 status,
                 executedAt,
                 description,
-                Optional.ofNullable(serializedDownTask),
+                serializedDownTask,
                 durationMs,
-                Optional.ofNullable(errorMessage));
+                errorMessage);
     }
 
     private String loadSchemaResource() throws IOException {

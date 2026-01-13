@@ -119,8 +119,8 @@ class MigrationNodeFactoryTest {
         // When: ノードを生成
         MigrationNode node = factory.createNode(taskDef, nodeId, environment);
 
-        // Then: downTask()がemptyを返す
-        assertThat(node.downTask()).isEmpty();
+        // Then: downTask()がnullを返す
+        assertThat(node.downTask()).isNull();
     }
 
     @Test
@@ -145,7 +145,7 @@ class MigrationNodeFactoryTest {
         MigrationNode node = factory.createNode(taskDef, nodeId, environment);
 
         // Then: downTask()が存在する
-        assertThat(node.downTask()).isPresent();
+        assertThat(node.downTask()).isNotNull();
     }
 
     @Test

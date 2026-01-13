@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,23 +20,23 @@ class YamlFileScannerTest {
         YamlFileScanner scanner = new YamlFileScanner();
 
         // When
-        Optional<Path> found = scanner.findProjectConfig(tempDir);
+        Path found = scanner.findProjectConfig(tempDir);
 
         // Then
-        assertThat(found).isPresent();
-        assertThat(found.get()).isEqualTo(projectConfig);
+        assertThat(found).isNotNull();
+        assertThat(found).isEqualTo(projectConfig);
     }
 
     @Test
-    void shouldReturnEmptyWhenProjectConfigNotFound(@TempDir Path tempDir) {
+    void shouldReturnNullWhenProjectConfigNotFound(@TempDir Path tempDir) {
         // Given: migraphe.yaml が存在しない
         YamlFileScanner scanner = new YamlFileScanner();
 
         // When
-        Optional<Path> found = scanner.findProjectConfig(tempDir);
+        Path found = scanner.findProjectConfig(tempDir);
 
         // Then
-        assertThat(found).isEmpty();
+        assertThat(found).isNull();
     }
 
     @Test
@@ -130,15 +129,15 @@ class YamlFileScannerTest {
         YamlFileScanner scanner = new YamlFileScanner();
 
         // When
-        Optional<Path> found = scanner.findEnvironmentFile(tempDir, "development");
+        Path found = scanner.findEnvironmentFile(tempDir, "development");
 
         // Then
-        assertThat(found).isPresent();
-        assertThat(found.get()).isEqualTo(devEnv);
+        assertThat(found).isNotNull();
+        assertThat(found).isEqualTo(devEnv);
     }
 
     @Test
-    void shouldReturnEmptyWhenEnvironmentFileNotFound(@TempDir Path tempDir) throws IOException {
+    void shouldReturnNullWhenEnvironmentFileNotFound(@TempDir Path tempDir) throws IOException {
         // Given: environments/ ディレクトリは存在するが、指定された環境ファイルがない
         Path environmentsDir = tempDir.resolve("environments");
         Files.createDirectories(environmentsDir);
@@ -146,10 +145,10 @@ class YamlFileScannerTest {
         YamlFileScanner scanner = new YamlFileScanner();
 
         // When
-        Optional<Path> found = scanner.findEnvironmentFile(tempDir, "production");
+        Path found = scanner.findEnvironmentFile(tempDir, "production");
 
         // Then
-        assertThat(found).isEmpty();
+        assertThat(found).isNull();
     }
 
     @Test

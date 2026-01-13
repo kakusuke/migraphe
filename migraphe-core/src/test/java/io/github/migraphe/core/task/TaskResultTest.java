@@ -18,7 +18,7 @@ class TaskResultTest {
 
         // then
         assertThat(result.message()).isEqualTo(message);
-        assertThat(result.serializedDownTask()).isEmpty();
+        assertThat(result.serializedDownTask()).isNull();
     }
 
     @Test
@@ -32,7 +32,7 @@ class TaskResultTest {
 
         // then
         assertThat(result.message()).isEqualTo(message);
-        assertThat(result.serializedDownTask()).hasValue(serializedDownTask);
+        assertThat(result.serializedDownTask()).isEqualTo(serializedDownTask);
     }
 
     @Test

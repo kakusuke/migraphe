@@ -3,6 +3,8 @@ package io.github.migraphe.cli.factory;
 import static org.assertj.core.api.Assertions.*;
 
 import io.github.migraphe.api.environment.Environment;
+import io.github.migraphe.api.spi.EnvironmentDefinition;
+import io.github.migraphe.cli.config.ConfigLoader;
 import io.github.migraphe.core.plugin.PluginRegistry;
 import io.github.migraphe.postgresql.PostgreSQLEnvironment;
 import io.smallrye.config.SmallRyeConfig;
@@ -16,6 +18,7 @@ class EnvironmentFactoryTest {
 
     private PluginRegistry pluginRegistry;
     private EnvironmentFactory factory;
+    private ConfigLoader configLoader;
 
     @BeforeEach
     void setUp() {
@@ -23,10 +26,11 @@ class EnvironmentFactoryTest {
         pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
         factory = new EnvironmentFactory(pluginRegistry);
+        configLoader = new ConfigLoader();
     }
 
     @Test
-    void shouldCreatePostgreSQLEnvironmentFromConfig() {
+    void shouldCreatePostgreSQLEnvironmentFromDefinition() {
         // Given: TargetConfig がロードされた SmallRyeConfig
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
@@ -43,8 +47,11 @@ class EnvironmentFactoryTest {
                                                 "secret")))
                         .build();
 
-        // When: db1 の Environment を生成
-        Environment environment = factory.createEnvironment(config, "db1");
+        // When: EnvironmentDefinition を読み込んで Environment を生成
+        Map<String, EnvironmentDefinition> definitions =
+                configLoader.loadEnvironmentDefinitions(config, pluginRegistry);
+        EnvironmentDefinition definition = definitions.get("db1");
+        Environment environment = factory.createEnvironment("db1", definition);
 
         // Then: 正しく生成される
         assertThat(environment).isInstanceOf(PostgreSQLEnvironment.class);
@@ -83,8 +90,10 @@ class EnvironmentFactoryTest {
                                                 "pass2")))
                         .build();
 
-        // When: 複数の Environment を生成
-        Map<String, Environment> environments = factory.createEnvironments(config);
+        // When: EnvironmentDefinition を読み込んで Environment を生成
+        Map<String, EnvironmentDefinition> definitions =
+                configLoader.loadEnvironmentDefinitions(config, pluginRegistry);
+        Map<String, Environment> environments = factory.createEnvironments(definitions);
 
         // Then: 両方のターゲットが生成される
         assertThat(environments).hasSize(2);
@@ -102,45 +111,29 @@ class EnvironmentFactoryTest {
     }
 
     @Test
-    void shouldThrowExceptionWhenTargetNotFound() {
-        // Given: db1 の設定がない
-        SmallRyeConfig config =
-                new SmallRyeConfigBuilder().withSources(new TestConfigSource(Map.of())).build();
-
-        // When & Then: 例外が発生
-        assertThatThrownBy(() -> factory.createEnvironment(config, "db1"))
-                .isInstanceOf(io.github.migraphe.core.config.ConfigurationException.class)
-                .hasMessageContaining("Target configuration not found: db1");
-    }
-
-    @Test
     void shouldThrowExceptionWhenPluginNotFound() {
-        // Given: 未知の type を持つ設定
-        SmallRyeConfig config =
-                new SmallRyeConfigBuilder()
-                        .withSources(
-                                new TestConfigSource(
-                                        Map.of(
-                                                "target.db1.type",
-                                                "unknown-type",
-                                                "target.db1.jdbc_url",
-                                                "jdbc:unknown://localhost")))
-                        .build();
+        // Given: 未知の type を持つ定義
+        EnvironmentDefinition unknownDefinition =
+                new EnvironmentDefinition() {
+                    @Override
+                    public String type() {
+                        return "unknown-type";
+                    }
+                };
 
         // When & Then: プラグインが見つからない例外が発生
-        assertThatThrownBy(() -> factory.createEnvironment(config, "db1"))
+        assertThatThrownBy(() -> factory.createEnvironment("db1", unknownDefinition))
                 .isInstanceOf(io.github.migraphe.core.config.ConfigurationException.class)
                 .hasMessageContaining("No plugin found for type: unknown-type");
     }
 
     @Test
-    void shouldHandleEmptyTargets() {
-        // Given: ターゲット設定が空
-        SmallRyeConfig config =
-                new SmallRyeConfigBuilder().withSources(new TestConfigSource(Map.of())).build();
+    void shouldHandleEmptyDefinitions() {
+        // Given: 空の定義マップ
+        Map<String, EnvironmentDefinition> definitions = Map.of();
 
-        // When: 全ターゲットを生成
-        Map<String, Environment> environments = factory.createEnvironments(config);
+        // When: 全 Environment を生成
+        Map<String, Environment> environments = factory.createEnvironments(definitions);
 
         // Then: 空のマップが返される
         assertThat(environments).isEmpty();

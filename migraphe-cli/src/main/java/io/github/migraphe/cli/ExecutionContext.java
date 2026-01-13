@@ -3,6 +3,7 @@ package io.github.migraphe.cli;
 import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.spi.EnvironmentDefinition;
 import io.github.migraphe.api.spi.TaskDefinition;
 import io.github.migraphe.cli.config.ConfigLoader;
 import io.github.migraphe.cli.factory.EnvironmentFactory;
@@ -46,9 +47,12 @@ public record ExecutionContext(
         ConfigLoader configLoader = new ConfigLoader();
         SmallRyeConfig config = configLoader.load(baseDir);
 
-        // 2. EnvironmentFactory で全Environment生成
+        // 2. EnvironmentDefinition を読み込み、EnvironmentFactory で全Environment生成
+        Map<String, EnvironmentDefinition> environmentDefinitions =
+                configLoader.loadEnvironmentDefinitions(config, pluginRegistry);
         EnvironmentFactory environmentFactory = new EnvironmentFactory(pluginRegistry);
-        Map<String, Environment> environments = environmentFactory.createEnvironments(config);
+        Map<String, Environment> environments =
+                environmentFactory.createEnvironments(environmentDefinitions);
 
         // 3. ConfigLoader で TaskDefinition を読み込み（プラグイン固有の型でマッピング）
         Map<NodeId, TaskDefinition<?>> taskDefinitions =

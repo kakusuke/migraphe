@@ -5,8 +5,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 
 /** YAMLファイルをディレクトリから発見するスキャナー。 */
 public class YamlFileScanner {
@@ -15,11 +15,11 @@ public class YamlFileScanner {
      * プロジェクト設定ファイル (migraphe.yaml) を検索する。
      *
      * @param baseDir プロジェクトルート
-     * @return migraphe.yaml のパス (存在しない場合は empty)
+     * @return migraphe.yaml のパス (存在しない場合は null)
      */
-    public Optional<Path> findProjectConfig(Path baseDir) {
+    public @Nullable Path findProjectConfig(Path baseDir) {
         Path projectConfig = baseDir.resolve("migraphe.yaml");
-        return Files.exists(projectConfig) ? Optional.of(projectConfig) : Optional.empty();
+        return Files.exists(projectConfig) ? projectConfig : null;
     }
 
     /**
@@ -71,12 +71,12 @@ public class YamlFileScanner {
      *
      * @param baseDir プロジェクトルート
      * @param envName 環境名 (例: "development", "production")
-     * @return environments/{envName}.yaml のパス (存在しない場合は empty)
+     * @return environments/{envName}.yaml のパス (存在しない場合は null)
      */
-    public Optional<Path> findEnvironmentFile(Path baseDir, String envName) {
+    public @Nullable Path findEnvironmentFile(Path baseDir, String envName) {
         Path environmentsDir = baseDir.resolve("environments");
         Path envFile = environmentsDir.resolve(envName + ".yaml");
 
-        return Files.exists(envFile) ? Optional.of(envFile) : Optional.empty();
+        return Files.exists(envFile) ? envFile : null;
     }
 }

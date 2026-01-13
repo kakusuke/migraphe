@@ -16,8 +16,8 @@ class ResultTest {
         // then
         assertThat(result.isOk()).isTrue();
         assertThat(result.isErr()).isFalse();
-        assertThat(result.value()).hasValue("success");
-        assertThat(result.error()).isEmpty();
+        assertThat(result.value()).isEqualTo("success");
+        assertThat(result.error()).isNull();
     }
 
     @Test
@@ -28,8 +28,8 @@ class ResultTest {
         // then
         assertThat(result.isOk()).isFalse();
         assertThat(result.isErr()).isTrue();
-        assertThat(result.value()).isEmpty();
-        assertThat(result.error()).hasValue("error message");
+        assertThat(result.value()).isNull();
+        assertThat(result.error()).isEqualTo("error message");
     }
 
     @Test
@@ -42,7 +42,7 @@ class ResultTest {
 
         // then
         assertThat(mapped.isOk()).isTrue();
-        assertThat(mapped.value()).hasValue(20);
+        assertThat(mapped.value()).isEqualTo(20);
     }
 
     @Test
@@ -55,7 +55,7 @@ class ResultTest {
 
         // then
         assertThat(mapped.isErr()).isTrue();
-        assertThat(mapped.error()).hasValue("error");
+        assertThat(mapped.error()).isEqualTo("error");
     }
 
     @Test
@@ -68,7 +68,7 @@ class ResultTest {
 
         // then
         assertThat(mapped.isErr()).isTrue();
-        assertThat(mapped.error()).hasValue(14); // length of "original error"
+        assertThat(mapped.error()).isEqualTo(14); // length of "original error"
     }
 
     @Test
@@ -81,7 +81,7 @@ class ResultTest {
 
         // then
         assertThat(mapped.isOk()).isTrue();
-        assertThat(mapped.value()).hasValue("success");
+        assertThat(mapped.value()).isEqualTo("success");
     }
 
     @Test
@@ -109,15 +109,15 @@ class ResultTest {
         // when & then
         String okMessage =
                 switch (okResult) {
-                    case Result.Ok<Integer, String> ok -> "Got value: " + ok.value().get();
-                    case Result.Err<Integer, String> err -> "Got error: " + err.error().get();
+                    case Result.Ok<Integer, String> ok -> "Got value: " + ok.value();
+                    case Result.Err<Integer, String> err -> "Got error: " + err.error();
                 };
         assertThat(okMessage).isEqualTo("Got value: 42");
 
         String errMessage =
                 switch (errResult) {
-                    case Result.Ok<Integer, String> ok -> "Got value: " + ok.value().get();
-                    case Result.Err<Integer, String> err -> "Got error: " + err.error().get();
+                    case Result.Ok<Integer, String> ok -> "Got value: " + ok.value();
+                    case Result.Err<Integer, String> err -> "Got error: " + err.error();
                 };
         assertThat(errMessage).isEqualTo("Got error: failed");
     }

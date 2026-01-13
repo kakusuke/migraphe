@@ -2,8 +2,8 @@ package io.github.migraphe.api.graph;
 
 import io.github.migraphe.api.environment.Environment;
 import io.github.migraphe.api.task.Task;
-import java.util.Optional;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /** マイグレーショングラフのノード（タスク）インターフェース。 プラグインがこのインターフェースを実装して、具体的なマイグレーションタスクを定義する。 */
 public interface MigrationNode {
@@ -15,7 +15,7 @@ public interface MigrationNode {
     String name();
 
     /** ノードの説明（オプション） */
-    String description();
+    @Nullable String description();
 
     /** このノードが属する環境 */
     Environment environment();
@@ -26,8 +26,8 @@ public interface MigrationNode {
     /** Up マイグレーション（前進） */
     Task upTask();
 
-    /** Down マイグレーション（ロールバック） ロールバック非対応の場合は Optional.empty() */
-    Optional<Task> downTask();
+    /** Down マイグレーション（ロールバック） ロールバック非対応の場合は null */
+    @Nullable Task downTask();
 
     /** 依存関係がないか（ルートノードか） */
     default boolean hasNoDependencies() {

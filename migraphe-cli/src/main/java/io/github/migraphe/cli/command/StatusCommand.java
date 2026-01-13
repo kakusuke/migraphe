@@ -81,17 +81,14 @@ public class StatusCommand implements Command {
         // history.target の type を取得してプラグインを特定
         String type = context.config().getValue("target." + historyTarget + ".type", String.class);
 
-        MigraphePlugin plugin =
-                context.pluginRegistry()
-                        .getPlugin(type)
-                        .orElseThrow(
-                                () ->
-                                        new ConfigurationException(
-                                                "No plugin found for history target type: "
-                                                        + type
-                                                        + ". Available types: "
-                                                        + context.pluginRegistry()
-                                                                .supportedTypes()));
+        MigraphePlugin<?> plugin = context.pluginRegistry().getPlugin(type);
+        if (plugin == null) {
+            throw new ConfigurationException(
+                    "No plugin found for history target type: "
+                            + type
+                            + ". Available types: "
+                            + context.pluginRegistry().supportedTypes());
+        }
 
         // プラグインの HistoryRepositoryProvider で HistoryRepository を生成
         return plugin.historyRepositoryProvider().createRepository(historyEnv);

@@ -1,5 +1,6 @@
 package io.github.migraphe.postgresql;
 
+import io.github.migraphe.api.spi.EnvironmentDefinition;
 import io.github.migraphe.api.spi.EnvironmentProvider;
 import io.github.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.migraphe.api.spi.MigraphePlugin;
@@ -21,6 +22,11 @@ public final class PostgreSQLPlugin implements MigraphePlugin<String> {
     @Override
     public Class<? extends TaskDefinition<String>> taskDefinitionClass() {
         return SqlTaskDefinition.class;
+    }
+
+    @Override
+    public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
+        return PostgreSQLEnvironmentDefinition.class;
     }
 
     @Override

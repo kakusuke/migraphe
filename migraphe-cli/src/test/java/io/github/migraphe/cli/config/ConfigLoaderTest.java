@@ -7,7 +7,6 @@ import io.smallrye.config.SmallRyeConfig;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,7 +20,7 @@ class ConfigLoaderTest {
         ConfigLoader loader = new ConfigLoader();
 
         // When
-        SmallRyeConfig config = loader.loadConfig(tempDir, Optional.empty());
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
 
         // Then: ProjectConfig がロードされる
         ProjectConfig projectConfig = config.getConfigMapping(ProjectConfig.class);
@@ -37,7 +36,7 @@ class ConfigLoaderTest {
         ConfigLoader loader = new ConfigLoader();
 
         // When
-        SmallRyeConfig config = loader.loadConfig(tempDir, Optional.empty());
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
 
         // Then: TargetConfig がロードされる (プレフィックス付き)
         assertThat(config.getValue("target.db1.type", String.class)).isEqualTo("postgresql");
@@ -53,7 +52,7 @@ class ConfigLoaderTest {
         ConfigLoader loader = new ConfigLoader();
 
         // When
-        SmallRyeConfig config = loader.loadConfig(tempDir, Optional.empty());
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
 
         // Then: TaskConfig がロードされる (プレフィックス付き)
         assertThat(config.getValue("task.\"db1/create_users\".name", String.class))
@@ -78,7 +77,7 @@ class ConfigLoaderTest {
         ConfigLoader loader = new ConfigLoader();
 
         // When: --env=development を指定
-        SmallRyeConfig config = loader.loadConfig(tempDir, Optional.of("development"));
+        SmallRyeConfig config = loader.loadConfig(tempDir, "development");
 
         // Then: 環境変数がロードされる
         assertThat(config.getValue("DB_HOST", String.class)).isEqualTo("localhost");
@@ -112,7 +111,7 @@ class ConfigLoaderTest {
         ConfigLoader loader = new ConfigLoader();
 
         // When
-        SmallRyeConfig config = loader.loadConfig(tempDir, Optional.of("development"));
+        SmallRyeConfig config = loader.loadConfig(tempDir, "development");
 
         // Then: ${DB_HOST} が展開される
         assertThat(config.getValue("target.db1.jdbc_url", String.class))
@@ -127,7 +126,7 @@ class ConfigLoaderTest {
         ConfigLoader loader = new ConfigLoader();
 
         // When: --env=production を指定しても環境ファイルがない
-        SmallRyeConfig config = loader.loadConfig(tempDir, Optional.of("production"));
+        SmallRyeConfig config = loader.loadConfig(tempDir, "production");
 
         // Then: エラーにならず、環境変数なしでロードされる
         assertThat(config).isNotNull();
@@ -141,7 +140,7 @@ class ConfigLoaderTest {
         ConfigLoader loader = new ConfigLoader();
 
         // When & Then
-        assertThatThrownBy(() -> loader.loadConfig(tempDir, Optional.empty()))
+        assertThatThrownBy(() -> loader.loadConfig(tempDir, null))
                 .isInstanceOf(io.github.migraphe.core.config.ConfigurationException.class)
                 .hasMessageContaining("Project config file not found");
     }

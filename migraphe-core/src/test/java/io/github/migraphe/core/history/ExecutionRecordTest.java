@@ -8,7 +8,6 @@ import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.history.ExecutionRecord;
 import io.github.migraphe.api.history.ExecutionStatus;
 import io.github.migraphe.api.task.ExecutionDirection;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ExecutionRecordTest {
@@ -19,7 +18,7 @@ class ExecutionRecordTest {
         NodeId nodeId = NodeId.of("node-1");
         EnvironmentId envId = EnvironmentId.of("dev");
         String description = "Create users table";
-        Optional<String> serializedDownTask = Optional.of("{\"rollback\":\"drop table\"}");
+        String serializedDownTask = "{\"rollback\":\"drop table\"}";
         long durationMs = 100;
 
         // when
@@ -35,7 +34,7 @@ class ExecutionRecordTest {
         assertThat(record.description()).isEqualTo(description);
         assertThat(record.serializedDownTask()).isEqualTo(serializedDownTask);
         assertThat(record.durationMs()).isEqualTo(durationMs);
-        assertThat(record.errorMessage()).isEmpty();
+        assertThat(record.errorMessage()).isNull();
         assertThat(record.id()).isNotBlank();
         assertThat(record.executedAt()).isNotNull();
         assertThat(record.isUp()).isTrue();
@@ -57,8 +56,8 @@ class ExecutionRecordTest {
         // then
         assertThat(record.direction()).isEqualTo(ExecutionDirection.DOWN);
         assertThat(record.status()).isEqualTo(ExecutionStatus.SUCCESS);
-        assertThat(record.serializedDownTask()).isEmpty();
-        assertThat(record.errorMessage()).isEmpty();
+        assertThat(record.serializedDownTask()).isNull();
+        assertThat(record.errorMessage()).isNull();
         assertThat(record.isUp()).isFalse();
         assertThat(record.isDown()).isTrue();
     }
@@ -78,7 +77,7 @@ class ExecutionRecordTest {
 
         // then
         assertThat(record.status()).isEqualTo(ExecutionStatus.FAILURE);
-        assertThat(record.errorMessage()).hasValue(errorMessage);
+        assertThat(record.errorMessage()).isEqualTo(errorMessage);
         assertThat(record.durationMs()).isZero();
     }
 
@@ -96,8 +95,8 @@ class ExecutionRecordTest {
         // then
         assertThat(record.status()).isEqualTo(ExecutionStatus.SKIPPED);
         assertThat(record.direction()).isEqualTo(ExecutionDirection.UP);
-        assertThat(record.errorMessage()).hasValue(reason);
-        assertThat(record.serializedDownTask()).isEmpty();
+        assertThat(record.errorMessage()).isEqualTo(reason);
+        assertThat(record.serializedDownTask()).isNull();
     }
 
     @Test
@@ -113,9 +112,9 @@ class ExecutionRecordTest {
                                         ExecutionStatus.FAILURE,
                                         java.time.Instant.now(),
                                         "desc",
-                                        Optional.empty(),
+                                        null,
                                         100L,
-                                        Optional.empty()))
+                                        null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Failure status requires error message");
     }
@@ -133,25 +132,21 @@ class ExecutionRecordTest {
                                         ExecutionStatus.SUCCESS,
                                         java.time.Instant.now(),
                                         "desc",
-                                        Optional.of("serialized"),
+                                        "serialized",
                                         100L,
-                                        Optional.empty()))
+                                        null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("DOWN execution should not have serializedDownTask");
     }
 
     @Test
-    void shouldAllowEmptySerializedDownTaskForUp() {
+    void shouldAllowNullSerializedDownTaskForUp() {
         // when
         ExecutionRecord record =
                 ExecutionRecord.upSuccess(
-                        NodeId.of("node-1"),
-                        EnvironmentId.of("dev"),
-                        "desc",
-                        Optional.empty(),
-                        100);
+                        NodeId.of("node-1"), EnvironmentId.of("dev"), "desc", null, 100);
 
         // then
-        assertThat(record.serializedDownTask()).isEmpty();
+        assertThat(record.serializedDownTask()).isNull();
     }
 }

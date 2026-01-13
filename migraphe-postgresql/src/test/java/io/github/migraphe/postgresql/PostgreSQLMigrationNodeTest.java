@@ -42,7 +42,7 @@ class PostgreSQLMigrationNodeTest {
         assertThat(node.environment()).isEqualTo(environment);
         assertThat(node.dependencies()).isEmpty();
         assertThat(node.upTask()).isNotNull();
-        assertThat(node.downTask()).isPresent();
+        assertThat(node.downTask()).isNotNull();
     }
 
     @Test
@@ -78,7 +78,7 @@ class PostgreSQLMigrationNodeTest {
 
         // then
         assertThat(node.upTask()).isNotNull();
-        assertThat(node.downTask()).isEmpty();
+        assertThat(node.downTask()).isNull();
     }
 
     @Test
@@ -93,7 +93,7 @@ class PostgreSQLMigrationNodeTest {
                         .build();
 
         // then
-        assertThat(node.description()).isEmpty();
+        assertThat(node.description()).isNullOrEmpty();
     }
 
     @Test

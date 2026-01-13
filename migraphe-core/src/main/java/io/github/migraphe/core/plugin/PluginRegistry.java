@@ -9,6 +9,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.jspecify.annotations.Nullable;
 
 /**
  * プラグインレジストリ - ServiceLoader でプラグインを読み込み、管理する。
@@ -25,9 +26,10 @@ import java.util.stream.Stream;
  */
 public final class PluginRegistry {
 
-    private final Map<String, MigraphePlugin> plugins = new ConcurrentHashMap<>();
+    private final Map<String, MigraphePlugin<?>> plugins = new ConcurrentHashMap<>();
 
     /** クラスパスから ServiceLoader を使用してプラグインを読み込む。 */
+    @SuppressWarnings("rawtypes")
     public void loadFromClasspath() {
         ServiceLoader<MigraphePlugin> loader = ServiceLoader.load(MigraphePlugin.class);
         for (MigraphePlugin plugin : loader) {
@@ -41,6 +43,7 @@ public final class PluginRegistry {
      * @param jarPath JAR ファイルのパス
      * @throws PluginLoadException 読み込みに失敗した場合
      */
+    @SuppressWarnings("rawtypes")
     public void loadFromJar(Path jarPath) {
         if (!Files.exists(jarPath)) {
             throw new PluginLoadException("JAR file not found: " + jarPath);
@@ -110,7 +113,7 @@ public final class PluginRegistry {
      *
      * @param plugin 登録するプラグイン
      */
-    void register(MigraphePlugin plugin) {
+    void register(MigraphePlugin<?> plugin) {
         Objects.requireNonNull(plugin, "plugin must not be null");
         String type = plugin.type();
         Objects.requireNonNull(type, "plugin.type() must not be null");
@@ -126,10 +129,10 @@ public final class PluginRegistry {
      * 指定された型のプラグインを取得する。
      *
      * @param type プラグインの型識別子
-     * @return プラグイン（存在しない場合は空）
+     * @return プラグイン（存在しない場合は null）
      */
-    public Optional<MigraphePlugin> getPlugin(String type) {
-        return Optional.ofNullable(plugins.get(type));
+    public @Nullable MigraphePlugin<?> getPlugin(String type) {
+        return plugins.get(type);
     }
 
     /**

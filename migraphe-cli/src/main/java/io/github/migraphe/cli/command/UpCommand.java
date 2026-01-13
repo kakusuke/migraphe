@@ -63,19 +63,24 @@ public class UpCommand implements Command {
                         System.out.println("OK (" + duration + "ms)");
 
                         // 実行記録を保存
+                        TaskResult taskResult = result.value();
+                        String serializedDownTask =
+                                taskResult != null ? taskResult.serializedDownTask() : null;
+
                         ExecutionRecord record =
                                 ExecutionRecord.upSuccess(
                                         node.id(),
                                         node.environment().id(),
                                         node.name(),
-                                        result.value().flatMap(TaskResult::serializedDownTask),
+                                        serializedDownTask,
                                         duration);
                         historyRepo.record(record);
 
                         totalExecuted++;
                     } else {
                         System.out.println("FAILED");
-                        System.err.println("  Error: " + result.error());
+                        String errorMsg = result.error();
+                        System.err.println("  Error: " + errorMsg);
 
                         // 失敗記録を保存
                         ExecutionRecord failureRecord =
@@ -84,7 +89,7 @@ public class UpCommand implements Command {
                                         node.environment().id(),
                                         ExecutionDirection.UP,
                                         node.name(),
-                                        result.error().orElse("Unknown error"));
+                                        errorMsg != null ? errorMsg : "Unknown error");
                         historyRepo.record(failureRecord);
 
                         return 1; // エラー終了
@@ -143,17 +148,14 @@ public class UpCommand implements Command {
         // history.target の type を取得してプラグインを特定
         String type = context.config().getValue("target." + historyTarget + ".type", String.class);
 
-        MigraphePlugin plugin =
-                context.pluginRegistry()
-                        .getPlugin(type)
-                        .orElseThrow(
-                                () ->
-                                        new ConfigurationException(
-                                                "No plugin found for history target type: "
-                                                        + type
-                                                        + ". Available types: "
-                                                        + context.pluginRegistry()
-                                                                .supportedTypes()));
+        MigraphePlugin<?> plugin = context.pluginRegistry().getPlugin(type);
+        if (plugin == null) {
+            throw new ConfigurationException(
+                    "No plugin found for history target type: "
+                            + type
+                            + ". Available types: "
+                            + context.pluginRegistry().supportedTypes());
+        }
 
         // プラグインの HistoryRepositoryProvider で HistoryRepository を生成
         return plugin.historyRepositoryProvider().createRepository(historyEnv);

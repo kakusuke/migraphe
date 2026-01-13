@@ -45,24 +45,24 @@ public class MigrationNodeFactory {
         String targetId = taskDef.target();
         String type = config.getValue("target." + targetId + ".type", String.class);
 
-        MigraphePlugin<Object> plugin =
-                (MigraphePlugin<Object>)
-                        pluginRegistry
-                                .getPlugin(type)
-                                .orElseThrow(
-                                        () ->
-                                                new ConfigurationException(
-                                                        "No plugin found for type: "
-                                                                + type
-                                                                + ". Available types: "
-                                                                + pluginRegistry.supportedTypes()));
+        MigraphePlugin<?> plugin = pluginRegistry.getPlugin(type);
+        if (plugin == null) {
+            throw new ConfigurationException(
+                    "No plugin found for type: "
+                            + type
+                            + ". Available types: "
+                            + pluginRegistry.supportedTypes());
+        }
+
+        MigraphePlugin<Object> typedPlugin = (MigraphePlugin<Object>) plugin;
 
         // 依存関係を解決（フレームワークの責務）
         Set<NodeId> dependencies = resolveDependencies(taskDef);
 
         // プラグインの MigrationNodeProvider で MigrationNode を生成
         TaskDefinition<Object> typedTaskDef = (TaskDefinition<Object>) taskDef;
-        return plugin.migrationNodeProvider()
+        return typedPlugin
+                .migrationNodeProvider()
                 .createNode(nodeId, typedTaskDef, dependencies, environment);
     }
 

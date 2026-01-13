@@ -2,14 +2,12 @@ package io.github.migraphe.core.graph;
 
 import io.github.migraphe.api.common.Result;
 import io.github.migraphe.api.environment.Environment;
-import io.github.migraphe.api.environment.EnvironmentConfig;
 import io.github.migraphe.api.environment.EnvironmentId;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.task.Task;
 import io.github.migraphe.api.task.TaskResult;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 /** テスト用ヘルパークラス */
@@ -33,11 +31,6 @@ class TestHelpers {
         @Override
         public String name() {
             return name;
-        }
-
-        @Override
-        public EnvironmentConfig config() {
-            return EnvironmentConfig.empty();
         }
     }
 
@@ -106,8 +99,8 @@ class TestHelpers {
         }
 
         @Override
-        public Optional<Task> downTask() {
-            return Optional.of(new TestTask("DOWN: " + name));
+        public Task downTask() {
+            return new TestTask("DOWN: " + name);
         }
 
         @Override

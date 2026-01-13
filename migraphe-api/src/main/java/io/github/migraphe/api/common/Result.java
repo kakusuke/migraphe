@@ -1,8 +1,8 @@
 package io.github.migraphe.api.common;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Function;
+import org.jspecify.annotations.Nullable;
 
 /** Railway-oriented programming の Result 型。 Sealed interface で型安全なエラーハンドリングを提供。 */
 public sealed interface Result<T, E> permits Result.Ok, Result.Err {
@@ -11,9 +11,19 @@ public sealed interface Result<T, E> permits Result.Ok, Result.Err {
 
     boolean isErr();
 
-    Optional<T> value();
+    /**
+     * 成功値を取得する。
+     *
+     * @return Ok の場合は値、Err の場合は null
+     */
+    @Nullable T value();
 
-    Optional<E> error();
+    /**
+     * エラー値を取得する。
+     *
+     * @return Err の場合はエラー、Ok の場合は null
+     */
+    @Nullable E error();
 
     <U> Result<U, E> map(Function<T, U> mapper);
 
@@ -37,13 +47,13 @@ public sealed interface Result<T, E> permits Result.Ok, Result.Err {
         }
 
         @Override
-        public Optional<T> value() {
-            return Optional.of(val);
+        public T value() {
+            return val;
         }
 
         @Override
-        public Optional<E> error() {
-            return Optional.empty();
+        public @Nullable E error() {
+            return null;
         }
 
         @Override
@@ -92,13 +102,13 @@ public sealed interface Result<T, E> permits Result.Ok, Result.Err {
         }
 
         @Override
-        public Optional<T> value() {
-            return Optional.empty();
+        public @Nullable T value() {
+            return null;
         }
 
         @Override
-        public Optional<E> error() {
-            return Optional.of(err);
+        public E error() {
+            return err;
         }
 
         @Override

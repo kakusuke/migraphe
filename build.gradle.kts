@@ -1,6 +1,9 @@
+import net.ltgt.gradle.errorprone.errorprone
+
 plugins {
     id("java")
     alias(libs.plugins.spotless) apply false
+    alias(libs.plugins.errorprone) apply false
 }
 
 allprojects {
@@ -15,11 +18,18 @@ allprojects {
 subprojects {
     apply(plugin = "java")
     apply(plugin = "com.diffplug.spotless")
+    apply(plugin = "net.ltgt.errorprone")
 
     java {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(21))
         }
+    }
+
+    dependencies {
+        "errorprone"(rootProject.libs.errorprone.core)
+        "errorprone"(rootProject.libs.nullaway)
+        "compileOnly"(rootProject.libs.jspecify)
     }
 
     configure<com.diffplug.gradle.spotless.SpotlessExtension> {
@@ -29,6 +39,15 @@ subprojects {
             removeUnusedImports()
             trimTrailingWhitespace()
             endWithNewline()
+        }
+    }
+
+    tasks.withType<JavaCompile>().configureEach {
+        options.errorprone {
+            // NullAway is configured but disabled until Optional removal is complete
+            // To enable: change "disable" to "error"
+            disable("NullAway")
+            option("NullAway:AnnotatedPackages", "io.github.migraphe")
         }
     }
 

@@ -5,8 +5,8 @@ import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.task.ExecutionDirection;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 /**
  * マイグレーション実行記録（値オブジェクト）。
@@ -21,9 +21,9 @@ public record ExecutionRecord(
         ExecutionStatus status, // SUCCESS, FAILURE, SKIPPED
         Instant executedAt, // 実行日時
         String description, // タスクの説明
-        Optional<String> serializedDownTask, // シリアライズされたDownTask（UP実行時のみ）
+        @Nullable String serializedDownTask, // シリアライズされたDownTask（UP実行時のみ）
         long durationMs, // 実行時間（ミリ秒）
-        Optional<String> errorMessage // エラーメッセージ（失敗時のみ）
+        @Nullable String errorMessage // エラーメッセージ（失敗時のみ）
         ) {
     public ExecutionRecord {
         Objects.requireNonNull(id, "id must not be null");
@@ -33,15 +33,13 @@ public record ExecutionRecord(
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(executedAt, "executedAt must not be null");
         Objects.requireNonNull(description, "description must not be null");
-        Objects.requireNonNull(serializedDownTask, "serializedDownTask must not be null");
-        Objects.requireNonNull(errorMessage, "errorMessage must not be null");
 
-        if (status == ExecutionStatus.FAILURE && errorMessage.isEmpty()) {
+        if (status == ExecutionStatus.FAILURE && errorMessage == null) {
             throw new IllegalArgumentException("Failure status requires error message");
         }
 
         // UP実行時のみDownTaskを持つべき
-        if (direction == ExecutionDirection.DOWN && serializedDownTask.isPresent()) {
+        if (direction == ExecutionDirection.DOWN && serializedDownTask != null) {
             throw new IllegalArgumentException("DOWN execution should not have serializedDownTask");
         }
     }
@@ -51,7 +49,7 @@ public record ExecutionRecord(
             NodeId nodeId,
             EnvironmentId environmentId,
             String description,
-            Optional<String> serializedDownTask,
+            @Nullable String serializedDownTask,
             long durationMs) {
         return new ExecutionRecord(
                 UUID.randomUUID().toString(),
@@ -63,7 +61,7 @@ public record ExecutionRecord(
                 description,
                 serializedDownTask,
                 durationMs,
-                Optional.empty());
+                null);
     }
 
     /** DOWN成功記録を作成 */
@@ -77,9 +75,9 @@ public record ExecutionRecord(
                 ExecutionStatus.SUCCESS,
                 Instant.now(),
                 description,
-                Optional.empty(), // DOWNはserializedDownTaskを持たない
+                null, // DOWNはserializedDownTaskを持たない
                 durationMs,
-                Optional.empty());
+                null);
     }
 
     /** 失敗記録を作成 */
@@ -97,9 +95,9 @@ public record ExecutionRecord(
                 ExecutionStatus.FAILURE,
                 Instant.now(),
                 description,
-                Optional.empty(),
+                null,
                 0L,
-                Optional.of(errorMessage));
+                errorMessage);
     }
 
     /** スキップ記録を作成 */
@@ -113,9 +111,9 @@ public record ExecutionRecord(
                 ExecutionStatus.SKIPPED,
                 Instant.now(),
                 description,
-                Optional.empty(),
+                null,
                 0L,
-                Optional.of(reason));
+                reason);
     }
 
     /** UP実行かどうか */

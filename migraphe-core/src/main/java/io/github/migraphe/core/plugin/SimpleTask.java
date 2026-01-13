@@ -4,17 +4,16 @@ import io.github.migraphe.api.common.Result;
 import io.github.migraphe.api.task.Task;
 import io.github.migraphe.api.task.TaskResult;
 import java.util.Objects;
-import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /** Task のシンプルなリファレンス実装。 プラグイン開発者はこれを参考に独自の実装を作成できる。 */
 public final class SimpleTask implements Task {
     private final String description;
-    private final Optional<String> serializedDownTask;
+    private final @Nullable String serializedDownTask;
 
-    private SimpleTask(String description, Optional<String> serializedDownTask) {
+    private SimpleTask(String description, @Nullable String serializedDownTask) {
         this.description = Objects.requireNonNull(description, "description must not be null");
-        this.serializedDownTask =
-                Objects.requireNonNull(serializedDownTask, "serializedDownTask must not be null");
+        this.serializedDownTask = serializedDownTask;
     }
 
     @Override
@@ -29,10 +28,10 @@ public final class SimpleTask implements Task {
     }
 
     public static SimpleTask of(String description) {
-        return new SimpleTask(description, Optional.empty());
+        return new SimpleTask(description, null);
     }
 
     public static SimpleTask withDownTask(String description, String serializedDownTask) {
-        return new SimpleTask(description, Optional.of(serializedDownTask));
+        return new SimpleTask(description, serializedDownTask);
     }
 }

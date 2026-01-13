@@ -8,7 +8,6 @@ import io.github.migraphe.api.history.ExecutionRecord;
 import io.github.migraphe.api.history.HistoryRepository;
 import io.github.migraphe.api.task.ExecutionDirection;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,8 +36,7 @@ class InMemoryHistoryRepositoryTest {
     @Test
     void shouldRecordExecution() {
         // given
-        ExecutionRecord record =
-                ExecutionRecord.upSuccess(node1, envId, "Create table", Optional.empty(), 100);
+        ExecutionRecord record = ExecutionRecord.upSuccess(node1, envId, "Create table", null, 100);
 
         // when
         repository.record(record);
@@ -50,8 +48,7 @@ class InMemoryHistoryRepositoryTest {
     @Test
     void shouldCheckIfNodeWasExecuted() {
         // given
-        ExecutionRecord record =
-                ExecutionRecord.upSuccess(node1, envId, "Create table", Optional.empty(), 100);
+        ExecutionRecord record = ExecutionRecord.upSuccess(node1, envId, "Create table", null, 100);
 
         // when
         repository.record(record);
@@ -65,9 +62,8 @@ class InMemoryHistoryRepositoryTest {
     void shouldReturnExecutedNodes() {
         // given
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(node1, envId, "Create table", Optional.empty(), 100);
-        ExecutionRecord record2 =
-                ExecutionRecord.upSuccess(node2, envId, "Add column", Optional.empty(), 50);
+                ExecutionRecord.upSuccess(node1, envId, "Create table", null, 100);
+        ExecutionRecord record2 = ExecutionRecord.upSuccess(node2, envId, "Add column", null, 50);
 
         // when
         repository.record(record1);
@@ -82,7 +78,7 @@ class InMemoryHistoryRepositoryTest {
     void shouldFindLatestRecordForNode() {
         // given
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(node1, envId, "First execution", Optional.empty(), 100);
+                ExecutionRecord.upSuccess(node1, envId, "First execution", null, 100);
         ExecutionRecord record2 = ExecutionRecord.downSuccess(node1, envId, "Rollback", 50);
 
         // when
@@ -90,9 +86,9 @@ class InMemoryHistoryRepositoryTest {
         repository.record(record2);
 
         // then
-        Optional<ExecutionRecord> latest = repository.findLatestRecord(node1, envId);
-        assertThat(latest).isPresent();
-        assertThat(latest.get().direction()).isEqualTo(ExecutionDirection.DOWN);
+        ExecutionRecord latest = repository.findLatestRecord(node1, envId);
+        assertThat(latest).isNotNull();
+        assertThat(latest.direction()).isEqualTo(ExecutionDirection.DOWN);
     }
 
     @Test
@@ -124,10 +120,8 @@ class InMemoryHistoryRepositoryTest {
     @Test
     void shouldReturnAllRecordsInOrder() {
         // given
-        ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(node1, envId, "First", Optional.empty(), 100);
-        ExecutionRecord record2 =
-                ExecutionRecord.upSuccess(node2, envId, "Second", Optional.empty(), 50);
+        ExecutionRecord record1 = ExecutionRecord.upSuccess(node1, envId, "First", null, 100);
+        ExecutionRecord record2 = ExecutionRecord.upSuccess(node2, envId, "Second", null, 50);
 
         // when
         repository.record(record1);
@@ -141,10 +135,9 @@ class InMemoryHistoryRepositoryTest {
     void shouldIsolateRecordsBetweenEnvironments() {
         // given
         ExecutionRecord devRecord =
-                ExecutionRecord.upSuccess(node1, envId, "Dev migration", Optional.empty(), 100);
+                ExecutionRecord.upSuccess(node1, envId, "Dev migration", null, 100);
         ExecutionRecord stagingRecord =
-                ExecutionRecord.upSuccess(
-                        node2, stagingEnvId, "Staging migration", Optional.empty(), 50);
+                ExecutionRecord.upSuccess(node2, stagingEnvId, "Staging migration", null, 50);
 
         // when
         repository.record(devRecord);
@@ -162,9 +155,9 @@ class InMemoryHistoryRepositoryTest {
     @Test
     void shouldReturnEmptyForNonExistentNode() {
         // when
-        Optional<ExecutionRecord> latest = repository.findLatestRecord(node1, envId);
+        ExecutionRecord latest = repository.findLatestRecord(node1, envId);
 
         // then
-        assertThat(latest).isEmpty();
+        assertThat(latest).isNull();
     }
 }

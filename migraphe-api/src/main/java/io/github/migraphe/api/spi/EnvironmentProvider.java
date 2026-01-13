@@ -1,7 +1,6 @@
 package io.github.migraphe.api.spi;
 
 import io.github.migraphe.api.environment.Environment;
-import io.github.migraphe.api.environment.EnvironmentConfig;
 
 /**
  * Environment を生成する Provider インターフェース。
@@ -11,11 +10,11 @@ import io.github.migraphe.api.environment.EnvironmentConfig;
 public interface EnvironmentProvider {
 
     /**
-     * 設定から Environment を生成する。
+     * 環境定義から Environment を生成する。
      *
      * @param name 環境名（target ID）
-     * @param config 環境設定
+     * @param definition 環境定義（プラグイン固有の設定）
      * @return Environment インスタンス
      */
-    Environment createEnvironment(String name, EnvironmentConfig config);
+    Environment createEnvironment(String name, EnvironmentDefinition definition);
 }

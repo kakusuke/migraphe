@@ -14,6 +14,9 @@ dependencyResolutionManagement {
             version("picocli", "4.7.7")
             version("microprofile-config", "3.1")
             version("smallrye-config", "3.9.1")
+            version("errorprone", "2.24.1")
+            version("nullaway", "0.10.26")
+            version("jspecify", "0.3.0")
 
             // Libraries
             library("junit-bom", "org.junit", "junit-bom").versionRef("junit")
@@ -62,8 +65,15 @@ dependencyResolutionManagement {
                 )
                 .versionRef("smallrye-config")
 
+            // Error Prone / NullAway
+            library("errorprone-core", "com.google.errorprone", "error_prone_core")
+                .versionRef("errorprone")
+            library("nullaway", "com.uber.nullaway", "nullaway").versionRef("nullaway")
+            library("jspecify", "org.jspecify", "jspecify").versionRef("jspecify")
+
             // Plugins
             plugin("spotless", "com.diffplug.spotless").versionRef("spotless")
+            plugin("errorprone", "net.ltgt.errorprone").version("4.0.1")
         }
     }
 }

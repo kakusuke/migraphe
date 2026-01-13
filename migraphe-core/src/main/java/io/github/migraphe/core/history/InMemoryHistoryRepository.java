@@ -7,6 +7,7 @@ import io.github.migraphe.api.history.ExecutionStatus;
 import io.github.migraphe.api.history.HistoryRepository;
 import java.util.*;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 /**
  * メモリ内でマイグレーション履歴を管理する実装。
@@ -54,13 +55,14 @@ public final class InMemoryHistoryRepository implements HistoryRepository {
     }
 
     @Override
-    public Optional<ExecutionRecord> findLatestRecord(NodeId nodeId, EnvironmentId environmentId) {
+    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, EnvironmentId environmentId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
         return getRecordsForEnvironment(environmentId).stream()
                 .filter(r -> r.nodeId().equals(nodeId))
-                .max(Comparator.comparing(ExecutionRecord::executedAt));
+                .max(Comparator.comparing(ExecutionRecord::executedAt))
+                .orElse(null);
     }
 
     @Override

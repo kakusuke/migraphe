@@ -8,27 +8,28 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import org.jspecify.annotations.Nullable;
 
 /** PostgreSQL マイグレーションノードの実装。 Builder パターンで SQL ファイルまたは文字列から構築する。 */
 public final class PostgreSQLMigrationNode implements MigrationNode {
 
     private final NodeId id;
     private final String name;
-    private final String description;
+    private final @Nullable String description;
     private final PostgreSQLEnvironment environment;
     private final Set<NodeId> dependencies;
     private final String upSql;
-    private final Optional<String> downSql;
+    private final @Nullable String downSql;
 
     private PostgreSQLMigrationNode(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
         this.name = Objects.requireNonNull(builder.name, "name must not be null");
-        this.description = builder.description != null ? builder.description : "";
+        this.description = builder.description;
         this.environment =
                 Objects.requireNonNull(builder.environment, "environment must not be null");
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upSql = Objects.requireNonNull(builder.upSql, "upSql must not be null");
-        this.downSql = Optional.ofNullable(builder.downSql);
+        this.downSql = builder.downSql;
 
         if (upSql.isBlank()) {
             throw new IllegalArgumentException("upSql must not be blank");
@@ -46,7 +47,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
     }
 
     @Override
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
@@ -66,8 +67,11 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
     }
 
     @Override
-    public Optional<Task> downTask() {
-        return downSql.map(sql -> PostgreSQLDownTask.create(environment, sql));
+    public @Nullable Task downTask() {
+        if (downSql != null) {
+            return PostgreSQLDownTask.create(environment, downSql);
+        }
+        return null;
     }
 
     public static Builder builder() {
@@ -75,13 +79,13 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
     }
 
     public static class Builder {
-        private NodeId id;
-        private String name;
-        private String description;
-        private PostgreSQLEnvironment environment;
+        private @Nullable NodeId id;
+        private @Nullable String name;
+        private @Nullable String description;
+        private @Nullable PostgreSQLEnvironment environment;
         private Set<NodeId> dependencies = Set.of();
-        private String upSql;
-        private String downSql;
+        private @Nullable String upSql;
+        private @Nullable String downSql;
 
         public Builder id(String id) {
             this.id = NodeId.of(id);
@@ -98,7 +102,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
             return this;
         }
 
-        public Builder description(String description) {
+        public Builder description(@Nullable String description) {
             this.description = description;
             return this;
         }
@@ -159,7 +163,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
          * @param sql DOWN SQL
          * @return Builder
          */
-        public Builder downSql(String sql) {
+        public Builder downSql(@Nullable String sql) {
             this.downSql = sql;
             return this;
         }

@@ -13,6 +13,7 @@ import io.github.migraphe.api.task.TaskResult;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.Objects;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -96,8 +97,9 @@ class PostgreSQLIntegrationTest {
 
         // then
         assertThat(result.isOk()).isTrue();
-        assertThat(result.value()).isPresent();
-        assertThat(result.value().get().serializedDownTask()).isPresent();
+        TaskResult taskResult = result.value();
+        assertThat(taskResult).isNotNull();
+        assertThat(taskResult.serializedDownTask()).isNotNull();
 
         // Verify table exists
         try (Connection conn = environment.createConnection();
@@ -115,7 +117,7 @@ class PostgreSQLIntegrationTest {
                         node.id(),
                         environment.id(),
                         "Create users table",
-                        result.value().get().serializedDownTask(),
+                        taskResult.serializedDownTask(),
                         100);
         historyRepo.record(record);
 
@@ -142,13 +144,13 @@ class PostgreSQLIntegrationTest {
         node.upTask().execute();
 
         // when - Execute down migration
-        Task downTask = node.downTask().orElseThrow();
+        Task downTask = Objects.requireNonNull(node.downTask());
         Result<TaskResult, String> result = downTask.execute();
 
         // then
         assertThat(result.isOk()).isTrue();
-        assertThat(result.value()).isPresent();
-        assertThat(result.value().get().serializedDownTask()).isEmpty();
+        assertThat(result.value()).isNotNull();
+        assertThat(result.value().serializedDownTask()).isNull();
 
         // Verify table does not exist
         try (Connection conn = environment.createConnection();
@@ -178,8 +180,8 @@ class PostgreSQLIntegrationTest {
 
         // then
         assertThat(result.isErr()).isTrue();
-        assertThat(result.error()).isPresent();
-        assertThat(result.error().get()).contains("Failed to execute UP migration");
+        assertThat(result.error()).isNotNull();
+        assertThat(result.error()).contains("Failed to execute UP migration");
     }
 
     @Test
@@ -222,7 +224,7 @@ class PostgreSQLIntegrationTest {
                         node1.id(),
                         environment.id(),
                         node1.name(),
-                        result1.value().get().serializedDownTask(),
+                        result1.value().serializedDownTask(),
                         100));
 
         historyRepo.record(
@@ -230,7 +232,7 @@ class PostgreSQLIntegrationTest {
                         node2.id(),
                         environment.id(),
                         node2.name(),
-                        result2.value().get().serializedDownTask(),
+                        result2.value().serializedDownTask(),
                         150));
 
         // Verify both executed
@@ -245,12 +247,7 @@ class PostgreSQLIntegrationTest {
 
         NodeId nodeId = NodeId.of("V001");
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(
-                        nodeId,
-                        environment.id(),
-                        "First execution",
-                        java.util.Optional.empty(),
-                        100);
+                ExecutionRecord.upSuccess(nodeId, environment.id(), "First execution", null, 100);
         ExecutionRecord record2 =
                 ExecutionRecord.downSuccess(nodeId, environment.id(), "Rollback", 50);
 
@@ -260,8 +257,8 @@ class PostgreSQLIntegrationTest {
 
         // then
         var latest = historyRepo.findLatestRecord(nodeId, environment.id());
-        assertThat(latest).isPresent();
-        assertThat(latest.get().id()).isEqualTo(record2.id());
+        assertThat(latest).isNotNull();
+        assertThat(latest.id()).isEqualTo(record2.id());
     }
 
     @Test
@@ -293,11 +290,9 @@ class PostgreSQLIntegrationTest {
         NodeId node1 = NodeId.of("V001");
         NodeId node2 = NodeId.of("V002");
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(
-                        node1, environment.id(), "Migration 1", java.util.Optional.empty(), 100);
+                ExecutionRecord.upSuccess(node1, environment.id(), "Migration 1", null, 100);
         ExecutionRecord record2 =
-                ExecutionRecord.upSuccess(
-                        node2, environment.id(), "Migration 2", java.util.Optional.empty(), 150);
+                ExecutionRecord.upSuccess(node2, environment.id(), "Migration 2", null, 150);
 
         // when
         historyRepo.record(record1);

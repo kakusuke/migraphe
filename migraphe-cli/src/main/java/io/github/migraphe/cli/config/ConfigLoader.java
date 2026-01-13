@@ -1,6 +1,7 @@
 package io.github.migraphe.cli.config;
 
 import io.github.migraphe.api.graph.NodeId;
+import io.github.migraphe.api.spi.EnvironmentDefinition;
 import io.github.migraphe.api.spi.MigraphePlugin;
 import io.github.migraphe.api.spi.TaskDefinition;
 import io.github.migraphe.core.config.ConfigurationException;
@@ -13,10 +14,13 @@ import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
+import java.util.stream.StreamSupport;
+import org.jspecify.annotations.Nullable;
 
 /** YAML ファイルから設定を読み込み、SmallRyeConfig を構築するローダー。 */
 public class ConfigLoader {
@@ -29,29 +33,27 @@ public class ConfigLoader {
      * @throws ConfigurationException 設定ファイルのロードに失敗した場合
      */
     public SmallRyeConfig load(Path baseDir) {
-        return loadConfig(baseDir, Optional.empty());
+        return loadConfig(baseDir, null);
     }
 
     /**
      * YAML ファイルから設定をロードして SmallRyeConfig を構築する。
      *
      * @param baseDir プロジェクトルートディレクトリ
-     * @param envName 環境名 (オプション。指定された場合は environments/{envName}.yaml をロード)
+     * @param envName 環境名 (null の場合は環境ファイルをロードしない)
      * @return SmallRyeConfig
      * @throws ConfigurationException 設定ファイルのロードに失敗した場合
      */
-    public SmallRyeConfig loadConfig(Path baseDir, Optional<String> envName) {
+    public SmallRyeConfig loadConfig(Path baseDir, @Nullable String envName) {
         YamlFileScanner scanner = new YamlFileScanner();
         TaskIdGenerator idGenerator = new TaskIdGenerator();
 
         // 1. プロジェクト設定ファイル (migraphe.yaml) を発見
-        Path projectConfigFile =
-                scanner.findProjectConfig(baseDir)
-                        .orElseThrow(
-                                () ->
-                                        new ConfigurationException(
-                                                "Project config file not found: "
-                                                        + baseDir.resolve("migraphe.yaml")));
+        Path projectConfigFile = scanner.findProjectConfig(baseDir);
+        if (projectConfigFile == null) {
+            throw new ConfigurationException(
+                    "Project config file not found: " + baseDir.resolve("migraphe.yaml"));
+        }
 
         // 2. ターゲットファイル (targets/*.yaml) をスキャン
         List<Path> targetFiles = scanner.scanTargetFiles(baseDir);
@@ -75,17 +77,15 @@ public class ConfigLoader {
         SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder();
 
         // 6. 環境ファイルがあればロード (最優先 - ordinal 500)
-        Optional<Path> envFile = envName.flatMap(env -> scanner.findEnvironmentFile(baseDir, env));
+        Path envFile = envName != null ? scanner.findEnvironmentFile(baseDir, envName) : null;
 
-        if (envFile.isPresent()) {
+        if (envFile != null) {
             try {
-                YamlConfigSource envSource =
-                        new YamlConfigSource(envFile.get().toUri().toURL(), 500);
+                YamlConfigSource envSource = new YamlConfigSource(envFile.toUri().toURL(), 500);
                 // 環境ファイルと MultiFileYamlConfigSource を同時に追加
                 builder.withSources(envSource, multiFileSource);
             } catch (IOException e) {
-                throw new ConfigurationException(
-                        "Failed to load environment file: " + envFile.get(), e);
+                throw new ConfigurationException("Failed to load environment file: " + envFile, e);
             }
         } else {
             // 環境ファイルがない場合は MultiFileYamlConfigSource のみ
@@ -129,6 +129,93 @@ public class ConfigLoader {
     }
 
     /**
+     * targets/ ディレクトリから EnvironmentDefinition を読み込む。
+     *
+     * <p>各ターゲットの type フィールドからプラグインを特定し、 プラグイン固有の EnvironmentDefinition サブタイプにマッピングする。
+     *
+     * @param mainConfig メイン設定（ターゲット情報を含む）
+     * @param pluginRegistry プラグインレジストリ
+     * @return targetId → EnvironmentDefinition のマップ
+     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     */
+    public Map<String, EnvironmentDefinition> loadEnvironmentDefinitions(
+            SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
+
+        Map<String, EnvironmentDefinition> environmentDefinitions = new LinkedHashMap<>();
+
+        // 1. target.* プレフィックスを持つプロパティからターゲットIDを抽出
+        Set<String> targetIds = extractTargetIds(mainConfig);
+
+        for (String targetId : targetIds) {
+            EnvironmentDefinition envDef =
+                    loadEnvironmentDefinition(targetId, mainConfig, pluginRegistry);
+            environmentDefinitions.put(targetId, envDef);
+        }
+
+        return environmentDefinitions;
+    }
+
+    /**
+     * 単一のターゲットから EnvironmentDefinition を読み込む。
+     *
+     * @param targetId ターゲットID
+     * @param mainConfig メイン設定
+     * @param pluginRegistry プラグインレジストリ
+     * @return EnvironmentDefinition
+     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     */
+    public EnvironmentDefinition loadEnvironmentDefinition(
+            String targetId, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
+
+        String prefix = "target." + targetId + ".";
+
+        // 1. type を取得
+        String type = mainConfig.getValue(prefix + "type", String.class);
+        if (type == null) {
+            throw new ConfigurationException("Target type not found for target: " + targetId);
+        }
+
+        // 2. プラグインを取得
+        MigraphePlugin<?> plugin = pluginRegistry.getPlugin(type);
+        if (plugin == null) {
+            throw new ConfigurationException(
+                    "No plugin found for type: "
+                            + type
+                            + ". Available types: "
+                            + pluginRegistry.supportedTypes());
+        }
+
+        // 3. プラグインの EnvironmentDefinition クラスでマッピング
+        // プレフィックス付きで EnvironmentDefinition を構築
+        SmallRyeConfig envConfig =
+                new SmallRyeConfigBuilder()
+                        .withSources(new PrefixedConfigSource(mainConfig, prefix))
+                        .withMapping(plugin.environmentDefinitionClass())
+                        .withValidateUnknown(false)
+                        .build();
+
+        return envConfig.getConfigMapping(plugin.environmentDefinitionClass());
+    }
+
+    /**
+     * 設定からターゲットIDを抽出する。
+     *
+     * @param config SmallRyeConfig
+     * @return ターゲットIDのセット
+     */
+    private Set<String> extractTargetIds(SmallRyeConfig config) {
+        Set<String> targetIds = new HashSet<>();
+
+        StreamSupport.stream(config.getPropertyNames().spliterator(), false)
+                .filter(name -> name.startsWith("target."))
+                .map(name -> name.substring("target.".length()))
+                .map(name -> name.split("\\.")[0])
+                .forEach(targetIds::add);
+
+        return targetIds;
+    }
+
+    /**
      * 単一のタスクファイルから TaskDefinition を読み込む。
      *
      * @param taskFile タスクファイルのパス
@@ -162,16 +249,14 @@ public class ConfigLoader {
             }
 
             // 3. プラグインを取得
-            MigraphePlugin<?> plugin =
-                    pluginRegistry
-                            .getPlugin(type)
-                            .orElseThrow(
-                                    () ->
-                                            new ConfigurationException(
-                                                    "No plugin found for type: "
-                                                            + type
-                                                            + ". Available types: "
-                                                            + pluginRegistry.supportedTypes()));
+            MigraphePlugin<?> plugin = pluginRegistry.getPlugin(type);
+            if (plugin == null) {
+                throw new ConfigurationException(
+                        "No plugin found for type: "
+                                + type
+                                + ". Available types: "
+                                + pluginRegistry.supportedTypes());
+            }
 
             // 4. プラグインの TaskDefinition クラスでマッピング
             // 注: YamlConfigSource を再作成（SmallRyeConfig はソースを使い切る）

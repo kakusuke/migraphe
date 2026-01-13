@@ -29,11 +29,8 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
 
         PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) environment;
 
-        // UP SQL を取得（直接 String）
+        // UP SQL を取得
         String upSql = task.up();
-
-        // DOWN SQL を取得（オプション、直接 String）
-        String downSql = task.down().orElse(null);
 
         // PostgreSQLMigrationNode を構築
         var builder =
@@ -44,11 +41,11 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
                         .dependencies(dependencies)
                         .upSql(upSql);
 
+        // description（オプション）
         task.description().ifPresent(builder::description);
 
-        if (downSql != null && !downSql.isBlank()) {
-            builder.downSql(downSql);
-        }
+        // DOWN SQL（オプション）
+        task.down().filter(sql -> !sql.isBlank()).ifPresent(builder::downSql);
 
         return builder.build();
     }

@@ -7,20 +7,20 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Objects;
-import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /** PostgreSQL で UP マイグレーション（前進）を実行するタスク。 */
 public final class PostgreSQLUpTask implements Task {
 
     private final PostgreSQLEnvironment environment;
     private final String upSql;
-    private final Optional<String> downSql;
+    private final @Nullable String downSql;
 
     private PostgreSQLUpTask(
-            PostgreSQLEnvironment environment, String upSql, Optional<String> downSql) {
+            PostgreSQLEnvironment environment, String upSql, @Nullable String downSql) {
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
         this.upSql = Objects.requireNonNull(upSql, "upSql must not be null");
-        this.downSql = Objects.requireNonNull(downSql, "downSql must not be null");
+        this.downSql = downSql;
 
         if (upSql.isBlank()) {
             throw new IllegalArgumentException("upSql must not be blank");
@@ -32,11 +32,11 @@ public final class PostgreSQLUpTask implements Task {
      *
      * @param environment PostgreSQL 環境
      * @param upSql UP SQL
-     * @param downSql DOWN SQL（ロールバック用、Optional）
+     * @param downSql DOWN SQL（ロールバック用、null 許容）
      * @return UP タスク
      */
     public static PostgreSQLUpTask create(
-            PostgreSQLEnvironment environment, String upSql, Optional<String> downSql) {
+            PostgreSQLEnvironment environment, String upSql, @Nullable String downSql) {
         return new PostgreSQLUpTask(environment, upSql, downSql);
     }
 
@@ -54,11 +54,10 @@ public final class PostgreSQLUpTask implements Task {
                 long durationMs = System.currentTimeMillis() - startTime;
 
                 // DOWN SQL があれば、そのまま（生 SQL テキスト）をシリアライズする
-                if (downSql.isPresent()) {
+                if (downSql != null) {
                     return Result.ok(
                             TaskResult.withDownTask(
-                                    "UP migration executed in " + durationMs + "ms",
-                                    downSql.get()));
+                                    "UP migration executed in " + durationMs + "ms", downSql));
                 } else {
                     return Result.ok(
                             TaskResult.withoutDownTask(

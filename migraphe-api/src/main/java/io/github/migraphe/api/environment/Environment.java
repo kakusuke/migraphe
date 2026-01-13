@@ -8,7 +8,4 @@ public interface Environment {
 
     /** 環境名（例: "dev", "staging", "prod"） */
     String name();
-
-    /** 環境固有の設定 */
-    EnvironmentConfig config();
 }

@@ -4,16 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.migraphe.api.environment.Environment;
-import io.github.migraphe.api.environment.EnvironmentConfig;
 import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.history.HistoryRepository;
+import io.github.migraphe.api.spi.EnvironmentDefinition;
 import io.github.migraphe.api.spi.MigraphePlugin;
 import io.github.migraphe.api.spi.TaskDefinition;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.List;
-import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -54,6 +53,18 @@ class PostgreSQLPluginTest {
 
         // then
         assertThat(taskDefClass).isEqualTo(SqlTaskDefinition.class);
+    }
+
+    @Test
+    void shouldReturnEnvironmentDefinitionClass() {
+        // given
+        PostgreSQLPlugin plugin = new PostgreSQLPlugin();
+
+        // when
+        Class<? extends EnvironmentDefinition> envDefClass = plugin.environmentDefinitionClass();
+
+        // then
+        assertThat(envDefClass).isEqualTo(PostgreSQLEnvironmentDefinition.class);
     }
 
     @Test
@@ -99,15 +110,15 @@ class PostgreSQLPluginTest {
     void environmentProviderShouldCreateEnvironment() {
         // given
         var provider = new PostgreSQLEnvironmentProvider();
-        var config =
-                EnvironmentConfig.of(
-                        Map.of(
-                                "jdbc_url", "jdbc:postgresql://localhost:5432/test",
-                                "username", "testuser",
-                                "password", "testpass"));
+        var definition =
+                createEnvironmentDefinition(
+                        "postgresql",
+                        "jdbc:postgresql://localhost:5432/test",
+                        "testuser",
+                        "testpass");
 
         // when
-        Environment env = provider.createEnvironment("test-db", config);
+        Environment env = provider.createEnvironment("test-db", definition);
 
         // then
         assertThat(env).isNotNull();
@@ -116,43 +127,21 @@ class PostgreSQLPluginTest {
     }
 
     @Test
-    void environmentProviderShouldThrowWhenMissingJdbcUrl() {
+    void environmentProviderShouldThrowWhenGivenWrongDefinitionType() {
         // given
         var provider = new PostgreSQLEnvironmentProvider();
-        var config = EnvironmentConfig.of(Map.of("username", "user", "password", "pass"));
+        var wrongDefinition =
+                new EnvironmentDefinition() {
+                    @Override
+                    public String type() {
+                        return "other";
+                    }
+                };
 
         // when & then
-        assertThatThrownBy(() -> provider.createEnvironment("test", config))
+        assertThatThrownBy(() -> provider.createEnvironment("test", wrongDefinition))
                 .isInstanceOf(PostgreSQLException.class)
-                .hasMessageContaining("Missing required config: jdbc_url");
-    }
-
-    @Test
-    void environmentProviderShouldThrowWhenMissingUsername() {
-        // given
-        var provider = new PostgreSQLEnvironmentProvider();
-        var config =
-                EnvironmentConfig.of(
-                        Map.of("jdbc_url", "jdbc:postgresql://localhost/db", "password", "pass"));
-
-        // when & then
-        assertThatThrownBy(() -> provider.createEnvironment("test", config))
-                .isInstanceOf(PostgreSQLException.class)
-                .hasMessageContaining("Missing required config: username");
-    }
-
-    @Test
-    void environmentProviderShouldThrowWhenMissingPassword() {
-        // given
-        var provider = new PostgreSQLEnvironmentProvider();
-        var config =
-                EnvironmentConfig.of(
-                        Map.of("jdbc_url", "jdbc:postgresql://localhost/db", "username", "user"));
-
-        // when & then
-        assertThatThrownBy(() -> provider.createEnvironment("test", config))
-                .isInstanceOf(PostgreSQLException.class)
-                .hasMessageContaining("Missing required config: password");
+                .hasMessageContaining("Expected PostgreSQLEnvironmentDefinition");
     }
 
     @Test
@@ -198,11 +187,6 @@ class PostgreSQLPluginTest {
                     public String name() {
                         return "test";
                     }
-
-                    @Override
-                    public EnvironmentConfig config() {
-                        return EnvironmentConfig.empty();
-                    }
                 };
         var nodeId = NodeId.of("V001");
         SqlTaskDefinition task = createTaskDefinition("test", null, "test", "SELECT 1;", null);
@@ -244,11 +228,6 @@ class PostgreSQLPluginTest {
                     public String name() {
                         return "test";
                     }
-
-                    @Override
-                    public EnvironmentConfig config() {
-                        return EnvironmentConfig.empty();
-                    }
                 };
 
         // when & then
@@ -276,5 +255,19 @@ class PostgreSQLPluginTest {
 
         SmallRyeConfig config = builder.build();
         return config.getConfigMapping(SqlTaskDefinition.class);
+    }
+
+    /** テスト用の PostgreSQLEnvironmentDefinition を作成する。 */
+    private PostgreSQLEnvironmentDefinition createEnvironmentDefinition(
+            String type, String jdbcUrl, String username, String password) {
+        SmallRyeConfig config =
+                new SmallRyeConfigBuilder()
+                        .withMapping(PostgreSQLEnvironmentDefinition.class)
+                        .withDefaultValue("type", type)
+                        .withDefaultValue("jdbc_url", jdbcUrl)
+                        .withDefaultValue("username", username)
+                        .withDefaultValue("password", password)
+                        .build();
+        return config.getConfigMapping(PostgreSQLEnvironmentDefinition.class);
     }
 }

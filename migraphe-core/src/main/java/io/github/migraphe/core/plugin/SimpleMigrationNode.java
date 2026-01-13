@@ -5,28 +5,28 @@ import io.github.migraphe.api.graph.MigrationNode;
 import io.github.migraphe.api.graph.NodeId;
 import io.github.migraphe.api.task.Task;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /** MigrationNode のシンプルなリファレンス実装。 プラグイン開発者はこれを参考に独自の実装を作成できる。 */
 public final class SimpleMigrationNode implements MigrationNode {
     private final NodeId id;
     private final String name;
-    private final String description;
+    private final @Nullable String description;
     private final Environment environment;
     private final Set<NodeId> dependencies;
     private final Task upTask;
-    private final Optional<Task> downTask;
+    private final @Nullable Task downTask;
 
     private SimpleMigrationNode(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
         this.name = Objects.requireNonNull(builder.name, "name must not be null");
-        this.description = builder.description != null ? builder.description : "";
+        this.description = builder.description;
         this.environment =
                 Objects.requireNonNull(builder.environment, "environment must not be null");
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upTask = Objects.requireNonNull(builder.upTask, "upTask must not be null");
-        this.downTask = Optional.ofNullable(builder.downTask);
+        this.downTask = builder.downTask;
     }
 
     @Override
@@ -40,7 +40,7 @@ public final class SimpleMigrationNode implements MigrationNode {
     }
 
     @Override
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
@@ -60,7 +60,7 @@ public final class SimpleMigrationNode implements MigrationNode {
     }
 
     @Override
-    public Optional<Task> downTask() {
+    public @Nullable Task downTask() {
         return downTask;
     }
 
@@ -69,13 +69,13 @@ public final class SimpleMigrationNode implements MigrationNode {
     }
 
     public static class Builder {
-        private NodeId id;
-        private String name;
-        private String description;
-        private Environment environment;
+        private @Nullable NodeId id;
+        private @Nullable String name;
+        private @Nullable String description;
+        private @Nullable Environment environment;
         private Set<NodeId> dependencies = Set.of();
-        private Task upTask;
-        private Task downTask;
+        private @Nullable Task upTask;
+        private @Nullable Task downTask;
 
         public Builder id(NodeId id) {
             this.id = id;
@@ -92,7 +92,7 @@ public final class SimpleMigrationNode implements MigrationNode {
             return this;
         }
 
-        public Builder description(String description) {
+        public Builder description(@Nullable String description) {
             this.description = description;
             return this;
         }
@@ -117,7 +117,7 @@ public final class SimpleMigrationNode implements MigrationNode {
             return this;
         }
 
-        public Builder downTask(Task downTask) {
+        public Builder downTask(@Nullable Task downTask) {
             this.downTask = downTask;
             return this;
         }

@@ -1,7 +1,6 @@
 package io.github.migraphe.core.plugin;
 
 import io.github.migraphe.api.environment.Environment;
-import io.github.migraphe.api.environment.EnvironmentConfig;
 import io.github.migraphe.api.environment.EnvironmentId;
 import java.util.Objects;
 
@@ -9,12 +8,10 @@ import java.util.Objects;
 public final class SimpleEnvironment implements Environment {
     private final EnvironmentId id;
     private final String name;
-    private final EnvironmentConfig config;
 
-    private SimpleEnvironment(EnvironmentId id, String name, EnvironmentConfig config) {
+    private SimpleEnvironment(EnvironmentId id, String name) {
         this.id = Objects.requireNonNull(id, "id must not be null");
         this.name = Objects.requireNonNull(name, "name must not be null");
-        this.config = Objects.requireNonNull(config, "config must not be null");
     }
 
     @Override
@@ -27,18 +24,12 @@ public final class SimpleEnvironment implements Environment {
         return name;
     }
 
-    @Override
-    public EnvironmentConfig config() {
-        return config;
-    }
-
-    public static SimpleEnvironment create(
-            EnvironmentId id, String name, EnvironmentConfig config) {
-        return new SimpleEnvironment(id, name, config);
+    public static SimpleEnvironment create(EnvironmentId id, String name) {
+        return new SimpleEnvironment(id, name);
     }
 
     public static SimpleEnvironment create(String name) {
-        return new SimpleEnvironment(EnvironmentId.of(name), name, EnvironmentConfig.empty());
+        return new SimpleEnvironment(EnvironmentId.of(name), name);
     }
 
     @Override

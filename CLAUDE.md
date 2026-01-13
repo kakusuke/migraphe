@@ -4,9 +4,9 @@
 
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
-**Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless
-**Current Phase**: 11 (Plugin System) - COMPLETE
-**Tests**: 176+, 100% passing
+**Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify (@Nullable)
+**Current Phase**: 12 (Refactoring) - COMPLETE
+**Tests**: 177+, 100% passing
 
 ## Module Structure
 
@@ -28,12 +28,12 @@ migraphe-cli/       # CLI entry point, config loading, commands
 
 ```
 io.github.migraphe.api/
-├── environment/    # Environment, EnvironmentId, EnvironmentConfig
+├── environment/    # Environment, EnvironmentId
 ├── graph/          # MigrationNode (interface), NodeId
 ├── task/           # Task, TaskResult, ExecutionDirection
 ├── history/        # HistoryRepository (interface), ExecutionRecord, ExecutionStatus
 ├── common/         # Result, ValidationResult
-└── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider
+└── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
 
 io.github.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, GraphVisualizer
@@ -117,6 +117,8 @@ Update when code changes:
 | 11-5 | Command integration (HistoryRepository via plugin) | ✅ Complete |
 | 11-6 | Main CLI integration | ✅ Complete |
 | 11-7 | Cleanup and documentation | ✅ Complete |
+| 12-1 | EnvironmentDefinition generification | ✅ Complete |
+| 12-2 | @Nullable introduction (Optional removal) | ✅ Complete |
 
 ### Future Phases
 - `down`, `history`, `validate` commands
@@ -132,7 +134,7 @@ Update when code changes:
 3. **Interface Segregation**: Small, focused interfaces
 4. **Dependency Inversion**: Depend on interfaces
 5. **Immutability**: Records and immutable collections
-6. **Null Safety**: Optional instead of null
+6. **Null Safety**: `@Nullable` (jspecify) for nullable fields/returns, `Optional` only for SmallRye @ConfigMapping
 7. **Type Safety**: Sealed interfaces, pattern matching
 
 ## Session End Procedure
@@ -147,38 +149,28 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-13 (Session 9)
+- **Phase 12-1**: EnvironmentDefinition generification - COMPLETED
+  - Created `EnvironmentDefinition` interface in API module
+  - Added `environmentDefinitionClass()` to `MigraphePlugin`
+  - Changed `EnvironmentProvider` signature to use `EnvironmentDefinition`
+  - Created `PostgreSQLEnvironmentDefinition` with `@ConfigMapping`
+  - Updated `ConfigLoader` with `loadEnvironmentDefinitions()` method
+  - Deleted old `EnvironmentConfig` class
+- **Phase 12-2**: @Nullable introduction - COMPLETED
+  - Added jspecify dependency for `@Nullable` annotations
+  - Replaced `Optional` with `@Nullable` for most interfaces
+  - **Exception**: `TaskDefinition` keeps `Optional` (SmallRye @ConfigMapping requirement)
+  - Updated `Result<T,E>`: Ok.value() returns NonNull, Err.error() returns NonNull
+  - Updated all tests for @Nullable assertions
+- Tests: 177+, 100% passing
+
 ### 2026-01-09 (Session 8)
-- **Phase 11-3**: Generic Factories - COMPLETED
-  - `EnvironmentFactory` now uses PluginRegistry to create Environment via plugin
-  - `MigrationNodeFactory` now uses PluginRegistry to create MigrationNode via plugin
-  - Both factories return interface types (Environment, MigrationNode) instead of PostgreSQL-specific types
-- **Phase 11-4**: ExecutionContext generalization - COMPLETED
-  - Changed record fields from PostgreSQL types to interface types
-  - `ExecutionContext.load()` now requires PluginRegistry parameter
-  - Added `pluginRegistry` field to ExecutionContext record
-- **Phase 11-5**: Command integration - COMPLETED
-  - `UpCommand` and `StatusCommand` now use PluginRegistry to get HistoryRepository
-  - Removed instanceof checks, using `plugin.historyRepositoryProvider().createRepository()`
-- **Phase 11-6**: Main CLI integration - COMPLETED
-  - `Main.java` initializes PluginRegistry from classpath and plugins/ directory
-- **Phase 11-7**: Cleanup and documentation - COMPLETED
-  - Removed PostgreSQL direct imports from CLI main code
-  - Created `docs/PLUGIN_DEVELOPMENT.md` (English)
-  - Created `docs/PLUGIN_DEVELOPMENT.ja.md` (Japanese)
-- **Phase 11 COMPLETE** - Full plugin system implemented
-- Tests: 176+, 100% passing
-
-### 2026-01-05 (Session 7)
-- **Phase 11-0**: Created `migraphe-api` module, moved interfaces from core
-- **Phase 11-1**: Implemented PluginRegistry with ServiceLoader + URLClassLoader
-- **Phase 11-2**: PostgreSQLPlugin with 3 providers, META-INF/services registration
-- Tests: 176+ (92 core + 34 postgresql + ~50 cli)
-
-### 2026-01-05 (Session 6)
-- Created user documentation (README, USER_GUIDE in EN/JA)
-- Phase 11 plugin system design
+- **Phase 11**: Plugin System - COMPLETED
+  - Generic factories, ExecutionContext generalization, Main CLI integration
+  - Created `docs/PLUGIN_DEVELOPMENT.md` (EN/JA)
 
 ---
 
-**Last Updated**: 2026-01-09
-**Phase 11 Complete** - Next: Future phases (down command, Native Image, etc.)
+**Last Updated**: 2026-01-13
+**Phase 12 Complete** - Next: Future phases (down command, Native Image, etc.)

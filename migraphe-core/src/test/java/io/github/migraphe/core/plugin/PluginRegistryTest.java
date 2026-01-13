@@ -3,6 +3,7 @@ package io.github.migraphe.core.plugin;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.migraphe.api.spi.EnvironmentDefinition;
 import io.github.migraphe.api.spi.EnvironmentProvider;
 import io.github.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.migraphe.api.spi.MigraphePlugin;
@@ -38,7 +39,7 @@ class PluginRegistryTest {
         // then
         assertThat(registry.size()).isEqualTo(1);
         assertThat(registry.supportedTypes()).containsExactly("test-db");
-        assertThat(registry.getPlugin("test-db")).isPresent().contains(mockPlugin);
+        assertThat(registry.getPlugin("test-db")).isNotNull().isSameAs(mockPlugin);
     }
 
     @Test
@@ -47,7 +48,7 @@ class PluginRegistryTest {
         var result = registry.getPlugin("unknown");
 
         // then
-        assertThat(result).isEmpty();
+        assertThat(result).isNull();
     }
 
     @Test
@@ -62,7 +63,7 @@ class PluginRegistryTest {
 
         // then
         assertThat(registry.size()).isEqualTo(1);
-        assertThat(registry.getPlugin("postgresql")).isPresent().contains(plugin2);
+        assertThat(registry.getPlugin("postgresql")).isNotNull().isSameAs(plugin2);
     }
 
     @Test
@@ -103,6 +104,11 @@ class PluginRegistryTest {
 
                     @Override
                     public Class<? extends TaskDefinition<Object>> taskDefinitionClass() {
+                        return null;
+                    }
+
+                    @Override
+                    public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
                         return null;
                     }
 
@@ -214,8 +220,13 @@ class PluginRegistryTest {
             }
 
             @Override
+            public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
+                return null;
+            }
+
+            @Override
             public EnvironmentProvider environmentProvider() {
-                return (name, config) -> null;
+                return (name, definition) -> null;
             }
 
             @Override

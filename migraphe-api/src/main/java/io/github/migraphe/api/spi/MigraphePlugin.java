@@ -21,6 +21,11 @@ package io.github.migraphe.api.spi;
  *     }
  *
  *     @Override
+ *     public Class<PostgreSQLEnvironmentDefinition> environmentDefinitionClass() {
+ *         return PostgreSQLEnvironmentDefinition.class;
+ *     }
+ *
+ *     @Override
  *     public EnvironmentProvider environmentProvider() {
  *         return new PostgreSQLEnvironmentProvider();
  *     }
@@ -59,6 +64,16 @@ public interface MigraphePlugin<T> {
      * @return TaskDefinition サブタイプの Class
      */
     Class<? extends TaskDefinition<T>> taskDefinitionClass();
+
+    /**
+     * プラグイン固有の EnvironmentDefinition サブタイプを返す。
+     *
+     * <p>フレームワークは返されたクラスを使用して YAML から EnvironmentDefinition をマッピングする。 サブタイプは {@code @ConfigMapping}
+     * アノテーション付きで実装する必要がある。
+     *
+     * @return EnvironmentDefinition サブタイプの Class
+     */
+    Class<? extends EnvironmentDefinition> environmentDefinitionClass();
 
     /**
      * Environment を生成する Provider を返す。
