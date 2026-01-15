@@ -68,7 +68,11 @@ public final class PostgreSQLUpTask implements Task {
 
     private Result<TaskResult, String> executeWithAutocommit(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            stmt.execute(upSql);
+            // autocommit モードでは各ステートメントを個別に実行
+            // （CREATE DATABASE などは暗黙的トランザクションでも実行不可のため）
+            for (String sql : splitStatements(upSql)) {
+                stmt.execute(sql);
+            }
             long durationMs = System.currentTimeMillis() - startTime;
 
             if (downSql != null) {
@@ -84,6 +88,21 @@ public final class PostgreSQLUpTask implements Task {
         } catch (SQLException e) {
             return Result.err("Failed to execute UP migration: " + e.getMessage());
         }
+    }
+
+    /**
+     * SQL テキストをステートメントに分割する。
+     *
+     * <p>セミコロン + 空白/コメント + 改行 のパターンで分割。 文字列リテラル内のセミコロンで誤分割しないよう、行末のみを対象とする。
+     */
+    private static String[] splitStatements(String sql) {
+        // セミコロン + 空白/コメント(optional) + 改行 で分割
+        String[] parts = sql.split(";\\s*?(--[^\\n]*)?\\r?\\n");
+        return java.util.Arrays.stream(parts)
+                .map(String::trim)
+                .map(s -> s.endsWith(";") ? s.substring(0, s.length() - 1).trim() : s)
+                .filter(s -> !s.isEmpty())
+                .toArray(String[]::new);
     }
 
     private Result<TaskResult, String> executeWithTransaction(Connection conn, long startTime) {
