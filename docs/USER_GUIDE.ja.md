@@ -501,7 +501,7 @@ No plugins are currently loaded.
 
 To use this plugin type:
   1. Place the plugin JAR file in ./plugins/ directory
-  2. Ensure the JAR contains META-INF/services/io.github.migraphe.api.spi.MigraphePlugin
+  2. Ensure the JAR contains META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 ```
 
 **解決策:**

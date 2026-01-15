@@ -27,7 +27,7 @@ migraphe-cli/       # CLI entry point, config loading, commands
 ## Package Structure
 
 ```
-io.github.migraphe.api/
+io.github.kakusuke.migraphe.api/
 ├── environment/    # Environment, EnvironmentId
 ├── graph/          # MigrationNode (interface), NodeId
 ├── task/           # Task, TaskResult, ExecutionDirection
@@ -35,19 +35,19 @@ io.github.migraphe.api/
 ├── common/         # Result, ValidationResult
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
 
-io.github.migraphe.core/
+io.github.kakusuke.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, GraphVisualizer
 ├── history/        # InMemoryHistoryRepository
 ├── config/         # ProjectConfig, TargetConfig, TaskConfig (@ConfigMapping)
 ├── plugin/         # PluginRegistry, PluginLoadException
 └── plugin/         # SimpleMigrationNode, SimpleEnvironment, SimpleTask (reference impl)
 
-io.github.migraphe.postgresql/
+io.github.kakusuke.migraphe.postgresql/
 ├── PostgreSQL{Environment,MigrationNode,UpTask,DownTask,HistoryRepository}.java
 ├── PostgreSQLPlugin.java, PostgreSQL{Environment,MigrationNode,HistoryRepository}Provider.java
-└── META-INF/services/io.github.migraphe.api.spi.MigraphePlugin
+└── META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 
-io.github.migraphe.cli/
+io.github.kakusuke.migraphe.cli/
 ├── Main.java, ExecutionContext.java
 ├── command/        # Command, UpCommand, StatusCommand
 ├── config/         # ConfigLoader, MultiFileYamlConfigSource, YamlFileScanner, TaskIdGenerator

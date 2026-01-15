@@ -18,7 +18,7 @@ Migraphe は Java の ServiceLoader メカニズムに基づいたプラグイ�
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.migraphe:migraphe-api:0.1.0")
+    implementation("io.github.kakusuke.migraphe:migraphe-api:0.1.0")
 }
 ```
 
@@ -29,7 +29,7 @@ dependencies {
 ```java
 package com.example.myplugin;
 
-import io.github.migraphe.api.spi.*;
+import io.github.kakusuke.migraphe.api.spi.*;
 
 public class MyDatabasePlugin implements MigraphePlugin {
 
@@ -126,7 +126,7 @@ public class MyDatabaseHistoryRepositoryProvider implements HistoryRepositoryPro
 サービス登録ファイルを作成します：
 
 ```
-src/main/resources/META-INF/services/io.github.migraphe.api.spi.MigraphePlugin
+src/main/resources/META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 ```
 
 内容：

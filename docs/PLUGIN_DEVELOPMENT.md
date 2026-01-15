@@ -18,7 +18,7 @@ Add the `migraphe-api` module to your plugin project:
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.migraphe:migraphe-api:0.1.0")
+    implementation("io.github.kakusuke.migraphe:migraphe-api:0.1.0")
 }
 ```
 
@@ -29,7 +29,7 @@ Create a class implementing `MigraphePlugin`:
 ```java
 package com.example.myplugin;
 
-import io.github.migraphe.api.spi.*;
+import io.github.kakusuke.migraphe.api.spi.*;
 
 public class MyDatabasePlugin implements MigraphePlugin {
 
@@ -126,7 +126,7 @@ public class MyDatabaseHistoryRepositoryProvider implements HistoryRepositoryPro
 Create the service registration file:
 
 ```
-src/main/resources/META-INF/services/io.github.migraphe.api.spi.MigraphePlugin
+src/main/resources/META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 ```
 
 Contents:

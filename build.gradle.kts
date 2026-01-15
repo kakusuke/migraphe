@@ -7,7 +7,7 @@ plugins {
 }
 
 allprojects {
-    group = "io.github.migraphe"
+    group = "io.github.kakusuke.migraphe"
     version = "0.1.0-SNAPSHOT"
 
     repositories {
@@ -51,7 +51,7 @@ subprojects {
             } else {
                 disable("NullAway")
             }
-            option("NullAway:AnnotatedPackages", "io.github.migraphe")
+            option("NullAway:AnnotatedPackages", "io.github.kakusuke.migraphe")
         }
     }
 
