@@ -90,13 +90,15 @@ my-project/
 **Getting Plugin JARs:**
 
 ```bash
-# Build from source
-./gradlew :migraphe-postgresql:jar
+# Build fat JAR (includes JDBC driver)
+./gradlew :migraphe-postgresql:fatJar
 
-# Copy JAR to plugins/
+# Copy fat JAR to plugins/
 mkdir -p my-project/plugins
-cp migraphe-postgresql/build/libs/migraphe-postgresql-*.jar my-project/plugins/
+cp migraphe-postgresql/build/libs/migraphe-postgresql-*-all.jar my-project/plugins/
 ```
+
+**Note:** Use the `-all.jar` (fat JAR) for CLI usage. The thin JAR is for Gradle/Maven dependency management.
 
 ## Project Setup
 

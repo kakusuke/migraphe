@@ -32,3 +32,14 @@ tasks.test {
         showStandardStreams = false
     }
 }
+
+// Fat JAR タスク（CLI プラグイン用 - JDBC ドライバ込み）
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("all")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    from(configurations.runtimeClasspath.get().map {
+        if (it.isDirectory) it else zipTree(it)
+    })
+    with(tasks.jar.get() as CopySpec)
+}
