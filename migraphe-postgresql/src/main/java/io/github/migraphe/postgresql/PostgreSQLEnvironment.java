@@ -72,6 +72,20 @@ public final class PostgreSQLEnvironment implements Environment {
      * @throws SQLException 接続の作成に失敗した場合
      */
     public Connection createConnection() throws SQLException {
+        ensureDriverLoaded();
         return DriverManager.getConnection(jdbcUrl, username, password);
+    }
+
+    /**
+     * PostgreSQL JDBC ドライバがロードされていることを確認する。
+     *
+     * <p>URLClassLoader でプラグインを読み込んだ場合、ドライバは DriverManager に自動登録されないため、 明示的にクラスをロードする必要がある。
+     */
+    private static void ensureDriverLoaded() throws SQLException {
+        try {
+            Class.forName("org.postgresql.Driver");
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("PostgreSQL JDBC driver not found", e);
+        }
     }
 }
