@@ -16,6 +16,7 @@ dependencies {
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
+    testImplementation(libs.smallrye.config.source.yaml)
 
     // Testcontainers
     testImplementation(platform(libs.testcontainers.bom))

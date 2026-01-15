@@ -56,6 +56,8 @@ class PostgreSQLIntegrationTest {
             // Drop all user tables
             stmt.execute("DROP TABLE IF EXISTS posts CASCADE");
             stmt.execute("DROP TABLE IF EXISTS users CASCADE");
+            stmt.execute("DROP TABLE IF EXISTS autocommit_test CASCADE");
+            stmt.execute("DROP TABLE IF EXISTS autocommit_down_test CASCADE");
             // Clear history
             stmt.execute("TRUNCATE TABLE migraphe_history");
         }
@@ -303,5 +305,75 @@ class PostgreSQLIntegrationTest {
         assertThat(allRecords).hasSize(2);
         assertThat(allRecords.get(0).status()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(allRecords.get(1).status()).isEqualTo(ExecutionStatus.SUCCESS);
+    }
+
+    @Test
+    void shouldExecuteUpMigrationWithAutocommit() throws Exception {
+        // given
+        historyRepo.initialize();
+
+        PostgreSQLMigrationNode node =
+                PostgreSQLMigrationNode.builder()
+                        .id("autocommit_test")
+                        .name("Autocommit migration")
+                        .environment(environment)
+                        .upSql("CREATE TABLE autocommit_test (id SERIAL PRIMARY KEY);")
+                        .downSql("DROP TABLE IF EXISTS autocommit_test;")
+                        .autocommit(true)
+                        .build();
+
+        // when
+        Task upTask = node.upTask();
+        Result<TaskResult, String> result = upTask.execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        assertThat(result.value().message()).contains("autocommit");
+
+        // Verify table exists
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT table_name FROM information_schema.tables "
+                                        + "WHERE table_name = 'autocommit_test'")) {
+            assertThat(rs.next()).isTrue();
+        }
+    }
+
+    @Test
+    void shouldExecuteDownMigrationWithAutocommit() throws Exception {
+        // given
+        historyRepo.initialize();
+
+        PostgreSQLMigrationNode node =
+                PostgreSQLMigrationNode.builder()
+                        .id("autocommit_down")
+                        .name("Autocommit down migration")
+                        .environment(environment)
+                        .upSql("CREATE TABLE autocommit_down_test (id SERIAL);")
+                        .downSql("DROP TABLE IF EXISTS autocommit_down_test;")
+                        .autocommit(true)
+                        .build();
+
+        node.upTask().execute();
+
+        // when
+        Task downTask = Objects.requireNonNull(node.downTask());
+        Result<TaskResult, String> result = downTask.execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        assertThat(result.value().message()).contains("autocommit");
+
+        // Verify table does not exist
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT table_name FROM information_schema.tables "
+                                        + "WHERE table_name = 'autocommit_down_test'")) {
+            assertThat(rs.next()).isFalse();
+        }
     }
 }

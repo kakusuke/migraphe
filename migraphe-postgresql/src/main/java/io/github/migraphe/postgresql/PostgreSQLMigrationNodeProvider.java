@@ -27,8 +27,16 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
                             + environment.getClass().getName());
         }
 
+        if (!(task instanceof SqlTaskDefinition sqlTask)) {
+            throw new PostgreSQLException(
+                    "TaskDefinition must be SqlTaskDefinition, got: " + task.getClass().getName());
+        }
+
         // UP SQL を取得
         String upSql = task.up();
+
+        // autocommit を取得（デフォルト false）
+        boolean autocommit = sqlTask.autocommit().orElse(false);
 
         // PostgreSQLMigrationNode を構築
         var builder =
@@ -37,7 +45,8 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
                         .name(task.name())
                         .environment(pgEnv)
                         .dependencies(dependencies)
-                        .upSql(upSql);
+                        .upSql(upSql)
+                        .autocommit(autocommit);
 
         // description（オプション）
         task.description().ifPresent(builder::description);

@@ -71,7 +71,7 @@ io.github.migraphe.cli/
 project/
 ├── migraphe.yaml        # project.name, history.target
 ├── targets/*.yaml       # type, jdbc_url, username, password (flat structure)
-├── tasks/**/*.yaml      # name, target, dependencies, up, down (flat structure)
+├── tasks/**/*.yaml      # name, target, dependencies, up, down, autocommit (flat structure)
 └── environments/*.yaml  # Environment-specific overrides
 ```
 
@@ -150,6 +150,17 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-16 (Session 11)
+- **Autocommit Mode**: PostgreSQL プラグインに autocommit オプション追加
+  - `SqlTaskDefinition.autocommit()`: YAML で `autocommit: true` をパース
+  - `PostgreSQLMigrationNode`: autocommit フィールド + Builder メソッド
+  - `PostgreSQLUpTask`/`PostgreSQLDownTask`: autocommit モード分岐実装
+  - `PostgreSQLMigrationNodeProvider`: SqlTaskDefinition から autocommit 読み取り
+  - 統合テスト追加: shouldExecuteUpMigrationWithAutocommit, shouldExecuteDownMigrationWithAutocommit
+  - ドキュメント更新: USER_GUIDE.md / USER_GUIDE.ja.md に Autocommit Mode セクション追加
+- Use case: `CREATE DATABASE`, `CREATE INDEX CONCURRENTLY` など、トランザクション内で実行不可の SQL
+- Tests: 183, 100% passing
+
 ### 2026-01-13 (Session 10)
 - **Plugin Dynamic Loading**: migraphe-cli から migraphe-postgresql 依存を分離
   - `build.gradle.kts`: `implementation` → `testImplementation` に変更
@@ -161,32 +172,10 @@ Update when code changes:
 - Tests: 180, 100% passing
 
 ### 2026-01-13 (Session 9)
-- **Phase 12-1**: EnvironmentDefinition generification - COMPLETED
-  - Created `EnvironmentDefinition` interface in API module
-  - Added `environmentDefinitionClass()` to `MigraphePlugin`
-  - Changed `EnvironmentProvider` signature to use `EnvironmentDefinition`
-  - Created `PostgreSQLEnvironmentDefinition` with `@ConfigMapping`
-  - Updated `ConfigLoader` with `loadEnvironmentDefinitions()` method
-  - Deleted old `EnvironmentConfig` class
-- **Phase 12-2**: @Nullable introduction - COMPLETED
-  - Added jspecify dependency for `@Nullable` annotations
-  - Replaced `Optional` with `@Nullable` for most interfaces
-  - **Exception**: `TaskDefinition` keeps `Optional` (SmallRye @ConfigMapping requirement)
-  - Updated `Result<T,E>`: Ok.value() returns NonNull, Err.error() returns NonNull
-  - Updated all tests for @Nullable assertions
-- **Phase 12-3**: NullAway enabled - COMPLETED
-  - NullAway enabled for main source code (compile-time null safety checks)
-  - Test code excluded (intentional null passing for error handling tests)
-  - Fixed `ConfigSource.getValue()` → `@Nullable` return type
-  - Fixed `Main.createCommand()` → `@Nullable` return type
+- **Phase 12**: Refactoring - COMPLETED (EnvironmentDefinition, @Nullable, NullAway)
 - Tests: 177+, 100% passing
-
-### 2026-01-09 (Session 8)
-- **Phase 11**: Plugin System - COMPLETED
-  - Generic factories, ExecutionContext generalization, Main CLI integration
-  - Created `docs/PLUGIN_DEVELOPMENT.md` (EN/JA)
 
 ---
 
-**Last Updated**: 2026-01-13
+**Last Updated**: 2026-01-16
 **Phase 12 Complete** - Next: Future phases (down command, Native Image, etc.)

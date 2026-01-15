@@ -13,12 +13,11 @@ import java.util.Optional;
  * <p>YAML 例:
  *
  * <pre>{@code
- * name: create_users
- * target: db1
- * dependencies:
- *   - initial_setup
- * up: "CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100));"
- * down: "DROP TABLE users;"
+ * name: create_database
+ * target: admin
+ * autocommit: true  # トランザクション外で実行
+ * up: "CREATE DATABASE myapp;"
+ * down: "DROP DATABASE myapp;"
  * }</pre>
  */
 @ConfigMapping(prefix = "")
@@ -41,4 +40,13 @@ public interface SqlTaskDefinition extends TaskDefinition<String> {
 
     @Override
     Optional<String> down();
+
+    /**
+     * autocommit モードで実行するかどうか。
+     *
+     * <p>true の場合、トランザクションを使用せずに実行する。 CREATE DATABASE などトランザクション内で実行できない SQL 用。
+     *
+     * @return autocommit を有効にする場合は true を含む Optional、指定なしの場合は空
+     */
+    Optional<Boolean> autocommit();
 }

@@ -209,6 +209,7 @@ down: |
 - `dependencies` (optional): List of task IDs this task depends on
 - `up` (required): SQL to execute for forward migration
 - `down` (optional): SQL to execute for rollback
+- `autocommit` (optional): Execute without transaction (see [Autocommit Mode](#autocommit-mode))
 
 ### Environment-Specific Configuration
 
@@ -282,6 +283,34 @@ down: |
   DROP INDEX IF EXISTS idx_users_email;
   DROP INDEX IF EXISTS idx_users_created_at;
 ```
+
+### Autocommit Mode
+
+Some SQL statements cannot run inside a transaction. For these cases, use `autocommit: true`:
+
+**Common Use Cases:**
+- `CREATE DATABASE` / `DROP DATABASE`
+- `CREATE INDEX CONCURRENTLY`
+- `VACUUM`
+- `CLUSTER`
+
+**Example: Create database**
+
+```yaml
+# tasks/admin/001_create_database.yaml
+name: Create application database
+target: admin
+autocommit: true
+up: |
+  CREATE DATABASE myapp;
+down: |
+  DROP DATABASE myapp;
+```
+
+**Important Notes:**
+- Autocommit migrations do NOT have automatic rollback on failure
+- If the SQL fails partway through, partial changes may persist
+- Use with caution and only when necessary
 
 ### Best Practices
 

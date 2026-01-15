@@ -112,6 +112,43 @@ class PostgreSQLMigrationNodeTest {
     }
 
     @Test
+    void shouldCreateNodeWithAutocommit() {
+        // given
+        String upSql = "CREATE DATABASE myapp;";
+        String downSql = "DROP DATABASE myapp;";
+
+        // when
+        PostgreSQLMigrationNode node =
+                PostgreSQLMigrationNode.builder()
+                        .id("create_db")
+                        .name("Create database")
+                        .environment(environment)
+                        .upSql(upSql)
+                        .downSql(downSql)
+                        .autocommit(true)
+                        .build();
+
+        // then
+        assertThat(node.upTask()).isNotNull();
+        assertThat(node.upTask().description()).contains("autocommit");
+    }
+
+    @Test
+    void shouldDefaultAutocommitToFalse() {
+        // when
+        PostgreSQLMigrationNode node =
+                PostgreSQLMigrationNode.builder()
+                        .id("V001")
+                        .name("Create users table")
+                        .environment(environment)
+                        .upSql("CREATE TABLE users (id SERIAL);")
+                        .build();
+
+        // then: autocommit なしでビルドできる（デフォルト false）
+        assertThat(node.upTask().description()).doesNotContain("autocommit");
+    }
+
+    @Test
     void shouldImplementEqualsBasedOnId() {
         // given
         PostgreSQLMigrationNode node1 =

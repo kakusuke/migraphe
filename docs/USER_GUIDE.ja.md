@@ -209,6 +209,7 @@ down: |
 - `dependencies`（オプション）: このタスクが依存するタスクIDのリスト
 - `up`（必須）: フォワードマイグレーション用に実行するSQL
 - `down`（オプション）: ロールバック用に実行するSQL
+- `autocommit`（オプション）: トランザクションなしで実行（[Autocommitモード](#autocommitモード)を参照）
 
 ### 環境固有の設定
 
@@ -282,6 +283,34 @@ down: |
   DROP INDEX IF EXISTS idx_users_email;
   DROP INDEX IF EXISTS idx_users_created_at;
 ```
+
+### Autocommitモード
+
+一部のSQL文はトランザクション内で実行できません。そのような場合は `autocommit: true` を使用します:
+
+**一般的なユースケース:**
+- `CREATE DATABASE` / `DROP DATABASE`
+- `CREATE INDEX CONCURRENTLY`
+- `VACUUM`
+- `CLUSTER`
+
+**例: データベースの作成**
+
+```yaml
+# tasks/admin/001_create_database.yaml
+name: Create application database
+target: admin
+autocommit: true
+up: |
+  CREATE DATABASE myapp;
+down: |
+  DROP DATABASE myapp;
+```
+
+**重要な注意事項:**
+- Autocommitマイグレーションは失敗時の自動ロールバックがありません
+- SQLが途中で失敗した場合、部分的な変更が残る可能性があります
+- 必要な場合にのみ注意して使用してください
 
 ### ベストプラクティス
 

@@ -15,12 +15,17 @@ public final class PostgreSQLUpTask implements Task {
     private final PostgreSQLEnvironment environment;
     private final String upSql;
     private final @Nullable String downSql;
+    private final boolean autocommit;
 
     private PostgreSQLUpTask(
-            PostgreSQLEnvironment environment, String upSql, @Nullable String downSql) {
+            PostgreSQLEnvironment environment,
+            String upSql,
+            @Nullable String downSql,
+            boolean autocommit) {
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
         this.upSql = Objects.requireNonNull(upSql, "upSql must not be null");
         this.downSql = downSql;
+        this.autocommit = autocommit;
 
         if (upSql.isBlank()) {
             throw new IllegalArgumentException("upSql must not be blank");
@@ -33,11 +38,15 @@ public final class PostgreSQLUpTask implements Task {
      * @param environment PostgreSQL 環境
      * @param upSql UP SQL
      * @param downSql DOWN SQL（ロールバック用、null 許容）
+     * @param autocommit autocommit モードで実行するかどうか
      * @return UP タスク
      */
     public static PostgreSQLUpTask create(
-            PostgreSQLEnvironment environment, String upSql, @Nullable String downSql) {
-        return new PostgreSQLUpTask(environment, upSql, downSql);
+            PostgreSQLEnvironment environment,
+            String upSql,
+            @Nullable String downSql,
+            boolean autocommit) {
+        return new PostgreSQLUpTask(environment, upSql, downSql, autocommit);
     }
 
     @Override
@@ -45,35 +54,66 @@ public final class PostgreSQLUpTask implements Task {
         long startTime = System.currentTimeMillis();
 
         try (Connection conn = environment.createConnection()) {
-            conn.setAutoCommit(false);
-
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute(upSql);
-                conn.commit();
-
-                long durationMs = System.currentTimeMillis() - startTime;
-
-                // DOWN SQL があれば、そのまま（生 SQL テキスト）をシリアライズする
-                if (downSql != null) {
-                    return Result.ok(
-                            TaskResult.withDownTask(
-                                    "UP migration executed in " + durationMs + "ms", downSql));
-                } else {
-                    return Result.ok(
-                            TaskResult.withoutDownTask(
-                                    "UP migration executed in " + durationMs + "ms"));
-                }
-            } catch (SQLException e) {
-                conn.rollback();
-                return Result.err("Failed to execute UP migration: " + e.getMessage());
+            if (autocommit) {
+                conn.setAutoCommit(true);
+                return executeWithAutocommit(conn, startTime);
+            } else {
+                conn.setAutoCommit(false);
+                return executeWithTransaction(conn, startTime);
             }
         } catch (SQLException e) {
             return Result.err("Failed to establish database connection: " + e.getMessage());
         }
     }
 
+    private Result<TaskResult, String> executeWithAutocommit(Connection conn, long startTime) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(upSql);
+            long durationMs = System.currentTimeMillis() - startTime;
+
+            if (downSql != null) {
+                return Result.ok(
+                        TaskResult.withDownTask(
+                                "UP migration executed in " + durationMs + "ms (autocommit)",
+                                downSql));
+            } else {
+                return Result.ok(
+                        TaskResult.withoutDownTask(
+                                "UP migration executed in " + durationMs + "ms (autocommit)"));
+            }
+        } catch (SQLException e) {
+            return Result.err("Failed to execute UP migration: " + e.getMessage());
+        }
+    }
+
+    private Result<TaskResult, String> executeWithTransaction(Connection conn, long startTime) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(upSql);
+            conn.commit();
+
+            long durationMs = System.currentTimeMillis() - startTime;
+
+            if (downSql != null) {
+                return Result.ok(
+                        TaskResult.withDownTask(
+                                "UP migration executed in " + durationMs + "ms", downSql));
+            } else {
+                return Result.ok(
+                        TaskResult.withoutDownTask(
+                                "UP migration executed in " + durationMs + "ms"));
+            }
+        } catch (SQLException e) {
+            try {
+                conn.rollback();
+            } catch (SQLException rollbackEx) {
+                // rollback failed, ignore
+            }
+            return Result.err("Failed to execute UP migration: " + e.getMessage());
+        }
+    }
+
     @Override
     public String description() {
-        return "PostgreSQL UP migration";
+        return autocommit ? "PostgreSQL UP migration (autocommit)" : "PostgreSQL UP migration";
     }
 }

@@ -20,6 +20,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
     private final Set<NodeId> dependencies;
     private final String upSql;
     private final @Nullable String downSql;
+    private final boolean autocommit;
 
     private PostgreSQLMigrationNode(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
@@ -30,6 +31,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upSql = Objects.requireNonNull(builder.upSql, "upSql must not be null");
         this.downSql = builder.downSql;
+        this.autocommit = builder.autocommit;
 
         if (upSql.isBlank()) {
             throw new IllegalArgumentException("upSql must not be blank");
@@ -63,13 +65,13 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
 
     @Override
     public Task upTask() {
-        return PostgreSQLUpTask.create(environment, upSql, downSql);
+        return PostgreSQLUpTask.create(environment, upSql, downSql, autocommit);
     }
 
     @Override
     public @Nullable Task downTask() {
         if (downSql != null) {
-            return PostgreSQLDownTask.create(environment, downSql);
+            return PostgreSQLDownTask.create(environment, downSql, autocommit);
         }
         return null;
     }
@@ -86,6 +88,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
         private Set<NodeId> dependencies = Set.of();
         private @Nullable String upSql;
         private @Nullable String downSql;
+        private boolean autocommit = false;
 
         public Builder id(String id) {
             this.id = NodeId.of(id);
@@ -189,6 +192,19 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
          */
         public Builder downSqlFromResource(String resourcePath) throws IOException {
             this.downSql = loadResource(resourcePath);
+            return this;
+        }
+
+        /**
+         * autocommit モードを設定する。
+         *
+         * <p>true の場合、トランザクションを使用せずに実行する。 CREATE DATABASE などトランザクション内で実行できない SQL 用。
+         *
+         * @param autocommit autocommit を有効にする場合は true
+         * @return Builder
+         */
+        public Builder autocommit(boolean autocommit) {
+            this.autocommit = autocommit;
             return this;
         }
 

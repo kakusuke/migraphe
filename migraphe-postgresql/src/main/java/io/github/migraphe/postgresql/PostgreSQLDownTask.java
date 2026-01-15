@@ -13,10 +13,13 @@ public final class PostgreSQLDownTask implements Task {
 
     private final PostgreSQLEnvironment environment;
     private final String downSql;
+    private final boolean autocommit;
 
-    private PostgreSQLDownTask(PostgreSQLEnvironment environment, String downSql) {
+    private PostgreSQLDownTask(
+            PostgreSQLEnvironment environment, String downSql, boolean autocommit) {
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
         this.downSql = Objects.requireNonNull(downSql, "downSql must not be null");
+        this.autocommit = autocommit;
         if (downSql.isBlank()) {
             throw new IllegalArgumentException("downSql must not be blank");
         }
@@ -27,10 +30,12 @@ public final class PostgreSQLDownTask implements Task {
      *
      * @param environment PostgreSQL 環境
      * @param downSql DOWN SQL（生 SQL テキスト）
+     * @param autocommit autocommit モードで実行するかどうか
      * @return DOWN タスク
      */
-    public static PostgreSQLDownTask create(PostgreSQLEnvironment environment, String downSql) {
-        return new PostgreSQLDownTask(environment, downSql);
+    public static PostgreSQLDownTask create(
+            PostgreSQLEnvironment environment, String downSql, boolean autocommit) {
+        return new PostgreSQLDownTask(environment, downSql, autocommit);
     }
 
     @Override
@@ -38,27 +43,50 @@ public final class PostgreSQLDownTask implements Task {
         long startTime = System.currentTimeMillis();
 
         try (Connection conn = environment.createConnection()) {
-            conn.setAutoCommit(false);
-
-            try (Statement stmt = conn.createStatement()) {
-                stmt.execute(downSql);
-                conn.commit();
-
-                long durationMs = System.currentTimeMillis() - startTime;
-                return Result.ok(
-                        TaskResult.withoutDownTask(
-                                "DOWN migration executed in " + durationMs + "ms"));
-            } catch (SQLException e) {
-                conn.rollback();
-                return Result.err("Failed to execute DOWN migration: " + e.getMessage());
+            if (autocommit) {
+                conn.setAutoCommit(true);
+                return executeWithAutocommit(conn, startTime);
+            } else {
+                conn.setAutoCommit(false);
+                return executeWithTransaction(conn, startTime);
             }
         } catch (SQLException e) {
             return Result.err("Failed to establish database connection: " + e.getMessage());
         }
     }
 
+    private Result<TaskResult, String> executeWithAutocommit(Connection conn, long startTime) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(downSql);
+            long durationMs = System.currentTimeMillis() - startTime;
+            return Result.ok(
+                    TaskResult.withoutDownTask(
+                            "DOWN migration executed in " + durationMs + "ms (autocommit)"));
+        } catch (SQLException e) {
+            return Result.err("Failed to execute DOWN migration: " + e.getMessage());
+        }
+    }
+
+    private Result<TaskResult, String> executeWithTransaction(Connection conn, long startTime) {
+        try (Statement stmt = conn.createStatement()) {
+            stmt.execute(downSql);
+            conn.commit();
+
+            long durationMs = System.currentTimeMillis() - startTime;
+            return Result.ok(
+                    TaskResult.withoutDownTask("DOWN migration executed in " + durationMs + "ms"));
+        } catch (SQLException e) {
+            try {
+                conn.rollback();
+            } catch (SQLException rollbackEx) {
+                // rollback failed, ignore
+            }
+            return Result.err("Failed to execute DOWN migration: " + e.getMessage());
+        }
+    }
+
     @Override
     public String description() {
-        return "PostgreSQL DOWN migration";
+        return autocommit ? "PostgreSQL DOWN migration (autocommit)" : "PostgreSQL DOWN migration";
     }
 }
