@@ -13,7 +13,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 ```
 migraphe-api/       # Lightweight interfaces (no external deps) - for plugin developers
 migraphe-core/      # Orchestration logic, algorithms, reference implementations
-migraphe-postgresql/ # PostgreSQL plugin (Environment, MigrationNode, HistoryRepository)
+migraphe-plugin-postgresql/ # PostgreSQL plugin (Environment, MigrationNode, HistoryRepository)
 migraphe-cli/       # CLI entry point, config loading, commands
 ```
 
@@ -162,7 +162,7 @@ Update when code changes:
 - Tests: 183, 100% passing
 
 ### 2026-01-13 (Session 10)
-- **Plugin Dynamic Loading**: migraphe-cli から migraphe-postgresql 依存を分離
+- **Plugin Dynamic Loading**: migraphe-cli から migraphe-plugin-postgresql 依存を分離
   - `build.gradle.kts`: `implementation` → `testImplementation` に変更
   - 本番は `./plugins/` ディレクトリから JAR を動的ロード
   - テストはクラスパスから ServiceLoader でロード（既存テスト維持）

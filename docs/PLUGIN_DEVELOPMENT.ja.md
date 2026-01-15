@@ -281,7 +281,7 @@ public interface HistoryRepository {
 
 ## 例: PostgreSQL プラグイン
 
-完全な実装例として `migraphe-postgresql` モジュールを参照してください：
+完全な実装例として `migraphe-plugin-postgresql` モジュールを参照してください：
 - `PostgreSQLPlugin` - メインプラグインクラス
 - `PostgreSQLEnvironmentProvider` - PostgreSQLEnvironment を生成
 - `PostgreSQLMigrationNodeProvider` - PostgreSQLMigrationNode を生成

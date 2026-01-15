@@ -166,7 +166,7 @@ cd migraphe
 
 # Specific module
 ./gradlew :migraphe-core:test
-./gradlew :migraphe-postgresql:test
+./gradlew :migraphe-plugin-postgresql:test
 ./gradlew :migraphe-cli:test
 ```
 

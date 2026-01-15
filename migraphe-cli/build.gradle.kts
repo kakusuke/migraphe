@@ -8,7 +8,7 @@ dependencies {
     api(project(":migraphe-core"))
 
     // プラグイン（テスト用のみ - 本番は plugins/ ディレクトリから動的ロード）
-    testImplementation(project(":migraphe-postgresql"))
+    testImplementation(project(":migraphe-plugin-postgresql"))
 
     // MicroProfile Config (YAML support)
     implementation(libs.smallrye.config)

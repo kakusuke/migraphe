@@ -76,7 +76,7 @@ Place plugin JAR files in the `plugins/` directory of your project:
 my-project/
 ├── migraphe.yaml
 ├── plugins/                      # Plugin directory
-│   └── migraphe-postgresql-x.x.x.jar
+│   └── migraphe-plugin-postgresql-x.x.x.jar
 ├── targets/
 └── tasks/
 ```
@@ -85,17 +85,17 @@ my-project/
 
 | Plugin | Description |
 |--------|-------------|
-| `migraphe-postgresql` | PostgreSQL database support |
+| `migraphe-plugin-postgresql` | PostgreSQL database support |
 
 **Getting Plugin JARs:**
 
 ```bash
 # Build fat JAR (includes JDBC driver)
-./gradlew :migraphe-postgresql:fatJar
+./gradlew :migraphe-plugin-postgresql:fatJar
 
 # Copy fat JAR to plugins/
 mkdir -p my-project/plugins
-cp migraphe-postgresql/build/libs/migraphe-postgresql-*-all.jar my-project/plugins/
+cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
 ```
 
 **Note:** Use the `-all.jar` (fat JAR) for CLI usage. The thin JAR is for Gradle/Maven dependency management.

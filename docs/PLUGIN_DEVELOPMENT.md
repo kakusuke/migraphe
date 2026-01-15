@@ -281,7 +281,7 @@ public interface HistoryRepository {
 
 ## Example: PostgreSQL Plugin
 
-See `migraphe-postgresql` module for a complete example:
+See `migraphe-plugin-postgresql` module for a complete example:
 - `PostgreSQLPlugin` - Main plugin class
 - `PostgreSQLEnvironmentProvider` - Creates PostgreSQLEnvironment
 - `PostgreSQLMigrationNodeProvider` - Creates PostgreSQLMigrationNode

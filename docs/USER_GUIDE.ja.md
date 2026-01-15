@@ -76,7 +76,7 @@ Migraphe はプラグインアーキテクチャを採用しており、デー�
 my-project/
 ├── migraphe.yaml
 ├── plugins/                      # プラグインディレクトリ
-│   └── migraphe-postgresql-x.x.x.jar
+│   └── migraphe-plugin-postgresql-x.x.x.jar
 ├── targets/
 └── tasks/
 ```
@@ -85,17 +85,17 @@ my-project/
 
 | プラグイン | 説明 |
 |-----------|------|
-| `migraphe-postgresql` | PostgreSQL データベースサポート |
+| `migraphe-plugin-postgresql` | PostgreSQL データベースサポート |
 
 **プラグイン JAR の取得:**
 
 ```bash
 # Fat JAR をビルド（JDBC ドライバ込み）
-./gradlew :migraphe-postgresql:fatJar
+./gradlew :migraphe-plugin-postgresql:fatJar
 
 # Fat JAR を plugins/ にコピー
 mkdir -p my-project/plugins
-cp migraphe-postgresql/build/libs/migraphe-postgresql-*-all.jar my-project/plugins/
+cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
 ```
 
 **注意:** CLI で使用する場合は `-all.jar`（Fat JAR）を使用してください。通常の JAR は Gradle/Maven 依存関係用です。

@@ -80,5 +80,5 @@ dependencyResolutionManagement {
 
 include("migraphe-api")
 include("migraphe-core")
-include("migraphe-postgresql")
+include("migraphe-plugin-postgresql")
 include("migraphe-cli")
