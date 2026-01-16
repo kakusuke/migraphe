@@ -67,8 +67,6 @@ public class MultiFileYamlConfigSource implements ConfigSource {
      * @throws ConfigurationException YAML ファイルの読み込みに失敗した場合
      */
     private void loadTargetConfigs(List<Path> files) {
-        TaskIdGenerator idGenerator = new TaskIdGenerator();
-
         for (Path file : files) {
             try {
                 // ファイル名から targetId を抽出 (db1.yaml → "db1")

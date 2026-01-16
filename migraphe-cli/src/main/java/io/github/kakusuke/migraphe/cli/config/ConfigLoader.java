@@ -202,7 +202,11 @@ public class ConfigLoader {
         StreamSupport.stream(config.getPropertyNames().spliterator(), false)
                 .filter(name -> name.startsWith("target."))
                 .map(name -> name.substring("target.".length()))
-                .map(name -> name.split("\\.")[0])
+                .map(
+                        name -> {
+                            int dotIndex = name.indexOf('.');
+                            return dotIndex >= 0 ? name.substring(0, dotIndex) : name;
+                        })
                 .forEach(targetIds::add);
 
         return targetIds;

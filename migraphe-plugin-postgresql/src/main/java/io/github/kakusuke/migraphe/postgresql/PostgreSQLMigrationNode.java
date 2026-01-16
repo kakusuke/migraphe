@@ -1,5 +1,7 @@
 package io.github.kakusuke.migraphe.postgresql;
 
+import static java.nio.charset.StandardCharsets.UTF_8;
+
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
@@ -217,7 +219,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
                 if (is == null) {
                     throw new IOException("Resource not found: " + resourcePath);
                 }
-                return new String(is.readAllBytes());
+                return new String(is.readAllBytes(), UTF_8);
             }
         }
     }
