@@ -30,11 +30,11 @@
           <entry name="$USER_HOME$/.gradle/caches/modules-2/files-2.1/aopalliance/aopalliance/1.0/235ba8b489512805ac13a8f9ea77a1ca5ebe3e8/aopalliance-1.0.jar" />
         </processorPath>
         <module name="migraphe.migraphe-cli.test" />
-        <module name="migraphe.migraphe-postgresql.main" />
         <module name="migraphe.migraphe-core.test" />
         <module name="migraphe.migraphe-api.test" />
+        <module name="migraphe.migraphe-plugin-postgresql.test" />
         <module name="migraphe.migraphe-core.main" />
-        <module name="migraphe.migraphe-postgresql.test" />
+        <module name="migraphe.migraphe-plugin-postgresql.main" />
         <module name="migraphe.migraphe-cli.main" />
         <module name="migraphe.migraphe-api.main" />
       </profile>
@@ -43,18 +43,21 @@
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
-      <module name="migraphe.migraphe-api" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-api.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-api.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-cli" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-cli.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-cli.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-core" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-core.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-core.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-postgresql" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-postgresql.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
-      <module name="migraphe.migraphe-postgresql.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-api" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-api.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-api.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-cli" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-cli.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-cli.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-core" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-core.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-core.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-plugin-postgresql" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-plugin-postgresql.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-plugin-postgresql.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-postgresql" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-postgresql.main" options="&quot;-Xplugin:ErrorProne -Xep:NullAway:ERROR -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
+      <module name="migraphe.migraphe-postgresql.test" options="&quot;-Xplugin:ErrorProne -XepCompilingTestOnlyCode -Xep:NullAway:OFF -XepOpt:NullAway:AnnotatedPackages=io.github.kakusuke.migraphe&quot; -XDcompilePolicy=simple" />
     </option>
   </component>
 </project>
