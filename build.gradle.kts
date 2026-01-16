@@ -8,7 +8,7 @@ plugins {
 
 allprojects {
     group = "io.github.kakusuke.migraphe"
-    version = "0.1.0-SNAPSHOT"
+    // version は gradle.properties で管理
 
     repositories {
         mavenCentral()

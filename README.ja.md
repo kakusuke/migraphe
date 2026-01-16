@@ -1,5 +1,8 @@
 # Migraphe
 
+[![CI](https://github.com/kakusuke/migraphe/actions/workflows/ci.yml/badge.svg)](https://github.com/kakusuke/migraphe/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 有向非巡回グラフ（DAG）構造を使用して、複数環境にわたるデータベースおよびインフラストラクチャのマイグレーションを管理するオーケストレーションツールです。
 
 [English README](README.md)

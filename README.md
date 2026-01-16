@@ -1,5 +1,8 @@
 # Migraphe
 
+[![CI](https://github.com/kakusuke/migraphe/actions/workflows/ci.yml/badge.svg)](https://github.com/kakusuke/migraphe/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A migration orchestration tool that manages database and infrastructure migrations across multiple environments using a directed acyclic graph (DAG) structure.
 
 [日本語版 README](README.ja.md)
