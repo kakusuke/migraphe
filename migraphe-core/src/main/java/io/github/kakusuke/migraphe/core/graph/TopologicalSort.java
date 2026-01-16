@@ -65,4 +65,69 @@ public final class TopologicalSort {
 
         return inDegree;
     }
+
+    /**
+     * 指定されたノードセットのみを含む逆順実行プランを生成する。 ロールバック用に、依存されている側から先に実行される順序を返す。
+     *
+     * @param graph マイグレーショングラフ
+     * @param targetNodes 対象ノードIDのセット
+     * @return 逆順実行プラン
+     */
+    public static ExecutionPlan createReverseExecutionPlanFor(
+            MigrationGraph graph, Set<NodeId> targetNodes) {
+        if (targetNodes.isEmpty()) {
+            return new ExecutionPlan(List.of());
+        }
+
+        // 対象ノードのみでサブグラフを構築し、逆方向の入次数を計算
+        // 逆方向 = 依存されている数（出次数）を入次数として扱う
+        Map<NodeId, Integer> outDegree = new HashMap<>();
+        for (NodeId nodeId : targetNodes) {
+            // 対象ノード内で、このノードに依存しているノードの数
+            int count = 0;
+            for (NodeId dependent : graph.getDependents(nodeId)) {
+                if (targetNodes.contains(dependent)) {
+                    count++;
+                }
+            }
+            outDegree.put(nodeId, count);
+        }
+
+        List<ExecutionLevel> levels = new ArrayList<>();
+        int currentLevel = 0;
+
+        while (!outDegree.isEmpty()) {
+            // 出次数が0のノード（誰からも依存されていない = 最初にロールバック可能）
+            Set<MigrationNode> nodesAtCurrentLevel = new HashSet<>();
+
+            for (var entry : outDegree.entrySet()) {
+                if (entry.getValue() == 0) {
+                    graph.getNode(entry.getKey()).ifPresent(nodesAtCurrentLevel::add);
+                }
+            }
+
+            if (nodesAtCurrentLevel.isEmpty()) {
+                throw new IllegalStateException(
+                        "Cannot create reverse execution plan: invalid dependencies");
+            }
+
+            levels.add(new ExecutionLevel(currentLevel, nodesAtCurrentLevel));
+
+            // 処理したノードを削除し、依存先の出次数を減らす
+            for (MigrationNode node : nodesAtCurrentLevel) {
+                outDegree.remove(node.id());
+
+                // このノードが依存しているノード（= 依存先）の出次数を減らす
+                for (NodeId dependency : node.dependencies()) {
+                    if (outDegree.containsKey(dependency)) {
+                        outDegree.computeIfPresent(dependency, (k, v) -> v - 1);
+                    }
+                }
+            }
+
+            currentLevel++;
+        }
+
+        return new ExecutionPlan(levels);
+    }
 }
