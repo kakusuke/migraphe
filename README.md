@@ -185,7 +185,7 @@ This project follows:
 
 ## License
 
-[Your License Here]
+MIT License
 
 ## Links
 

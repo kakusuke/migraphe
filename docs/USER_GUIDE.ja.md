@@ -621,5 +621,5 @@ WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
 ## サポート
 
 問題や質問については:
-- GitHub Issues: [リポジトリURL]
-- ドキュメント: [ドキュメントURL]
+- GitHub Issues: https://github.com/kakusuke/migraphe/issues
+- ドキュメント: https://github.com/kakusuke/migraphe/tree/main/docs

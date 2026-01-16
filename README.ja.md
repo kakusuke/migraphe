@@ -185,7 +185,7 @@ cd migraphe
 
 ## ライセンス
 
-[Your License Here]
+MIT License
 
 ## リンク
 
