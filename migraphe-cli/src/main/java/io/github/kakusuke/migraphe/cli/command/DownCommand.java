@@ -85,11 +85,11 @@ public class DownCommand implements Command {
                                 .map(MigrationNode::id)
                                 .collect(Collectors.toSet());
             } else {
-                // 通常: ターゲットに依存する全ノードを取得
+                // 通常: ターゲット自身 + ターゲットに依存する全ノードを取得
                 // targetVersion は上記のバリデーションで null でないことが保証
-                targetNodeIds =
-                        context.graph()
-                                .getAllDependents(java.util.Objects.requireNonNull(targetVersion));
+                NodeId target = java.util.Objects.requireNonNull(targetVersion);
+                targetNodeIds = new java.util.HashSet<>(context.graph().getAllDependents(target));
+                targetNodeIds.add(target); // ターゲット自身も含める
             }
 
             // 4. 実行済みのノードのみフィルタ
@@ -214,7 +214,8 @@ public class DownCommand implements Command {
             // allMigrations == false の場合、targetVersion は null でない
             NodeId targetId = java.util.Objects.requireNonNull(targetVersion);
             MigrationNode target = context.graph().getNode(targetId).orElseThrow();
-            System.out.println("Target version: " + targetId.value() + " (" + target.name() + ")");
+            System.out.println(
+                    "Rollback includes: " + targetId.value() + " (" + target.name() + ")");
         }
     }
 

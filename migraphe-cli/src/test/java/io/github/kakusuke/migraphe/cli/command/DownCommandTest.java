@@ -101,7 +101,7 @@ class DownCommandTest {
     }
 
     @Test
-    void shouldNotRollbackTargetVersionItself() throws Exception {
+    void shouldRollbackTargetVersionItself() throws Exception {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
@@ -117,7 +117,7 @@ class DownCommandTest {
                 new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
         downCommand.execute();
 
-        // Then: V001 のテーブル (users) はまだ存在する
+        // Then: V001 のテーブル (users) も削除されている
         Environment env = context.environments().get("test-db");
         if (env instanceof PostgreSQLEnvironment pgEnv) {
             try (Connection conn = pgEnv.createConnection();
@@ -127,7 +127,7 @@ class DownCommandTest {
                                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE"
                                         + " table_name = 'users')");
                 rs.next();
-                assertThat(rs.getBoolean(1)).isTrue();
+                assertThat(rs.getBoolean(1)).isFalse();
             }
         }
     }
@@ -177,7 +177,7 @@ class DownCommandTest {
         // Then
         String output = outputStream.toString();
         assertThat(output).contains("will be rolled back");
-        assertThat(output).contains("Target version:");
+        assertThat(output).contains("Rollback includes:");
     }
 
     @Test

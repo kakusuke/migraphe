@@ -405,7 +405,7 @@ java -jar migraphe-cli-all.jar down --dry-run --all
 
 #### Version-Specific Rollback
 
-The `down <version>` command rolls back only migrations that **directly or indirectly depend on** the specified version (node). The specified version itself is NOT rolled back.
+The `down <version>` command rolls back the specified version (node) **itself** and all migrations that **directly or indirectly depend on** it.
 
 **Example:**
 ```
@@ -416,8 +416,9 @@ V004 (depends only on V001)
 
 migraphe down V002 execution:
 ✓ V003 rolled back (depends on V002)
+✓ V002 rolled back (specified version)
 ✗ V004 unchanged (doesn't depend on V002)
-✗ V002 itself is NOT rolled back
+✗ V001 unchanged (V002's dependency)
 ```
 
 #### --all Option
@@ -453,16 +454,18 @@ $ java -jar migraphe-cli-all.jar down db1/001_create_users
 The following migrations will be rolled back:
   - db1/003_create_comments: Create comments table
   - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
 
-Target version: db1/001_create_users (Create users table)
+Rollback includes: db1/001_create_users (Create users table)
 
 Proceed with rollback? [y/N]: y
 
 Rolling back...
   [DOWN] Create comments table ... OK (15ms)
   [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
 
-Rollback complete. 2 migrations rolled back.
+Rollback complete. 3 migrations rolled back.
 ```
 
 ### dry-run Option
@@ -475,8 +478,9 @@ $ java -jar migraphe-cli-all.jar down --dry-run db1/001_create_users
 [DRY RUN] The following migrations would be rolled back:
   - db1/003_create_comments: Create comments table
   - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
 
-Target version: db1/001_create_users (Create users table)
+Rollback includes: db1/001_create_users (Create users table)
 
 No changes made (dry run).
 ```

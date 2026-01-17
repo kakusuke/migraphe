@@ -405,7 +405,7 @@ java -jar migraphe-cli-all.jar down --dry-run --all
 
 #### バージョン指定の場合
 
-`down <version>` コマンドは、指定したバージョン（ノード）に**直接/間接的に依存する**マイグレーションのみをロールバックします。指定したバージョン自体はロールバックされません。
+`down <version>` コマンドは、指定したバージョン（ノード）**自身**と、それに**直接/間接的に依存する**マイグレーションをロールバックします。
 
 **例:**
 ```
@@ -416,8 +416,9 @@ V004 (V001のみに依存)
 
 migraphe down V002 実行:
 ✓ V003 をロールバック (V002に依存)
+✓ V002 をロールバック (指定したバージョン)
 ✗ V004 はそのまま (V002に依存していない)
-✗ V002 自体はロールバックしない
+✗ V001 はそのまま (V002の依存先)
 ```
 
 #### --all オプションの場合
@@ -453,16 +454,18 @@ $ java -jar migraphe-cli-all.jar down db1/001_create_users
 The following migrations will be rolled back:
   - db1/003_create_comments: Create comments table
   - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
 
-Target version: db1/001_create_users (Create users table)
+Rollback includes: db1/001_create_users (Create users table)
 
 Proceed with rollback? [y/N]: y
 
 Rolling back...
   [DOWN] Create comments table ... OK (15ms)
   [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
 
-Rollback complete. 2 migrations rolled back.
+Rollback complete. 3 migrations rolled back.
 ```
 
 ### dry-run オプション
@@ -475,8 +478,9 @@ $ java -jar migraphe-cli-all.jar down --dry-run db1/001_create_users
 [DRY RUN] The following migrations would be rolled back:
   - db1/003_create_comments: Create comments table
   - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
 
-Target version: db1/001_create_users (Create users table)
+Rollback includes: db1/001_create_users (Create users table)
 
 No changes made (dry run).
 ```
