@@ -391,6 +391,50 @@ class DownCommandTest {
         assertThat(output).contains("No changes made (dry run)");
     }
 
+    @Test
+    void shouldAllowReUpAfterDown() throws Exception {
+        // Given: UP -> DOWN を実行
+        createTestProject(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+
+        // 1回目の UP
+        UpCommand upCommand1 = new UpCommand(context);
+        upCommand1.execute();
+
+        outputStream.reset();
+
+        // DOWN を実行
+        DownCommand downCommand =
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
+        downCommand.execute();
+
+        outputStream.reset();
+
+        // When: 再度 UP を実行
+        UpCommand upCommand2 = new UpCommand(context);
+        int exitCode = upCommand2.execute();
+
+        // Then: UP が成功し、テーブルが再作成される
+        assertThat(exitCode).isEqualTo(0);
+        String output = outputStream.toString();
+        assertThat(output).contains("Migration completed successfully");
+        assertThat(output).doesNotContain("[SKIP]"); // スキップされずに実行される
+
+        // テーブルが存在することを確認
+        Environment env = context.environments().get("test-db");
+        if (env instanceof PostgreSQLEnvironment pgEnv) {
+            try (Connection conn = pgEnv.createConnection();
+                    Statement stmt = conn.createStatement()) {
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE"
+                                        + " table_name = 'users')");
+                rs.next();
+                assertThat(rs.getBoolean(1)).isTrue();
+            }
+        }
+    }
+
     /** テスト用のプロジェクト構造を作成する。 */
     private void createTestProject(Path baseDir) throws IOException {
         String projectYaml =
