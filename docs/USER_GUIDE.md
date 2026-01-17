@@ -389,16 +389,23 @@ The `down` command rolls back migrations to a specified version.
 # Rollback migrations that depend on the specified version
 java -jar migraphe-cli-all.jar down <version>
 
+# Rollback all migrations
+java -jar migraphe-cli-all.jar down --all
+
 # Skip confirmation prompt
 java -jar migraphe-cli-all.jar down -y <version>
+java -jar migraphe-cli-all.jar down -y --all
 
 # Show execution plan only (don't actually execute)
 java -jar migraphe-cli-all.jar down --dry-run <version>
+java -jar migraphe-cli-all.jar down --dry-run --all
 ```
 
 ### How It Works
 
-The `down` command rolls back only migrations that **directly or indirectly depend on** the specified version (node). The specified version itself is NOT rolled back.
+#### Version-Specific Rollback
+
+The `down <version>` command rolls back only migrations that **directly or indirectly depend on** the specified version (node). The specified version itself is NOT rolled back.
 
 **Example:**
 ```
@@ -411,6 +418,31 @@ migraphe down V002 execution:
 ✓ V003 rolled back (depends on V002)
 ✗ V004 unchanged (doesn't depend on V002)
 ✗ V002 itself is NOT rolled back
+```
+
+#### --all Option
+
+The `down --all` command rolls back **all** executed migrations. They are executed in reverse dependency order to maintain data integrity.
+
+**Example:**
+```bash
+$ java -jar migraphe-cli-all.jar down --all
+
+The following migrations will be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rolling back all migrations.
+
+Proceed with rollback? [y/N]: y
+
+Rolling back...
+  [DOWN] Create comments table ... OK (15ms)
+  [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
+
+Rollback complete. 3 migrations rolled back.
 ```
 
 ### Execution Flow

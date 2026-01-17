@@ -122,7 +122,7 @@ Update when code changes:
 | 12-3 | NullAway compile-time checks enabled | ✅ Complete |
 
 ### Future Phases
-- `down`, `history`, `validate` commands
+- `history`, `validate` commands
 - GraalVM Native Image packaging
 - Gradle plugin
 - Additional database plugins (MySQL, MongoDB)
@@ -149,6 +149,14 @@ Update when code changes:
 ---
 
 ## Changelog
+
+### 2026-01-18 (Session 13)
+- **Down --all Option**: `migraphe down --all` で全マイグレーションをロールバック
+  - `DownCommand.allMigrations` フラグ追加
+  - `Main.java`: `--all` オプションのパース追加
+  - テスト追加: `shouldRollbackAllMigrationsWithAllFlag`, `shouldDisplayAllMigrationsInDryRunWithAllFlag`
+  - ドキュメント更新: `--all` オプションの使用方法を追加
+- Tests: 200+, 100% passing
 
 ### 2026-01-16 (Session 12)
 - **Down Command Implementation**: `migraphe down <version>` コマンドを実装

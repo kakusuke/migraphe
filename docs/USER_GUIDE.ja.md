@@ -389,16 +389,23 @@ java -jar migraphe-cli-all.jar up --env development
 # 指定バージョンに依存するマイグレーションをロールバック
 java -jar migraphe-cli-all.jar down <version>
 
+# 全てのマイグレーションをロールバック
+java -jar migraphe-cli-all.jar down --all
+
 # 確認プロンプトをスキップ
 java -jar migraphe-cli-all.jar down -y <version>
+java -jar migraphe-cli-all.jar down -y --all
 
 # 実行計画のみ表示（実際には実行しない）
 java -jar migraphe-cli-all.jar down --dry-run <version>
+java -jar migraphe-cli-all.jar down --dry-run --all
 ```
 
 ### 動作の仕組み
 
-`down` コマンドは、指定したバージョン（ノード）に**直接/間接的に依存する**マイグレーションのみをロールバックします。指定したバージョン自体はロールバックされません。
+#### バージョン指定の場合
+
+`down <version>` コマンドは、指定したバージョン（ノード）に**直接/間接的に依存する**マイグレーションのみをロールバックします。指定したバージョン自体はロールバックされません。
 
 **例:**
 ```
@@ -411,6 +418,31 @@ migraphe down V002 実行:
 ✓ V003 をロールバック (V002に依存)
 ✗ V004 はそのまま (V002に依存していない)
 ✗ V002 自体はロールバックしない
+```
+
+#### --all オプションの場合
+
+`down --all` は、実行済みの**全て**のマイグレーションをロールバックします。依存関係の逆順で実行されるため、データの整合性が保たれます。
+
+**例:**
+```bash
+$ java -jar migraphe-cli-all.jar down --all
+
+The following migrations will be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rolling back all migrations.
+
+Proceed with rollback? [y/N]: y
+
+Rolling back...
+  [DOWN] Create comments table ... OK (15ms)
+  [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
+
+Rollback complete. 3 migrations rolled back.
 ```
 
 ### 実行フロー

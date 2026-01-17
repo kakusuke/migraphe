@@ -91,7 +91,7 @@ class DownCommandTest {
         // When: down V001 を実行（-y で確認スキップ）
         // V002, V003 のみロールバック、V001 は残る
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), true, false);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
         int exitCode = downCommand.execute();
 
         // Then
@@ -114,7 +114,7 @@ class DownCommandTest {
 
         // When: down V001 を実行
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), true, false);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
         downCommand.execute();
 
         // Then: V001 のテーブル (users) はまだ存在する
@@ -145,7 +145,7 @@ class DownCommandTest {
 
         // When
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), true, false);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
         int exitCode = downCommand.execute();
 
         // Then: 002_add_index が先にロールバックされる
@@ -171,7 +171,7 @@ class DownCommandTest {
 
         // When
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), true, false);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
         downCommand.execute();
 
         // Then
@@ -196,7 +196,12 @@ class DownCommandTest {
                 new ByteArrayInputStream("n\n".getBytes(StandardCharsets.UTF_8));
         DownCommand downCommand =
                 new DownCommand(
-                        context, NodeId.of("test-db/001_create_users"), false, false, inputStream);
+                        context,
+                        NodeId.of("test-db/001_create_users"),
+                        false,
+                        false,
+                        false,
+                        inputStream);
         int exitCode = downCommand.execute();
 
         // Then
@@ -218,7 +223,7 @@ class DownCommandTest {
 
         // When: -y フラグ付き
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), true, false);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
         int exitCode = downCommand.execute();
 
         // Then: 確認プロンプトなしで実行される
@@ -240,7 +245,7 @@ class DownCommandTest {
 
         // When: --dry-run フラグ付き
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, false, true);
         int exitCode = downCommand.execute();
 
         // Then: 実行されない
@@ -276,7 +281,7 @@ class DownCommandTest {
 
         // When
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, false, true);
         downCommand.execute();
 
         // Then
@@ -292,7 +297,8 @@ class DownCommandTest {
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // When
-        DownCommand downCommand = new DownCommand(context, NodeId.of("non-existent"), true, false);
+        DownCommand downCommand =
+                new DownCommand(context, NodeId.of("non-existent"), false, true, false);
 
         // 標準エラー出力もキャプチャ
         ByteArrayOutputStream errStream = new ByteArrayOutputStream();
@@ -317,13 +323,72 @@ class DownCommandTest {
 
         // When
         DownCommand downCommand =
-                new DownCommand(context, NodeId.of("test-db/001_create_users"), true, false);
+                new DownCommand(context, NodeId.of("test-db/001_create_users"), false, true, false);
         int exitCode = downCommand.execute();
 
         // Then
         assertThat(exitCode).isEqualTo(0);
         String output = outputStream.toString();
         assertThat(output).contains("No migrations to rollback");
+    }
+
+    @Test
+    void shouldRollbackAllMigrationsWithAllFlag() throws Exception {
+        // Given: V001 <- V002 を実行
+        createTestProject(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+
+        UpCommand upCommand = new UpCommand(context);
+        upCommand.execute();
+
+        outputStream.reset();
+
+        // When: --all フラグで全てロールバック
+        DownCommand downCommand = new DownCommand(context, null, true, true, false);
+        int exitCode = downCommand.execute();
+
+        // Then
+        assertThat(exitCode).isEqualTo(0);
+        String output = outputStream.toString();
+        assertThat(output).contains("Rolling back all migrations");
+        assertThat(output).contains("Rollback complete");
+
+        // 全テーブルが削除されていることを確認
+        Environment env = context.environments().get("test-db");
+        if (env instanceof PostgreSQLEnvironment pgEnv) {
+            try (Connection conn = pgEnv.createConnection();
+                    Statement stmt = conn.createStatement()) {
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT EXISTS (SELECT FROM information_schema.tables WHERE"
+                                        + " table_name = 'users')");
+                rs.next();
+                assertThat(rs.getBoolean(1)).isFalse();
+            }
+        }
+    }
+
+    @Test
+    void shouldDisplayAllMigrationsInDryRunWithAllFlag() throws IOException {
+        // Given
+        createTestProject(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+
+        UpCommand upCommand = new UpCommand(context);
+        upCommand.execute();
+
+        outputStream.reset();
+
+        // When: --all --dry-run
+        DownCommand downCommand = new DownCommand(context, null, true, false, true);
+        downCommand.execute();
+
+        // Then
+        String output = outputStream.toString();
+        assertThat(output).contains("[DRY RUN]");
+        assertThat(output).contains("would be rolled back");
+        assertThat(output).contains("Rolling back all migrations");
+        assertThat(output).contains("No changes made (dry run)");
     }
 
     /** テスト用のプロジェクト構造を作成する。 */

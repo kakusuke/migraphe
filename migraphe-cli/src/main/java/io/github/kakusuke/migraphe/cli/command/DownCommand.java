@@ -26,28 +26,32 @@ import org.jspecify.annotations.Nullable;
 public class DownCommand implements Command {
 
     private final ExecutionContext context;
-    private final NodeId targetVersion;
+    private final @Nullable NodeId targetVersion;
+    private final boolean allMigrations;
     private final boolean skipConfirmation;
     private final boolean dryRun;
     private final InputStream inputStream;
 
     public DownCommand(
             ExecutionContext context,
-            NodeId targetVersion,
+            @Nullable NodeId targetVersion,
+            boolean allMigrations,
             boolean skipConfirmation,
             boolean dryRun) {
-        this(context, targetVersion, skipConfirmation, dryRun, System.in);
+        this(context, targetVersion, allMigrations, skipConfirmation, dryRun, System.in);
     }
 
     /** テスト用コンストラクタ。 */
     public DownCommand(
             ExecutionContext context,
-            NodeId targetVersion,
+            @Nullable NodeId targetVersion,
+            boolean allMigrations,
             boolean skipConfirmation,
             boolean dryRun,
             InputStream inputStream) {
         this.context = context;
         this.targetVersion = targetVersion;
+        this.allMigrations = allMigrations;
         this.skipConfirmation = skipConfirmation;
         this.dryRun = dryRun;
         this.inputStream = inputStream;
@@ -56,22 +60,41 @@ public class DownCommand implements Command {
     @Override
     public int execute() {
         try {
-            // 1. ターゲットバージョンの存在確認
-            if (context.graph().getNode(targetVersion).isEmpty()) {
-                System.err.println("Error: Target version not found: " + targetVersion.value());
-                return 1;
+            // 1. 引数のバリデーション
+            if (!allMigrations) {
+                if (targetVersion == null) {
+                    System.err.println("Error: Either --all or target version must be specified.");
+                    return 1;
+                }
+                if (context.graph().getNode(targetVersion).isEmpty()) {
+                    System.err.println("Error: Target version not found: " + targetVersion.value());
+                    return 1;
+                }
             }
 
             // 2. HistoryRepository を取得
             HistoryRepository historyRepo = getHistoryRepository();
             historyRepo.initialize();
 
-            // 3. ターゲットに依存する全ノードを取得
-            Set<NodeId> allDependents = context.graph().getAllDependents(targetVersion);
+            // 3. ロールバック対象ノードを取得
+            Set<NodeId> targetNodeIds;
+            if (allMigrations) {
+                // --all: 全ノードが対象
+                targetNodeIds =
+                        context.graph().allNodes().stream()
+                                .map(MigrationNode::id)
+                                .collect(Collectors.toSet());
+            } else {
+                // 通常: ターゲットに依存する全ノードを取得
+                // targetVersion は上記のバリデーションで null でないことが保証
+                targetNodeIds =
+                        context.graph()
+                                .getAllDependents(java.util.Objects.requireNonNull(targetVersion));
+            }
 
             // 4. 実行済みのノードのみフィルタ
             Set<NodeId> executedDependents =
-                    allDependents.stream()
+                    targetNodeIds.stream()
                             .filter(
                                     id -> {
                                         MigrationNode node =
@@ -184,9 +207,15 @@ public class DownCommand implements Command {
             }
         }
 
-        MigrationNode target = context.graph().getNode(targetVersion).orElseThrow();
         System.out.println();
-        System.out.println("Target version: " + targetVersion.value() + " (" + target.name() + ")");
+        if (allMigrations) {
+            System.out.println("Rolling back all migrations.");
+        } else {
+            // allMigrations == false の場合、targetVersion は null でない
+            NodeId targetId = java.util.Objects.requireNonNull(targetVersion);
+            MigrationNode target = context.graph().getNode(targetId).orElseThrow();
+            System.out.println("Target version: " + targetId.value() + " (" + target.name() + ")");
+        }
     }
 
     /** 確認プロンプトを表示する。 */

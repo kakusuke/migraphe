@@ -84,21 +84,29 @@ public class Main {
         List<String> argList = Arrays.asList(args);
         boolean skipConfirm = argList.contains("-y");
         boolean dryRun = argList.contains("--dry-run");
+        boolean allMigrations = argList.contains("--all");
 
-        // バージョン引数を取得（down, -y, --dry-run 以外の最初の引数）
+        // バージョン引数を取得（down, -y, --dry-run, --all 以外の最初の引数）
         String version =
                 argList.stream()
-                        .filter(a -> !a.equals("down") && !a.equals("-y") && !a.equals("--dry-run"))
+                        .filter(
+                                a ->
+                                        !a.equals("down")
+                                                && !a.equals("-y")
+                                                && !a.equals("--dry-run")
+                                                && !a.equals("--all"))
                         .findFirst()
                         .orElse(null);
 
-        if (version == null) {
-            System.err.println("Error: Version argument required for 'down' command");
-            System.err.println("Usage: migraphe down [-y] [--dry-run] <version>");
+        // --all が指定されていない場合はバージョンが必要
+        if (!allMigrations && version == null) {
+            System.err.println("Error: Version argument or --all required for 'down' command");
+            System.err.println("Usage: migraphe down [-y] [--dry-run] [--all | <version>]");
             return null;
         }
 
-        return new DownCommand(context, NodeId.of(version), skipConfirm, dryRun);
+        NodeId targetVersion = version != null ? NodeId.of(version) : null;
+        return new DownCommand(context, targetVersion, allMigrations, skipConfirm, dryRun);
     }
 
     /** 使用方法を表示する。 */
@@ -108,11 +116,13 @@ public class Main {
         System.out.println("Usage: migraphe <command> [options]");
         System.out.println();
         System.out.println("Commands:");
-        System.out.println("  up                          Execute pending migrations");
-        System.out.println("  down [-y] [--dry-run] <v>   Rollback to version <v>");
-        System.out.println("  status                      Show migration status");
+        System.out.println("  up                                  Execute pending migrations");
+        System.out.println("  down [-y] [--dry-run] [--all | <v>] Rollback migrations");
+        System.out.println("  status                              Show migration status");
         System.out.println();
         System.out.println("Down options:");
+        System.out.println("  <version>   Rollback migrations that depend on <version>");
+        System.out.println("  --all       Rollback all executed migrations");
         System.out.println("  -y          Skip confirmation prompt");
         System.out.println("  --dry-run   Show plan without executing");
         System.out.println();
