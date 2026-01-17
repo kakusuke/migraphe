@@ -29,7 +29,7 @@ dependencies {
 }
 
 application {
-    mainClass.set("io.github.migraphe.cli.Main")
+    mainClass.set("io.github.kakusuke.migraphe.cli.Main")
 }
 
 tasks.test {
@@ -42,7 +42,7 @@ tasks.register<Jar>("fatJar") {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     manifest {
-        attributes["Main-Class"] = "io.github.migraphe.cli.Main"
+        attributes["Main-Class"] = "io.github.kakusuke.migraphe.cli.Main"
     }
 
     from(configurations.runtimeClasspath.get().map {

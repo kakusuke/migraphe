@@ -3,8 +3,10 @@ plugins {
 }
 
 dependencies {
-    // API dependency only (no core implementation needed)
-    implementation(project(":migraphe-api"))
+    // API dependency - compileOnly because host application provides it at runtime
+    compileOnly(project(":migraphe-api"))
+    // API needed for tests
+    testImplementation(project(":migraphe-api"))
 
     // PostgreSQL JDBC
     implementation(libs.postgresql)

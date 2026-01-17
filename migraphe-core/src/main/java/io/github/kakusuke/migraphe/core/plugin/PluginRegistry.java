@@ -55,7 +55,8 @@ public final class PluginRegistry {
 
         try {
             URL jarUrl = jarPath.toUri().toURL();
-            URLClassLoader classLoader = new URLClassLoader(new URL[] {jarUrl});
+            URLClassLoader classLoader =
+                    new URLClassLoader(new URL[] {jarUrl}, MigraphePlugin.class.getClassLoader());
             ServiceLoader<MigraphePlugin> loader =
                     ServiceLoader.load(MigraphePlugin.class, classLoader);
 
@@ -99,6 +100,9 @@ public final class PluginRegistry {
                 } catch (PluginLoadException e) {
                     // 個別の JAR 読み込みエラーはログに記録して続行
                     System.err.println("Warning: " + e.getMessage());
+                    if (e.getCause() != null) {
+                        System.err.println("  Caused by: " + e.getCause());
+                    }
                 }
             }
         } catch (Exception e) {
