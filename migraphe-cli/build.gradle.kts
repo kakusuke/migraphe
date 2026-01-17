@@ -41,6 +41,9 @@ tasks.register<Jar>("fatJar") {
     archiveClassifier.set("all")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
+    dependsOn(tasks.jar)
+    dependsOn(configurations.runtimeClasspath)
+
     manifest {
         attributes["Main-Class"] = "io.github.kakusuke.migraphe.cli.Main"
     }
