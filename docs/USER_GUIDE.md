@@ -10,9 +10,10 @@
 4. [Configuration](#configuration)
 5. [Writing Migrations](#writing-migrations)
 6. [Running Migrations](#running-migrations)
-7. [Environment Management](#environment-management)
-8. [Advanced Features](#advanced-features)
-9. [Troubleshooting](#troubleshooting)
+7. [Rollback (down)](#rollback-down)
+8. [Environment Management](#environment-management)
+9. [Advanced Features](#advanced-features)
+10. [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -377,6 +378,119 @@ java -jar migraphe-cli-all.jar up --env production
 # Load development environment overrides
 java -jar migraphe-cli-all.jar up --env development
 ```
+
+## Rollback (down)
+
+The `down` command rolls back migrations to a specified version.
+
+### Basic Usage
+
+```bash
+# Rollback migrations that depend on the specified version
+java -jar migraphe-cli-all.jar down <version>
+
+# Rollback all migrations
+java -jar migraphe-cli-all.jar down --all
+
+# Skip confirmation prompt
+java -jar migraphe-cli-all.jar down -y <version>
+java -jar migraphe-cli-all.jar down -y --all
+
+# Show execution plan only (don't actually execute)
+java -jar migraphe-cli-all.jar down --dry-run <version>
+java -jar migraphe-cli-all.jar down --dry-run --all
+```
+
+### How It Works
+
+#### Version-Specific Rollback
+
+The `down <version>` command rolls back the specified version (node) **itself** and all migrations that **directly or indirectly depend on** it.
+
+**Example:**
+```
+Dependency graph:
+V001 <- V002 <- V003
+  ↑
+V004 (depends only on V001)
+
+migraphe down V002 execution:
+✓ V003 rolled back (depends on V002)
+✓ V002 rolled back (specified version)
+✗ V004 unchanged (doesn't depend on V002)
+✗ V001 unchanged (V002's dependency)
+```
+
+#### --all Option
+
+The `down --all` command rolls back **all** executed migrations. They are executed in reverse dependency order to maintain data integrity.
+
+**Example:**
+```bash
+$ java -jar migraphe-cli-all.jar down --all
+
+The following migrations will be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rolling back all migrations.
+
+Proceed with rollback? [y/N]: y
+
+Rolling back...
+  [DOWN] Create comments table ... OK (15ms)
+  [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
+
+Rollback complete. 3 migrations rolled back.
+```
+
+### Execution Flow
+
+```bash
+$ java -jar migraphe-cli-all.jar down db1/001_create_users
+
+The following migrations will be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rollback includes: db1/001_create_users (Create users table)
+
+Proceed with rollback? [y/N]: y
+
+Rolling back...
+  [DOWN] Create comments table ... OK (15ms)
+  [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
+
+Rollback complete. 3 migrations rolled back.
+```
+
+### dry-run Option
+
+Preview what would be rolled back without actually executing:
+
+```bash
+$ java -jar migraphe-cli-all.jar down --dry-run db1/001_create_users
+
+[DRY RUN] The following migrations would be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rollback includes: db1/001_create_users (Create users table)
+
+No changes made (dry run).
+```
+
+### Important Notes
+
+1. **DOWN migration required**: Tasks must have `down` SQL defined for rollback
+2. **Dependency order**: Migrations that are depended upon are rolled back first
+3. **Recorded in history**: Rollbacks are recorded in the history table (direction: DOWN)
+4. **Only executed migrations**: Only migrations marked as executed in history are rolled back
 
 ## Environment Management
 

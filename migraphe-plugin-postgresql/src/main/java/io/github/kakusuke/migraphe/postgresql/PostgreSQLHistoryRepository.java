@@ -79,10 +79,13 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
+        // 最新のレコードを取得し、UP かつ SUCCESS の場合のみ実行済みとみなす
         String sql =
                 """
-                SELECT COUNT(*) FROM migraphe_history
-                WHERE node_id = ? AND environment_id = ? AND status = 'SUCCESS'
+                SELECT direction, status FROM migraphe_history
+                WHERE node_id = ? AND environment_id = ?
+                ORDER BY executed_at DESC
+                LIMIT 1
                 """;
 
         try (Connection conn = environment.createConnection();
@@ -93,7 +96,9 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getInt(1) > 0;
+                    String direction = rs.getString("direction");
+                    String status = rs.getString("status");
+                    return "UP".equals(direction) && "SUCCESS".equals(status);
                 }
                 return false;
             }
@@ -106,10 +111,16 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
     public List<NodeId> executedNodes(EnvironmentId environmentId) {
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
+        // 各ノードの最新レコードが UP かつ SUCCESS のものだけを返す
         String sql =
                 """
-                SELECT DISTINCT node_id FROM migraphe_history
-                WHERE environment_id = ? AND status = 'SUCCESS'
+                SELECT node_id FROM (
+                    SELECT node_id, direction, status,
+                           ROW_NUMBER() OVER (PARTITION BY node_id ORDER BY executed_at DESC) as rn
+                    FROM migraphe_history
+                    WHERE environment_id = ?
+                ) AS latest
+                WHERE rn = 1 AND direction = 'UP' AND status = 'SUCCESS'
                 ORDER BY node_id
                 """;
 

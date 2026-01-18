@@ -5,6 +5,7 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.util.*;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
@@ -40,16 +41,38 @@ public final class InMemoryHistoryRepository implements HistoryRepository {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
+        // 最新のレコードを取得し、UP かつ SUCCESS の場合のみ実行済みとみなす
         return getRecordsForEnvironment(environmentId).stream()
-                .anyMatch(r -> r.nodeId().equals(nodeId) && r.status() == ExecutionStatus.SUCCESS);
+                .filter(r -> r.nodeId().equals(nodeId))
+                .max(Comparator.comparing(ExecutionRecord::executedAt))
+                .map(
+                        r ->
+                                r.direction() == ExecutionDirection.UP
+                                        && r.status() == ExecutionStatus.SUCCESS)
+                .orElse(false);
     }
 
     @Override
     public List<NodeId> executedNodes(EnvironmentId environmentId) {
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
-        return getRecordsForEnvironment(environmentId).stream()
-                .filter(r -> r.status() == ExecutionStatus.SUCCESS)
+        // 各ノードの最新レコードが UP かつ SUCCESS のものだけを返す
+        Map<NodeId, ExecutionRecord> latestByNode = new HashMap<>();
+        for (ExecutionRecord r : getRecordsForEnvironment(environmentId)) {
+            latestByNode.merge(
+                    r.nodeId(),
+                    r,
+                    (existing, incoming) ->
+                            incoming.executedAt().isAfter(existing.executedAt())
+                                    ? incoming
+                                    : existing);
+        }
+
+        return latestByNode.values().stream()
+                .filter(
+                        r ->
+                                r.direction() == ExecutionDirection.UP
+                                        && r.status() == ExecutionStatus.SUCCESS)
                 .map(ExecutionRecord::nodeId)
                 .collect(Collectors.toList());
     }

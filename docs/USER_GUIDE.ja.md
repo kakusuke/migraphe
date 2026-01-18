@@ -10,9 +10,10 @@
 4. [設定](#設定)
 5. [マイグレーションの作成](#マイグレーションの作成)
 6. [マイグレーションの実行](#マイグレーションの実行)
-7. [環境管理](#環境管理)
-8. [高度な機能](#高度な機能)
-9. [トラブルシューティング](#トラブルシューティング)
+7. [ロールバック（down）](#ロールバックdown)
+8. [環境管理](#環境管理)
+9. [高度な機能](#高度な機能)
+10. [トラブルシューティング](#トラブルシューティング)
 
 ## はじめに
 
@@ -377,6 +378,119 @@ java -jar migraphe-cli-all.jar up --env production
 # 開発環境のオーバーライドを読み込む
 java -jar migraphe-cli-all.jar up --env development
 ```
+
+## ロールバック（down）
+
+`down` コマンドは、指定したバージョンまでマイグレーションをロールバックします。
+
+### 基本的な使い方
+
+```bash
+# 指定バージョンに依存するマイグレーションをロールバック
+java -jar migraphe-cli-all.jar down <version>
+
+# 全てのマイグレーションをロールバック
+java -jar migraphe-cli-all.jar down --all
+
+# 確認プロンプトをスキップ
+java -jar migraphe-cli-all.jar down -y <version>
+java -jar migraphe-cli-all.jar down -y --all
+
+# 実行計画のみ表示（実際には実行しない）
+java -jar migraphe-cli-all.jar down --dry-run <version>
+java -jar migraphe-cli-all.jar down --dry-run --all
+```
+
+### 動作の仕組み
+
+#### バージョン指定の場合
+
+`down <version>` コマンドは、指定したバージョン（ノード）**自身**と、それに**直接/間接的に依存する**マイグレーションをロールバックします。
+
+**例:**
+```
+依存グラフ:
+V001 <- V002 <- V003
+  ↑
+V004 (V001のみに依存)
+
+migraphe down V002 実行:
+✓ V003 をロールバック (V002に依存)
+✓ V002 をロールバック (指定したバージョン)
+✗ V004 はそのまま (V002に依存していない)
+✗ V001 はそのまま (V002の依存先)
+```
+
+#### --all オプションの場合
+
+`down --all` は、実行済みの**全て**のマイグレーションをロールバックします。依存関係の逆順で実行されるため、データの整合性が保たれます。
+
+**例:**
+```bash
+$ java -jar migraphe-cli-all.jar down --all
+
+The following migrations will be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rolling back all migrations.
+
+Proceed with rollback? [y/N]: y
+
+Rolling back...
+  [DOWN] Create comments table ... OK (15ms)
+  [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
+
+Rollback complete. 3 migrations rolled back.
+```
+
+### 実行フロー
+
+```bash
+$ java -jar migraphe-cli-all.jar down db1/001_create_users
+
+The following migrations will be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rollback includes: db1/001_create_users (Create users table)
+
+Proceed with rollback? [y/N]: y
+
+Rolling back...
+  [DOWN] Create comments table ... OK (15ms)
+  [DOWN] Create posts table ... OK (12ms)
+  [DOWN] Create users table ... OK (10ms)
+
+Rollback complete. 3 migrations rolled back.
+```
+
+### dry-run オプション
+
+実際にロールバックせずに、何が実行されるかを確認できます:
+
+```bash
+$ java -jar migraphe-cli-all.jar down --dry-run db1/001_create_users
+
+[DRY RUN] The following migrations would be rolled back:
+  - db1/003_create_comments: Create comments table
+  - db1/002_create_posts: Create posts table
+  - db1/001_create_users: Create users table
+
+Rollback includes: db1/001_create_users (Create users table)
+
+No changes made (dry run).
+```
+
+### 注意事項
+
+1. **DOWNマイグレーションが必要**: ロールバックするには、タスクに `down` SQL が定義されている必要があります
+2. **依存関係順で実行**: 依存されている側のマイグレーションから先にロールバックされます
+3. **履歴に記録**: ロールバックも履歴テーブルに記録されます（direction: DOWN）
+4. **実行済みのみ対象**: 履歴で実行済みとなっているマイグレーションのみがロールバック対象になります
 
 ## 環境管理
 

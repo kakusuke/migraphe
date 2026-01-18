@@ -1,11 +1,15 @@
 package io.github.kakusuke.migraphe.cli;
 
+import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.cli.command.Command;
+import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /** Migraphe CLI のエントリーポイント。 */
@@ -31,7 +35,7 @@ public class Main {
             ExecutionContext context = ExecutionContext.load(baseDir, pluginRegistry);
 
             // コマンドを実行
-            Command command = createCommand(commandName, context);
+            Command command = createCommand(commandName, args, context);
 
             if (command == null) {
                 System.err.println("Unknown command: " + commandName);
@@ -65,12 +69,44 @@ public class Main {
     }
 
     /** コマンド名から Command インスタンスを生成する。 */
-    private static @Nullable Command createCommand(String commandName, ExecutionContext context) {
+    private static @Nullable Command createCommand(
+            String commandName, String[] args, ExecutionContext context) {
         return switch (commandName) {
             case "up" -> new UpCommand(context);
             case "status" -> new StatusCommand(context);
+            case "down" -> createDownCommand(args, context);
             default -> null;
         };
+    }
+
+    /** down コマンドを生成する。 */
+    private static @Nullable Command createDownCommand(String[] args, ExecutionContext context) {
+        List<String> argList = Arrays.asList(args);
+        boolean skipConfirm = argList.contains("-y");
+        boolean dryRun = argList.contains("--dry-run");
+        boolean allMigrations = argList.contains("--all");
+
+        // バージョン引数を取得（down, -y, --dry-run, --all 以外の最初の引数）
+        String version =
+                argList.stream()
+                        .filter(
+                                a ->
+                                        !a.equals("down")
+                                                && !a.equals("-y")
+                                                && !a.equals("--dry-run")
+                                                && !a.equals("--all"))
+                        .findFirst()
+                        .orElse(null);
+
+        // --all が指定されていない場合はバージョンが必要
+        if (!allMigrations && version == null) {
+            System.err.println("Error: Version argument or --all required for 'down' command");
+            System.err.println("Usage: migraphe down [-y] [--dry-run] [--all | <version>]");
+            return null;
+        }
+
+        NodeId targetVersion = version != null ? NodeId.of(version) : null;
+        return new DownCommand(context, targetVersion, allMigrations, skipConfirm, dryRun);
     }
 
     /** 使用方法を表示する。 */
@@ -80,8 +116,15 @@ public class Main {
         System.out.println("Usage: migraphe <command> [options]");
         System.out.println();
         System.out.println("Commands:");
-        System.out.println("  up      Execute pending migrations");
-        System.out.println("  status  Show migration status");
+        System.out.println("  up                                  Execute pending migrations");
+        System.out.println("  down [-y] [--dry-run] [--all | <v>] Rollback migrations");
+        System.out.println("  status                              Show migration status");
+        System.out.println();
+        System.out.println("Down options:");
+        System.out.println("  <version>   Rollback migrations that depend on <version>");
+        System.out.println("  --all       Rollback all executed migrations");
+        System.out.println("  -y          Skip confirmation prompt");
+        System.out.println("  --dry-run   Show plan without executing");
         System.out.println();
     }
 }

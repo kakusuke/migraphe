@@ -122,7 +122,7 @@ Update when code changes:
 | 12-3 | NullAway compile-time checks enabled | ✅ Complete |
 
 ### Future Phases
-- `down`, `history`, `validate` commands
+- `history`, `validate` commands
 - GraalVM Native Image packaging
 - Gradle plugin
 - Additional database plugins (MySQL, MongoDB)
@@ -150,32 +150,41 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-18 (Session 13)
+- **Down --all Option**: `migraphe down --all` で全マイグレーションをロールバック
+  - `DownCommand.allMigrations` フラグ追加
+  - `Main.java`: `--all` オプションのパース追加
+  - テスト追加: `shouldRollbackAllMigrationsWithAllFlag`, `shouldDisplayAllMigrationsInDryRunWithAllFlag`
+  - ドキュメント更新: `--all` オプションの使用方法を追加
+- Tests: 200+, 100% passing
+
+### 2026-01-16 (Session 12)
+- **Down Command Implementation**: `migraphe down <version>` コマンドを実装
+  - `MigrationGraph.getAllDependents()`: 再帰的に全依存ノードを取得
+  - `TopologicalSort.createReverseExecutionPlanFor()`: 部分グラフの逆順実行プラン生成
+  - `DownCommand`: 指定バージョンに依存するノードのみをロールバック
+  - オプション: `-y` (確認スキップ), `--dry-run` (実行計画のみ表示)
+  - 確認プロンプト: ロールバック対象一覧を表示し、ユーザー確認を要求
+  - `Main.java`: down コマンドの引数パースと登録
+  - テスト追加: MigrationGraphTest, TopologicalSortTest, DownCommandTest
+  - ドキュメント更新: USER_GUIDE.md / USER_GUIDE.ja.md に「ロールバック（down）」セクション追加
+- Tests: 200+, 100% passing
+
 ### 2026-01-16 (Session 11)
 - **Autocommit Mode**: PostgreSQL プラグインに autocommit オプション追加
   - `SqlTaskDefinition.autocommit()`: YAML で `autocommit: true` をパース
   - `PostgreSQLMigrationNode`: autocommit フィールド + Builder メソッド
   - `PostgreSQLUpTask`/`PostgreSQLDownTask`: autocommit モード分岐実装
-  - `PostgreSQLMigrationNodeProvider`: SqlTaskDefinition から autocommit 読み取り
   - 統合テスト追加: shouldExecuteUpMigrationWithAutocommit, shouldExecuteDownMigrationWithAutocommit
-  - ドキュメント更新: USER_GUIDE.md / USER_GUIDE.ja.md に Autocommit Mode セクション追加
-- Use case: `CREATE DATABASE`, `CREATE INDEX CONCURRENTLY` など、トランザクション内で実行不可の SQL
 - Tests: 183, 100% passing
 
 ### 2026-01-13 (Session 10)
 - **Plugin Dynamic Loading**: migraphe-cli から migraphe-plugin-postgresql 依存を分離
-  - `build.gradle.kts`: `implementation` → `testImplementation` に変更
   - 本番は `./plugins/` ディレクトリから JAR を動的ロード
-  - テストはクラスパスから ServiceLoader でロード（既存テスト維持）
-  - `PluginNotFoundException`: プラグイン未発見時の詳細エラーメッセージ
-  - `PluginRegistry.getRequiredPlugin()`: null チェック不要の必須取得メソッド
-  - ドキュメント更新: `USER_GUIDE.md`/`USER_GUIDE.ja.md` にプラグイン配置方法追加
+  - テストはクラスパスから ServiceLoader でロード
 - Tests: 180, 100% passing
-
-### 2026-01-13 (Session 9)
-- **Phase 12**: Refactoring - COMPLETED (EnvironmentDefinition, @Nullable, NullAway)
-- Tests: 177+, 100% passing
 
 ---
 
 **Last Updated**: 2026-01-16
-**Phase 12 Complete** - Next: Future phases (down command, Native Image, etc.)
+**Down Command Complete** - Next: history command, validate command, Native Image, etc.
