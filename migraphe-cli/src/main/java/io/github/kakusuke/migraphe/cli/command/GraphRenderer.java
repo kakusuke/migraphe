@@ -15,11 +15,23 @@ final class GraphRenderer {
     private final List<MigrationNode> sortedNodes;
     private final Map<NodeId, MigrationNode> nodeMap;
     private final Map<NodeId, Set<NodeId>> dependents; // ノード -> そのノードに依存しているノード
+    private final boolean reversed;
 
     GraphRenderer(List<MigrationNode> sortedNodes) {
+        this(sortedNodes, false);
+    }
+
+    /**
+     * コンストラクタ。
+     *
+     * @param sortedNodes ソート済みノードリスト
+     * @param reversed true の場合、逆順モード（DOWN用）。依存関係を逆に解釈する。
+     */
+    GraphRenderer(List<MigrationNode> sortedNodes, boolean reversed) {
         this.sortedNodes = List.copyOf(sortedNodes);
         this.nodeMap = new HashMap<>();
         this.dependents = new HashMap<>();
+        this.reversed = reversed;
 
         // ノードマップを構築
         for (MigrationNode node : sortedNodes) {
@@ -50,18 +62,20 @@ final class GraphRenderer {
             MigrationNode node = sortedNodes.get(i);
             boolean isLast = (i == sortedNodes.size() - 1);
 
-            // このノードの依存先（親）がどの列にあるか確認
+            // 逆順モードでは親子関係を逆に解釈
+            Set<NodeId> parents = getParents(node);
+            Set<NodeId> children = getChildren(node);
+
+            // このノードの親がどの列にあるか確認
             List<Integer> parentCols = new ArrayList<>();
-            for (NodeId dep : node.dependencies()) {
-                int col = columns.indexOf(dep);
+            for (NodeId parentId : parents) {
+                int col = columns.indexOf(parentId);
                 if (col >= 0) {
                     parentCols.add(col);
                 }
             }
             Collections.sort(parentCols);
 
-            // このノードに依存しているノード（子）があるか確認
-            Set<NodeId> children = dependents.getOrDefault(node.id(), Set.of());
             boolean hasChildren = !children.isEmpty();
 
             // このノードを配置する列を決定
@@ -130,6 +144,28 @@ final class GraphRenderer {
         }
 
         return result;
+    }
+
+    /** 逆順モードに応じて親ノードを取得する。 */
+    private Set<NodeId> getParents(MigrationNode node) {
+        if (reversed) {
+            // 逆順: dependents が親
+            return dependents.getOrDefault(node.id(), Set.of());
+        } else {
+            // 正順: dependencies が親
+            return node.dependencies();
+        }
+    }
+
+    /** 逆順モードに応じて子ノードを取得する。 */
+    private Set<NodeId> getChildren(MigrationNode node) {
+        if (reversed) {
+            // 逆順: dependencies が子
+            return node.dependencies();
+        } else {
+            // 正順: dependents が子
+            return dependents.getOrDefault(node.id(), Set.of());
+        }
     }
 
     private int findOrCreateColumn(List<NodeId> columns) {

@@ -7,15 +7,20 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
+import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.cli.ExecutionContext;
+import io.github.kakusuke.migraphe.cli.util.AnsiColor;
 import io.github.kakusuke.migraphe.core.graph.ExecutionLevel;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
 import java.util.Set;
@@ -31,6 +36,7 @@ public class DownCommand implements Command {
     private final boolean skipConfirmation;
     private final boolean dryRun;
     private final InputStream inputStream;
+    private final boolean colorEnabled;
 
     public DownCommand(
             ExecutionContext context,
@@ -38,7 +44,14 @@ public class DownCommand implements Command {
             boolean allMigrations,
             boolean skipConfirmation,
             boolean dryRun) {
-        this(context, targetVersion, allMigrations, skipConfirmation, dryRun, System.in);
+        this(
+                context,
+                targetVersion,
+                allMigrations,
+                skipConfirmation,
+                dryRun,
+                System.in,
+                AnsiColor.isColorEnabled());
     }
 
     /** テスト用コンストラクタ。 */
@@ -48,13 +61,15 @@ public class DownCommand implements Command {
             boolean allMigrations,
             boolean skipConfirmation,
             boolean dryRun,
-            InputStream inputStream) {
+            InputStream inputStream,
+            boolean colorEnabled) {
         this.context = context;
         this.targetVersion = targetVersion;
         this.allMigrations = allMigrations;
         this.skipConfirmation = skipConfirmation;
         this.dryRun = dryRun;
         this.inputStream = inputStream;
+        this.colorEnabled = colorEnabled;
     }
 
     @Override
@@ -115,7 +130,7 @@ public class DownCommand implements Command {
                             context.graph(), executedDependents);
 
             // 6. ロールバック対象を表示
-            displayRollbackPlan(plan);
+            displayRollbackPlan(plan, historyRepo);
 
             // 7. dry-run の場合はここで終了
             if (dryRun) {
@@ -132,69 +147,10 @@ public class DownCommand implements Command {
 
             // 9. 各ノードをロールバック
             System.out.println();
-            System.out.println("Rolling back...");
-
-            int totalRolledBack = 0;
-            for (ExecutionLevel level : plan.levels()) {
-                for (MigrationNode node : level.nodes()) {
-                    // 履歴から serializedDownTask を取得
-                    ExecutionRecord record =
-                            historyRepo.findLatestRecord(node.id(), node.environment().id());
-
-                    if (record == null) {
-                        System.out.println(
-                                "  [SKIP] "
-                                        + node.id().value()
-                                        + " - "
-                                        + node.name()
-                                        + " (no execution record found)");
-                        continue;
-                    }
-
-                    // DOWN タスクを取得
-                    Task downTask = getDownTask(node);
-                    if (downTask == null) {
-                        System.out.println(
-                                "  [SKIP] "
-                                        + node.id().value()
-                                        + " - "
-                                        + node.name()
-                                        + " (no down task available)");
-                        continue;
-                    }
-
-                    // DOWN タスクを実行
-                    System.out.print(
-                            "  [DOWN] " + node.id().value() + " - " + node.name() + " ... ");
-                    long startTime = System.currentTimeMillis();
-
-                    Result<TaskResult, String> result = downTask.execute();
-                    long duration = System.currentTimeMillis() - startTime;
-
-                    if (result.isOk()) {
-                        System.out.println("OK (" + duration + "ms)");
-
-                        // DOWN 実行記録を保存
-                        ExecutionRecord downRecord =
-                                ExecutionRecord.downSuccess(
-                                        node.id(), node.environment().id(), node.name(), duration);
-                        historyRepo.record(downRecord);
-
-                        totalRolledBack++;
-                    } else {
-                        System.out.println("FAILED");
-                        String errorMsg = result.error();
-                        System.err.println("  Error: " + errorMsg);
-                        return 1;
-                    }
-                }
-            }
-
+            System.out.println("Executing rollback...");
             System.out.println();
-            System.out.println(
-                    "Rollback complete. " + totalRolledBack + " migrations rolled back.");
 
-            return 0;
+            return executeRollback(plan, historyRepo);
 
         } catch (Exception e) {
             System.err.println("Rollback failed: " + e.getMessage());
@@ -204,29 +160,54 @@ public class DownCommand implements Command {
     }
 
     /** ロールバック対象を表示する。 */
-    private void displayRollbackPlan(ExecutionPlan plan) {
+    private void displayRollbackPlan(ExecutionPlan plan, HistoryRepository historyRepo) {
         String prefix = dryRun ? "[DRY RUN] " : "";
         String verb = dryRun ? "would be" : "will be";
 
         System.out.println();
-        System.out.println(prefix + "The following migrations " + verb + " rolled back:");
+        System.out.println(prefix + "Migrations to rollback:");
+        System.out.println();
 
+        // トポロジカル順序でノードを取得
+        List<MigrationNode> sortedNodes = new ArrayList<>();
         for (ExecutionLevel level : plan.levels()) {
-            for (MigrationNode node : level.nodes()) {
-                System.out.println("  - " + node.id().value() + ": " + node.name());
+            sortedNodes.addAll(level.nodes());
+        }
+
+        // GraphRenderer を使用してグラフ表示（逆順モード）
+        GraphRenderer renderer = new GraphRenderer(sortedNodes, true);
+        List<GraphRenderer.NodeGraphInfo> graphInfos = renderer.render();
+
+        for (GraphRenderer.NodeGraphInfo info : graphInfos) {
+            MigrationNode node = info.node();
+            boolean executed = historyRepo.wasExecuted(node.id(), node.environment().id());
+
+            // マージ行
+            if (info.mergeLine() != null) {
+                System.out.println(info.mergeLine());
+            }
+
+            // ノード行
+            String status = executed ? "[✓]" : "[ ]";
+            String line =
+                    info.nodeLine() + " " + status + " " + node.id().value() + " - " + node.name();
+            System.out.println(line);
+
+            // 分岐行
+            if (info.branchLine() != null) {
+                System.out.println(info.branchLine());
+            }
+
+            // 接続線
+            if (info.connectorLine() != null) {
+                System.out.println(info.connectorLine());
             }
         }
 
         System.out.println();
-        if (allMigrations) {
-            System.out.println("Rolling back all migrations.");
-        } else {
-            // allMigrations == false の場合、targetVersion は null でない
-            NodeId targetId = java.util.Objects.requireNonNull(targetVersion);
-            MigrationNode target = context.graph().getNode(targetId).orElseThrow();
-            System.out.println(
-                    "Rollback includes: " + targetId.value() + " (" + target.name() + ")");
-        }
+        int total = plan.totalNodes();
+        System.out.println(
+                total + " migration" + (total == 1 ? "" : "s") + " " + verb + " rolled back.");
     }
 
     /** 確認プロンプトを表示する。 */
@@ -243,6 +224,147 @@ public class DownCommand implements Command {
     private @Nullable Task getDownTask(MigrationNode node) {
         // node の downTask() を使用
         return node.downTask();
+    }
+
+    /** ロールバックを実行する。 */
+    private int executeRollback(ExecutionPlan plan, HistoryRepository historyRepo) {
+        int totalRolledBack = 0;
+
+        for (ExecutionLevel level : plan.levels()) {
+            for (MigrationNode node : level.nodes()) {
+                // 履歴から serializedDownTask を取得
+                ExecutionRecord record =
+                        historyRepo.findLatestRecord(node.id(), node.environment().id());
+
+                if (record == null) {
+                    printResult(
+                            "SKIP", node.id().value(), node.name(), null, "no execution record");
+                    continue;
+                }
+
+                // DOWN タスクを取得
+                Task downTask = getDownTask(node);
+                if (downTask == null) {
+                    printResult("SKIP", node.id().value(), node.name(), null, "no down task");
+                    continue;
+                }
+
+                // DOWN タスクを実行
+                long startTime = System.currentTimeMillis();
+                Result<TaskResult, String> result = downTask.execute();
+                long duration = System.currentTimeMillis() - startTime;
+
+                if (result.isOk()) {
+                    printResult("OK", node.id().value(), node.name(), duration, null);
+
+                    // DOWN 実行記録を保存
+                    ExecutionRecord downRecord =
+                            ExecutionRecord.downSuccess(
+                                    node.id(), node.environment().id(), node.name(), duration);
+                    historyRepo.record(downRecord);
+
+                    totalRolledBack++;
+                } else {
+                    printResult("FAIL", node.id().value(), node.name(), duration, null);
+                    String errorMsg = result.error();
+
+                    // 失敗時の詳細表示
+                    printFailureDetails(node, downTask, errorMsg);
+
+                    // 失敗記録を保存
+                    ExecutionRecord failureRecord =
+                            ExecutionRecord.failure(
+                                    node.id(),
+                                    node.environment().id(),
+                                    ExecutionDirection.DOWN,
+                                    node.name(),
+                                    errorMsg != null ? errorMsg : "Unknown error");
+                    historyRepo.record(failureRecord);
+
+                    return 1;
+                }
+            }
+        }
+
+        System.out.println();
+        if (totalRolledBack == 0) {
+            System.out.println("No migrations rolled back.");
+        } else {
+            System.out.println(
+                    "Rollback completed successfully. "
+                            + totalRolledBack
+                            + " migration"
+                            + (totalRolledBack == 1 ? "" : "s")
+                            + " rolled back.");
+        }
+
+        return 0;
+    }
+
+    /** 結果を色付きで表示する。 */
+    private void printResult(
+            String status,
+            String id,
+            String name,
+            @Nullable Long durationMs,
+            @Nullable String extra) {
+        String coloredStatus;
+        switch (status) {
+            case "OK" -> coloredStatus = colorEnabled ? AnsiColor.green("[OK]  ") : "[OK]   ";
+            case "SKIP" -> coloredStatus = colorEnabled ? AnsiColor.yellow("[SKIP]") : "[SKIP] ";
+            case "FAIL" -> coloredStatus = colorEnabled ? AnsiColor.red("[FAIL]") : "[FAIL] ";
+            default -> coloredStatus = "[" + status + "]";
+        }
+
+        StringBuilder line = new StringBuilder();
+        line.append(coloredStatus).append(" ").append(id).append(" - ").append(name);
+
+        if (durationMs != null) {
+            line.append(" (").append(durationMs).append("ms)");
+        }
+        if (extra != null) {
+            line.append(" (").append(extra).append(")");
+        }
+
+        System.out.println(line);
+    }
+
+    /** 失敗時の詳細情報を表示する。 */
+    private void printFailureDetails(MigrationNode node, Task downTask, @Nullable String errorMsg) {
+        System.out.println();
+        System.out.println(
+                colorEnabled
+                        ? AnsiColor.red("=== ROLLBACK FAILED ===")
+                        : "=== ROLLBACK FAILED ===");
+        System.out.println();
+
+        // 環境情報
+        String envLabel = colorEnabled ? AnsiColor.cyan("Environment:") : "Environment:";
+        System.out.println(envLabel);
+        System.out.println("  Target: " + node.environment().id().value());
+        System.out.println();
+
+        // SQL内容（SqlContentProviderを実装している場合）
+        if (downTask instanceof SqlContentProvider sqlProvider) {
+            String sqlLabel = colorEnabled ? AnsiColor.cyan("SQL Content:") : "SQL Content:";
+            System.out.println(sqlLabel);
+            String sql = sqlProvider.sqlContent();
+            String[] lines = sql.split("\n", -1);
+            for (int i = 0; i < lines.length; i++) {
+                String lineNum =
+                        colorEnabled
+                                ? AnsiColor.cyan(String.format("%3d", i + 1))
+                                : String.format("%3d", i + 1);
+                System.out.println("  " + lineNum + " | " + lines[i]);
+            }
+            System.out.println();
+        }
+
+        // エラーメッセージ
+        String errorLabel = colorEnabled ? AnsiColor.red("Error:") : "Error:";
+        System.out.println(errorLabel);
+        String errorContent = errorMsg != null ? errorMsg : "Unknown error";
+        System.out.println("  " + (colorEnabled ? AnsiColor.red(errorContent) : errorContent));
     }
 
     /** HistoryRepository をプラグイン経由で取得する。 */

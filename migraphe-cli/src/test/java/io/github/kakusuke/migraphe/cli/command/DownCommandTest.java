@@ -97,7 +97,7 @@ class DownCommandTest {
         // Then
         assertThat(exitCode).isEqualTo(0);
         String output = outputStream.toString(StandardCharsets.UTF_8);
-        assertThat(output).contains("Rollback complete");
+        assertThat(output).contains("Rollback completed successfully");
     }
 
     @Test
@@ -177,7 +177,7 @@ class DownCommandTest {
         // Then
         String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("will be rolled back");
-        assertThat(output).contains("Rollback includes:");
+        assertThat(output).contains("Migrations to rollback:");
     }
 
     @Test
@@ -201,7 +201,8 @@ class DownCommandTest {
                         false,
                         false,
                         false,
-                        inputStream);
+                        inputStream,
+                        false);
         int exitCode = downCommand.execute();
 
         // Then
@@ -350,8 +351,8 @@ class DownCommandTest {
         // Then
         assertThat(exitCode).isEqualTo(0);
         String output = outputStream.toString(StandardCharsets.UTF_8);
-        assertThat(output).contains("Rolling back all migrations");
-        assertThat(output).contains("Rollback complete");
+        assertThat(output).contains("will be rolled back");
+        assertThat(output).contains("Rollback completed successfully");
 
         // 全テーブルが削除されていることを確認
         Environment env = context.environments().get("test-db");
@@ -387,7 +388,6 @@ class DownCommandTest {
         String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("[DRY RUN]");
         assertThat(output).contains("would be rolled back");
-        assertThat(output).contains("Rolling back all migrations");
         assertThat(output).contains("No changes made (dry run)");
     }
 
