@@ -143,19 +143,29 @@ public class DownCommand implements Command {
 
                     if (record == null) {
                         System.out.println(
-                                "  [SKIP] " + node.name() + " (no execution record found)");
+                                "  [SKIP] "
+                                        + node.id().value()
+                                        + " - "
+                                        + node.name()
+                                        + " (no execution record found)");
                         continue;
                     }
 
                     // DOWN タスクを取得
                     Task downTask = getDownTask(node);
                     if (downTask == null) {
-                        System.out.println("  [SKIP] " + node.name() + " (no down task available)");
+                        System.out.println(
+                                "  [SKIP] "
+                                        + node.id().value()
+                                        + " - "
+                                        + node.name()
+                                        + " (no down task available)");
                         continue;
                     }
 
                     // DOWN タスクを実行
-                    System.out.print("  [DOWN] " + node.name() + " ... ");
+                    System.out.print(
+                            "  [DOWN] " + node.id().value() + " - " + node.name() + " ... ");
                     long startTime = System.currentTimeMillis();
 
                     Result<TaskResult, String> result = downTask.execute();

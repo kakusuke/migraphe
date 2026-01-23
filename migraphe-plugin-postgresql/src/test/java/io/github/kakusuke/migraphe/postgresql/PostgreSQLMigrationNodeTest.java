@@ -180,4 +180,23 @@ class PostgreSQLMigrationNodeTest {
         assertThat(node1).isNotEqualTo(node3);
         assertThat(node1.hashCode()).isEqualTo(node2.hashCode());
     }
+
+    @Test
+    void shouldExposeUpSqlThroughTask() {
+        // given
+        String upSql = "CREATE TABLE users (id SERIAL PRIMARY KEY);";
+
+        // when
+        PostgreSQLMigrationNode node =
+                PostgreSQLMigrationNode.builder()
+                        .id("V001")
+                        .name("Create users table")
+                        .environment(environment)
+                        .upSql(upSql)
+                        .build();
+
+        // then
+        PostgreSQLUpTask upTask = (PostgreSQLUpTask) node.upTask();
+        assertThat(upTask.upSql()).isEqualTo(upSql);
+    }
 }

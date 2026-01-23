@@ -72,11 +72,28 @@ public class Main {
     private static @Nullable Command createCommand(
             String commandName, String[] args, ExecutionContext context) {
         return switch (commandName) {
-            case "up" -> new UpCommand(context);
+            case "up" -> createUpCommand(args, context);
             case "status" -> new StatusCommand(context);
             case "down" -> createDownCommand(args, context);
             default -> null;
         };
+    }
+
+    /** up コマンドを生成する。 */
+    private static Command createUpCommand(String[] args, ExecutionContext context) {
+        List<String> argList = Arrays.asList(args);
+        boolean skipConfirm = argList.contains("-y");
+        boolean dryRun = argList.contains("--dry-run");
+
+        // ID引数を取得（up, -y, --dry-run 以外の最初の引数）
+        String targetId =
+                argList.stream()
+                        .filter(a -> !a.equals("up") && !a.equals("-y") && !a.equals("--dry-run"))
+                        .findFirst()
+                        .orElse(null);
+
+        NodeId nodeId = targetId != null ? NodeId.of(targetId) : null;
+        return new UpCommand(context, nodeId, skipConfirm, dryRun);
     }
 
     /** down コマンドを生成する。 */
@@ -116,9 +133,14 @@ public class Main {
         System.out.println("Usage: migraphe <command> [options]");
         System.out.println();
         System.out.println("Commands:");
-        System.out.println("  up                                  Execute pending migrations");
+        System.out.println("  up [-y] [--dry-run] [<id>]          Execute migrations");
         System.out.println("  down [-y] [--dry-run] [--all | <v>] Rollback migrations");
         System.out.println("  status                              Show migration status");
+        System.out.println();
+        System.out.println("Up options:");
+        System.out.println("  <id>        Execute migrations up to and including <id>");
+        System.out.println("  -y          Skip confirmation prompt");
+        System.out.println("  --dry-run   Show plan without executing");
         System.out.println();
         System.out.println("Down options:");
         System.out.println("  <version>   Rollback migrations that depend on <version>");

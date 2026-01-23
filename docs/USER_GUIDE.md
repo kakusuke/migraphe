@@ -336,37 +336,92 @@ java -jar migraphe-cli-all.jar status
 Migration Status
 ================
 
-[ ] db1/001_create_users - Create users table
-[ ] db1/002_create_posts - Create posts table
-[✓] db1/003_create_comments - Create comments table
+● [ ] db1/001_create_users - Create users table
+│
+● [ ] db1/002_create_posts - Create posts table
+│
+● [✓] db1/003_create_comments - Create comments table (58ms, 2026-01-23 10:30:00)
 
-Summary:
-  Total: 3
-  Executed: 1
-  Pending: 2
+Summary: Total: 3 | Executed: 1 | Pending: 2
 ```
 
 ### Execute Migrations
 
 ```bash
+# Execute all pending migrations
 java -jar migraphe-cli-all.jar up
+
+# Skip confirmation prompt
+java -jar migraphe-cli-all.jar up -y
+
+# Show execution plan only (don't actually execute)
+java -jar migraphe-cli-all.jar up --dry-run
+
+# Execute up to a specific migration (only the specified ID and its dependencies)
+java -jar migraphe-cli-all.jar up <id>
+
+# Combine options
+java -jar migraphe-cli-all.jar up -y --dry-run db1/002_create_posts
 ```
 
-**Output:**
+**Example Output:**
 ```
+Migrations to execute:
+
+● [ ] db1/001_create_users - Create users table
+│
+● [ ] db1/002_create_posts - Create posts table
+
+2 migrations will be executed.
+
+Proceed? [y/N]: y
+
 Executing migrations...
 
-Execution Plan:
-  Levels: 2
-  Total Tasks: 2
-
-Level 0:
-  [RUN]  Create users table ... OK (45ms)
-
-Level 1:
-  [RUN]  Create posts table ... OK (32ms)
+[OK]   Create users table (45ms)
+[OK]   Create posts table (32ms)
 
 Migration completed successfully. 2 migrations executed.
+```
+
+### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `<id>` | Execute only the specified migration and its dependencies |
+| `-y` | Skip confirmation prompt |
+| `--dry-run` | Show execution plan only without executing |
+
+### Colored Output
+
+Migration results are displayed with colors:
+
+- **[OK]** (green): Migration succeeded
+- **[SKIP]** (yellow): Already executed, skipped
+- **[FAIL]** (red): Migration failed
+
+Color output can be disabled by setting the `NO_COLOR` environment variable.
+
+### Failure Details
+
+When a migration fails, detailed information is displayed:
+
+```
+[FAIL] Create posts table (12ms)
+
+=== MIGRATION FAILED ===
+
+Environment:
+  Target: db1
+
+SQL Content:
+   1 | CREATE TABLE posts (
+   2 |   id SERIAL PRIMARY KEY,
+   3 |   title VARCHAR(200) NOT NULL
+   4 | );
+
+Error:
+  relation "posts" already exists
 ```
 
 ### Environment-Specific Execution

@@ -106,7 +106,7 @@ class StatusCommandTest {
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // 先に UP を実行
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         // 出力をリセット
@@ -174,7 +174,7 @@ class StatusCommandTest {
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // 最初のマイグレーションのみ実行するため、UpCommand を使用
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         // 出力をリセット

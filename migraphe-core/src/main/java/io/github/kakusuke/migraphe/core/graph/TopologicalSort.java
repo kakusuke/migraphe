@@ -67,6 +67,70 @@ public final class TopologicalSort {
     }
 
     /**
+     * 指定されたノードセットのみを含む正順実行プランを生成する。 対象ノードを依存関係順に実行する順序を返す。
+     *
+     * @param graph マイグレーショングラフ
+     * @param targetNodes 対象ノードIDのセット
+     * @return 正順実行プラン
+     */
+    public static ExecutionPlan createExecutionPlanFor(
+            MigrationGraph graph, Set<NodeId> targetNodes) {
+        if (targetNodes.isEmpty()) {
+            return new ExecutionPlan(List.of());
+        }
+
+        // 対象ノードのみでサブグラフを構築し、入次数を計算
+        Map<NodeId, Integer> inDegree = new HashMap<>();
+        for (NodeId nodeId : targetNodes) {
+            // 対象ノード内で、このノードが依存するノードの数
+            int count = 0;
+            for (NodeId dependency : graph.getDependencies(nodeId)) {
+                if (targetNodes.contains(dependency)) {
+                    count++;
+                }
+            }
+            inDegree.put(nodeId, count);
+        }
+
+        List<ExecutionLevel> levels = new ArrayList<>();
+        int currentLevel = 0;
+
+        while (!inDegree.isEmpty()) {
+            // 入次数が0のノード（依存関係が全て解決済み = 実行可能）
+            Set<MigrationNode> nodesAtCurrentLevel = new HashSet<>();
+
+            for (var entry : inDegree.entrySet()) {
+                if (entry.getValue() == 0) {
+                    graph.getNode(entry.getKey()).ifPresent(nodesAtCurrentLevel::add);
+                }
+            }
+
+            if (nodesAtCurrentLevel.isEmpty()) {
+                throw new IllegalStateException(
+                        "Cannot create execution plan: invalid dependencies");
+            }
+
+            levels.add(new ExecutionLevel(currentLevel, nodesAtCurrentLevel));
+
+            // 処理したノードを削除し、依存元の入次数を減らす
+            for (MigrationNode node : nodesAtCurrentLevel) {
+                inDegree.remove(node.id());
+
+                // このノードに依存しているノード（= 依存元）の入次数を減らす
+                for (NodeId dependent : graph.getDependents(node.id())) {
+                    if (inDegree.containsKey(dependent)) {
+                        inDegree.computeIfPresent(dependent, (k, v) -> v - 1);
+                    }
+                }
+            }
+
+            currentLevel++;
+        }
+
+        return new ExecutionPlan(levels);
+    }
+
+    /**
      * 指定されたノードセットのみを含む逆順実行プランを生成する。 ロールバック用に、依存されている側から先に実行される順序を返す。
      *
      * @param graph マイグレーショングラフ

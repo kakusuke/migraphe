@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.postgresql;
 
 import io.github.kakusuke.migraphe.api.common.Result;
+import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import java.sql.Connection;
@@ -10,7 +11,7 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /** PostgreSQL で UP マイグレーション（前進）を実行するタスク。 */
-public final class PostgreSQLUpTask implements Task {
+public final class PostgreSQLUpTask implements Task, SqlContentProvider {
 
     private final PostgreSQLEnvironment environment;
     private final String upSql;
@@ -134,5 +135,15 @@ public final class PostgreSQLUpTask implements Task {
     @Override
     public String description() {
         return autocommit ? "PostgreSQL UP migration (autocommit)" : "PostgreSQL UP migration";
+    }
+
+    /** UP SQL を取得する（失敗時の詳細表示用）。 */
+    public String upSql() {
+        return upSql;
+    }
+
+    @Override
+    public String sqlContent() {
+        return upSql;
     }
 }

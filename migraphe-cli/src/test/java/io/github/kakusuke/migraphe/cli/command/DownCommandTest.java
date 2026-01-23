@@ -82,7 +82,7 @@ class DownCommandTest {
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // まず UP を実行
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         // 出力をリセット
@@ -96,7 +96,7 @@ class DownCommandTest {
 
         // Then
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("Rollback complete");
     }
 
@@ -107,7 +107,7 @@ class DownCommandTest {
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // UP を実行
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -138,7 +138,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -150,7 +150,7 @@ class DownCommandTest {
 
         // Then: 002_add_index が先にロールバックされる
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
 
         // 002 が先に表示される（逆順）
         int indexOf002 = output.indexOf("002_add_index");
@@ -164,7 +164,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -175,7 +175,7 @@ class DownCommandTest {
         downCommand.execute();
 
         // Then
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("will be rolled back");
         assertThat(output).contains("Rollback includes:");
     }
@@ -186,7 +186,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -206,7 +206,7 @@ class DownCommandTest {
 
         // Then
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("Rollback cancelled");
     }
 
@@ -216,7 +216,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -228,7 +228,7 @@ class DownCommandTest {
 
         // Then: 確認プロンプトなしで実行される
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).doesNotContain("Proceed with rollback?");
     }
 
@@ -238,7 +238,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -250,7 +250,7 @@ class DownCommandTest {
 
         // Then: 実行されない
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("No changes made (dry run)");
 
         // インデックスがまだ存在することを確認
@@ -274,7 +274,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -285,7 +285,7 @@ class DownCommandTest {
         downCommand.execute();
 
         // Then
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("[DRY RUN]");
         assertThat(output).contains("would be rolled back");
     }
@@ -311,7 +311,7 @@ class DownCommandTest {
 
         // Then
         assertThat(exitCode).isEqualTo(1);
-        String errOutput = errStream.toString();
+        String errOutput = errStream.toString(StandardCharsets.UTF_8);
         assertThat(errOutput).contains("Target version not found");
     }
 
@@ -328,7 +328,7 @@ class DownCommandTest {
 
         // Then
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("No migrations to rollback");
     }
 
@@ -338,7 +338,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -349,7 +349,7 @@ class DownCommandTest {
 
         // Then
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("Rolling back all migrations");
         assertThat(output).contains("Rollback complete");
 
@@ -374,7 +374,7 @@ class DownCommandTest {
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        UpCommand upCommand = new UpCommand(context);
+        UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
 
         outputStream.reset();
@@ -384,7 +384,7 @@ class DownCommandTest {
         downCommand.execute();
 
         // Then
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("[DRY RUN]");
         assertThat(output).contains("would be rolled back");
         assertThat(output).contains("Rolling back all migrations");
@@ -398,7 +398,7 @@ class DownCommandTest {
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
         // 1回目の UP
-        UpCommand upCommand1 = new UpCommand(context);
+        UpCommand upCommand1 = new UpCommand(context, null, true, false);
         upCommand1.execute();
 
         outputStream.reset();
@@ -411,12 +411,12 @@ class DownCommandTest {
         outputStream.reset();
 
         // When: 再度 UP を実行
-        UpCommand upCommand2 = new UpCommand(context);
+        UpCommand upCommand2 = new UpCommand(context, null, true, false);
         int exitCode = upCommand2.execute();
 
         // Then: UP が成功し、テーブルが再作成される
         assertThat(exitCode).isEqualTo(0);
-        String output = outputStream.toString();
+        String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("Migration completed successfully");
         assertThat(output).doesNotContain("[SKIP]"); // スキップされずに実行される
 

@@ -150,6 +150,24 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-23 (Session 14)
+- **UpCommand Enhancement**: `migraphe up` コマンドの大幅改善
+  - **新規オプション**:
+    - `-y`: 確認プロンプトをスキップ
+    - `--dry-run`: 実行計画のみ表示
+    - `<id>`: 指定マイグレーションとその依存先のみを実行
+  - **グラフ表示**: 実行前にDAGグラフを表示（GraphRenderer 再利用）
+  - **色付き出力**: ANSI カラーで OK/SKIP/FAIL を区別
+  - **確認プロンプト**: 実行前にユーザー確認（-y でスキップ）
+  - **失敗時詳細表示**: 環境情報とSQL内容を行数付きで表示
+  - **新規クラス/インターフェース**:
+    - `AnsiColor`: ANSI カラーユーティリティ
+    - `SqlContentProvider`: SQL内容を提供するタスクのインターフェース
+  - **MigrationGraph**: `getAllDependencies()` 追加（getAllDependents の対称）
+  - **TopologicalSort**: `createExecutionPlanFor()` 追加（正順部分グラフプラン）
+  - **PostgreSQLUpTask**: `SqlContentProvider` 実装、`upSql()` getter 追加
+- Tests: 200+, 100% passing
+
 ### 2026-01-18 (Session 13)
 - **Down --all Option**: `migraphe down --all` で全マイグレーションをロールバック
   - `DownCommand.allMigrations` フラグ追加

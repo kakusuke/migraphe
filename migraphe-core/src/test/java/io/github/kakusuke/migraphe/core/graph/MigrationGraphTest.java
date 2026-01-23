@@ -43,7 +43,6 @@ class MigrationGraphTest {
         MigrationGraph graph = MigrationGraph.create();
         NodeId id1 = NodeId.of("node-1");
         NodeId id2 = NodeId.of("node-2");
-        NodeId id3 = NodeId.of("node-3");
 
         MigrationNode root1 = node("node-1").build();
         MigrationNode root2 = node("node-2").build();
@@ -130,7 +129,6 @@ class MigrationGraphTest {
         // given
         MigrationGraph graph = MigrationGraph.create();
         NodeId id1 = NodeId.of("node-1");
-        NodeId id2 = NodeId.of("node-2");
 
         MigrationNode node1 = node("node-1").build();
         MigrationNode node2 = node("node-2").dependencies(id1).build();
@@ -314,7 +312,6 @@ class MigrationGraphTest {
         MigrationGraph graph = MigrationGraph.create();
         NodeId id1 = NodeId.of("V001");
         NodeId id2 = NodeId.of("V002");
-        NodeId id3 = NodeId.of("V003");
         NodeId id4 = NodeId.of("V004");
 
         MigrationNode node1 = node("V001").build();
@@ -332,5 +329,95 @@ class MigrationGraphTest {
 
         // then: V002 に依存するのは V004 のみ（V003 は含まない）
         assertThat(dependentsOfV002).containsExactly(id4);
+    }
+
+    @Test
+    void shouldGetAllDependenciesRecursively() {
+        // given: V001 <- V002 <- V003 <- V004
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId id1 = NodeId.of("V001");
+        NodeId id2 = NodeId.of("V002");
+        NodeId id3 = NodeId.of("V003");
+        NodeId id4 = NodeId.of("V004");
+
+        MigrationNode node1 = node("V001").build();
+        MigrationNode node2 = node("V002").dependencies(id1).build();
+        MigrationNode node3 = node("V003").dependencies(id2).build();
+        MigrationNode node4 = node("V004").dependencies(id3).build();
+
+        graph.addNode(node1);
+        graph.addNode(node2);
+        graph.addNode(node3);
+        graph.addNode(node4);
+
+        // when: V004 が依存する全ノード
+        Set<NodeId> allDependencies = graph.getAllDependencies(id4);
+
+        // then: V004 が依存するのは V001, V002, V003
+        assertThat(allDependencies).containsExactlyInAnyOrder(id1, id2, id3);
+    }
+
+    @Test
+    void shouldGetAllDependenciesForMiddleNode() {
+        // given: V001 <- V002 <- V003
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId id1 = NodeId.of("V001");
+        NodeId id2 = NodeId.of("V002");
+
+        MigrationNode node1 = node("V001").build();
+        MigrationNode node2 = node("V002").dependencies(id1).build();
+        MigrationNode node3 = node("V003").dependencies(id2).build();
+
+        graph.addNode(node1);
+        graph.addNode(node2);
+        graph.addNode(node3);
+
+        // when: V002 が依存する全ノード
+        Set<NodeId> allDependencies = graph.getAllDependencies(id2);
+
+        // then: V002 が依存するのは V001 のみ
+        assertThat(allDependencies).containsExactly(id1);
+    }
+
+    @Test
+    void shouldReturnEmptySetWhenNoDependencies() {
+        // given
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId id1 = NodeId.of("V001");
+
+        MigrationNode node1 = node("V001").build();
+        graph.addNode(node1);
+
+        // when: V001 が依存する全ノード（ルートノードなので依存なし）
+        Set<NodeId> allDependencies = graph.getAllDependencies(id1);
+
+        // then
+        assertThat(allDependencies).isEmpty();
+    }
+
+    @Test
+    void shouldGetAllDependenciesWithDiamondDependencies() {
+        // given: V001 <- V002, V001 <- V003, V002+V003 <- V004 (ダイヤモンド)
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId id1 = NodeId.of("V001");
+        NodeId id2 = NodeId.of("V002");
+        NodeId id3 = NodeId.of("V003");
+        NodeId id4 = NodeId.of("V004");
+
+        MigrationNode node1 = node("V001").build();
+        MigrationNode node2 = node("V002").dependencies(id1).build();
+        MigrationNode node3 = node("V003").dependencies(id1).build();
+        MigrationNode node4 = node("V004").dependencies(id2, id3).build();
+
+        graph.addNode(node1);
+        graph.addNode(node2);
+        graph.addNode(node3);
+        graph.addNode(node4);
+
+        // when: V004 が依存する全ノード
+        Set<NodeId> allDependencies = graph.getAllDependencies(id4);
+
+        // then: V004 は V001, V002, V003 に依存（V001 は重複しない）
+        assertThat(allDependencies).containsExactlyInAnyOrder(id1, id2, id3);
     }
 }

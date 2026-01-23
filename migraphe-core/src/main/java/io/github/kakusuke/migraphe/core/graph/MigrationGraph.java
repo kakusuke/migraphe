@@ -81,6 +81,21 @@ public final class MigrationGraph {
         }
     }
 
+    /** 指定されたノードが直接/間接的に依存する全ノードを取得（再帰） */
+    public Set<NodeId> getAllDependencies(NodeId nodeId) {
+        Set<NodeId> result = new HashSet<>();
+        collectDependencies(nodeId, result);
+        return result;
+    }
+
+    private void collectDependencies(NodeId nodeId, Set<NodeId> collected) {
+        for (NodeId dependency : getDependencies(nodeId)) {
+            if (collected.add(dependency)) {
+                collectDependencies(dependency, collected);
+            }
+        }
+    }
+
     /** ノードをIDで取得 */
     public Optional<MigrationNode> getNode(NodeId nodeId) {
         return Optional.ofNullable(nodes.get(nodeId));

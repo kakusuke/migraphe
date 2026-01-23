@@ -336,37 +336,92 @@ java -jar migraphe-cli-all.jar status
 Migration Status
 ================
 
-[ ] db1/001_create_users - Create users table
-[ ] db1/002_create_posts - Create posts table
-[✓] db1/003_create_comments - Create comments table
+● [ ] db1/001_create_users - Create users table
+│
+● [ ] db1/002_create_posts - Create posts table
+│
+● [✓] db1/003_create_comments - Create comments table (58ms, 2026-01-23 10:30:00)
 
-Summary:
-  Total: 3
-  Executed: 1
-  Pending: 2
+Summary: Total: 3 | Executed: 1 | Pending: 2
 ```
 
 ### マイグレーションの実行
 
 ```bash
+# 全ての保留中のマイグレーションを実行
 java -jar migraphe-cli-all.jar up
+
+# 確認プロンプトをスキップ
+java -jar migraphe-cli-all.jar up -y
+
+# 実行計画のみ表示（実際には実行しない）
+java -jar migraphe-cli-all.jar up --dry-run
+
+# 特定のマイグレーションまで実行（指定IDとその依存先のみ）
+java -jar migraphe-cli-all.jar up <id>
+
+# オプションの組み合わせ
+java -jar migraphe-cli-all.jar up -y --dry-run db1/002_create_posts
 ```
 
-**出力:**
+**出力例:**
 ```
+Migrations to execute:
+
+● [ ] db1/001_create_users - Create users table
+│
+● [ ] db1/002_create_posts - Create posts table
+
+2 migrations will be executed.
+
+Proceed? [y/N]: y
+
 Executing migrations...
 
-Execution Plan:
-  Levels: 2
-  Total Tasks: 2
-
-Level 0:
-  [RUN]  Create users table ... OK (45ms)
-
-Level 1:
-  [RUN]  Create posts table ... OK (32ms)
+[OK]   Create users table (45ms)
+[OK]   Create posts table (32ms)
 
 Migration completed successfully. 2 migrations executed.
+```
+
+### コマンドオプション
+
+| オプション | 説明 |
+|-----------|------|
+| `<id>` | 指定したマイグレーションとその依存先のみを実行 |
+| `-y` | 確認プロンプトをスキップ |
+| `--dry-run` | 実行計画のみ表示し、実際には実行しない |
+
+### 色付き出力
+
+マイグレーション結果は色付きで表示されます:
+
+- **[OK]** (緑): マイグレーション成功
+- **[SKIP]** (黄): 既に実行済みでスキップ
+- **[FAIL]** (赤): マイグレーション失敗
+
+色出力は `NO_COLOR` 環境変数を設定することで無効にできます。
+
+### 失敗時の詳細表示
+
+マイグレーションが失敗した場合、詳細情報が表示されます:
+
+```
+[FAIL] Create posts table (12ms)
+
+=== MIGRATION FAILED ===
+
+Environment:
+  Target: db1
+
+SQL Content:
+   1 | CREATE TABLE posts (
+   2 |   id SERIAL PRIMARY KEY,
+   3 |   title VARCHAR(200) NOT NULL
+   4 | );
+
+Error:
+  relation "posts" already exists
 ```
 
 ### 環境固有の実行

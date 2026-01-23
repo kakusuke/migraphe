@@ -53,6 +53,7 @@ public class MigrationNodeFactory {
         Set<NodeId> dependencies = resolveDependencies(taskDef);
 
         // プラグインの MigrationNodeProvider で MigrationNode を生成
+        @SuppressWarnings("unchecked")
         TaskDefinition<Object> typedTaskDef = (TaskDefinition<Object>) taskDef;
         return typedPlugin
                 .migrationNodeProvider()
