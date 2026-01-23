@@ -119,14 +119,14 @@ class StatusCommandTest {
         // Then: 成功
         assertThat(exitCode).isEqualTo(0);
 
-        // 出力に実行日時と所要時間が含まれる
+        // 出力に実行日時と所要時間が同じ行に含まれる
         String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("[✓]");
-        assertThat(output).contains("Executed:");
-        // 日付形式のパターン（yyyy-MM-dd HH:mm:ss）
-        assertThat(output).containsPattern("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}");
-        // 所要時間（ms or s）
-        assertThat(output).containsPattern("\\(\\d+ms\\)|\\(\\d+\\.\\d+s\\)");
+        // 実行情報が同じ行にインラインで表示される（例: (58ms, 2026-01-18 22:01:22)）
+        assertThat(output)
+                .containsPattern(
+                        "\\(\\d+ms, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\)"
+                                + "|\\(\\d+\\.\\d+s, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\)");
     }
 
     @Test

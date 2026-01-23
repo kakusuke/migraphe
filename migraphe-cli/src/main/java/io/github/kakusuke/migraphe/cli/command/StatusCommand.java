@@ -56,36 +56,40 @@ public class StatusCommand implements Command {
                     System.out.println(info.mergeLine());
                 }
 
-                // ノード行を表示
+                // ノード行を表示（実行情報も同じ行に）
                 String status = executed ? "[✓]" : "[ ]";
-                System.out.println(
-                        info.nodeLine()
-                                + " "
-                                + status
-                                + " "
-                                + node.id().value()
-                                + " - "
-                                + node.name());
-
-                // 詳細行のプレフィックス（接続線に合わせる）
-                String detailPrefix = info.connectorLine() != null ? info.connectorLine() : "  ";
+                StringBuilder nodeLineBuilder = new StringBuilder();
+                nodeLineBuilder
+                        .append(info.nodeLine())
+                        .append(" ")
+                        .append(status)
+                        .append(" ")
+                        .append(node.id().value())
+                        .append(" - ")
+                        .append(node.name());
 
                 if (executed) {
                     executedCount++;
-                    // 実行済みノードには実行日時と所要時間を表示
+                    // 実行済みノードには実行日時と所要時間を同じ行に表示
                     ExecutionRecord record =
                             historyRepo.findLatestRecord(node.id(), node.environment().id());
                     if (record != null) {
-                        System.out.println(
-                                detailPrefix
-                                        + "   Executed: "
-                                        + formatDateTime(record.executedAt())
-                                        + " ("
-                                        + formatDuration(record.durationMs())
-                                        + ")");
+                        nodeLineBuilder
+                                .append(" (")
+                                .append(formatDuration(record.durationMs()))
+                                .append(", ")
+                                .append(formatDateTime(record.executedAt()))
+                                .append(")");
                     }
                 } else {
                     pendingCount++;
+                }
+
+                System.out.println(nodeLineBuilder);
+
+                // 分岐行を表示（複数の子がある場合）
+                if (info.branchLine() != null) {
+                    System.out.println(info.branchLine());
                 }
 
                 // 接続線を表示
