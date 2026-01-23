@@ -2,13 +2,22 @@ package io.github.kakusuke.migraphe.cli.command;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
+import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.cli.ExecutionContext;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 
 /** マイグレーションの実行状況を表示するコマンド。 */
 public class StatusCommand implements Command {
+
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private final ExecutionContext context;
 
@@ -27,28 +36,75 @@ public class StatusCommand implements Command {
             HistoryRepository historyRepo = getHistoryRepository();
             historyRepo.initialize();
 
-            // 全ノードの状態を表示
+            // トポロジカル順序のノードリスト（context.nodes() は既にソート済み）
+            List<MigrationNode> sortedNodes = new ArrayList<>(context.nodes());
+
+            // グラフをレンダリング
+            GraphRenderer renderer = new GraphRenderer(sortedNodes);
+            List<GraphRenderer.NodeGraphInfo> graphInfos = renderer.render();
+
             int executedCount = 0;
             int pendingCount = 0;
 
-            for (MigrationNode node : context.nodes()) {
+            for (int i = 0; i < graphInfos.size(); i++) {
+                GraphRenderer.NodeGraphInfo info = graphInfos.get(i);
+                MigrationNode node = info.node();
                 boolean executed = historyRepo.wasExecuted(node.id(), node.environment().id());
 
+                // マージ行があれば表示
+                if (info.mergeLine() != null) {
+                    System.out.println(info.mergeLine());
+                }
+
+                // ノード行を表示
                 String status = executed ? "[✓]" : "[ ]";
-                System.out.println(status + " " + node.id().value() + " - " + node.name());
+                System.out.println(
+                        info.nodeLine()
+                                + " "
+                                + status
+                                + " "
+                                + node.id().value()
+                                + " - "
+                                + node.name());
+
+                // 詳細行のプレフィックス（接続線に合わせる）
+                String detailPrefix = info.connectorLine() != null ? info.connectorLine() : "  ";
 
                 if (executed) {
                     executedCount++;
+                    // 実行済みノードには実行日時と所要時間を表示
+                    ExecutionRecord record =
+                            historyRepo.findLatestRecord(node.id(), node.environment().id());
+                    if (record != null) {
+                        System.out.println(
+                                detailPrefix
+                                        + "   Executed: "
+                                        + formatDateTime(record.executedAt())
+                                        + " ("
+                                        + formatDuration(record.durationMs())
+                                        + ")");
+                    }
                 } else {
                     pendingCount++;
+                }
+
+                // 接続線を表示
+                if (info.connectorLine() != null) {
+                    System.out.println(info.connectorLine());
                 }
             }
 
             System.out.println();
-            System.out.println("Summary:");
-            System.out.println("  Total: " + (executedCount + pendingCount));
-            System.out.println("  Executed: " + executedCount);
-            System.out.println("  Pending: " + pendingCount);
+
+            // サマリー
+            int total = executedCount + pendingCount;
+            System.out.println(
+                    "Summary: Total: "
+                            + total
+                            + " | Executed: "
+                            + executedCount
+                            + " | Pending: "
+                            + pendingCount);
 
             return 0; // 成功
 
@@ -57,6 +113,19 @@ public class StatusCommand implements Command {
             e.printStackTrace();
             return 1; // エラー終了
         }
+    }
+
+    /** 日時をフォーマットする。 */
+    private String formatDateTime(Instant instant) {
+        return DATE_TIME_FORMATTER.format(instant);
+    }
+
+    /** 所要時間をフォーマットする。 */
+    private String formatDuration(long durationMs) {
+        if (durationMs >= 1000) {
+            return String.format("%.1fs", durationMs / 1000.0);
+        }
+        return durationMs + "ms";
     }
 
     /** HistoryRepository をプラグイン経由で取得する。 */

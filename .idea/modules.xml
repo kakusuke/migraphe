@@ -4,11 +4,8 @@
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/migraphe-api/migraphe.migraphe-api.main.iml" filepath="$PROJECT_DIR$/.idea/modules/migraphe-api/migraphe.migraphe-api.main.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/migraphe-cli/migraphe.migraphe-cli.main.iml" filepath="$PROJECT_DIR$/.idea/modules/migraphe-cli/migraphe.migraphe-cli.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/migraphe-cli/migraphe.migraphe-cli.test.iml" filepath="$PROJECT_DIR$/.idea/modules/migraphe-cli/migraphe.migraphe-cli.test.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/migraphe-core/migraphe.migraphe-core.main.iml" filepath="$PROJECT_DIR$/.idea/modules/migraphe-core/migraphe.migraphe-core.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/migraphe-core/migraphe.migraphe-core.test.iml" filepath="$PROJECT_DIR$/.idea/modules/migraphe-core/migraphe.migraphe-core.test.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/migraphe-plugin-postgresql/migraphe.migraphe-plugin-postgresql.main.iml" filepath="$PROJECT_DIR$/.idea/modules/migraphe-plugin-postgresql/migraphe.migraphe-plugin-postgresql.main.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/migraphe-plugin-postgresql/migraphe.migraphe-plugin-postgresql.test.iml" filepath="$PROJECT_DIR$/.idea/modules/migraphe-plugin-postgresql/migraphe.migraphe-plugin-postgresql.test.iml" />
     </modules>
   </component>
 </project>
