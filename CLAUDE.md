@@ -5,8 +5,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 12 (Refactoring) - COMPLETE
-**Tests**: 177+, 100% passing
+**Current Phase**: 13 (Validate Command) - COMPLETE
+**Tests**: 159+, 100% passing
 
 ## Module Structure
 
@@ -75,7 +75,7 @@ project/
 └── environments/*.yaml  # Environment-specific overrides
 ```
 
-Commands: `migraphe status`, `migraphe up`
+Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`
 
 ## Instructions for Claude
 
@@ -122,7 +122,7 @@ Update when code changes:
 | 12-3 | NullAway compile-time checks enabled | ✅ Complete |
 
 ### Future Phases
-- `history`, `validate` commands
+- `history` command
 - GraalVM Native Image packaging
 - Gradle plugin
 - Additional database plugins (MySQL, MongoDB)
@@ -150,59 +150,36 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-23 (Session 15)
+- **Validate Command Implementation**: `migraphe validate` コマンドを実装
+  - **オフライン検証**: DB接続なしで設定ファイルを検証
+  - **エラー蓄積**: 全エラーを蓄積して一括表示（fail-fast しない）
+  - **検証項目**:
+    - `migraphe.yaml` 存在確認
+    - ターゲット設定の必須フィールド（`type`）
+    - タスク設定の必須フィールド（`name`, `target`, `up`）
+    - 依存関係の参照整合性
+    - 循環依存検出（DFS）
+  - **新規クラス**:
+    - `ConfigValidator`: 検証ロジック
+    - `ValidateCommand`: CLI コマンド
+  - **PluginRegistry**: `hasPlugin()` メソッド追加
+  - **Main.java**: validate コマンド登録（ExecutionContext なしで実行）
+  - **ドキュメント**: USER_GUIDE.md / USER_GUIDE.ja.md に「設定の検証」セクション追加
+- Tests: 159+, 100% passing
+
 ### 2026-01-23 (Session 14)
 - **UpCommand Enhancement**: `migraphe up` コマンドの大幅改善
-  - **新規オプション**:
-    - `-y`: 確認プロンプトをスキップ
-    - `--dry-run`: 実行計画のみ表示
-    - `<id>`: 指定マイグレーションとその依存先のみを実行
-  - **グラフ表示**: 実行前にDAGグラフを表示（GraphRenderer 再利用）
-  - **色付き出力**: ANSI カラーで OK/SKIP/FAIL を区別
-  - **確認プロンプト**: 実行前にユーザー確認（-y でスキップ）
-  - **失敗時詳細表示**: 環境情報とSQL内容を行数付きで表示
-  - **新規クラス/インターフェース**:
-    - `AnsiColor`: ANSI カラーユーティリティ
-    - `SqlContentProvider`: SQL内容を提供するタスクのインターフェース
-  - **MigrationGraph**: `getAllDependencies()` 追加（getAllDependents の対称）
-  - **TopologicalSort**: `createExecutionPlanFor()` 追加（正順部分グラフプラン）
-  - **PostgreSQLUpTask**: `SqlContentProvider` 実装、`upSql()` getter 追加
+  - 新規オプション: `-y`, `--dry-run`, `<id>`
+  - グラフ表示、色付き出力、確認プロンプト、失敗時詳細表示
+  - 新規クラス: `AnsiColor`, `SqlContentProvider`
 - Tests: 200+, 100% passing
 
 ### 2026-01-18 (Session 13)
 - **Down --all Option**: `migraphe down --all` で全マイグレーションをロールバック
-  - `DownCommand.allMigrations` フラグ追加
-  - `Main.java`: `--all` オプションのパース追加
-  - テスト追加: `shouldRollbackAllMigrationsWithAllFlag`, `shouldDisplayAllMigrationsInDryRunWithAllFlag`
-  - ドキュメント更新: `--all` オプションの使用方法を追加
 - Tests: 200+, 100% passing
-
-### 2026-01-16 (Session 12)
-- **Down Command Implementation**: `migraphe down <version>` コマンドを実装
-  - `MigrationGraph.getAllDependents()`: 再帰的に全依存ノードを取得
-  - `TopologicalSort.createReverseExecutionPlanFor()`: 部分グラフの逆順実行プラン生成
-  - `DownCommand`: 指定バージョンに依存するノードのみをロールバック
-  - オプション: `-y` (確認スキップ), `--dry-run` (実行計画のみ表示)
-  - 確認プロンプト: ロールバック対象一覧を表示し、ユーザー確認を要求
-  - `Main.java`: down コマンドの引数パースと登録
-  - テスト追加: MigrationGraphTest, TopologicalSortTest, DownCommandTest
-  - ドキュメント更新: USER_GUIDE.md / USER_GUIDE.ja.md に「ロールバック（down）」セクション追加
-- Tests: 200+, 100% passing
-
-### 2026-01-16 (Session 11)
-- **Autocommit Mode**: PostgreSQL プラグインに autocommit オプション追加
-  - `SqlTaskDefinition.autocommit()`: YAML で `autocommit: true` をパース
-  - `PostgreSQLMigrationNode`: autocommit フィールド + Builder メソッド
-  - `PostgreSQLUpTask`/`PostgreSQLDownTask`: autocommit モード分岐実装
-  - 統合テスト追加: shouldExecuteUpMigrationWithAutocommit, shouldExecuteDownMigrationWithAutocommit
-- Tests: 183, 100% passing
-
-### 2026-01-13 (Session 10)
-- **Plugin Dynamic Loading**: migraphe-cli から migraphe-plugin-postgresql 依存を分離
-  - 本番は `./plugins/` ディレクトリから JAR を動的ロード
-  - テストはクラスパスから ServiceLoader でロード
-- Tests: 180, 100% passing
 
 ---
 
-**Last Updated**: 2026-01-16
-**Down Command Complete** - Next: history command, validate command, Native Image, etc.
+**Last Updated**: 2026-01-23
+**Validate Command Complete** - Next: history command, Native Image, etc.

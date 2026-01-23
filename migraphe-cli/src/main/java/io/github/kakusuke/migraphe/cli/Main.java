@@ -5,6 +5,7 @@ import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
+import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -30,6 +31,14 @@ public class Main {
 
             // PluginRegistry を初期化
             PluginRegistry pluginRegistry = initializePluginRegistry(baseDir);
+
+            // validate コマンドは ExecutionContext を必要としない（オフライン検証）
+            if ("validate".equals(commandName)) {
+                ValidateCommand validateCommand = new ValidateCommand(baseDir, pluginRegistry);
+                int exitCode = validateCommand.execute();
+                System.exit(exitCode);
+                return;
+            }
 
             // ExecutionContext をロード
             ExecutionContext context = ExecutionContext.load(baseDir, pluginRegistry);
@@ -136,6 +145,8 @@ public class Main {
         System.out.println("  up [-y] [--dry-run] [<id>]          Execute migrations");
         System.out.println("  down [-y] [--dry-run] [--all | <v>] Rollback migrations");
         System.out.println("  status                              Show migration status");
+        System.out.println(
+                "  validate                            Validate configuration (offline)");
         System.out.println();
         System.out.println("Up options:");
         System.out.println("  <id>        Execute migrations up to and including <id>");

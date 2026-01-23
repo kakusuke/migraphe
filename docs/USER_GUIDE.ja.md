@@ -11,9 +11,10 @@
 5. [マイグレーションの作成](#マイグレーションの作成)
 6. [マイグレーションの実行](#マイグレーションの実行)
 7. [ロールバック（down）](#ロールバックdown)
-8. [環境管理](#環境管理)
-9. [高度な機能](#高度な機能)
-10. [トラブルシューティング](#トラブルシューティング)
+8. [設定の検証（validate）](#設定の検証validate)
+9. [環境管理](#環境管理)
+10. [高度な機能](#高度な機能)
+11. [トラブルシューティング](#トラブルシューティング)
 
 ## はじめに
 
@@ -546,6 +547,73 @@ No changes made (dry run).
 2. **依存関係順で実行**: 依存されている側のマイグレーションから先にロールバックされます
 3. **履歴に記録**: ロールバックも履歴テーブルに記録されます（direction: DOWN）
 4. **実行済みのみ対象**: 履歴で実行済みとなっているマイグレーションのみがロールバック対象になります
+
+## 設定の検証（validate）
+
+`validate` コマンドは、設定ファイルをオフラインで検証します。データベース接続なしで全エラーを蓄積して一括表示します。
+
+### 基本的な使い方
+
+```bash
+java -jar migraphe-cli-all.jar validate
+```
+
+### 検証項目
+
+1. **プロジェクト設定**: `migraphe.yaml` の存在と妥当性
+2. **ターゲット設定**: `targets/*.yaml` の必須フィールド（`type` など）
+3. **タスク設定**: `tasks/**/*.yaml` の必須フィールド（`name`, `target`, `up` など）
+4. **依存関係**: `dependencies` が存在するタスクIDを参照しているか
+5. **グラフ構造**: 循環依存（サイクル）がないか
+
+### 成功時の出力
+
+```
+Validation
+==========
+
+Checking project configuration... OK
+Checking targets (2 files)... OK
+Checking tasks (5 files)... OK
+Checking dependencies... OK
+Checking graph structure... OK
+
+Validation successful.
+```
+
+### エラー時の出力
+
+```
+Validation
+==========
+
+Checking project configuration... OK
+Checking targets (2 files)... FAIL
+  × targets/test-db.yaml: Missing required property 'type'
+Checking tasks (5 files)... FAIL
+  × tasks/db1/create_users.yaml: Missing required property 'name'
+  × tasks/db1/add_index.yaml: Target 'nonexistent' not found
+Checking dependencies... FAIL
+  × tasks/db1/add_index.yaml: Dependency 'db1/missing' not found
+Checking graph structure... FAIL
+  × Circular dependency detected: db1/a -> db1/b -> db1/a
+
+Validation failed with 5 errors.
+```
+
+### 使用場面
+
+- CI/CDパイプラインでのプレチェック
+- プルリクエストの検証
+- 設定ファイルのデバッグ
+- 本番デプロイ前の確認
+
+### 終了コード
+
+| 終了コード | 意味 |
+|-----------|------|
+| 0 | 検証成功（エラーなし） |
+| 1 | 検証失敗（1つ以上のエラー） |
 
 ## 環境管理
 

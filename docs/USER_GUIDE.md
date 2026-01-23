@@ -11,9 +11,10 @@
 5. [Writing Migrations](#writing-migrations)
 6. [Running Migrations](#running-migrations)
 7. [Rollback (down)](#rollback-down)
-8. [Environment Management](#environment-management)
-9. [Advanced Features](#advanced-features)
-10. [Troubleshooting](#troubleshooting)
+8. [Configuration Validation (validate)](#configuration-validation-validate)
+9. [Environment Management](#environment-management)
+10. [Advanced Features](#advanced-features)
+11. [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -546,6 +547,73 @@ No changes made (dry run).
 2. **Dependency order**: Migrations that are depended upon are rolled back first
 3. **Recorded in history**: Rollbacks are recorded in the history table (direction: DOWN)
 4. **Only executed migrations**: Only migrations marked as executed in history are rolled back
+
+## Configuration Validation (validate)
+
+The `validate` command validates configuration files offline. It checks all files without connecting to the database and displays all errors at once.
+
+### Basic Usage
+
+```bash
+java -jar migraphe-cli-all.jar validate
+```
+
+### What Gets Validated
+
+1. **Project configuration**: Existence and validity of `migraphe.yaml`
+2. **Target configuration**: Required fields in `targets/*.yaml` (e.g., `type`)
+3. **Task configuration**: Required fields in `tasks/**/*.yaml` (e.g., `name`, `target`, `up`)
+4. **Dependencies**: Whether `dependencies` reference existing task IDs
+5. **Graph structure**: No circular dependencies (cycles)
+
+### Success Output
+
+```
+Validation
+==========
+
+Checking project configuration... OK
+Checking targets (2 files)... OK
+Checking tasks (5 files)... OK
+Checking dependencies... OK
+Checking graph structure... OK
+
+Validation successful.
+```
+
+### Error Output
+
+```
+Validation
+==========
+
+Checking project configuration... OK
+Checking targets (2 files)... FAIL
+  × targets/test-db.yaml: Missing required property 'type'
+Checking tasks (5 files)... FAIL
+  × tasks/db1/create_users.yaml: Missing required property 'name'
+  × tasks/db1/add_index.yaml: Target 'nonexistent' not found
+Checking dependencies... FAIL
+  × tasks/db1/add_index.yaml: Dependency 'db1/missing' not found
+Checking graph structure... FAIL
+  × Circular dependency detected: db1/a -> db1/b -> db1/a
+
+Validation failed with 5 errors.
+```
+
+### Use Cases
+
+- Pre-check in CI/CD pipelines
+- Pull request validation
+- Configuration file debugging
+- Pre-production deployment verification
+
+### Exit Codes
+
+| Exit Code | Meaning |
+|-----------|---------|
+| 0 | Validation successful (no errors) |
+| 1 | Validation failed (one or more errors) |
 
 ## Environment Management
 

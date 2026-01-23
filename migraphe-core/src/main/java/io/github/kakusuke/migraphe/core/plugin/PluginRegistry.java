@@ -130,6 +130,16 @@ public final class PluginRegistry {
     }
 
     /**
+     * 指定された型のプラグインが登録されているか確認する。
+     *
+     * @param type プラグインの型識別子
+     * @return 登録されている場合は true
+     */
+    public boolean hasPlugin(String type) {
+        return plugins.containsKey(type);
+    }
+
+    /**
      * 指定された型のプラグインを取得する。
      *
      * @param type プラグインの型識別子
