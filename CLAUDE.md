@@ -5,7 +5,7 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 13 (Validate Command) - COMPLETE
+**Current Phase**: 14 (Core Logic Extraction) - COMPLETE
 **Tests**: 159+, 100% passing
 
 ## Module Structure
@@ -32,11 +32,13 @@ io.github.kakusuke.migraphe.api/
 ├── graph/          # MigrationNode (interface), NodeId
 ├── task/           # Task, TaskResult, ExecutionDirection
 ├── history/        # HistoryRepository (interface), ExecutionRecord, ExecutionStatus
+├── execution/      # ExecutionListener, ExecutionPlanInfo, ExecutionSummary
 ├── common/         # Result, ValidationResult
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
 
 io.github.kakusuke.migraphe.core/
-├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, GraphVisualizer
+├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, ExecutionGraphView, NodeLineInfo
+├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult
 ├── history/        # InMemoryHistoryRepository
 ├── config/         # ProjectConfig, TargetConfig, TaskConfig (@ConfigMapping)
 ├── plugin/         # PluginRegistry, PluginLoadException
@@ -49,7 +51,8 @@ io.github.kakusuke.migraphe.postgresql/
 
 io.github.kakusuke.migraphe.cli/
 ├── Main.java, ExecutionContext.java
-├── command/        # Command, UpCommand, StatusCommand
+├── command/        # Command, UpCommand, DownCommand, StatusCommand, ValidateCommand
+├── listener/       # ConsoleExecutionListener
 ├── config/         # ConfigLoader, MultiFileYamlConfigSource, YamlFileScanner, TaskIdGenerator
 └── factory/        # EnvironmentFactory, MigrationNodeFactory (generic, uses PluginRegistry)
 ```
@@ -64,6 +67,7 @@ io.github.kakusuke.migraphe.cli/
 6. **Multi-file Configuration**: `migraphe.yaml`, `targets/*.yaml`, `tasks/**/*.yaml`, `environments/*.yaml`
 7. **Auto Task ID**: Generated from file path (e.g., `tasks/db1/create.yaml` → `"db1/create"`)
 8. **Plugin System (Phase 11)**: ServiceLoader + URLClassLoader for runtime loading
+9. **Listener Pattern (Phase 14)**: Business logic (Core) separated from presentation (CLI/Gradle). `ExecutionListener` for progress notifications, `ExecutionGraphView` for graph rendering with `toString()`
 
 ## CLI Project Structure
 
@@ -120,11 +124,13 @@ Update when code changes:
 | 12-1 | EnvironmentDefinition generification | ✅ Complete |
 | 12-2 | @Nullable introduction (Optional removal) | ✅ Complete |
 | 12-3 | NullAway compile-time checks enabled | ✅ Complete |
+| 13 | Validate command | ✅ Complete |
+| 14 | Core logic extraction for Gradle plugin | ✅ Complete |
 
 ### Future Phases
 - `history` command
 - GraalVM Native Image packaging
-- Gradle plugin
+- Gradle plugin (can now use Core APIs)
 - Additional database plugins (MySQL, MongoDB)
 - Virtual Threads for parallel execution
 
@@ -150,36 +156,32 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-01-23 (Session 15)
-- **Validate Command Implementation**: `migraphe validate` コマンドを実装
-  - **オフライン検証**: DB接続なしで設定ファイルを検証
-  - **エラー蓄積**: 全エラーを蓄積して一括表示（fail-fast しない）
-  - **検証項目**:
-    - `migraphe.yaml` 存在確認
-    - ターゲット設定の必須フィールド（`type`）
-    - タスク設定の必須フィールド（`name`, `target`, `up`）
-    - 依存関係の参照整合性
-    - 循環依存検出（DFS）
-  - **新規クラス**:
-    - `ConfigValidator`: 検証ロジック
-    - `ValidateCommand`: CLI コマンド
-  - **PluginRegistry**: `hasPlugin()` メソッド追加
-  - **Main.java**: validate コマンド登録（ExecutionContext なしで実行）
-  - **ドキュメント**: USER_GUIDE.md / USER_GUIDE.ja.md に「設定の検証」セクション追加
+### 2026-01-26 (Session 16)
+- **Core Logic Extraction**: CLI のビジネスロジックを Core に移動（Gradle plugin 準備）
+  - **Listener パターン導入**: 実行ロジック (Core) とプレゼンテーション (CLI/Gradle) の分離
+  - **API モジュール追加**:
+    - `ExecutionListener`: 進捗通知インターフェース
+    - `ExecutionPlanInfo`, `ExecutionSummary`: 実行プラン・サマリー record
+  - **Core モジュール追加**:
+    - `MigrationExecutor`: UP マイグレーション実行サービス
+    - `RollbackExecutor`: DOWN マイグレーション実行サービス
+    - `StatusService`: ステータス取得サービス
+    - `ExecutionResult`: 実行結果 record
+    - `ExecutionGraphView`: git log --graph 風 ASCII グラフ表示 (toString() でプレーンテキスト)
+    - `NodeLineInfo`: 各ノードの行情報 record
+  - **CLI モジュール追加**:
+    - `ConsoleExecutionListener`: ANSI 色付き出力
+  - **リファクタリング**:
+    - `UpCommand`: MigrationExecutor + ConsoleExecutionListener 使用 (381行→219行)
+    - `DownCommand`: RollbackExecutor + ConsoleExecutionListener 使用 (401行→228行)
+  - **削除**: 旧 `GraphRenderer` (Core の `ExecutionGraphView` に移動)
 - Tests: 159+, 100% passing
 
-### 2026-01-23 (Session 14)
-- **UpCommand Enhancement**: `migraphe up` コマンドの大幅改善
-  - 新規オプション: `-y`, `--dry-run`, `<id>`
-  - グラフ表示、色付き出力、確認プロンプト、失敗時詳細表示
-  - 新規クラス: `AnsiColor`, `SqlContentProvider`
-- Tests: 200+, 100% passing
-
-### 2026-01-18 (Session 13)
-- **Down --all Option**: `migraphe down --all` で全マイグレーションをロールバック
-- Tests: 200+, 100% passing
+### 2026-01-23 (Session 15)
+- **Validate Command Implementation**: `migraphe validate` コマンド実装
+- Tests: 159+, 100% passing
 
 ---
 
-**Last Updated**: 2026-01-23
-**Validate Command Complete** - Next: history command, Native Image, etc.
+**Last Updated**: 2026-01-26
+**Core Logic Extraction Complete** - Next: Gradle plugin, history command, Native Image
