@@ -146,6 +146,277 @@ class ExecutionGraphViewTest {
     }
 
     @Nested
+    @DisplayName("複雑な依存関係")
+    class ComplexDependencies {
+
+        @Test
+        @DisplayName("ダイヤモンド依存: A -> B,C -> D")
+        void shouldRenderDiamond() {
+            // Given: A -> B, A -> C, B -> D, C -> D
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD =
+                    node("d").name("Node D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC, nodeD);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then
+            assertThat(view.lines()).hasSize(4);
+            // 期待出力（スナップショット）
+            // 注: C の後のコネクタラインは D がマージするまでアクティブ
+            String expected =
+                    """
+                    ● [ ] a - Node A
+                    ├─┐
+                    │ │
+                    ● │ [ ] b - Node B
+                    │ │
+                    │ ● [ ] c - Node C
+                    │ │
+                    ├─┘
+                    ● [ ] d - Node D
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("並列独立チェーン: A->B, C->D")
+        void shouldRenderParallelChains() {
+            // Given: A -> B, C -> D (互いに独立)
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").build();
+            MigrationNode nodeD = node("d").name("Node D").dependencies(NodeId.of("c")).build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC, nodeD);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then - 独立チェーンは別々の列に表示
+            assertThat(view.lines()).hasSize(4);
+            String expected =
+                    """
+                    ● [ ] a - Node A
+                    │
+                    ● [ ] b - Node B
+                    ● [ ] c - Node C
+                    │
+                    ● [ ] d - Node D
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("3分岐: A -> B,C,D")
+        void shouldRenderTripleBranch() {
+            // Given: A -> B, A -> C, A -> D
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD = node("d").name("Node D").dependencies(NodeId.of("a")).build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC, nodeD);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then - 3分岐（終端ノードは処理後にカラム解放）
+            assertThat(view.lines()).hasSize(4);
+            String expected =
+                    """
+                    ● [ ] a - Node A
+                    ├─┬─┐
+                    │ │ │
+                    ● │ │ [ ] b - Node B
+                      │ │
+                      ● │ [ ] c - Node C
+                        │
+                        ● [ ] d - Node D
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("3マージ: A,B,C -> D")
+        void shouldRenderTripleMerge() {
+            // Given: A -> D, B -> D, C -> D
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").build();
+            MigrationNode nodeC = node("c").name("Node C").build();
+            MigrationNode nodeD =
+                    node("d")
+                            .name("Node D")
+                            .dependencies(NodeId.of("a"), NodeId.of("b"), NodeId.of("c"))
+                            .build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC, nodeD);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then
+            System.out.println("=== 3マージ ===");
+            System.out.println(text);
+            System.out.println("===============");
+
+            assertThat(view.lines()).hasSize(4);
+        }
+
+        @Test
+        @DisplayName("推移的依存: A->B->C, A->C (冗長な依存)")
+        void shouldRenderTransitiveDependency() {
+            // Given: C が A と B に依存、B が A に依存
+            // A -> B -> C
+            // └───────┘ (A->C は冗長)
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC =
+                    node("c").name("Node C").dependencies(NodeId.of("a"), NodeId.of("b")).build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then - 冗長な依存を除去して1本の線で表示
+            System.out.println("=== 推移的依存 ===");
+            System.out.println(text);
+            System.out.println("==================");
+
+            assertThat(view.lines()).hasSize(3);
+            // 期待: 分岐せずに直列表示
+            String expected =
+                    """
+                    ● [ ] a - Node A
+                    │
+                    ● [ ] b - Node B
+                    │
+                    ● [ ] c - Node C
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("非対称分岐マージ: A->B->C->D, A->D (推移的簡約で1本)")
+        void shouldRenderAsymmetricBranchMerge() {
+            // Given: A -> B -> C -> D, A -> D
+            // A -> D は A -> B -> C -> D を通じて満たされるので冗長
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("b")).build();
+            MigrationNode nodeD =
+                    node("d").name("Node D").dependencies(NodeId.of("c"), NodeId.of("a")).build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC, nodeD);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then - 推移的簡約により直列表示
+            assertThat(view.lines()).hasSize(4);
+            String expected =
+                    """
+                    ● [ ] a - Node A
+                    │
+                    ● [ ] b - Node B
+                    │
+                    ● [ ] c - Node C
+                    │
+                    ● [ ] d - Node D
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("連続ダイヤモンド")
+        void shouldRenderDoubleDiamond() {
+            // Given: A -> B,C -> D -> E,F -> G
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD =
+                    node("d").name("Node D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            MigrationNode nodeE = node("e").name("Node E").dependencies(NodeId.of("d")).build();
+            MigrationNode nodeF = node("f").name("Node F").dependencies(NodeId.of("d")).build();
+            MigrationNode nodeG =
+                    node("g").name("Node G").dependencies(NodeId.of("e"), NodeId.of("f")).build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC, nodeD, nodeE, nodeF, nodeG);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then
+            System.out.println("=== 連続ダイヤモンド ===");
+            System.out.println(text);
+            System.out.println("=======================");
+
+            assertThat(view.lines()).hasSize(7);
+        }
+
+        @Test
+        @DisplayName("クロス依存: A,B -> C,D")
+        void shouldRenderCrossDependency() {
+            // Given: A -> C, A -> D, B -> C, B -> D
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").build();
+            MigrationNode nodeC =
+                    node("c").name("Node C").dependencies(NodeId.of("a"), NodeId.of("b")).build();
+            MigrationNode nodeD =
+                    node("d").name("Node D").dependencies(NodeId.of("a"), NodeId.of("b")).build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC, nodeD);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then - クロス依存: A と B がそれぞれ分岐
+            assertThat(view.lines()).hasSize(4);
+            String expected =
+                    """
+                    ● [ ] a - Node A
+                    ├─┐
+                    │ │
+                    │ │ ● [ ] b - Node B
+                    │ │ ├─┐
+                    │ │ │ │
+                    ├───┘ │
+                    ● │   │ [ ] c - Node C
+                      │   │
+                      ├───┘
+                      ● [ ] d - Node D
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("複数ルート: A,B,C が独立したルート")
+        void shouldRenderMultipleRoots() {
+            // Given: A, B, C (すべて独立したルート)
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").build();
+            MigrationNode nodeC = node("c").name("Node C").build();
+            List<MigrationNode> nodes = List.of(nodeA, nodeB, nodeC);
+
+            // When
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // Then
+            System.out.println("=== 複数ルート ===");
+            System.out.println(text);
+            System.out.println("=================");
+
+            assertThat(view.lines()).hasSize(3);
+        }
+    }
+
+    @Nested
     @DisplayName("NodeLineInfo")
     class NodeLineInfoTest {
 
