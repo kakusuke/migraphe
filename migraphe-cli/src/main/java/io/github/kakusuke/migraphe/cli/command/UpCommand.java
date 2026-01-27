@@ -1,26 +1,28 @@
 package io.github.kakusuke.migraphe.cli.command;
 
-import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
-import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
-import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
-import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
-import io.github.kakusuke.migraphe.api.task.Task;
-import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.cli.ExecutionContext;
+import io.github.kakusuke.migraphe.cli.listener.ConsoleExecutionListener;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
+import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.MigrationExecutor;
+import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
 import io.github.kakusuke.migraphe.core.graph.ExecutionLevel;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
+import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Scanner;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /** UP（前進）マイグレーションを実行するコマンド。 */
@@ -74,19 +76,22 @@ public class UpCommand implements Command {
             HistoryRepository historyRepo = getHistoryRepository();
             historyRepo.initialize();
 
-            // 3. 実行対象ノードを決定
-            Set<NodeId> targetNodes = determineTargetNodes(historyRepo);
+            // 3. Executor と Listener を作成
+            ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
+            MigrationExecutor executor =
+                    new MigrationExecutor(context.graph(), historyRepo, listener);
+
+            // 4. 実行対象ノードを決定
+            Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
 
             if (targetNodes.isEmpty()) {
                 System.out.println("No migrations to execute. All migrations are up to date.");
                 return 0;
             }
 
-            // 4. ExecutionPlan を生成
+            // 5. ExecutionPlan を生成してグラフ表示
             ExecutionPlan plan =
                     TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
-
-            // 5. グラフ表示
             displayMigrationGraph(plan, historyRepo);
 
             // 6. dry-run の場合はここで終了
@@ -107,40 +112,14 @@ public class UpCommand implements Command {
             System.out.println("Executing migrations...");
             System.out.println();
 
-            return executeMigrations(plan, historyRepo);
+            ExecutionResult result = executor.execute(targetNodes);
+            return result.success() ? 0 : 1;
 
         } catch (Exception e) {
             System.err.println("Migration failed: " + e.getMessage());
             e.printStackTrace();
             return 1;
         }
-    }
-
-    /** 実行対象ノードを決定する。 */
-    private Set<NodeId> determineTargetNodes(HistoryRepository historyRepo) {
-        Set<NodeId> candidates;
-
-        if (targetId != null) {
-            // ID指定: ターゲット + ターゲットの全依存先
-            candidates = new HashSet<>(context.graph().getAllDependencies(targetId));
-            candidates.add(targetId);
-        } else {
-            // 全体: グラフの全ノード
-            candidates =
-                    context.graph().allNodes().stream()
-                            .map(MigrationNode::id)
-                            .collect(Collectors.toSet());
-        }
-
-        // 未実行のノードのみフィルタ
-        return candidates.stream()
-                .filter(
-                        id -> {
-                            MigrationNode node = context.graph().getNode(id).orElse(null);
-                            if (node == null) return false;
-                            return !historyRepo.wasExecuted(id, node.environment().id());
-                        })
-                .collect(Collectors.toSet());
     }
 
     /** マイグレーショングラフを表示する。 */
@@ -158,11 +137,11 @@ public class UpCommand implements Command {
             sortedNodes.addAll(level.nodes());
         }
 
-        // GraphRenderer を使用してグラフ表示
-        GraphRenderer renderer = new GraphRenderer(sortedNodes);
-        List<GraphRenderer.NodeGraphInfo> graphInfos = renderer.render();
+        // ExecutionGraphView を使用してグラフ表示
+        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
+        List<NodeLineInfo> lines = graphView.lines();
 
-        for (GraphRenderer.NodeGraphInfo info : graphInfos) {
+        for (NodeLineInfo info : lines) {
             MigrationNode node = info.node();
             boolean executed = historyRepo.wasExecuted(node.id(), node.environment().id());
 
@@ -174,7 +153,13 @@ public class UpCommand implements Command {
             // ノード行
             String status = executed ? "[✓]" : "[ ]";
             String line =
-                    info.nodeLine() + " " + status + " " + node.id().value() + " - " + node.name();
+                    info.graphPrefix()
+                            + " "
+                            + status
+                            + " "
+                            + node.id().value()
+                            + " - "
+                            + node.name();
             System.out.println(line);
 
             // 分岐行
@@ -202,145 +187,6 @@ public class UpCommand implements Command {
             String input = scanner.nextLine().trim().toLowerCase(Locale.ROOT);
             return "y".equals(input) || "yes".equals(input);
         }
-    }
-
-    /** マイグレーションを実行する。 */
-    private int executeMigrations(ExecutionPlan plan, HistoryRepository historyRepo) {
-        int totalExecuted = 0;
-
-        for (ExecutionLevel level : plan.levels()) {
-            for (MigrationNode node : level.nodes()) {
-                // 既に実行済みかチェック
-                if (historyRepo.wasExecuted(node.id(), node.environment().id())) {
-                    printResult("SKIP", node.id().value(), node.name(), null, "already executed");
-                    continue;
-                }
-
-                // 実行
-                long startTime = System.currentTimeMillis();
-                Result<TaskResult, String> result = node.upTask().execute();
-                long duration = System.currentTimeMillis() - startTime;
-
-                if (result.isOk()) {
-                    printResult("OK", node.id().value(), node.name(), duration, null);
-
-                    // 実行記録を保存
-                    TaskResult taskResult = result.value();
-                    String serializedDownTask =
-                            taskResult != null ? taskResult.serializedDownTask() : null;
-
-                    ExecutionRecord record =
-                            ExecutionRecord.upSuccess(
-                                    node.id(),
-                                    node.environment().id(),
-                                    node.name(),
-                                    serializedDownTask,
-                                    duration);
-                    historyRepo.record(record);
-
-                    totalExecuted++;
-                } else {
-                    printResult("FAIL", node.id().value(), node.name(), duration, null);
-                    String errorMsg = result.error();
-
-                    // 失敗時の詳細表示
-                    printFailureDetails(node, errorMsg);
-
-                    // 失敗記録を保存
-                    ExecutionRecord failureRecord =
-                            ExecutionRecord.failure(
-                                    node.id(),
-                                    node.environment().id(),
-                                    ExecutionDirection.UP,
-                                    node.name(),
-                                    errorMsg != null ? errorMsg : "Unknown error");
-                    historyRepo.record(failureRecord);
-
-                    return 1;
-                }
-            }
-        }
-
-        System.out.println();
-        if (totalExecuted == 0) {
-            System.out.println("No migrations executed. All migrations are up to date.");
-        } else {
-            System.out.println(
-                    "Migration completed successfully. "
-                            + totalExecuted
-                            + " migration"
-                            + (totalExecuted == 1 ? "" : "s")
-                            + " executed.");
-        }
-
-        return 0;
-    }
-
-    /** 結果を色付きで表示する。 */
-    private void printResult(
-            String status,
-            String id,
-            String name,
-            @Nullable Long durationMs,
-            @Nullable String extra) {
-        String coloredStatus;
-        switch (status) {
-            case "OK" -> coloredStatus = colorEnabled ? AnsiColor.green("[OK]  ") : "[OK]   ";
-            case "SKIP" -> coloredStatus = colorEnabled ? AnsiColor.yellow("[SKIP]") : "[SKIP] ";
-            case "FAIL" -> coloredStatus = colorEnabled ? AnsiColor.red("[FAIL]") : "[FAIL] ";
-            default -> coloredStatus = "[" + status + "]";
-        }
-
-        StringBuilder line = new StringBuilder();
-        line.append(coloredStatus).append(" ").append(id).append(" - ").append(name);
-
-        if (durationMs != null) {
-            line.append(" (").append(durationMs).append("ms)");
-        }
-        if (extra != null) {
-            line.append(" (").append(extra).append(")");
-        }
-
-        System.out.println(line);
-    }
-
-    /** 失敗時の詳細情報を表示する。 */
-    private void printFailureDetails(MigrationNode node, @Nullable String errorMsg) {
-        System.out.println();
-        System.out.println(
-                colorEnabled
-                        ? AnsiColor.red("=== MIGRATION FAILED ===")
-                        : "=== MIGRATION FAILED ===");
-        System.out.println();
-
-        // 環境情報
-        String envLabel = colorEnabled ? AnsiColor.cyan("Environment:") : "Environment:";
-        System.out.println(envLabel);
-        System.out.println("  Target: " + node.environment().id().value());
-        System.out.println();
-
-        // SQL内容（SqlContentProviderを実装している場合）
-        Task upTask = node.upTask();
-        if (upTask instanceof SqlContentProvider sqlProvider) {
-            String sqlLabel = colorEnabled ? AnsiColor.cyan("SQL Content:") : "SQL Content:";
-            System.out.println(sqlLabel);
-            String sql = sqlProvider.sqlContent();
-            String[] lines = sql.split("\n", -1);
-            for (int i = 0; i < lines.length; i++) {
-                String lineNum =
-                        colorEnabled
-                                ? AnsiColor.cyan(String.format("%3d", i + 1))
-                                : String.format("%3d", i + 1);
-                System.out.println("  " + lineNum + " | " + lines[i]);
-            }
-            System.out.println();
-        }
-
-        // エラーメッセージ
-        String errorLabel = colorEnabled ? AnsiColor.red("Error:") : "Error:";
-        System.out.println(errorLabel);
-        String errorContent = errorMsg != null ? errorMsg : "Unknown error";
-        System.out.println("  " + (colorEnabled ? AnsiColor.red(errorContent) : errorContent));
     }
 
     /** HistoryRepository をプラグイン経由で取得する。 */

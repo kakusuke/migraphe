@@ -6,6 +6,8 @@ import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.cli.ExecutionContext;
+import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
+import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -40,14 +42,14 @@ public class StatusCommand implements Command {
             List<MigrationNode> sortedNodes = new ArrayList<>(context.nodes());
 
             // グラフをレンダリング
-            GraphRenderer renderer = new GraphRenderer(sortedNodes);
-            List<GraphRenderer.NodeGraphInfo> graphInfos = renderer.render();
+            ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
+            List<NodeLineInfo> lines = graphView.lines();
 
             int executedCount = 0;
             int pendingCount = 0;
 
-            for (int i = 0; i < graphInfos.size(); i++) {
-                GraphRenderer.NodeGraphInfo info = graphInfos.get(i);
+            for (int i = 0; i < lines.size(); i++) {
+                NodeLineInfo info = lines.get(i);
                 MigrationNode node = info.node();
                 boolean executed = historyRepo.wasExecuted(node.id(), node.environment().id());
 
@@ -60,7 +62,7 @@ public class StatusCommand implements Command {
                 String status = executed ? "[✓]" : "[ ]";
                 StringBuilder nodeLineBuilder = new StringBuilder();
                 nodeLineBuilder
-                        .append(info.nodeLine())
+                        .append(info.graphPrefix())
                         .append(" ")
                         .append(status)
                         .append(" ")
