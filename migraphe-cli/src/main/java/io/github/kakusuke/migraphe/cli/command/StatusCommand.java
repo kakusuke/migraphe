@@ -5,7 +5,7 @@ import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
-import io.github.kakusuke.migraphe.cli.ExecutionContext;
+import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
 import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;

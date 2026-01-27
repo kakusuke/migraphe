@@ -12,6 +12,7 @@
 - **DAGベースのマイグレーション**: マイグレーションタスク間の複雑な依存関係を定義
 - **マルチ環境サポート**: 開発、ステージング、本番環境のマイグレーションを管理
 - **プラガブルアーキテクチャ**: PostgreSQLをサポート、他のデータベースへの拡張性
+- **Gradleプラグイン**: `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate` タスクでビルドに統合
 - **YAML設定**: シンプルで読みやすい設定ファイル
 - **実行履歴**: マイグレーション実行履歴の追跡とロールバックサポート
 - **型安全**: Java 21で構築、モダンな言語機能を活用
@@ -99,6 +100,36 @@ java -jar path/to/migraphe-cli-all.jar status
 java -jar path/to/migraphe-cli-all.jar up
 ```
 
+## Gradleプラグイン
+
+`build.gradle.kts` にプラグインを追加:
+
+```kotlin
+plugins {
+    id("io.github.kakusuke.migraphe")
+}
+
+migraphe {
+    baseDir.set(layout.projectDirectory.dir("db")) // デフォルト: プロジェクトディレクトリ
+}
+
+dependencies {
+    migraphePlugin("io.github.kakusuke:migraphe-plugin-postgresql:0.1.0")
+}
+```
+
+利用可能なタスク:
+
+```bash
+./gradlew migrapheValidate          # 設定ファイルの検証（オフライン）
+./gradlew migrapheStatus            # マイグレーションステータス表示
+./gradlew migrapheUp                # マイグレーション実行
+./gradlew migrapheUp --dry-run      # 実行せずにプレビュー
+./gradlew migrapheUp --target=db1/create_users  # 特定ノードまで実行
+./gradlew migrapheDown --all        # 全マイグレーションのロールバック
+./gradlew migrapheDown --target=db1/create_users  # 特定ノードまでロールバック
+```
+
 ## ドキュメント
 
 - [ユーザーガイド（日本語）](docs/USER_GUIDE.ja.md) - 詳細なドキュメント
@@ -171,9 +202,10 @@ cd migraphe
 ./gradlew :migraphe-core:test
 ./gradlew :migraphe-plugin-postgresql:test
 ./gradlew :migraphe-cli:test
+./gradlew :migraphe-gradle-plugin:test
 ```
 
-テストカバレッジ: 177+テスト、100%合格
+テストカバレッジ: 257テスト、100%合格
 
 ## コントリビューション
 

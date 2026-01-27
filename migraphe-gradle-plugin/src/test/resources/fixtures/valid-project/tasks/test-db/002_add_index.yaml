@@ -1,0 +1,6 @@
+name: Add index on users
+target: test-db
+dependencies:
+  - test-db/001_create_users
+up: CREATE INDEX idx_users_name ON users(name);
+down: DROP INDEX idx_users_name;

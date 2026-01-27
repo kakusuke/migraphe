@@ -14,7 +14,8 @@
 8. [Configuration Validation (validate)](#configuration-validation-validate)
 9. [Environment Management](#environment-management)
 10. [Advanced Features](#advanced-features)
-11. [Troubleshooting](#troubleshooting)
+11. [Gradle Plugin](#gradle-plugin)
+12. [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -724,6 +725,55 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: Execution duration
 - `serialized_down_task`: Rollback SQL (UP migrations only)
 - `error_message`: Error details (FAILURE status only)
+
+## Gradle Plugin
+
+Migraphe provides a Gradle plugin for integrating migrations into your build process.
+
+### Setup
+
+Add to your `build.gradle.kts`:
+
+```kotlin
+plugins {
+    id("io.github.kakusuke.migraphe")
+}
+
+migraphe {
+    baseDir.set(layout.projectDirectory.dir("db")) // default: project directory
+}
+
+dependencies {
+    migraphePlugin("io.github.kakusuke:migraphe-plugin-postgresql:0.1.0")
+}
+```
+
+### Available Tasks
+
+| Task | Description |
+|------|-------------|
+| `migrapheValidate` | Validate configuration files (offline, no DB connection) |
+| `migrapheStatus` | Show migration execution status |
+| `migrapheUp` | Execute forward (UP) migrations |
+| `migrapheDown` | Execute rollback (DOWN) migrations |
+
+### Task Options
+
+**migrapheUp**:
+- `--target=<nodeId>` — Migrate up to a specific node
+- `--dry-run` — Preview without executing
+
+**migrapheDown**:
+- `--target=<nodeId>` — Rollback to a specific node
+- `--all` — Rollback all executed migrations
+- `--dry-run` — Preview without executing
+
+Options can also be specified via project properties (`-P`):
+
+```bash
+./gradlew migrapheUp -Pmigraphe.up.target=db1/create_users
+./gradlew migrapheDown -Pmigraphe.down.all=true
+```
 
 ## Troubleshooting
 
