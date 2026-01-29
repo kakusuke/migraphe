@@ -730,6 +730,8 @@ WHERE node_id = 'db1/001_create_users';
 
 Migraphe provides a Gradle plugin for integrating migrations into your build process.
 
+> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. A local build is required to use it.
+
 ### Setup
 
 Add to your `build.gradle.kts`:

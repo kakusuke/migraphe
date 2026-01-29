@@ -102,6 +102,8 @@ java -jar path/to/migraphe-cli-all.jar up
 
 ## Gradleプラグイン
 
+> **注意:** プラグインはまだMaven Central / Gradle Plugin Portalに公開されていません。利用にはローカルビルドが必要です。
+
 `build.gradle.kts` にプラグインを追加:
 
 ```kotlin

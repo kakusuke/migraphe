@@ -730,6 +730,8 @@ WHERE node_id = 'db1/001_create_users';
 
 Migrapheはマイグレーションをビルドプロセスに統合するためのGradleプラグインを提供します。
 
+> **注意:** プラグインはまだMaven Central / Gradle Plugin Portalに公開されていません。利用にはローカルビルドが必要です。
+
 ### セットアップ
 
 `build.gradle.kts` に追加:

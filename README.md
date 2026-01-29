@@ -102,6 +102,8 @@ java -jar path/to/migraphe-cli-all.jar up
 
 ## Gradle Plugin
 
+> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. A local build is required to use it.
+
 Add the plugin to your `build.gradle.kts`:
 
 ```kotlin
