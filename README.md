@@ -12,6 +12,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **DAG-based Migration**: Define complex dependencies between migration tasks
 - **Multi-Environment Support**: Manage migrations across development, staging, and production
 - **Pluggable Architecture**: Support for PostgreSQL, with extensibility for other databases
+- **Gradle Plugin**: Integrate migrations into your Gradle build with `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate`
 - **YAML Configuration**: Simple, readable configuration files
 - **Execution History**: Track migration execution history with rollback support
 - **Type-Safe**: Built with Java 21, leveraging modern language features
@@ -99,6 +100,38 @@ java -jar path/to/migraphe-cli-all.jar status
 java -jar path/to/migraphe-cli-all.jar up
 ```
 
+## Gradle Plugin
+
+> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. A local build is required to use it.
+
+Add the plugin to your `build.gradle.kts`:
+
+```kotlin
+plugins {
+    id("io.github.kakusuke.migraphe")
+}
+
+migraphe {
+    baseDir.set(layout.projectDirectory.dir("db")) // default: project directory
+}
+
+dependencies {
+    migraphePlugin("io.github.kakusuke:migraphe-plugin-postgresql:0.1.0")
+}
+```
+
+Available tasks:
+
+```bash
+./gradlew migrapheValidate          # Validate configuration (offline)
+./gradlew migrapheStatus            # Show migration status
+./gradlew migrapheUp                # Execute forward migrations
+./gradlew migrapheUp --dry-run      # Preview without executing
+./gradlew migrapheUp --target=db1/create_users  # Migrate up to specific node
+./gradlew migrapheDown --all        # Rollback all migrations
+./gradlew migrapheDown --target=db1/create_users  # Rollback to specific node
+```
+
 ## Documentation
 
 - [User Guide](docs/USER_GUIDE.md) - Detailed documentation
@@ -171,9 +204,10 @@ cd migraphe
 ./gradlew :migraphe-core:test
 ./gradlew :migraphe-plugin-postgresql:test
 ./gradlew :migraphe-cli:test
+./gradlew :migraphe-gradle-plugin:test
 ```
 
-Test coverage: 177+ tests, 100% passing
+Test coverage: 257 tests, 100% passing
 
 ## Contributing
 

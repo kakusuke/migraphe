@@ -14,7 +14,8 @@
 8. [設定の検証（validate）](#設定の検証validate)
 9. [環境管理](#環境管理)
 10. [高度な機能](#高度な機能)
-11. [トラブルシューティング](#トラブルシューティング)
+11. [Gradleプラグイン](#gradleプラグイン)
+12. [トラブルシューティング](#トラブルシューティング)
 
 ## はじめに
 
@@ -724,6 +725,57 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: 実行時間
 - `serialized_down_task`: ロールバックSQL（UPマイグレーションのみ）
 - `error_message`: エラーの詳細（FAILUREステータスのみ）
+
+## Gradleプラグイン
+
+Migrapheはマイグレーションをビルドプロセスに統合するためのGradleプラグインを提供します。
+
+> **注意:** プラグインはまだMaven Central / Gradle Plugin Portalに公開されていません。利用にはローカルビルドが必要です。
+
+### セットアップ
+
+`build.gradle.kts` に追加:
+
+```kotlin
+plugins {
+    id("io.github.kakusuke.migraphe")
+}
+
+migraphe {
+    baseDir.set(layout.projectDirectory.dir("db")) // デフォルト: プロジェクトディレクトリ
+}
+
+dependencies {
+    migraphePlugin("io.github.kakusuke:migraphe-plugin-postgresql:0.1.0")
+}
+```
+
+### 利用可能なタスク
+
+| タスク | 説明 |
+|--------|------|
+| `migrapheValidate` | 設定ファイルの検証（オフライン、DB接続不要） |
+| `migrapheStatus` | マイグレーション実行状況の表示 |
+| `migrapheUp` | マイグレーション（前進）の実行 |
+| `migrapheDown` | ロールバック（後退）の実行 |
+
+### タスクオプション
+
+**migrapheUp**:
+- `--target=<nodeId>` — 特定のノードまでマイグレーション
+- `--dry-run` — 実行せずにプレビュー
+
+**migrapheDown**:
+- `--target=<nodeId>` — 特定のノードまでロールバック
+- `--all` — 全実行済みマイグレーションのロールバック
+- `--dry-run` — 実行せずにプレビュー
+
+プロジェクトプロパティ（`-P`）でも指定可能:
+
+```bash
+./gradlew migrapheUp -Pmigraphe.up.target=db1/create_users
+./gradlew migrapheDown -Pmigraphe.down.all=true
+```
 
 ## トラブルシューティング
 

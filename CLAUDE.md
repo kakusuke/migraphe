@@ -5,16 +5,17 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 14 (Core Logic Extraction) - COMPLETE
-**Tests**: 159+, 100% passing
+**Current Phase**: 15 (Gradle Plugin) - COMPLETE
+**Tests**: 257, 100% passing
 
 ## Module Structure
 
 ```
 migraphe-api/       # Lightweight interfaces (no external deps) - for plugin developers
-migraphe-core/      # Orchestration logic, algorithms, reference implementations
+migraphe-core/      # Orchestration logic, algorithms, config loading, factories
 migraphe-plugin-postgresql/ # PostgreSQL plugin (Environment, MigrationNode, HistoryRepository)
-migraphe-cli/       # CLI entry point, config loading, commands
+migraphe-cli/       # CLI entry point, commands, console output
+migraphe-gradle-plugin/    # Gradle plugin (migrapheUp/Down/Status/Validate tasks)
 ```
 
 ## Core Interfaces (Plugins implement these)
@@ -38,9 +39,10 @@ io.github.kakusuke.migraphe.api/
 
 io.github.kakusuke.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, ExecutionGraphView, NodeLineInfo
-├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult
+├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult, ExecutionContext
 ├── history/        # InMemoryHistoryRepository
-├── config/         # ProjectConfig, TargetConfig, TaskConfig (@ConfigMapping)
+├── config/         # ProjectConfig, TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
+├── factory/        # EnvironmentFactory, MigrationNodeFactory (generic, uses PluginRegistry)
 ├── plugin/         # PluginRegistry, PluginLoadException
 └── plugin/         # SimpleMigrationNode, SimpleEnvironment, SimpleTask (reference impl)
 
@@ -50,11 +52,18 @@ io.github.kakusuke.migraphe.postgresql/
 └── META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 
 io.github.kakusuke.migraphe.cli/
-├── Main.java, ExecutionContext.java
+├── Main.java
 ├── command/        # Command, UpCommand, DownCommand, StatusCommand, ValidateCommand
 ├── listener/       # ConsoleExecutionListener
-├── config/         # ConfigLoader, MultiFileYamlConfigSource, YamlFileScanner, TaskIdGenerator
-└── factory/        # EnvironmentFactory, MigrationNodeFactory (generic, uses PluginRegistry)
+└── util/           # AnsiColor
+
+io.github.kakusuke.migraphe.gradle/
+├── MigrapheGradlePlugin.java     # Plugin entry point
+├── MigrapheExtension.java        # DSL extension (baseDir)
+├── AbstractMigrapheTask.java     # Base task (PluginRegistry, ExecutionContext)
+├── Migraphe{Up,Down,Status,Validate}Task.java  # Gradle tasks
+├── GradleExecutionListener.java  # Gradle Logger-based listener
+└── HistoryRepositoryHelper.java  # Shared HistoryRepository creation
 ```
 
 ## Key Design Decisions
@@ -68,6 +77,7 @@ io.github.kakusuke.migraphe.cli/
 7. **Auto Task ID**: Generated from file path (e.g., `tasks/db1/create.yaml` → `"db1/create"`)
 8. **Plugin System (Phase 11)**: ServiceLoader + URLClassLoader for runtime loading
 9. **Listener Pattern (Phase 14)**: Business logic (Core) separated from presentation (CLI/Gradle). `ExecutionListener` for progress notifications, `ExecutionGraphView` for graph rendering with `toString()`
+10. **Gradle Plugin (Phase 15)**: `java-gradle-plugin` + Gradle TestKit. Custom `migraphePlugin` configuration for plugin JARs. `@Option` + `-P` property for task arguments. `PluginRegistry.loadFromClassLoader()` for Gradle's classloader
 
 ## CLI Project Structure
 
@@ -126,13 +136,19 @@ Update when code changes:
 | 12-3 | NullAway compile-time checks enabled | ✅ Complete |
 | 13 | Validate command | ✅ Complete |
 | 14 | Core logic extraction for Gradle plugin | ✅ Complete |
+| 15-0 | Shared infra CLI → Core migration | ✅ Complete |
+| 15-1 | Gradle plugin module creation | ✅ Complete |
+| 15-2 | Extension DSL + Plugin class | ✅ Complete |
+| 15-3 | AbstractMigrapheTask + Listener + Helper | ✅ Complete |
+| 15-4 | Task implementations (Up/Down/Status/Validate) | ✅ Complete |
+| 15-5 | Tests (Unit + Gradle TestKit) | ✅ Complete |
 
 ### Future Phases
 - `history` command
 - GraalVM Native Image packaging
-- Gradle plugin (can now use Core APIs)
 - Additional database plugins (MySQL, MongoDB)
 - Virtual Threads for parallel execution
+- Gradle configuration cache support
 
 ## Design Principles
 
@@ -156,32 +172,26 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-28 (Session 17)
+- **Gradle Plugin 実装 (Phase 15)**: `migraphe-gradle-plugin` モジュール新規作成
+  - **Phase 15-0**: 共有インフラ CLI → Core 移動（config, factory, ExecutionContext の 9 ソース + 8 テスト）
+  - **Phase 15-1**: モジュール作成 + `java-gradle-plugin` ビルド設定
+  - **Phase 15-2**: `MigrapheExtension`（DSL）+ `MigrapheGradlePlugin`（エントリポイント）
+  - **Phase 15-3**: `AbstractMigrapheTask`（共通基底）, `GradleExecutionListener`, `HistoryRepositoryHelper`
+  - **Phase 15-4**: 4タスク実装 — `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate`
+    - `@Option` + `-P` プロジェクトプロパティ対応
+    - `migraphePlugin` カスタム configuration でプラグイン JAR 追加
+  - **Phase 15-5**: テスト 14 件（ユニット 6 + Gradle TestKit 機能テスト 8）
+  - **PluginRegistry**: `loadFromClassLoader()` メソッド追加
+  - **Core build.gradle.kts**: SmallRye を `api` スコープに変更（ExecutionContext 公開 API のため）
+- Tests: 257, 100% passing
+
 ### 2026-01-26 (Session 16)
 - **Core Logic Extraction**: CLI のビジネスロジックを Core に移動（Gradle plugin 準備）
-  - **Listener パターン導入**: 実行ロジック (Core) とプレゼンテーション (CLI/Gradle) の分離
-  - **API モジュール追加**:
-    - `ExecutionListener`: 進捗通知インターフェース
-    - `ExecutionPlanInfo`, `ExecutionSummary`: 実行プラン・サマリー record
-  - **Core モジュール追加**:
-    - `MigrationExecutor`: UP マイグレーション実行サービス
-    - `RollbackExecutor`: DOWN マイグレーション実行サービス
-    - `StatusService`: ステータス取得サービス
-    - `ExecutionResult`: 実行結果 record
-    - `ExecutionGraphView`: git log --graph 風 ASCII グラフ表示 (toString() でプレーンテキスト)
-    - `NodeLineInfo`: 各ノードの行情報 record
-  - **CLI モジュール追加**:
-    - `ConsoleExecutionListener`: ANSI 色付き出力
-  - **リファクタリング**:
-    - `UpCommand`: MigrationExecutor + ConsoleExecutionListener 使用 (381行→219行)
-    - `DownCommand`: RollbackExecutor + ConsoleExecutionListener 使用 (401行→228行)
-  - **削除**: 旧 `GraphRenderer` (Core の `ExecutionGraphView` に移動)
-- Tests: 159+, 100% passing
-
-### 2026-01-23 (Session 15)
-- **Validate Command Implementation**: `migraphe validate` コマンド実装
+  - Listener パターン導入, MigrationExecutor, RollbackExecutor, ExecutionGraphView 等
 - Tests: 159+, 100% passing
 
 ---
 
-**Last Updated**: 2026-01-26
-**Core Logic Extraction Complete** - Next: Gradle plugin, history command, Native Image
+**Last Updated**: 2026-01-28
+**Gradle Plugin Complete** - Next: history command, Native Image, configuration cache

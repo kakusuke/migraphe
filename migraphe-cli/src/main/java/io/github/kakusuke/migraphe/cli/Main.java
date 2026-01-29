@@ -6,6 +6,7 @@ import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
 import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
+import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.nio.file.Path;
 import java.nio.file.Paths;

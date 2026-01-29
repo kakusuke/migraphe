@@ -1,0 +1,4 @@
+project:
+  name: invalid-project
+history:
+  target: missing-db
