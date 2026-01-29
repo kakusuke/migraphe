@@ -11,6 +11,8 @@ import java.util.List;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.provider.MapProperty;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.InputFiles;
 
@@ -20,6 +22,10 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
     /** プロジェクト設定のベースディレクトリ。 */
     @InputDirectory
     public abstract DirectoryProperty getBaseDir();
+
+    /** SmallRye Config に差し込む変数マップ。 */
+    @Input
+    public abstract MapProperty<String, String> getVariables();
 
     /** migraphePlugin configuration の解決済み JAR パス。 */
     @InputFiles
@@ -57,6 +63,7 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
     /** ExecutionContext をロードする。 */
     protected ExecutionContext loadExecutionContext() {
         PluginRegistry registry = createPluginRegistry();
-        return ExecutionContext.load(getBaseDir().get().getAsFile().toPath(), registry);
+        return ExecutionContext.load(
+                getBaseDir().get().getAsFile().toPath(), registry, getVariables().get());
     }
 }

@@ -11,6 +11,7 @@ import io.smallrye.config.SmallRyeConfigBuilder;
 import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -31,7 +32,19 @@ public class ConfigLoader {
      * @throws ConfigurationException 設定ファイルのロードに失敗した場合
      */
     public SmallRyeConfig load(Path baseDir) {
-        return loadConfig(baseDir, null);
+        return loadConfig(baseDir, null, Collections.emptyMap());
+    }
+
+    /**
+     * YAML ファイルから設定をロードして SmallRyeConfig を構築する（変数指定あり）。
+     *
+     * @param baseDir プロジェクトルートディレクトリ
+     * @param variables 変数マップ（SmallRye Config に最優先で差し込まれる）
+     * @return SmallRyeConfig
+     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     */
+    public SmallRyeConfig load(Path baseDir, Map<String, String> variables) {
+        return loadConfig(baseDir, null, variables);
     }
 
     /**
@@ -43,6 +56,20 @@ public class ConfigLoader {
      * @throws ConfigurationException 設定ファイルのロードに失敗した場合
      */
     public SmallRyeConfig loadConfig(Path baseDir, @Nullable String envName) {
+        return loadConfig(baseDir, envName, Collections.emptyMap());
+    }
+
+    /**
+     * YAML ファイルから設定をロードして SmallRyeConfig を構築する。
+     *
+     * @param baseDir プロジェクトルートディレクトリ
+     * @param envName 環境名 (null の場合は環境ファイルをロードしない)
+     * @param variables 変数マップ（SmallRye Config に最優先で差し込まれる）
+     * @return SmallRyeConfig
+     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     */
+    public SmallRyeConfig loadConfig(
+            Path baseDir, @Nullable String envName, Map<String, String> variables) {
         YamlFileScanner scanner = new YamlFileScanner();
         TaskIdGenerator idGenerator = new TaskIdGenerator();
 
@@ -72,7 +99,7 @@ public class ConfigLoader {
         // 注: ProjectConfig のみ withMapping を使用。
         // TargetConfig と TaskConfig は動的なプレフィックスを持つため、
         // プログラマティックに取得する必要がある。
-        SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder();
+        SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().addDefaultInterceptors();
 
         // 6. 環境ファイルがあればロード (最優先 - ordinal 500)
         Path envFile = envName != null ? scanner.findEnvironmentFile(baseDir, envName) : null;
@@ -90,7 +117,12 @@ public class ConfigLoader {
             builder.withSources(multiFileSource);
         }
 
-        // 7. マッピングとバリデーション設定
+        // 7. variables があれば MapConfigSource を追加（最優先 ordinal 600）
+        if (!variables.isEmpty()) {
+            builder.withSources(new MapConfigSource(variables));
+        }
+
+        // 8. マッピングとバリデーション設定
         builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // マッピングされていないプロパティを許可
 
         return builder.build();

@@ -13,6 +13,7 @@ import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,9 +48,22 @@ public record ExecutionContext(
      * @return ExecutionContext
      */
     public static ExecutionContext load(Path baseDir, PluginRegistry pluginRegistry) {
+        return load(baseDir, pluginRegistry, Collections.emptyMap());
+    }
+
+    /**
+     * プロジェクトディレクトリから ExecutionContext をロードする（変数指定あり）。
+     *
+     * @param baseDir プロジェクトのルートディレクトリ
+     * @param pluginRegistry プラグインレジストリ
+     * @param variables 変数マップ（SmallRye Config に最優先で差し込まれる）
+     * @return ExecutionContext
+     */
+    public static ExecutionContext load(
+            Path baseDir, PluginRegistry pluginRegistry, Map<String, String> variables) {
         // 1. ConfigLoader でYAML設定を読み込み
         ConfigLoader configLoader = new ConfigLoader();
-        SmallRyeConfig config = configLoader.load(baseDir);
+        SmallRyeConfig config = configLoader.load(baseDir, variables);
 
         // 2. EnvironmentDefinition を読み込み、EnvironmentFactory で全Environment生成
         Map<String, EnvironmentDefinition> environmentDefinitions =

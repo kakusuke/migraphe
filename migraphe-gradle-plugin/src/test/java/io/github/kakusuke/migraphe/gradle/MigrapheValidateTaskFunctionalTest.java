@@ -147,6 +147,43 @@ class MigrapheValidateTaskFunctionalTest {
         assertThat(result.getOutput()).contains("Validation failed");
     }
 
+    @Test
+    void shouldSupportVariablesDsl() throws IOException {
+        // variables DSL を使用した build.gradle.kts でビルドが成功すること
+        String projectYaml =
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                """;
+        Files.writeString(testProjectDir.resolve("migraphe.yaml"), projectYaml);
+
+        String buildScript =
+                """
+                plugins {
+                    id("io.github.kakusuke.migraphe")
+                }
+
+                migraphe {
+                    variables.set(mapOf(
+                        "DB_HOST" to "localhost",
+                        "DB_USER" to "testuser"
+                    ))
+                }
+                """;
+        Files.writeString(testProjectDir.resolve("build.gradle.kts"), buildScript);
+
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("migrapheValidate")
+                        .build();
+
+        assertThat(result.getOutput()).contains("Validation successful");
+    }
+
     private void createProjectWithTargets(Path baseDir) throws IOException {
         String projectYaml =
                 """

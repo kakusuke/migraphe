@@ -1,5 +1,6 @@
 package io.github.kakusuke.migraphe.gradle;
 
+import java.util.Collections;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
@@ -13,6 +14,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
         MigrapheExtension extension =
                 project.getExtensions().create("migraphe", MigrapheExtension.class);
         extension.getBaseDir().convention(project.getLayout().getProjectDirectory());
+        extension.getVariables().convention(Collections.emptyMap());
 
         // 2. カスタム configuration
         Configuration migraphePluginConfig =
@@ -34,6 +36,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.setDescription("Validate migraphe configuration files (offline)");
                             task.setGroup("migraphe");
                             task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
                         });
 
@@ -45,6 +48,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.setDescription("Show migration execution status");
                             task.setGroup("migraphe");
                             task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
                         });
 
@@ -56,6 +60,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.setDescription("Execute forward (UP) migrations");
                             task.setGroup("migraphe");
                             task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
                         });
 
@@ -67,6 +72,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.setDescription("Execute rollback (DOWN) migrations");
                             task.setGroup("migraphe");
                             task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
                         });
     }

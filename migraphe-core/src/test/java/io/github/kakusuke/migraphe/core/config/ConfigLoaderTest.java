@@ -6,6 +6,7 @@ import io.smallrye.config.SmallRyeConfig;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -83,7 +84,6 @@ class ConfigLoaderTest {
         assertThat(config.getValue("DB_USER", String.class)).isEqualTo("devuser");
     }
 
-    @org.junit.jupiter.api.Disabled("TODO: Fix variable expansion in Phase 10-5")
     @Test
     void shouldExpandEnvironmentVariables(@TempDir Path tempDir) throws IOException {
         // Given: 環境変数と ${VAR} を含む設定
@@ -142,6 +142,50 @@ class ConfigLoaderTest {
         assertThatThrownBy(() -> loader.loadConfig(tempDir, null))
                 .isInstanceOf(ConfigurationException.class)
                 .hasMessageContaining("Project config file not found");
+    }
+
+    @Test
+    void shouldOverrideConfigWithVariables(@TempDir Path tempDir) throws IOException {
+        // Given: variables で jdbc_url を上書き
+        createProjectStructure(tempDir);
+
+        ConfigLoader loader = new ConfigLoader();
+        Map<String, String> variables =
+                Map.of("target.db1.jdbc_url", "jdbc:postgresql://override-host:5432/overridedb");
+
+        // When
+        SmallRyeConfig config = loader.load(tempDir, variables);
+
+        // Then: variables の値で上書きされる
+        assertThat(config.getValue("target.db1.jdbc_url", String.class))
+                .isEqualTo("jdbc:postgresql://override-host:5432/overridedb");
+    }
+
+    @Test
+    void shouldResolveVariableExpressions(@TempDir Path tempDir) throws IOException {
+        // Given: ${DB_HOST} を含むターゲット設定
+        createProjectStructure(tempDir);
+
+        // targets/db1.yaml を ${DB_HOST} を含む版に書き換え
+        Path db1Config = tempDir.resolve("targets/db1.yaml");
+        Files.writeString(
+                db1Config,
+                """
+                type: postgresql
+                jdbc_url: jdbc:postgresql://${DB_HOST}:5432/mydb
+                username: dbuser
+                password: secret
+                """);
+
+        ConfigLoader loader = new ConfigLoader();
+        Map<String, String> variables = Map.of("DB_HOST", "variables-host");
+
+        // When
+        SmallRyeConfig config = loader.load(tempDir, variables);
+
+        // Then: ${DB_HOST} が variables から解決される
+        assertThat(config.getValue("target.db1.jdbc_url", String.class))
+                .isEqualTo("jdbc:postgresql://variables-host:5432/mydb");
     }
 
     /** テスト用のプロジェクト構造を作成する。 */
