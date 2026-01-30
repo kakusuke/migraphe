@@ -14,7 +14,8 @@
 8. [Configuration Validation (validate)](#configuration-validation-validate)
 9. [Environment Management](#environment-management)
 10. [Advanced Features](#advanced-features)
-11. [Troubleshooting](#troubleshooting)
+11. [Gradle Plugin](#gradle-plugin)
+12. [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -356,13 +357,13 @@ java -jar migraphe-cli-all.jar up
 java -jar migraphe-cli-all.jar up -y
 
 # Show execution plan only (don't actually execute)
-java -jar migraphe-cli-all.jar up --dry-run
+java -jar migraphe-cli-all.jar up --preview
 
 # Execute up to a specific migration (only the specified ID and its dependencies)
 java -jar migraphe-cli-all.jar up <id>
 
 # Combine options
-java -jar migraphe-cli-all.jar up -y --dry-run db1/002_create_posts
+java -jar migraphe-cli-all.jar up -y --preview db1/002_create_posts
 ```
 
 **Example Output:**
@@ -391,7 +392,7 @@ Migration completed successfully. 2 migrations executed.
 |--------|-------------|
 | `<id>` | Execute only the specified migration and its dependencies |
 | `-y` | Skip confirmation prompt |
-| `--dry-run` | Show execution plan only without executing |
+| `--preview` | Show execution plan only without executing |
 
 ### Colored Output
 
@@ -453,8 +454,8 @@ java -jar migraphe-cli-all.jar down -y <version>
 java -jar migraphe-cli-all.jar down -y --all
 
 # Show execution plan only (don't actually execute)
-java -jar migraphe-cli-all.jar down --dry-run <version>
-java -jar migraphe-cli-all.jar down --dry-run --all
+java -jar migraphe-cli-all.jar down --preview <version>
+java -jar migraphe-cli-all.jar down --preview --all
 ```
 
 ### How It Works
@@ -529,7 +530,7 @@ Rollback complete. 3 migrations rolled back.
 Preview what would be rolled back without actually executing:
 
 ```bash
-$ java -jar migraphe-cli-all.jar down --dry-run db1/001_create_users
+$ java -jar migraphe-cli-all.jar down --preview db1/001_create_users
 
 [DRY RUN] The following migrations would be rolled back:
   - db1/003_create_comments: Create comments table
@@ -724,6 +725,77 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: Execution duration
 - `serialized_down_task`: Rollback SQL (UP migrations only)
 - `error_message`: Error details (FAILURE status only)
+
+## Gradle Plugin
+
+Migraphe provides a Gradle plugin for integrating migrations into your build process.
+
+> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. Use `./gradlew publishToMavenLocal` in the migraphe repository to install it locally.
+
+### Setup
+
+Add the plugin repository and version to your `settings.gradle.kts`:
+
+```kotlin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    plugins {
+        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    }
+}
+```
+
+Add to your `build.gradle.kts`:
+
+```kotlin
+plugins {
+    id("io.github.kakusuke.migraphe")
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+migraphe {
+    baseDir.set(layout.projectDirectory.dir("db")) // default: project directory
+}
+
+dependencies {
+    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
+}
+```
+
+### Available Tasks
+
+| Task | Description |
+|------|-------------|
+| `migrapheValidate` | Validate configuration files (offline, no DB connection) |
+| `migrapheStatus` | Show migration execution status |
+| `migrapheUp` | Execute forward (UP) migrations |
+| `migrapheDown` | Execute rollback (DOWN) migrations |
+
+### Task Options
+
+**migrapheUp**:
+- `--target=<nodeId>` — Migrate up to a specific node
+- `--preview` — Preview without executing
+
+**migrapheDown**:
+- `--target=<nodeId>` — Rollback to a specific node
+- `--all` — Rollback all executed migrations
+- `--preview` — Preview without executing
+
+Options can also be specified via project properties (`-P`):
+
+```bash
+./gradlew migrapheUp -Pmigraphe.up.target=db1/create_users
+./gradlew migrapheDown -Pmigraphe.down.all=true
+```
 
 ## Troubleshooting
 

@@ -1,9 +1,9 @@
 package io.github.kakusuke.migraphe.cli.command;
 
-import io.github.kakusuke.migraphe.cli.config.ConfigValidator;
-import io.github.kakusuke.migraphe.cli.config.ConfigValidator.ValidationOutput;
-import io.github.kakusuke.migraphe.cli.config.YamlFileScanner;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
+import io.github.kakusuke.migraphe.core.config.ConfigValidator;
+import io.github.kakusuke.migraphe.core.config.ConfigValidator.ValidationOutput;
+import io.github.kakusuke.migraphe.core.config.YamlFileScanner;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.nio.file.Path;
 import java.util.ArrayList;

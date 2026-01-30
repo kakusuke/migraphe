@@ -72,4 +72,40 @@ class ExecutionPlanTest {
         // then
         assertThat(plan.totalNodes()).isEqualTo(3);
     }
+
+    @Test
+    void shouldFilterNodesInOrder() {
+        // given: allNodes = [A, B, C, D], plan contains [B, D]
+        MigrationNode nodeA = node("a").build();
+        MigrationNode nodeB = node("b").build();
+        MigrationNode nodeC = node("c").build();
+        MigrationNode nodeD = node("d").build();
+
+        ExecutionLevel level = new ExecutionLevel(0, Set.of(nodeB, nodeD));
+        ExecutionPlan plan = new ExecutionPlan(List.of(level));
+
+        List<MigrationNode> allNodes = List.of(nodeA, nodeB, nodeC, nodeD);
+
+        // when
+        List<MigrationNode> filtered = plan.filterNodesInOrder(allNodes);
+
+        // then: allNodes の順序を維持してプラン内のノードのみ返す
+        assertThat(filtered).containsExactly(nodeB, nodeD);
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenNoMatchingNodes() {
+        // given: allNodes に含まれないノードだけのプラン
+        MigrationNode nodeA = node("a").build();
+        MigrationNode nodeX = node("x").build();
+
+        ExecutionLevel level = new ExecutionLevel(0, Set.of(nodeX));
+        ExecutionPlan plan = new ExecutionPlan(List.of(level));
+
+        // when
+        List<MigrationNode> filtered = plan.filterNodesInOrder(List.of(nodeA));
+
+        // then
+        assertThat(filtered).isEmpty();
+    }
 }

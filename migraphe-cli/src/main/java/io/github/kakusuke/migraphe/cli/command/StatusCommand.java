@@ -1,25 +1,17 @@
 package io.github.kakusuke.migraphe.cli.command;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
-import io.github.kakusuke.migraphe.cli.ExecutionContext;
+import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
+import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
-import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 /** マイグレーションの実行状況を表示するコマンド。 */
 public class StatusCommand implements Command {
-
-    private static final DateTimeFormatter DATE_TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     private final ExecutionContext context;
 
@@ -35,7 +27,7 @@ public class StatusCommand implements Command {
             System.out.println();
 
             // HistoryRepository を取得
-            HistoryRepository historyRepo = getHistoryRepository();
+            HistoryRepository historyRepo = context.createHistoryRepository();
             historyRepo.initialize();
 
             // トポロジカル順序のノードリスト（context.nodes() は既にソート済み）
@@ -78,9 +70,9 @@ public class StatusCommand implements Command {
                     if (record != null) {
                         nodeLineBuilder
                                 .append(" (")
-                                .append(formatDuration(record.durationMs()))
+                                .append(FormatUtils.formatDuration(record.durationMs()))
                                 .append(", ")
-                                .append(formatDateTime(record.executedAt()))
+                                .append(FormatUtils.formatDateTime(record.executedAt()))
                                 .append(")");
                     }
                 } else {
@@ -119,46 +111,5 @@ public class StatusCommand implements Command {
             e.printStackTrace();
             return 1; // エラー終了
         }
-    }
-
-    /** 日時をフォーマットする。 */
-    private String formatDateTime(Instant instant) {
-        return DATE_TIME_FORMATTER.format(instant);
-    }
-
-    /** 所要時間をフォーマットする。 */
-    private String formatDuration(long durationMs) {
-        if (durationMs >= 1000) {
-            return String.format("%.1fs", durationMs / 1000.0);
-        }
-        return durationMs + "ms";
-    }
-
-    /** HistoryRepository をプラグイン経由で取得する。 */
-    private HistoryRepository getHistoryRepository() {
-        // プロジェクト設定から history.target を取得
-        String historyTarget =
-                context.config()
-                        .getConfigMapping(
-                                io.github.kakusuke.migraphe.core.config.ProjectConfig.class)
-                        .history()
-                        .target();
-
-        Environment historyEnv = context.environments().get(historyTarget);
-
-        if (historyEnv == null) {
-            // フォールバック: InMemoryHistoryRepository を使用
-            System.out.println(
-                    "Warning: History target not found. Using in-memory history repository.");
-            return new InMemoryHistoryRepository();
-        }
-
-        // history.target の type を取得してプラグインを特定
-        String type = context.config().getValue("target." + historyTarget + ".type", String.class);
-
-        MigraphePlugin<?> plugin = context.pluginRegistry().getRequiredPlugin(type);
-
-        // プラグインの HistoryRepositoryProvider で HistoryRepository を生成
-        return plugin.historyRepositoryProvider().createRepository(historyEnv);
     }
 }

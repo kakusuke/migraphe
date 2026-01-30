@@ -14,7 +14,8 @@
 8. [設定の検証（validate）](#設定の検証validate)
 9. [環境管理](#環境管理)
 10. [高度な機能](#高度な機能)
-11. [トラブルシューティング](#トラブルシューティング)
+11. [Gradleプラグイン](#gradleプラグイン)
+12. [トラブルシューティング](#トラブルシューティング)
 
 ## はじめに
 
@@ -356,13 +357,13 @@ java -jar migraphe-cli-all.jar up
 java -jar migraphe-cli-all.jar up -y
 
 # 実行計画のみ表示（実際には実行しない）
-java -jar migraphe-cli-all.jar up --dry-run
+java -jar migraphe-cli-all.jar up --preview
 
 # 特定のマイグレーションまで実行（指定IDとその依存先のみ）
 java -jar migraphe-cli-all.jar up <id>
 
 # オプションの組み合わせ
-java -jar migraphe-cli-all.jar up -y --dry-run db1/002_create_posts
+java -jar migraphe-cli-all.jar up -y --preview db1/002_create_posts
 ```
 
 **出力例:**
@@ -391,7 +392,7 @@ Migration completed successfully. 2 migrations executed.
 |-----------|------|
 | `<id>` | 指定したマイグレーションとその依存先のみを実行 |
 | `-y` | 確認プロンプトをスキップ |
-| `--dry-run` | 実行計画のみ表示し、実際には実行しない |
+| `--preview` | 実行計画のみ表示し、実際には実行しない |
 
 ### 色付き出力
 
@@ -453,8 +454,8 @@ java -jar migraphe-cli-all.jar down -y <version>
 java -jar migraphe-cli-all.jar down -y --all
 
 # 実行計画のみ表示（実際には実行しない）
-java -jar migraphe-cli-all.jar down --dry-run <version>
-java -jar migraphe-cli-all.jar down --dry-run --all
+java -jar migraphe-cli-all.jar down --preview <version>
+java -jar migraphe-cli-all.jar down --preview --all
 ```
 
 ### 動作の仕組み
@@ -529,7 +530,7 @@ Rollback complete. 3 migrations rolled back.
 実際にロールバックせずに、何が実行されるかを確認できます:
 
 ```bash
-$ java -jar migraphe-cli-all.jar down --dry-run db1/001_create_users
+$ java -jar migraphe-cli-all.jar down --preview db1/001_create_users
 
 [DRY RUN] The following migrations would be rolled back:
   - db1/003_create_comments: Create comments table
@@ -724,6 +725,77 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: 実行時間
 - `serialized_down_task`: ロールバックSQL（UPマイグレーションのみ）
 - `error_message`: エラーの詳細（FAILUREステータスのみ）
+
+## Gradleプラグイン
+
+Migrapheはマイグレーションをビルドプロセスに統合するためのGradleプラグインを提供します。
+
+> **注意:** プラグインはまだMaven Central / Gradle Plugin Portalに公開されていません。migrapheリポジトリで `./gradlew publishToMavenLocal` を実行してローカルインストールしてください。
+
+### セットアップ
+
+`settings.gradle.kts` にプラグインリポジトリとバージョンを追加:
+
+```kotlin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    plugins {
+        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    }
+}
+```
+
+`build.gradle.kts` に追加:
+
+```kotlin
+plugins {
+    id("io.github.kakusuke.migraphe")
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+migraphe {
+    baseDir.set(layout.projectDirectory.dir("db")) // デフォルト: プロジェクトディレクトリ
+}
+
+dependencies {
+    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
+}
+```
+
+### 利用可能なタスク
+
+| タスク | 説明 |
+|--------|------|
+| `migrapheValidate` | 設定ファイルの検証（オフライン、DB接続不要） |
+| `migrapheStatus` | マイグレーション実行状況の表示 |
+| `migrapheUp` | マイグレーション（前進）の実行 |
+| `migrapheDown` | ロールバック（後退）の実行 |
+
+### タスクオプション
+
+**migrapheUp**:
+- `--target=<nodeId>` — 特定のノードまでマイグレーション
+- `--preview` — 実行せずにプレビュー
+
+**migrapheDown**:
+- `--target=<nodeId>` — 特定のノードまでロールバック
+- `--all` — 全実行済みマイグレーションのロールバック
+- `--preview` — 実行せずにプレビュー
+
+プロジェクトプロパティ（`-P`）でも指定可能:
+
+```bash
+./gradlew migrapheUp -Pmigraphe.up.target=db1/create_users
+./gradlew migrapheDown -Pmigraphe.down.all=true
+```
 
 ## トラブルシューティング
 

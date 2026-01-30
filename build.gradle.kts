@@ -58,4 +58,22 @@ subprojects {
     tasks.withType<Test> {
         useJUnitPlatform()
     }
+
+    // maven-publish: cli 以外のモジュールを publishToMavenLocal 可能にする
+    if (name != "migraphe-cli") {
+        apply(plugin = "maven-publish")
+
+        afterEvaluate {
+            configure<PublishingExtension> {
+                publications {
+                    // java-gradle-plugin は自動で pluginMaven publication を生成するのでスキップ
+                    if (plugins.hasPlugin("java-gradle-plugin").not()) {
+                        create<MavenPublication>("maven") {
+                            from(components["java"])
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

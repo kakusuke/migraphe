@@ -8,8 +8,11 @@ dependencies {
 
     // MicroProfile Config
     api(libs.microprofile.config.api)
-    implementation(libs.smallrye.config)
-    implementation(libs.smallrye.config.source.yaml)
+    api(libs.smallrye.config)
+    api(libs.smallrye.config.source.yaml)
+
+    // プラグイン（テスト用のみ - ファクトリ・バリデータテスト用）
+    testImplementation(project(":migraphe-plugin-postgresql"))
 
     // JUnit 5
     testImplementation(platform(libs.junit.bom))

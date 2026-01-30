@@ -38,6 +38,22 @@ public final class PluginRegistry {
     }
 
     /**
+     * 指定された ClassLoader を使用してプラグインを読み込む。
+     *
+     * <p>Gradle plugin 等、独自の ClassLoader からプラグインをロードする場合に使用する。
+     *
+     * @param classLoader プラグインを探索する ClassLoader
+     */
+    @SuppressWarnings("rawtypes")
+    public void loadFromClassLoader(ClassLoader classLoader) {
+        ServiceLoader<MigraphePlugin> loader =
+                ServiceLoader.load(MigraphePlugin.class, classLoader);
+        for (MigraphePlugin plugin : loader) {
+            register(plugin);
+        }
+    }
+
+    /**
      * 指定された JAR ファイルからプラグインを読み込む。
      *
      * @param jarPath JAR ファイルのパス

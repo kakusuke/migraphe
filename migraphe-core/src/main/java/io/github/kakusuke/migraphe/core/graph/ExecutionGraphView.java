@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.core.graph;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import java.util.*;
+import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -66,6 +67,33 @@ public final class ExecutionGraphView {
     /** 各ノードの行情報リストを取得する。 */
     public List<NodeLineInfo> lines() {
         return lines;
+    }
+
+    /**
+     * 各ノードのステータス付き行をリストとして生成する。
+     *
+     * <p>各行に mergeLine, ノード行（ステータス付き）, branchLine, connectorLine を含む。 Up/Down のグラフ表示に使用する。Status
+     * コマンドはノード行に追加情報を付加するため直接 {@link #lines()} を使う。
+     *
+     * @param statusFn 各ノードに対するステータス文字列を返す関数（例: "[✓]" / "[ ]"）
+     * @return 表示行のリスト
+     */
+    public List<String> renderLines(Function<MigrationNode, String> statusFn) {
+        List<String> output = new ArrayList<>();
+        for (NodeLineInfo info : lines) {
+            if (info.mergeLine() != null) {
+                output.add(info.mergeLine());
+            }
+            String status = statusFn.apply(info.node());
+            output.add(info.toPlainText(status));
+            if (info.branchLine() != null) {
+                output.add(info.branchLine());
+            }
+            if (info.connectorLine() != null) {
+                output.add(info.connectorLine());
+            }
+        }
+        return output;
     }
 
     /** プレーンテキストとしてグラフ全体を出力する（色なし）。 */
