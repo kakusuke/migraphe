@@ -102,7 +102,22 @@ java -jar path/to/migraphe-cli-all.jar up
 
 ## Gradleプラグイン
 
-> **注意:** プラグインはまだMaven Central / Gradle Plugin Portalに公開されていません。利用にはローカルビルドが必要です。
+> **注意:** プラグインはまだMaven Central / Gradle Plugin Portalに公開されていません。migrapheリポジトリで `./gradlew publishToMavenLocal` を実行してローカルインストールしてください。
+
+`settings.gradle.kts` にプラグインリポジトリとバージョンを追加:
+
+```kotlin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    plugins {
+        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    }
+}
+```
 
 `build.gradle.kts` にプラグインを追加:
 
@@ -111,12 +126,17 @@ plugins {
     id("io.github.kakusuke.migraphe")
 }
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 migraphe {
     baseDir.set(layout.projectDirectory.dir("db")) // デフォルト: プロジェクトディレクトリ
 }
 
 dependencies {
-    migraphePlugin("io.github.kakusuke:migraphe-plugin-postgresql:0.1.0")
+    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
 }
 ```
 
@@ -126,7 +146,7 @@ dependencies {
 ./gradlew migrapheValidate          # 設定ファイルの検証（オフライン）
 ./gradlew migrapheStatus            # マイグレーションステータス表示
 ./gradlew migrapheUp                # マイグレーション実行
-./gradlew migrapheUp --dry-run      # 実行せずにプレビュー
+./gradlew migrapheUp --preview      # 実行せずにプレビュー
 ./gradlew migrapheUp --target=db1/create_users  # 特定ノードまで実行
 ./gradlew migrapheDown --all        # 全マイグレーションのロールバック
 ./gradlew migrapheDown --target=db1/create_users  # 特定ノードまでロールバック

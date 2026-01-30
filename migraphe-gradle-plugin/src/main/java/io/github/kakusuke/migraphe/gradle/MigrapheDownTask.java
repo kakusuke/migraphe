@@ -12,6 +12,7 @@ import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.gradle.api.GradleException;
@@ -50,7 +51,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
     }
 
     @Option(
-            option = "dry-run",
+            option = "preview",
             description = "Show what would be rolled back without making changes")
     public void setDryRunOption(boolean dryRun) {
         getDryRun().set(dryRun);
@@ -63,28 +64,11 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
         NodeId targetVersion = null;
         if (getTarget().isPresent()) {
             targetVersion = NodeId.of(getTarget().get());
-        } else {
-            Object prop = getProject().findProperty("migraphe.down.target");
-            if (prop != null) {
-                targetVersion = NodeId.of(prop.toString());
-            }
         }
 
         boolean allMigrations = getAll().getOrElse(false);
-        if (!allMigrations) {
-            Object prop = getProject().findProperty("migraphe.down.all");
-            if ("true".equals(String.valueOf(prop))) {
-                allMigrations = true;
-            }
-        }
 
         boolean dryRun = getDryRun().getOrElse(false);
-        if (!dryRun) {
-            Object prop = getProject().findProperty("migraphe.down.dryRun");
-            if ("true".equals(String.valueOf(prop))) {
-                dryRun = true;
-            }
-        }
 
         // 引数のバリデーション
         if (!allMigrations && targetVersion == null) {
@@ -119,7 +103,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
         // 逆順実行プラン生成してグラフ表示
         ExecutionPlan plan =
                 TopologicalSort.createReverseExecutionPlanFor(context.graph(), targetNodes);
-        displayRollbackPlan(plan, historyRepo, dryRun);
+        displayRollbackPlan(context, plan, historyRepo, dryRun);
 
         // dry-run の場合はここで終了
         if (dryRun) {
@@ -145,7 +129,10 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
     }
 
     private void displayRollbackPlan(
-            ExecutionPlan plan, HistoryRepository historyRepo, boolean dryRun) {
+            ExecutionContext context,
+            ExecutionPlan plan,
+            HistoryRepository historyRepo,
+            boolean dryRun) {
         String prefix = dryRun ? "[DRY RUN] " : "";
         String verb = dryRun ? "would be" : "will be";
 
@@ -153,9 +140,18 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
         getLogger().lifecycle("{}Migrations to rollback:", prefix);
         getLogger().lifecycle("");
 
-        List<MigrationNode> sortedNodes = new ArrayList<>();
+        // プランのノードID集合を取得し、context.nodes() の DFS 順でフィルタ
+        Set<NodeId> planNodeIds = new HashSet<>();
         for (ExecutionLevel level : plan.levels()) {
-            sortedNodes.addAll(level.nodes());
+            for (MigrationNode n : level.nodes()) {
+                planNodeIds.add(n.id());
+            }
+        }
+        List<MigrationNode> sortedNodes = new ArrayList<>();
+        for (MigrationNode node : context.nodes()) {
+            if (planNodeIds.contains(node.id())) {
+                sortedNodes.add(node);
+            }
         }
 
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, true);

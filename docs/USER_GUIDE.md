@@ -357,13 +357,13 @@ java -jar migraphe-cli-all.jar up
 java -jar migraphe-cli-all.jar up -y
 
 # Show execution plan only (don't actually execute)
-java -jar migraphe-cli-all.jar up --dry-run
+java -jar migraphe-cli-all.jar up --preview
 
 # Execute up to a specific migration (only the specified ID and its dependencies)
 java -jar migraphe-cli-all.jar up <id>
 
 # Combine options
-java -jar migraphe-cli-all.jar up -y --dry-run db1/002_create_posts
+java -jar migraphe-cli-all.jar up -y --preview db1/002_create_posts
 ```
 
 **Example Output:**
@@ -392,7 +392,7 @@ Migration completed successfully. 2 migrations executed.
 |--------|-------------|
 | `<id>` | Execute only the specified migration and its dependencies |
 | `-y` | Skip confirmation prompt |
-| `--dry-run` | Show execution plan only without executing |
+| `--preview` | Show execution plan only without executing |
 
 ### Colored Output
 
@@ -454,8 +454,8 @@ java -jar migraphe-cli-all.jar down -y <version>
 java -jar migraphe-cli-all.jar down -y --all
 
 # Show execution plan only (don't actually execute)
-java -jar migraphe-cli-all.jar down --dry-run <version>
-java -jar migraphe-cli-all.jar down --dry-run --all
+java -jar migraphe-cli-all.jar down --preview <version>
+java -jar migraphe-cli-all.jar down --preview --all
 ```
 
 ### How It Works
@@ -530,7 +530,7 @@ Rollback complete. 3 migrations rolled back.
 Preview what would be rolled back without actually executing:
 
 ```bash
-$ java -jar migraphe-cli-all.jar down --dry-run db1/001_create_users
+$ java -jar migraphe-cli-all.jar down --preview db1/001_create_users
 
 [DRY RUN] The following migrations would be rolled back:
   - db1/003_create_comments: Create comments table
@@ -730,9 +730,24 @@ WHERE node_id = 'db1/001_create_users';
 
 Migraphe provides a Gradle plugin for integrating migrations into your build process.
 
-> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. A local build is required to use it.
+> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. Use `./gradlew publishToMavenLocal` in the migraphe repository to install it locally.
 
 ### Setup
+
+Add the plugin repository and version to your `settings.gradle.kts`:
+
+```kotlin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    plugins {
+        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    }
+}
+```
 
 Add to your `build.gradle.kts`:
 
@@ -741,12 +756,17 @@ plugins {
     id("io.github.kakusuke.migraphe")
 }
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 migraphe {
     baseDir.set(layout.projectDirectory.dir("db")) // default: project directory
 }
 
 dependencies {
-    migraphePlugin("io.github.kakusuke:migraphe-plugin-postgresql:0.1.0")
+    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
 }
 ```
 
@@ -763,12 +783,12 @@ dependencies {
 
 **migrapheUp**:
 - `--target=<nodeId>` — Migrate up to a specific node
-- `--dry-run` — Preview without executing
+- `--preview` — Preview without executing
 
 **migrapheDown**:
 - `--target=<nodeId>` — Rollback to a specific node
 - `--all` — Rollback all executed migrations
-- `--dry-run` — Preview without executing
+- `--preview` — Preview without executing
 
 Options can also be specified via project properties (`-P`):
 

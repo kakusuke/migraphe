@@ -102,7 +102,22 @@ java -jar path/to/migraphe-cli-all.jar up
 
 ## Gradle Plugin
 
-> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. A local build is required to use it.
+> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. Use `./gradlew publishToMavenLocal` in the migraphe repository to install it locally.
+
+Add the plugin repository and version to your `settings.gradle.kts`:
+
+```kotlin
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+    }
+    plugins {
+        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    }
+}
+```
 
 Add the plugin to your `build.gradle.kts`:
 
@@ -111,12 +126,17 @@ plugins {
     id("io.github.kakusuke.migraphe")
 }
 
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
 migraphe {
     baseDir.set(layout.projectDirectory.dir("db")) // default: project directory
 }
 
 dependencies {
-    migraphePlugin("io.github.kakusuke:migraphe-plugin-postgresql:0.1.0")
+    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
 }
 ```
 
@@ -126,7 +146,7 @@ Available tasks:
 ./gradlew migrapheValidate          # Validate configuration (offline)
 ./gradlew migrapheStatus            # Show migration status
 ./gradlew migrapheUp                # Execute forward migrations
-./gradlew migrapheUp --dry-run      # Preview without executing
+./gradlew migrapheUp --preview      # Preview without executing
 ./gradlew migrapheUp --target=db1/create_users  # Migrate up to specific node
 ./gradlew migrapheDown --all        # Rollback all migrations
 ./gradlew migrapheDown --target=db1/create_users  # Rollback to specific node

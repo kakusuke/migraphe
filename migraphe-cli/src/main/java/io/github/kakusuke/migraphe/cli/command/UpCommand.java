@@ -19,6 +19,7 @@ import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
@@ -92,7 +93,7 @@ public class UpCommand implements Command {
             // 5. ExecutionPlan を生成してグラフ表示
             ExecutionPlan plan =
                     TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
-            displayMigrationGraph(plan, historyRepo);
+            displayMigrationGraph(context, plan, historyRepo);
 
             // 6. dry-run の場合はここで終了
             if (dryRun) {
@@ -123,7 +124,8 @@ public class UpCommand implements Command {
     }
 
     /** マイグレーショングラフを表示する。 */
-    private void displayMigrationGraph(ExecutionPlan plan, HistoryRepository historyRepo) {
+    private void displayMigrationGraph(
+            ExecutionContext context, ExecutionPlan plan, HistoryRepository historyRepo) {
         String prefix = dryRun ? "[DRY RUN] " : "";
         String verb = dryRun ? "would be" : "will be";
 
@@ -131,10 +133,18 @@ public class UpCommand implements Command {
         System.out.println(prefix + "Migrations to execute:");
         System.out.println();
 
-        // トポロジカル順序でノードを取得
-        List<MigrationNode> sortedNodes = new ArrayList<>();
+        // プランのノードID集合を取得し、context.nodes() の DFS 順でフィルタ
+        Set<NodeId> planNodeIds = new HashSet<>();
         for (ExecutionLevel level : plan.levels()) {
-            sortedNodes.addAll(level.nodes());
+            for (MigrationNode n : level.nodes()) {
+                planNodeIds.add(n.id());
+            }
+        }
+        List<MigrationNode> sortedNodes = new ArrayList<>();
+        for (MigrationNode node : context.nodes()) {
+            if (planNodeIds.contains(node.id())) {
+                sortedNodes.add(node);
+            }
         }
 
         // ExecutionGraphView を使用してグラフ表示

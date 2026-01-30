@@ -12,6 +12,7 @@ import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.gradle.api.GradleException;
@@ -39,7 +40,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         getTarget().set(target);
     }
 
-    @Option(option = "dry-run", description = "Show what would be executed without making changes")
+    @Option(option = "preview", description = "Show what would be executed without making changes")
     public void setDryRunOption(boolean dryRun) {
         getDryRun().set(dryRun);
     }
@@ -51,21 +52,9 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         NodeId targetId = null;
         if (getTarget().isPresent()) {
             targetId = NodeId.of(getTarget().get());
-        } else {
-            // -P フォールバック
-            Object prop = getProject().findProperty("migraphe.up.target");
-            if (prop != null) {
-                targetId = NodeId.of(prop.toString());
-            }
         }
 
         boolean dryRun = getDryRun().getOrElse(false);
-        if (!dryRun) {
-            Object prop = getProject().findProperty("migraphe.up.dryRun");
-            if ("true".equals(String.valueOf(prop))) {
-                dryRun = true;
-            }
-        }
 
         // ターゲット指定の場合、存在確認
         if (targetId != null && context.graph().getNode(targetId).isEmpty()) {
@@ -91,7 +80,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
 
         // 実行プランを生成してグラフ表示
         ExecutionPlan plan = TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
-        displayMigrationGraph(plan, historyRepo, dryRun);
+        displayMigrationGraph(context, plan, historyRepo, dryRun);
 
         // dry-run の場合はここで終了
         if (dryRun) {
@@ -117,7 +106,10 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
     }
 
     private void displayMigrationGraph(
-            ExecutionPlan plan, HistoryRepository historyRepo, boolean dryRun) {
+            ExecutionContext context,
+            ExecutionPlan plan,
+            HistoryRepository historyRepo,
+            boolean dryRun) {
         String prefix = dryRun ? "[DRY RUN] " : "";
         String verb = dryRun ? "would be" : "will be";
 
@@ -125,9 +117,18 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         getLogger().lifecycle("{}Migrations to execute:", prefix);
         getLogger().lifecycle("");
 
-        List<MigrationNode> sortedNodes = new ArrayList<>();
+        // プランのノードID集合を取得し、context.nodes() の DFS 順でフィルタ
+        Set<NodeId> planNodeIds = new HashSet<>();
         for (ExecutionLevel level : plan.levels()) {
-            sortedNodes.addAll(level.nodes());
+            for (MigrationNode n : level.nodes()) {
+                planNodeIds.add(n.id());
+            }
+        }
+        List<MigrationNode> sortedNodes = new ArrayList<>();
+        for (MigrationNode node : context.nodes()) {
+            if (planNodeIds.contains(node.id())) {
+                sortedNodes.add(node);
+            }
         }
 
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);

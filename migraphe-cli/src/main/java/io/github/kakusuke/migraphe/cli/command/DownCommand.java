@@ -19,6 +19,7 @@ import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
@@ -106,7 +107,7 @@ public class DownCommand implements Command {
             // 5. 逆順実行プラン生成してグラフ表示
             ExecutionPlan plan =
                     TopologicalSort.createReverseExecutionPlanFor(context.graph(), targetNodes);
-            displayRollbackPlan(plan, historyRepo);
+            displayRollbackPlan(context, plan, historyRepo);
 
             // 6. dry-run の場合はここで終了
             if (dryRun) {
@@ -137,7 +138,8 @@ public class DownCommand implements Command {
     }
 
     /** ロールバック対象を表示する。 */
-    private void displayRollbackPlan(ExecutionPlan plan, HistoryRepository historyRepo) {
+    private void displayRollbackPlan(
+            ExecutionContext context, ExecutionPlan plan, HistoryRepository historyRepo) {
         String prefix = dryRun ? "[DRY RUN] " : "";
         String verb = dryRun ? "would be" : "will be";
 
@@ -145,10 +147,18 @@ public class DownCommand implements Command {
         System.out.println(prefix + "Migrations to rollback:");
         System.out.println();
 
-        // トポロジカル順序でノードを取得
-        List<MigrationNode> sortedNodes = new ArrayList<>();
+        // プランのノードID集合を取得し、context.nodes() の DFS 順でフィルタ
+        Set<NodeId> planNodeIds = new HashSet<>();
         for (ExecutionLevel level : plan.levels()) {
-            sortedNodes.addAll(level.nodes());
+            for (MigrationNode n : level.nodes()) {
+                planNodeIds.add(n.id());
+            }
+        }
+        List<MigrationNode> sortedNodes = new ArrayList<>();
+        for (MigrationNode node : context.nodes()) {
+            if (planNodeIds.contains(node.id())) {
+                sortedNodes.add(node);
+            }
         }
 
         // ExecutionGraphView を使用してグラフ表示（逆順モード）

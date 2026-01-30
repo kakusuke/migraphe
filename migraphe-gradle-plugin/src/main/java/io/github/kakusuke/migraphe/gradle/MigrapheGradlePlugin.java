@@ -62,6 +62,15 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
+                            // -P プロパティによるフォールバック (configuration time)
+                            Object targetProp = project.findProperty("migraphe.up.target");
+                            if (targetProp != null) {
+                                task.getTarget().convention(targetProp.toString());
+                            }
+                            Object dryRunProp = project.findProperty("migraphe.up.dryRun");
+                            if ("true".equals(String.valueOf(dryRunProp))) {
+                                task.getDryRun().convention(true);
+                            }
                         });
 
         project.getTasks()
@@ -74,6 +83,19 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
+                            // -P プロパティによるフォールバック (configuration time)
+                            Object targetProp = project.findProperty("migraphe.down.target");
+                            if (targetProp != null) {
+                                task.getTarget().convention(targetProp.toString());
+                            }
+                            Object allProp = project.findProperty("migraphe.down.all");
+                            if ("true".equals(String.valueOf(allProp))) {
+                                task.getAll().convention(true);
+                            }
+                            Object dryRunProp = project.findProperty("migraphe.down.dryRun");
+                            if ("true".equals(String.valueOf(dryRunProp))) {
+                                task.getDryRun().convention(true);
+                            }
                         });
     }
 }
