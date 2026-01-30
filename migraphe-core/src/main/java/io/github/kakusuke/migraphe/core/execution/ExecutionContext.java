@@ -3,12 +3,16 @@ package io.github.kakusuke.migraphe.core.execution;
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
+import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.config.ConfigLoader;
+import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.factory.EnvironmentFactory;
 import io.github.kakusuke.migraphe.core.factory.MigrationNodeFactory;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
+import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import java.nio.file.Path;
@@ -39,6 +43,26 @@ public record ExecutionContext(
         Map<String, Environment> environments,
         List<MigrationNode> nodes,
         MigrationGraph graph) {
+
+    /**
+     * HistoryRepository を生成する。
+     *
+     * <p>プロジェクト設定の history.target からターゲットを特定し、対応するプラグインの {@link
+     * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} で HistoryRepository を生成する。
+     * ターゲットが見つからない場合は {@link InMemoryHistoryRepository} をフォールバックとして返す。
+     *
+     * @return HistoryRepository
+     */
+    public HistoryRepository createHistoryRepository() {
+        String historyTarget = config.getConfigMapping(ProjectConfig.class).history().target();
+        Environment historyEnv = environments.get(historyTarget);
+        if (historyEnv == null) {
+            return new InMemoryHistoryRepository();
+        }
+        String type = config.getValue("target." + historyTarget + ".type", String.class);
+        MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
+        return plugin.historyRepositoryProvider().createRepository(historyEnv);
+    }
 
     /**
      * プロジェクトディレクトリから ExecutionContext をロードする。

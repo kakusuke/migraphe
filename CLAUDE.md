@@ -38,7 +38,7 @@ io.github.kakusuke.migraphe.api/
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
 
 io.github.kakusuke.migraphe.core/
-├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, ExecutionGraphView, NodeLineInfo
+├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, ExecutionGraphView, NodeLineInfo, FormatUtils
 ├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult, ExecutionContext
 ├── history/        # InMemoryHistoryRepository
 ├── config/         # ProjectConfig, TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
@@ -62,8 +62,7 @@ io.github.kakusuke.migraphe.gradle/
 ├── MigrapheExtension.java        # DSL extension (baseDir)
 ├── AbstractMigrapheTask.java     # Base task (PluginRegistry, ExecutionContext)
 ├── Migraphe{Up,Down,Status,Validate}Task.java  # Gradle tasks
-├── GradleExecutionListener.java  # Gradle Logger-based listener
-└── HistoryRepositoryHelper.java  # Shared HistoryRepository creation
+└── GradleExecutionListener.java  # Gradle Logger-based listener
 ```
 
 ## Key Design Decisions
@@ -78,6 +77,7 @@ io.github.kakusuke.migraphe.gradle/
 8. **Plugin System (Phase 11)**: ServiceLoader + URLClassLoader for runtime loading
 9. **Listener Pattern (Phase 14)**: Business logic (Core) separated from presentation (CLI/Gradle). `ExecutionListener` for progress notifications, `ExecutionGraphView` for graph rendering with `toString()`
 10. **Gradle Plugin (Phase 15)**: `java-gradle-plugin` + Gradle TestKit. Custom `migraphePlugin` configuration for plugin JARs. `@Option` + `-P` property for task arguments. `PluginRegistry.loadFromClassLoader()` for Gradle's classloader
+11. **Shared Logic**: `ExecutionContext.createHistoryRepository()` for HistoryRepository creation, `ExecutionPlan.filterNodesInOrder()` for DFS-order filtering, `ExecutionGraphView.renderLines()` for graph rendering loop, `FormatUtils` for duration/datetime formatting
 
 ## CLI Project Structure
 
@@ -139,7 +139,7 @@ Update when code changes:
 | 15-0 | Shared infra CLI → Core migration | ✅ Complete |
 | 15-1 | Gradle plugin module creation | ✅ Complete |
 | 15-2 | Extension DSL + Plugin class | ✅ Complete |
-| 15-3 | AbstractMigrapheTask + Listener + Helper | ✅ Complete |
+| 15-3 | AbstractMigrapheTask + Listener | ✅ Complete |
 | 15-4 | Task implementations (Up/Down/Status/Validate) | ✅ Complete |
 | 15-5 | Tests (Unit + Gradle TestKit) | ✅ Complete |
 
@@ -172,26 +172,21 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-01-30 (Session 18)
+- **Gradle/CLI 共通処理抽出**: 重複コードを Core に共通化
+  - `ExecutionContext.createHistoryRepository()`: HistoryRepository 生成を一元化（CLI 3箇所 + Gradle 3箇所の重複を解消）
+  - `ExecutionPlan.filterNodesInOrder()`: Plan ノード DFS 順フィルタを一元化（CLI 2箇所 + Gradle 2箇所）
+  - `ExecutionGraphView.renderLines(Function)`: グラフ行レンダリングループを一元化（CLI Up/Down + Gradle Up/Down）
+  - `FormatUtils`: Duration/DateTime フォーマットを Core に新規追加（CLI StatusCommand + Gradle MigrapheStatusTask）
+  - `HistoryRepositoryHelper.java` **削除**（`ExecutionContext.createHistoryRepository()` に統合）
+  - 新規テスト 8 件追加（createHistoryRepository ×2, filterNodesInOrder ×2, renderLines ×3, FormatUtils ×3 ※ネストクラス含む）
+- Tests: 265+, 100% passing
+
 ### 2026-01-28 (Session 17)
 - **Gradle Plugin 実装 (Phase 15)**: `migraphe-gradle-plugin` モジュール新規作成
-  - **Phase 15-0**: 共有インフラ CLI → Core 移動（config, factory, ExecutionContext の 9 ソース + 8 テスト）
-  - **Phase 15-1**: モジュール作成 + `java-gradle-plugin` ビルド設定
-  - **Phase 15-2**: `MigrapheExtension`（DSL）+ `MigrapheGradlePlugin`（エントリポイント）
-  - **Phase 15-3**: `AbstractMigrapheTask`（共通基底）, `GradleExecutionListener`, `HistoryRepositoryHelper`
-  - **Phase 15-4**: 4タスク実装 — `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate`
-    - `@Option` + `-P` プロジェクトプロパティ対応
-    - `migraphePlugin` カスタム configuration でプラグイン JAR 追加
-  - **Phase 15-5**: テスト 14 件（ユニット 6 + Gradle TestKit 機能テスト 8）
-  - **PluginRegistry**: `loadFromClassLoader()` メソッド追加
-  - **Core build.gradle.kts**: SmallRye を `api` スコープに変更（ExecutionContext 公開 API のため）
 - Tests: 257, 100% passing
-
-### 2026-01-26 (Session 16)
-- **Core Logic Extraction**: CLI のビジネスロジックを Core に移動（Gradle plugin 準備）
-  - Listener パターン導入, MigrationExecutor, RollbackExecutor, ExecutionGraphView 等
-- Tests: 159+, 100% passing
 
 ---
 
-**Last Updated**: 2026-01-28
-**Gradle Plugin Complete** - Next: history command, Native Image, configuration cache
+**Last Updated**: 2026-01-30
+**Shared Logic Extraction Complete** - Next: history command, Native Image, configuration cache

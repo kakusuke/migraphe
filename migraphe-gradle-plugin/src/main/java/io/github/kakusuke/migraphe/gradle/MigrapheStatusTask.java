@@ -5,19 +5,14 @@ import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
+import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import org.gradle.api.tasks.TaskAction;
 
 /** マイグレーションの実行状況を表示する Gradle タスク。 */
 public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
-
-    private static final DateTimeFormatter DATE_TIME_FORMATTER =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 
     @TaskAction
     public void status() {
@@ -27,8 +22,7 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
         getLogger().lifecycle("================");
         getLogger().lifecycle("");
 
-        HistoryRepository historyRepo =
-                HistoryRepositoryHelper.getHistoryRepository(context, getLogger());
+        HistoryRepository historyRepo = context.createHistoryRepository();
         historyRepo.initialize();
 
         List<MigrationNode> sortedNodes = new ArrayList<>(context.nodes());
@@ -64,9 +58,9 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                 if (record != null) {
                     nodeLineBuilder
                             .append(" (")
-                            .append(formatDuration(record.durationMs()))
+                            .append(FormatUtils.formatDuration(record.durationMs()))
                             .append(", ")
-                            .append(formatDateTime(record.executedAt()))
+                            .append(FormatUtils.formatDateTime(record.executedAt()))
                             .append(")");
                 }
             } else {
@@ -96,16 +90,5 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
     /** 副作用のあるタスクはキャッシュしない。 */
     public MigrapheStatusTask() {
         getOutputs().upToDateWhen(task -> false);
-    }
-
-    private String formatDateTime(Instant instant) {
-        return DATE_TIME_FORMATTER.format(instant);
-    }
-
-    private String formatDuration(long durationMs) {
-        if (durationMs >= 1000) {
-            return String.format("%.1fs", durationMs / 1000.0);
-        }
-        return durationMs + "ms";
     }
 }

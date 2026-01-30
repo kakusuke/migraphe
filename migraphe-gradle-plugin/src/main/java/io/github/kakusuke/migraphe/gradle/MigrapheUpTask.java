@@ -7,12 +7,8 @@ import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.MigrationExecutor;
 import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
-import io.github.kakusuke.migraphe.core.graph.ExecutionLevel;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
-import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.gradle.api.GradleException;
@@ -62,8 +58,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         }
 
         // HistoryRepository を取得
-        HistoryRepository historyRepo =
-                HistoryRepositoryHelper.getHistoryRepository(context, getLogger());
+        HistoryRepository historyRepo = context.createHistoryRepository();
         historyRepo.initialize();
 
         // Executor を作成
@@ -117,49 +112,18 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         getLogger().lifecycle("{}Migrations to execute:", prefix);
         getLogger().lifecycle("");
 
-        // プランのノードID集合を取得し、context.nodes() の DFS 順でフィルタ
-        Set<NodeId> planNodeIds = new HashSet<>();
-        for (ExecutionLevel level : plan.levels()) {
-            for (MigrationNode n : level.nodes()) {
-                planNodeIds.add(n.id());
-            }
-        }
-        List<MigrationNode> sortedNodes = new ArrayList<>();
-        for (MigrationNode node : context.nodes()) {
-            if (planNodeIds.contains(node.id())) {
-                sortedNodes.add(node);
-            }
-        }
+        // プランのノードを DFS 順でフィルタ
+        List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
-        List<NodeLineInfo> lines = graphView.lines();
-
-        for (NodeLineInfo info : lines) {
-            MigrationNode node = info.node();
-            boolean executed = historyRepo.wasExecuted(node.id(), node.environment().id());
-
-            if (info.mergeLine() != null) {
-                getLogger().lifecycle(info.mergeLine());
-            }
-
-            String status = executed ? "[✓]" : "[ ]";
-            String line =
-                    info.graphPrefix()
-                            + " "
-                            + status
-                            + " "
-                            + node.id().value()
-                            + " - "
-                            + node.name();
+        List<String> lines =
+                graphView.renderLines(
+                        node ->
+                                historyRepo.wasExecuted(node.id(), node.environment().id())
+                                        ? "[✓]"
+                                        : "[ ]");
+        for (String line : lines) {
             getLogger().lifecycle(line);
-
-            if (info.branchLine() != null) {
-                getLogger().lifecycle(info.branchLine());
-            }
-
-            if (info.connectorLine() != null) {
-                getLogger().lifecycle(info.connectorLine());
-            }
         }
 
         getLogger().lifecycle("");

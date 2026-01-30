@@ -1,25 +1,18 @@
 package io.github.kakusuke.migraphe.cli.command;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.cli.listener.ConsoleExecutionListener;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.RollbackExecutor;
 import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
-import io.github.kakusuke.migraphe.core.graph.ExecutionLevel;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
-import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
-import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
@@ -87,7 +80,7 @@ public class DownCommand implements Command {
             }
 
             // 2. HistoryRepository を取得
-            HistoryRepository historyRepo = getHistoryRepository();
+            HistoryRepository historyRepo = context.createHistoryRepository();
             historyRepo.initialize();
 
             // 3. Executor と Listener を作成
@@ -147,54 +140,19 @@ public class DownCommand implements Command {
         System.out.println(prefix + "Migrations to rollback:");
         System.out.println();
 
-        // プランのノードID集合を取得し、context.nodes() の DFS 順でフィルタ
-        Set<NodeId> planNodeIds = new HashSet<>();
-        for (ExecutionLevel level : plan.levels()) {
-            for (MigrationNode n : level.nodes()) {
-                planNodeIds.add(n.id());
-            }
-        }
-        List<MigrationNode> sortedNodes = new ArrayList<>();
-        for (MigrationNode node : context.nodes()) {
-            if (planNodeIds.contains(node.id())) {
-                sortedNodes.add(node);
-            }
-        }
+        // プランのノードを DFS 順でフィルタ
+        List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
         // ExecutionGraphView を使用してグラフ表示（逆順モード）
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, true);
-        List<NodeLineInfo> lines = graphView.lines();
-
-        for (NodeLineInfo info : lines) {
-            MigrationNode node = info.node();
-            boolean executed = historyRepo.wasExecuted(node.id(), node.environment().id());
-
-            // マージ行
-            if (info.mergeLine() != null) {
-                System.out.println(info.mergeLine());
-            }
-
-            // ノード行
-            String status = executed ? "[✓]" : "[ ]";
-            String line =
-                    info.graphPrefix()
-                            + " "
-                            + status
-                            + " "
-                            + node.id().value()
-                            + " - "
-                            + node.name();
+        List<String> lines =
+                graphView.renderLines(
+                        node ->
+                                historyRepo.wasExecuted(node.id(), node.environment().id())
+                                        ? "[✓]"
+                                        : "[ ]");
+        for (String line : lines) {
             System.out.println(line);
-
-            // 分岐行
-            if (info.branchLine() != null) {
-                System.out.println(info.branchLine());
-            }
-
-            // 接続線
-            if (info.connectorLine() != null) {
-                System.out.println(info.connectorLine());
-            }
         }
 
         System.out.println();
@@ -211,29 +169,5 @@ public class DownCommand implements Command {
             String input = scanner.nextLine().trim().toLowerCase(Locale.ROOT);
             return "y".equals(input) || "yes".equals(input);
         }
-    }
-
-    /** HistoryRepository をプラグイン経由で取得する。 */
-    private HistoryRepository getHistoryRepository() {
-        String historyTarget =
-                context.config()
-                        .getConfigMapping(
-                                io.github.kakusuke.migraphe.core.config.ProjectConfig.class)
-                        .history()
-                        .target();
-
-        Environment historyEnv = context.environments().get(historyTarget);
-
-        if (historyEnv == null) {
-            System.out.println(
-                    "Warning: History target not found. Using in-memory history repository.");
-            return new InMemoryHistoryRepository();
-        }
-
-        String type = context.config().getValue("target." + historyTarget + ".type", String.class);
-
-        MigraphePlugin<?> plugin = context.pluginRegistry().getRequiredPlugin(type);
-
-        return plugin.historyRepositoryProvider().createRepository(historyEnv);
     }
 }

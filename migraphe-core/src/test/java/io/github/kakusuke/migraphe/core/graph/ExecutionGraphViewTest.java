@@ -439,4 +439,63 @@ class ExecutionGraphViewTest {
             assertThat(plainText).contains("Create users table");
         }
     }
+
+    @Nested
+    @DisplayName("renderLines")
+    class RenderLines {
+
+        @Test
+        @DisplayName("単一ノードで renderLines が正しい行リストを返す")
+        void shouldRenderSingleNodeLines() {
+            // Given
+            MigrationNode nodeA = node("a").name("Create table").build();
+            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA), false);
+
+            // When
+            List<String> lines = view.renderLines(n -> "[OK]");
+
+            // Then
+            assertThat(lines).hasSize(1);
+            assertThat(lines.get(0)).contains("●").contains("[OK]").contains("a");
+        }
+
+        @Test
+        @DisplayName("ダイヤモンド依存で mergeLine/branchLine/connectorLine を含む")
+        void shouldIncludeAllLineTypes() {
+            // Given: A -> B, A -> C, B -> D, C -> D
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD =
+                    node("d").name("Node D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            ExecutionGraphView view =
+                    new ExecutionGraphView(List.of(nodeA, nodeB, nodeC, nodeD), false);
+
+            // When
+            List<String> lines = view.renderLines(n -> "[ ]");
+
+            // Then: branchLine, connectorLine, mergeLine が含まれているはず
+            assertThat(lines).hasSizeGreaterThan(4);
+            // ノード行は4行
+            long nodeLines = lines.stream().filter(l -> l.contains("[ ]")).count();
+            assertThat(nodeLines).isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("statusFn がノードごとに異なるステータスを返せる")
+        void shouldApplyDifferentStatusPerNode() {
+            // Given
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB), false);
+
+            // When
+            List<String> lines = view.renderLines(n -> n.id().value().equals("a") ? "[✓]" : "[ ]");
+
+            // Then
+            String allText = String.join("\n", lines);
+            assertThat(allText).contains("[✓]");
+            assertThat(allText).contains("[ ]");
+        }
+    }
 }
