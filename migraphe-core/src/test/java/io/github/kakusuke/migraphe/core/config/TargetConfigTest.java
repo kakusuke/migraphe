@@ -33,7 +33,28 @@ class TargetConfigTest {
         assertThat(targetConfig.type()).isEqualTo("postgresql");
         assertThat(targetConfig.jdbcUrl()).isEqualTo("jdbc:postgresql://localhost:5432/mydb");
         assertThat(targetConfig.username()).isEqualTo("dbuser");
-        assertThat(targetConfig.password()).isEqualTo("secret");
+        assertThat(targetConfig.password()).hasValue("secret");
+    }
+
+    @Test
+    void shouldAllowMissingPassword() {
+        SmallRyeConfig config =
+                new SmallRyeConfigBuilder()
+                        .withSources(
+                                new TestConfigSource(
+                                        Map.of(
+                                                "type",
+                                                "postgresql",
+                                                "jdbc_url",
+                                                "jdbc:postgresql://localhost:5432/mydb",
+                                                "username",
+                                                "dbuser")))
+                        .withMapping(TargetConfig.class)
+                        .build();
+
+        TargetConfig targetConfig = config.getConfigMapping(TargetConfig.class);
+
+        assertThat(targetConfig.password()).isEmpty();
     }
 
     /** テスト用のシンプルなConfigSource実装。 */

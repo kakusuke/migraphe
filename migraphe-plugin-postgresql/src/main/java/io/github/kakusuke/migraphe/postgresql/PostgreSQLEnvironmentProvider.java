@@ -16,6 +16,6 @@ public final class PostgreSQLEnvironmentProvider implements EnvironmentProvider 
         }
 
         return PostgreSQLEnvironment.create(
-                name, pgDef.jdbcUrl(), pgDef.username(), pgDef.password());
+                name, pgDef.jdbcUrl(), pgDef.username(), pgDef.password().orElse(null));
     }
 }

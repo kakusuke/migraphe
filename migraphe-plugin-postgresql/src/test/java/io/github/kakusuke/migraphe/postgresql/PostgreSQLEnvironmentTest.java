@@ -50,16 +50,13 @@ class PostgreSQLEnvironmentTest {
     }
 
     @Test
-    void shouldThrowExceptionWhenPasswordIsNull() {
-        // when & then
-        assertThatThrownBy(
-                        () ->
-                                PostgreSQLEnvironment.create(
-                                        "test",
-                                        "jdbc:postgresql://localhost:5432/db",
-                                        "user",
-                                        null))
-                .isInstanceOf(NullPointerException.class)
-                .hasMessageContaining("password must not be null");
+    void shouldAllowNullPassword() {
+        // when
+        PostgreSQLEnvironment env =
+                PostgreSQLEnvironment.create(
+                        "test", "jdbc:postgresql://localhost:5432/db", "user", null);
+
+        // then
+        assertThat(env.getPassword()).isNull();
     }
 }

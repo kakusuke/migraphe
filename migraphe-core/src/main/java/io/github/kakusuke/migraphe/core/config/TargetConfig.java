@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.core.config;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithName;
+import java.util.Optional;
 
 /**
  * ターゲット（データベース接続など）の設定。
@@ -38,7 +39,7 @@ public interface TargetConfig {
     /**
      * パスワード。
      *
-     * @return パスワード
+     * @return パスワード（未設定または空文字列の場合は empty）
      */
-    String password();
+    Optional<String> password();
 }

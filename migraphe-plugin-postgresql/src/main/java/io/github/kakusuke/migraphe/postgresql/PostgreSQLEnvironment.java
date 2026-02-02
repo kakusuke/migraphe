@@ -6,6 +6,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /** PostgreSQL 環境の実装。 JDBC 接続情報を保持し、データベース接続を提供する。 */
 public final class PostgreSQLEnvironment implements Environment {
@@ -14,15 +15,19 @@ public final class PostgreSQLEnvironment implements Environment {
     private final String name;
     private final String jdbcUrl;
     private final String username;
-    private final String password;
+    private final @Nullable String password;
 
     private PostgreSQLEnvironment(
-            EnvironmentId id, String name, String jdbcUrl, String username, String password) {
+            EnvironmentId id,
+            String name,
+            String jdbcUrl,
+            String username,
+            @Nullable String password) {
         this.id = Objects.requireNonNull(id, "id must not be null");
         this.name = Objects.requireNonNull(name, "name must not be null");
         this.jdbcUrl = Objects.requireNonNull(jdbcUrl, "jdbcUrl must not be null");
         this.username = Objects.requireNonNull(username, "username must not be null");
-        this.password = Objects.requireNonNull(password, "password must not be null");
+        this.password = password;
     }
 
     /**
@@ -31,11 +36,11 @@ public final class PostgreSQLEnvironment implements Environment {
      * @param name 環境名（環境IDとしても使用される）
      * @param jdbcUrl JDBC 接続 URL
      * @param username データベースユーザー名
-     * @param password データベースパスワード
+     * @param password データベースパスワード（nullの場合はパスワードなし）
      * @return PostgreSQL 環境
      */
     public static PostgreSQLEnvironment create(
-            String name, String jdbcUrl, String username, String password) {
+            String name, String jdbcUrl, String username, @Nullable String password) {
         EnvironmentId id = EnvironmentId.of(name);
         return new PostgreSQLEnvironment(id, name, jdbcUrl, username, password);
     }
@@ -61,7 +66,7 @@ public final class PostgreSQLEnvironment implements Environment {
     }
 
     /** JDBC パスワードを取得する。 */
-    public String getPassword() {
+    public @Nullable String getPassword() {
         return password;
     }
 

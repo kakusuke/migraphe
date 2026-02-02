@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.postgresql;
 import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithName;
+import java.util.Optional;
 
 /**
  * PostgreSQL 用の EnvironmentDefinition サブタイプ。
@@ -29,5 +30,5 @@ public interface PostgreSQLEnvironmentDefinition extends EnvironmentDefinition {
 
     String username();
 
-    String password();
+    Optional<String> password();
 }
