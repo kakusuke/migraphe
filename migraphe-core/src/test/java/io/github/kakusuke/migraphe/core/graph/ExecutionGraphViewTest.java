@@ -148,7 +148,8 @@ class ExecutionGraphViewTest {
         @DisplayName("ダイヤモンド依存: A -> B,C -> D")
         void shouldRenderDiamond() {
             // Given: A -> B, A -> C, B -> D, C -> D
-            // Dom tree: A→{B, C, D}. Trunk = D (last in topo). B, C = branches.
+            // Dom tree: A→{B, C, D}. Trunk = D. B, C = branches.
+            // Non-dom edges: B→D, C→D → レーン共通化
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
@@ -162,10 +163,11 @@ class ExecutionGraphViewTest {
             assertThat(view.lines()).hasSize(4);
             String expected =
                     """
-                    ● [ ] a - Node A
-                    ├─● [ ] b - Node B
-                    ├─● [ ] c - Node C
-                    ● [ ] d - Node D
+                    ●     [ ] a - Node A
+                    ├─●─┐ [ ] b - Node B
+                    ├─●─┤ [ ] c - Node C
+                    ├───┘
+                    ●     [ ] d - Node D
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -226,7 +228,6 @@ class ExecutionGraphViewTest {
         @DisplayName("3マージ: A,B,C -> D")
         void shouldRenderTripleMerge() {
             // Given: A -> D, B -> D, C -> D
-            // Dom tree (virtual root): →{A, B, C, D}. All children of virtual root.
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").build();
             MigrationNode nodeC = node("c").name("Node C").build();
@@ -301,7 +302,7 @@ class ExecutionGraphViewTest {
         @DisplayName("連続ダイヤモンド: A->B,C->D->E,F->G")
         void shouldRenderDoubleDiamond() {
             // Given: A -> B,C -> D -> E,F -> G
-            // Dom tree: A→{B, C, D→{E, F, G}}. Trunk path: A→D→G.
+            // Non-dom edges: B→D, C→D, E→G, F→G
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
@@ -319,13 +320,15 @@ class ExecutionGraphViewTest {
             assertThat(view.lines()).hasSize(7);
             String expected =
                     """
-                    ● [ ] a - Node A
-                    ├─● [ ] b - Node B
-                    ├─● [ ] c - Node C
-                    ● [ ] d - Node D
-                    ├─● [ ] e - Node E
-                    ├─● [ ] f - Node F
-                    ● [ ] g - Node G
+                    ●     [ ] a - Node A
+                    ├─●─┐ [ ] b - Node B
+                    ├─●─┤ [ ] c - Node C
+                    ├───┘
+                    ●     [ ] d - Node D
+                    ├─●─┐ [ ] e - Node E
+                    ├─●─┤ [ ] f - Node F
+                    ├───┘
+                    ●     [ ] g - Node G
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -335,6 +338,7 @@ class ExecutionGraphViewTest {
         void shouldRenderCrossDependency() {
             // Given: A -> C, A -> D, B -> C, B -> D
             // Dom tree (virtual root): →{A, B, C, D}. All children of virtual root.
+            // Non-dom edges: A→C, A→D, B→C, B→D (all are non-dom since idom=VIRTUAL)
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").build();
             MigrationNode nodeC =
@@ -346,12 +350,14 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(nodes, false);
             String text = view.toString();
 
-            // 支配木方式: 全て仮想ルートの子 → 独立ルート扱い
             assertThat(view.lines()).hasSize(4);
-            assertThat(text).contains("● [ ] a - Node A");
-            assertThat(text).contains("● [ ] b - Node B");
-            assertThat(text).contains("● [ ] c - Node C");
-            assertThat(text).contains("● [ ] d - Node D");
+            assertThat(text).contains("[ ] a - Node A");
+            assertThat(text).contains("[ ] b - Node B");
+            assertThat(text).contains("[ ] c - Node C");
+            assertThat(text).contains("[ ] d - Node D");
+            // レーン描画を含む
+            assertThat(text).contains("┐");
+            assertThat(text).contains("┘");
         }
 
         @Test
@@ -380,7 +386,7 @@ class ExecutionGraphViewTest {
         @DisplayName("3分岐→マージ: A->B,C,D->E")
         void shouldRenderTripleBranchMerge() {
             // Given: A -> B, A -> C, A -> D, B -> E, C -> E, D -> E
-            // Dom tree: A→{B, C, D, E}. Trunk = E (last in topo). B, C, D = branches.
+            // Non-dom edges: B→E, C→E, D→E → 1レーンに共通化
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
@@ -398,11 +404,12 @@ class ExecutionGraphViewTest {
             assertThat(view.lines()).hasSize(5);
             String expected =
                     """
-                    ● [ ] a - Node A
-                    ├─● [ ] b - Node B
-                    ├─● [ ] c - Node C
-                    ├─● [ ] d - Node D
-                    ● [ ] e - Node E
+                    ●     [ ] a - Node A
+                    ├─●─┐ [ ] b - Node B
+                    ├─●─┤ [ ] c - Node C
+                    ├─●─┤ [ ] d - Node D
+                    ├───┘
+                    ●     [ ] e - Node E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -437,7 +444,6 @@ class ExecutionGraphViewTest {
         @DisplayName("ブランチ内サブブランチ: A->{B,C}, B->{X,Y}, {B,C}->D")
         void shouldRenderSubBranchInBranch() {
             // Given: A -> B, A -> C, B -> X, B -> Y, B -> D, C -> D
-            // Dom tree: A→{B→{X, Y}, C, D}. idom(D) = A (LCA of B and C = A).
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
@@ -456,8 +462,7 @@ class ExecutionGraphViewTest {
         @DisplayName("並列チェーン後マージ: A->B->C, D->E->F, {C,F}->G")
         void shouldRenderParallelChainsWithMerge() {
             // Given: A -> B -> C, D -> E -> F, C -> G, F -> G
-            // Dom tree (virtual root): →{A→B→C, D→E→F, G}
-            // idom(G) = virtual root (LCA of C and F in dom tree)
+            // Non-dom edges: C→G, F→G
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("b")).build();
@@ -472,7 +477,10 @@ class ExecutionGraphViewTest {
 
             assertThat(view.lines()).hasSize(7);
             String text = view.toString();
-            assertThat(text).contains("● [ ] g - Node G");
+            assertThat(text).contains("[ ] g - Node G");
+            // レーン描画を含む
+            assertThat(text).contains("┐");
+            assertThat(text).contains("┘");
         }
 
         @Test
@@ -497,8 +505,7 @@ class ExecutionGraphViewTest {
         @DisplayName("部分マージ: A->{B,C,D}, {B,C}->E (Dはマージしない)")
         void shouldRenderPartialMerge() {
             // Given: A -> B, A -> C, A -> D, B -> E, C -> E
-            // Dom tree: A→{B, C, D, E}. idom(E) = A (LCA of B and C = A).
-            // Trunk = E (last in topo among same-depth children).
+            // Non-dom edges: B→E, C→E
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
@@ -513,11 +520,12 @@ class ExecutionGraphViewTest {
             assertThat(view.lines()).hasSize(5);
             String expected =
                     """
-                    ● [ ] a - Node A
-                    ├─● [ ] b - Node B
-                    ├─● [ ] c - Node C
-                    ├─● [ ] d - Node D
-                    ● [ ] e - Node E
+                    ●     [ ] a - Node A
+                    ├─●─┐ [ ] b - Node B
+                    ├─●─┤ [ ] c - Node C
+                    ├─● │ [ ] d - Node D
+                    ├───┘
+                    ●     [ ] e - Node E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -537,9 +545,12 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(nodes, false);
             String text = view.toString();
 
-            // 支配木方式: 全て A の dom children。E は branch として表示される。
             assertThat(view.lines()).hasSize(5);
-            assertThat(text).contains("● [ ] a - Node A");
+            assertThat(text).contains("[ ] a - Node A");
+            assertThat(text).contains("[ ] b - Node B");
+            assertThat(text).contains("[ ] c - Node C");
+            assertThat(text).contains("[ ] d - Node D");
+            assertThat(text).contains("[ ] e - Node E");
         }
 
         @Test
@@ -567,11 +578,9 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(nodes, false);
             String text = view.toString();
 
-            // 支配木方式: 仮想ルート→{101, 001→{...}}
-            // 001 が trunk (深いサブツリー)、101 が branch (先に描画)
             assertThat(view.lines()).hasSize(7);
-            assertThat(text).contains("● [ ] 001 - Create DB");
-            assertThat(text).contains("● [ ] 101 - Create testlog");
+            assertThat(text).contains("[ ] 001 - Create DB");
+            assertThat(text).contains("[ ] 101 - Create testlog");
         }
 
         @Test
@@ -636,7 +645,7 @@ class ExecutionGraphViewTest {
         }
 
         @Test
-        @DisplayName("ダイヤモンド: 支配木方式で分岐+マージ")
+        @DisplayName("ダイヤモンド: 支配木方式で分岐+マージ+レーン描画")
         void diamondRendering() {
             MigrationNode nodeA = node("a").name("A").build();
             MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
@@ -646,23 +655,20 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view =
                     new ExecutionGraphView(List.of(nodeA, nodeB, nodeC, nodeD), false);
             String text = view.toString();
-            // Dom tree: A→{B, C, D}. Trunk = D. B, C = branches.
             String expected =
                     """
-                    ● [ ] a - A
-                    ├─● [ ] b - B
-                    ├─● [ ] c - C
-                    ● [ ] d - D
+                    ●     [ ] a - A
+                    ├─●─┐ [ ] b - B
+                    ├─●─┤ [ ] c - C
+                    ├───┘
+                    ●     [ ] d - D
                     """;
             assertThat(text).isEqualTo(expected);
         }
 
         @Test
-        @DisplayName("ネストダイヤモンド: A→{B→{F,G}→H, C}→E")
+        @DisplayName("ネストダイヤモンド: A→{B→{F,G}→H, C}→E — post-trunk + レーン描画")
         void nestedDiamondRendering() {
-            // A → B, A → C, B → F, B → G, F → H, G → H, B → E, C → E
-            // Actually: A→{B, C}, B→{F, G}, {F,G}→H, {H, C}→E
-            // But simpler: A→B, A→C, B→F, B→G, F→H, G→H, H→E, C→E
             MigrationNode nodeA = node("a").name("A").build();
             MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
@@ -678,17 +684,20 @@ class ExecutionGraphViewTest {
                             List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
             String text = view.toString();
 
-            // Dom tree: A→{B→{F, G, H}, C, E}. Trunk = B (deepest subtree).
-            // Branches of A: C, E. Then trunk B with its subtree.
+            // E is post-trunk (receives non-dom edge H→E from trunk subtree)
+            // C is pre-trunk
+            // Lane 0: E group (C→E, H→E), Lane 1: H group (F→H, G→H)
             String expected =
                     """
-                    ● [ ] a - A
-                    ├─● [ ] c - C
-                    ├─● [ ] e - E
-                    ● [ ] b - B
-                    ├─● [ ] f - F
-                    ├─● [ ] g - G
-                    ● [ ] h - H
+                    ●      [ ] a - A
+                    ├─●─┐  [ ] c - C
+                    ●   │  [ ] b - B
+                    ├─●─│┐ [ ] f - F
+                    ├─●─│┤ [ ] g - G
+                    ├───┼┘
+                    ●───┤  [ ] h - H
+                      ├─┘
+                    └─●    [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -790,7 +799,7 @@ class ExecutionGraphViewTest {
         }
 
         @Test
-        @DisplayName("ダイヤモンド依存で正しい行数を返す")
+        @DisplayName("ダイヤモンド依存で正しい行数を返す（マージ行含む）")
         void shouldIncludeAllLineTypes() {
             // Given: A -> B, A -> C, B -> D, C -> D
             MigrationNode nodeA = node("a").name("Node A").build();
@@ -803,8 +812,8 @@ class ExecutionGraphViewTest {
 
             List<String> lines = view.renderLines(n -> "[ ] " + n.id().value() + " - " + n.name());
 
-            // 支配木方式: ノード行4 のみ（コネクタ行なし、branch が間に入るため）
-            assertThat(lines).hasSize(4);
+            // 支配木方式: ノード行4 + マージ行1 = 5行
+            assertThat(lines).hasSize(5);
             long nodeLines = lines.stream().filter(l -> l.contains("[ ]")).count();
             assertThat(nodeLines).isEqualTo(4);
         }
@@ -826,6 +835,160 @@ class ExecutionGraphViewTest {
             String allText = String.join("\n", lines);
             assertThat(allText).contains("[✓]");
             assertThat(allText).contains("[ ]");
+        }
+    }
+
+    @Nested
+    @DisplayName("非支配木辺レーン描画")
+    class NonDomEdgeRendering {
+
+        @Test
+        @DisplayName("ダイヤモンドでレーン共通化: A→{B,C}→D — B→D, C→D を1レーンに共通化")
+        void diamondLaneSharing() {
+            MigrationNode nodeA = node("a").name("A").build();
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD =
+                    node("d").name("D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            ExecutionGraphView view =
+                    new ExecutionGraphView(List.of(nodeA, nodeB, nodeC, nodeD), false);
+            String text = view.toString();
+
+            // B→D と C→D が1つのレーンに共通化
+            String expected =
+                    """
+                    ●     [ ] a - A
+                    ├─●─┐ [ ] b - B
+                    ├─●─┤ [ ] c - C
+                    ├───┘
+                    ●     [ ] d - D
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("連続ダイヤモンドで複数レーン: A→{B,C}→D→{E,F}→G — レーン再利用")
+        void doubleDiamondMultipleLanes() {
+            MigrationNode nodeA = node("a").name("A").build();
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD =
+                    node("d").name("D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            MigrationNode nodeE = node("e").name("E").dependencies(NodeId.of("d")).build();
+            MigrationNode nodeF = node("f").name("F").dependencies(NodeId.of("d")).build();
+            MigrationNode nodeG =
+                    node("g").name("G").dependencies(NodeId.of("e"), NodeId.of("f")).build();
+            ExecutionGraphView view =
+                    new ExecutionGraphView(
+                            List.of(nodeA, nodeB, nodeC, nodeD, nodeE, nodeF, nodeG), false);
+            String text = view.toString();
+
+            // 2つのダイヤモンドが連続、レーン再利用
+            String expected =
+                    """
+                    ●     [ ] a - A
+                    ├─●─┐ [ ] b - B
+                    ├─●─┤ [ ] c - C
+                    ├───┘
+                    ●     [ ] d - D
+                    ├─●─┐ [ ] e - E
+                    ├─●─┤ [ ] f - F
+                    ├───┘
+                    ●     [ ] g - G
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("ネストダイヤモンドで DFS 順序調整: post-trunk 描画")
+        void nestedDiamondDfsReordering() {
+            MigrationNode nodeA = node("a").name("A").build();
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeF = node("f").name("F").dependencies(NodeId.of("b")).build();
+            MigrationNode nodeG = node("g").name("G").dependencies(NodeId.of("b")).build();
+            MigrationNode nodeH =
+                    node("h").name("H").dependencies(NodeId.of("f"), NodeId.of("g")).build();
+            MigrationNode nodeE =
+                    node("e").name("E").dependencies(NodeId.of("h"), NodeId.of("c")).build();
+
+            ExecutionGraphView view =
+                    new ExecutionGraphView(
+                            List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
+
+            // DFS 順序: C (pre-trunk), B subtree (trunk), E (post-trunk)
+            assertThat(view.lines().get(0).node().id()).isEqualTo(NodeId.of("a"));
+            assertThat(view.lines().get(1).node().id()).isEqualTo(NodeId.of("c")); // pre-trunk
+            assertThat(view.lines().get(2).node().id()).isEqualTo(NodeId.of("b")); // trunk
+            assertThat(view.lines().get(6).node().id()).isEqualTo(NodeId.of("e")); // post-trunk
+
+            String text = view.toString();
+            // E は └ で表示（最後の post-trunk branch）
+            assertThat(text).contains("└─●");
+        }
+
+        @Test
+        @DisplayName("非支配木辺なし: チェーンは変更なし")
+        void noNonDomEdgesChain() {
+            MigrationNode nodeA = node("a").name("A").build();
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("b")).build();
+            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
+            String text = view.toString();
+
+            // レーンなし
+            String expected =
+                    """
+                    ● [ ] a - A
+                    │
+                    ● [ ] b - B
+                    │
+                    ● [ ] c - C
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("非支配木辺なし: 分岐のみは変更なし")
+        void noNonDomEdgesForkOnly() {
+            MigrationNode nodeA = node("a").name("A").build();
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
+            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
+            String text = view.toString();
+
+            // レーンなし
+            String expected =
+                    """
+                    ● [ ] a - A
+                    ├─● [ ] b - B
+                    ● [ ] c - C
+                    """;
+            assertThat(text).isEqualTo(expected);
+        }
+
+        @Test
+        @DisplayName("└ vs ├: post-trunk branch の最後が └ になる")
+        void lastPostTrunkBranchUsesElbow() {
+            MigrationNode nodeA = node("a").name("A").build();
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeF = node("f").name("F").dependencies(NodeId.of("b")).build();
+            MigrationNode nodeG = node("g").name("G").dependencies(NodeId.of("b")).build();
+            MigrationNode nodeH =
+                    node("h").name("H").dependencies(NodeId.of("f"), NodeId.of("g")).build();
+            MigrationNode nodeE =
+                    node("e").name("E").dependencies(NodeId.of("h"), NodeId.of("c")).build();
+
+            ExecutionGraphView view =
+                    new ExecutionGraphView(
+                            List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
+            String text = view.toString();
+
+            // E は post-trunk の最後 → └─● で表示
+            assertThat(text).contains("└─●");
+            // C は pre-trunk → ├─● で表示
+            assertThat(text).contains("├─●─┐");
         }
     }
 }

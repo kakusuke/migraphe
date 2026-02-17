@@ -118,10 +118,13 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
         List<String> lines =
                 graphView.renderLines(
-                        node ->
-                                historyRepo.wasExecuted(node.id(), node.environment().id())
-                                        ? "[✓]"
-                                        : "[ ]");
+                        node -> {
+                            String status =
+                                    historyRepo.wasExecuted(node.id(), node.environment().id())
+                                            ? "[✓]"
+                                            : "[ ]";
+                            return status + " " + node.id().value() + " - " + node.name();
+                        });
         for (String line : lines) {
             getLogger().lifecycle(line);
         }

@@ -6,7 +6,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 15 (Gradle Plugin) - COMPLETE
-**Tests**: 257, 100% passing
+**Tests**: 293, 100% passing
 
 ## Module Structure
 
@@ -172,6 +172,23 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-02-12 (Session 19) - COMPLETE
+- **ExecutionGraphView 再設計**: インライン分岐 + マージレーン方式に変更
+  - 目的: git graph 風の視覚的に分かりやすいグラフ表示
+  - 描画ルール:
+    - フォーク（リーフのみ）: `├─●` `└─●` インライン表示
+    - フォーク（マージあり）: `├─●─┐` `└─●─┤` + マージレーン `┐` `┤`
+    - マージ: コネクタ行 `┌───┘` + マージ結果ノード
+    - チェーン: ノード間に `│` 行（継続を明示）
+    - レーン深度: 表（`├` `└`）と裏（`┴` `┘`）の区別
+    - クロス依存: `●─┐` `●─│┐` + `├┴─●` `└┴─●` 形式
+  - **部分マージ対応**: マージに参加しないフォーク子がマージ結果の前に表示されるように改善
+    - `reorderForVisualization()`: ノード再順序付けロジック追加
+    - `closedForks` 追跡: マージ後のフォーク子の正しい表示
+  - 詳細計画: `PLAN-ExecutionGraphView.md`
+  - テスト: 34ケース（14基本パターン + 部分マージ含む複雑パターン）
+- Tests: 293, 100% passing
+
 ### 2026-01-30 (Session 18)
 - **Gradle/CLI 共通処理抽出**: 重複コードを Core に共通化
   - `ExecutionContext.createHistoryRepository()`: HistoryRepository 生成を一元化（CLI 3箇所 + Gradle 3箇所の重複を解消）
@@ -188,5 +205,6 @@ Update when code changes:
 
 ---
 
-**Last Updated**: 2026-01-30
-**Shared Logic Extraction Complete** - Next: history command, Native Image, configuration cache
+**Last Updated**: 2026-02-12
+**Current Work**: ExecutionGraphView 再設計 - COMPLETE
+**Plan File**: `PLAN-ExecutionGraphView.md`

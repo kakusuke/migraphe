@@ -6,7 +6,6 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.ExecutionGraphView;
 import io.github.kakusuke.migraphe.core.graph.FormatUtils;
-import io.github.kakusuke.migraphe.core.graph.NodeLineInfo;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,74 +34,58 @@ public class StatusCommand implements Command {
 
             // グラフをレンダリング
             ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
-            List<NodeLineInfo> lines = graphView.lines();
 
-            int executedCount = 0;
-            int pendingCount = 0;
+            int[] executedCount = {0};
+            int[] pendingCount = {0};
 
-            for (int i = 0; i < lines.size(); i++) {
-                NodeLineInfo info = lines.get(i);
-                MigrationNode node = info.node();
-                boolean executed = historyRepo.wasExecuted(node.id(), node.environment().id());
+            List<String> lines =
+                    graphView.renderLines(
+                            node -> {
+                                boolean executed =
+                                        historyRepo.wasExecuted(node.id(), node.environment().id());
+                                StringBuilder sb = new StringBuilder();
+                                if (executed) {
+                                    executedCount[0]++;
+                                    sb.append("[✓] ");
+                                } else {
+                                    pendingCount[0]++;
+                                    sb.append("[ ] ");
+                                }
+                                sb.append(node.id().value()).append(" - ").append(node.name());
+                                if (executed) {
+                                    ExecutionRecord record =
+                                            historyRepo.findLatestRecord(
+                                                    node.id(), node.environment().id());
+                                    if (record != null) {
+                                        sb.append(" (")
+                                                .append(
+                                                        FormatUtils.formatDuration(
+                                                                record.durationMs()))
+                                                .append(", ")
+                                                .append(
+                                                        FormatUtils.formatDateTime(
+                                                                record.executedAt()))
+                                                .append(")");
+                                    }
+                                }
+                                return sb.toString();
+                            });
 
-                // マージ行があれば表示
-                if (info.mergeLine() != null) {
-                    System.out.println(info.mergeLine());
-                }
-
-                // ノード行を表示（実行情報も同じ行に）
-                String status = executed ? "[✓]" : "[ ]";
-                StringBuilder nodeLineBuilder = new StringBuilder();
-                nodeLineBuilder
-                        .append(info.graphPrefix())
-                        .append(" ")
-                        .append(status)
-                        .append(" ")
-                        .append(node.id().value())
-                        .append(" - ")
-                        .append(node.name());
-
-                if (executed) {
-                    executedCount++;
-                    // 実行済みノードには実行日時と所要時間を同じ行に表示
-                    ExecutionRecord record =
-                            historyRepo.findLatestRecord(node.id(), node.environment().id());
-                    if (record != null) {
-                        nodeLineBuilder
-                                .append(" (")
-                                .append(FormatUtils.formatDuration(record.durationMs()))
-                                .append(", ")
-                                .append(FormatUtils.formatDateTime(record.executedAt()))
-                                .append(")");
-                    }
-                } else {
-                    pendingCount++;
-                }
-
-                System.out.println(nodeLineBuilder);
-
-                // 分岐行を表示（複数の子がある場合）
-                if (info.branchLine() != null) {
-                    System.out.println(info.branchLine());
-                }
-
-                // 接続線を表示
-                if (info.connectorLine() != null) {
-                    System.out.println(info.connectorLine());
-                }
+            for (String line : lines) {
+                System.out.println(line);
             }
 
             System.out.println();
 
             // サマリー
-            int total = executedCount + pendingCount;
+            int total = executedCount[0] + pendingCount[0];
             System.out.println(
                     "Summary: Total: "
                             + total
                             + " | Executed: "
-                            + executedCount
+                            + executedCount[0]
                             + " | Pending: "
-                            + pendingCount);
+                            + pendingCount[0]);
 
             return 0; // 成功
 
