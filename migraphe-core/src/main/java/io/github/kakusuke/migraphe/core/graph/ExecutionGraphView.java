@@ -9,34 +9,32 @@ import org.jspecify.annotations.Nullable;
 /**
  * DAG の実行グラフをテキスト表現するクラス。
  *
- * <p>git log --graph 風の ASCII 表示を生成する。
+ * <p>支配木 (Dominator Tree) ベースの描画方式。
+ *
+ * <ul>
+ *   <li>トポロジカルソートでノードを並べる
+ *   <li>支配木を構築し、trunk/branch を決定
+ *   <li>DFS で支配木を走査し、ASCII プレフィックスを生成
+ * </ul>
  */
 public final class ExecutionGraphView {
 
-    private final List<MigrationNode> sortedNodes;
+    private static final NodeId VIRTUAL_ROOT = NodeId.of("__virtual_root__");
+
     private final Map<NodeId, MigrationNode> nodeMap;
-    private final Map<NodeId, Set<NodeId>> dependents;
-    private final boolean reversed;
-    private final List<NodeLineInfo> lines;
+    private final Map<NodeId, List<NodeId>> childrenOf;
+    private final Map<NodeId, List<NodeId>> parentsOf;
+    private final List<NodeLineInfo> lineInfos;
+    private final List<RenderRow> renderRows;
+    private final int maxColumn;
 
-    /** カラムの状態を管理するクラス */
-    private static class ColumnState {
-        @Nullable NodeId occupiedBy; // 現在のノード
-        Set<NodeId> pendingChildren; // まだ処理されていない子ノード
+    private sealed interface RenderRow {
+        record NodeRow(MigrationNode node, int column, boolean isBranch, Set<Integer> activeColumns)
+                implements RenderRow {}
 
-        ColumnState() {
-            this.occupiedBy = null;
-            this.pendingChildren = new HashSet<>();
-        }
+        record ConnectorRow(int column, Set<Integer> activeColumns) implements RenderRow {}
 
-        boolean isActive() {
-            return occupiedBy != null || !pendingChildren.isEmpty();
-        }
-
-        void clear() {
-            this.occupiedBy = null;
-            this.pendingChildren.clear();
-        }
+        record BlankRow() implements RenderRow {}
     }
 
     /**
@@ -46,371 +44,504 @@ public final class ExecutionGraphView {
      * @param reversed true の場合、逆順モード（DOWN用）。依存関係を逆に解釈する。
      */
     public ExecutionGraphView(List<MigrationNode> sortedNodes, boolean reversed) {
-        this.sortedNodes = List.copyOf(sortedNodes);
-        this.nodeMap = new HashMap<>();
-        this.dependents = new HashMap<>();
-        this.reversed = reversed;
+        this.nodeMap = new LinkedHashMap<>();
+
+        Map<NodeId, Set<NodeId>> dependents = new LinkedHashMap<>();
 
         for (MigrationNode node : sortedNodes) {
             nodeMap.put(node.id(), node);
         }
-
         for (MigrationNode node : sortedNodes) {
             for (NodeId dep : node.dependencies()) {
-                dependents.computeIfAbsent(dep, k -> new HashSet<>()).add(node.id());
+                dependents.computeIfAbsent(dep, k -> new LinkedHashSet<>()).add(node.id());
             }
         }
 
-        this.lines = render();
+        // 推移的簡約済みの子ノードを計算
+        this.childrenOf = new LinkedHashMap<>();
+        for (MigrationNode node : sortedNodes) {
+            Set<NodeId> raw =
+                    reversed ? node.dependencies() : dependents.getOrDefault(node.id(), Set.of());
+            Set<NodeId> reduced = removeTransitive(raw);
+            List<NodeId> ordered =
+                    sortedNodes.stream().map(MigrationNode::id).filter(reduced::contains).toList();
+            childrenOf.put(node.id(), ordered);
+        }
+
+        // 推移的簡約済みの親ノードを計算
+        this.parentsOf = new LinkedHashMap<>();
+        for (MigrationNode node : sortedNodes) {
+            Set<NodeId> raw =
+                    reversed ? dependents.getOrDefault(node.id(), Set.of()) : node.dependencies();
+            Set<NodeId> reduced = removeTransitiveParents(raw);
+            List<NodeId> ordered =
+                    sortedNodes.stream().map(MigrationNode::id).filter(reduced::contains).toList();
+            parentsOf.put(node.id(), ordered);
+        }
+
+        List<NodeLineInfo> infos = new ArrayList<>();
+        List<RenderRow> rows = new ArrayList<>();
+        buildDominatorTreeView(sortedNodes, infos, rows);
+        this.lineInfos = List.copyOf(infos);
+        this.renderRows = List.copyOf(rows);
+
+        int mc = 0;
+        for (NodeLineInfo info : lineInfos) {
+            mc = Math.max(mc, info.column());
+        }
+        this.maxColumn = mc;
     }
 
     /** 各ノードの行情報リストを取得する。 */
     public List<NodeLineInfo> lines() {
-        return lines;
+        return lineInfos;
     }
 
     /**
-     * 各ノードのステータス付き行をリストとして生成する。
+     * 各ノードのラベル付き行をリストとして生成する。
      *
-     * <p>各行に mergeLine, ノード行（ステータス付き）, branchLine, connectorLine を含む。 Up/Down のグラフ表示に使用する。Status
-     * コマンドはノード行に追加情報を付加するため直接 {@link #lines()} を使う。
-     *
-     * @param statusFn 各ノードに対するステータス文字列を返す関数（例: "[✓]" / "[ ]"）
+     * @param labelFn 各ノードに対するフルラベルを返す関数
      * @return 表示行のリスト
      */
-    public List<String> renderLines(Function<MigrationNode, String> statusFn) {
-        List<String> output = new ArrayList<>();
-        for (NodeLineInfo info : lines) {
-            if (info.mergeLine() != null) {
-                output.add(info.mergeLine());
-            }
-            String status = statusFn.apply(info.node());
-            output.add(info.toPlainText(status));
-            if (info.branchLine() != null) {
-                output.add(info.branchLine());
-            }
-            if (info.connectorLine() != null) {
-                output.add(info.connectorLine());
-            }
+    public List<String> renderLines(Function<MigrationNode, String> labelFn) {
+        Map<NodeId, String> labels = new LinkedHashMap<>();
+        for (NodeLineInfo info : lineInfos) {
+            labels.put(info.node().id(), labelFn.apply(info.node()));
         }
-        return output;
+        return doRender(labels);
     }
 
     /** プレーンテキストとしてグラフ全体を出力する（色なし）。 */
     @Override
     public String toString() {
+        List<String> rendered =
+                renderLines(node -> "[ ] " + node.id().value() + " - " + node.name());
         StringBuilder sb = new StringBuilder();
-        for (NodeLineInfo info : lines) {
-            if (info.mergeLine() != null) {
-                sb.append(info.mergeLine()).append("\n");
-            }
-            sb.append(info.toPlainText("[ ]")).append("\n");
-            if (info.branchLine() != null) {
-                sb.append(info.branchLine()).append("\n");
-            }
-            if (info.connectorLine() != null) {
-                sb.append(info.connectorLine()).append("\n");
-            }
+        for (String line : rendered) {
+            sb.append(line).append("\n");
         }
         return sb.toString();
     }
 
-    private List<NodeLineInfo> render() {
-        List<NodeLineInfo> result = new ArrayList<>();
-        List<ColumnState> columns = new ArrayList<>();
+    // ========== 支配木構築 + DFS レンダリング ==========
 
-        for (int i = 0; i < sortedNodes.size(); i++) {
-            MigrationNode node = sortedNodes.get(i);
-            boolean isLast = (i == sortedNodes.size() - 1);
+    private void buildDominatorTreeView(
+            List<MigrationNode> sortedNodes,
+            List<NodeLineInfo> outLineInfos,
+            List<RenderRow> outRows) {
+        if (sortedNodes.isEmpty()) return;
 
-            Set<NodeId> children = getChildren(node);
-
-            // 自分が pendingChildren に登録されているカラムを探す（親のカラム）
-            List<Integer> parentCols = new ArrayList<>();
-            for (int col = 0; col < columns.size(); col++) {
-                ColumnState state = columns.get(col);
-                if (state.pendingChildren.contains(node.id())) {
-                    parentCols.add(col);
-                }
+        // Step 1: 支配木の構築
+        List<NodeId> topoOrder = sortedNodes.stream().map(MigrationNode::id).toList();
+        List<NodeId> roots = new ArrayList<>();
+        for (NodeId id : topoOrder) {
+            if (parents(id).isEmpty()) {
+                roots.add(id);
             }
-            Collections.sort(parentCols);
+        }
 
-            // ノードのカラムを決定
-            int nodeCol;
-            if (!parentCols.isEmpty()) {
-                nodeCol = parentCols.get(0);
+        // idom の計算
+        Map<NodeId, NodeId> idom = new LinkedHashMap<>();
+        boolean hasVirtualRoot = roots.size() > 1;
+
+        if (hasVirtualRoot) {
+            for (NodeId root : roots) {
+                idom.put(root, VIRTUAL_ROOT);
+            }
+        }
+
+        for (NodeId nodeId : topoOrder) {
+            if (roots.contains(nodeId)) continue;
+            List<NodeId> p = parents(nodeId);
+            if (p.size() == 1) {
+                idom.put(nodeId, p.get(0));
             } else {
-                nodeCol = findOrCreateColumn(columns);
-            }
-
-            String branchLine = null;
-            String mergeLine = null;
-
-            // マージ処理（複数の親がいる場合）
-            if (parentCols.size() > 1) {
-                mergeLine = buildMergeLine(columns, parentCols, nodeCol);
-            }
-
-            // 親のカラムから自分を削除し、空になったらクリア
-            for (int col : parentCols) {
-                ColumnState state = columns.get(col);
-                state.pendingChildren.remove(node.id());
-                if (state.pendingChildren.isEmpty()) {
-                    state.clear();
+                // 複数親: LCA を計算
+                NodeId lca = p.get(0);
+                for (int i = 1; i < p.size(); i++) {
+                    lca = lcaInDomTree(lca, p.get(i), idom);
                 }
+                idom.put(nodeId, lca);
             }
+        }
 
-            // ノード行を描画
-            String graphPrefix = buildNodeLine(columns, nodeCol);
+        // 支配木の子リストを構築
+        Map<NodeId, List<NodeId>> domChildren = new LinkedHashMap<>();
+        for (Map.Entry<NodeId, NodeId> entry : idom.entrySet()) {
+            domChildren
+                    .computeIfAbsent(entry.getValue(), k -> new ArrayList<>())
+                    .add(entry.getKey());
+        }
 
-            // 子がいる場合、このノードでカラムを占有
-            if (!children.isEmpty()) {
-                ensureColumnExists(columns, nodeCol);
-                ColumnState state = columns.get(nodeCol);
-                state.occupiedBy = node.id();
+        // Step 2: Trunk 選択
+        Map<NodeId, Integer> subtreeDepth = new LinkedHashMap<>();
+        computeSubtreeDepth(
+                hasVirtualRoot ? VIRTUAL_ROOT : roots.get(0), domChildren, subtreeDepth);
 
-                List<NodeId> childList = new ArrayList<>(children);
+        Map<NodeId, @Nullable NodeId> trunkChild = new LinkedHashMap<>();
+        computeTrunkChild(
+                hasVirtualRoot ? VIRTUAL_ROOT : roots.get(0),
+                domChildren,
+                subtreeDepth,
+                trunkChild,
+                topoOrder);
 
-                // 分岐処理（複数の子がいる場合）
-                if (children.size() > 1) {
-                    List<Integer> childCols = new ArrayList<>();
-                    childCols.add(nodeCol);
+        // Step 3: DFS レンダリング
+        if (hasVirtualRoot) {
+            List<NodeId> virtualChildren = domChildren.getOrDefault(VIRTUAL_ROOT, List.of());
+            @Nullable NodeId virtualTrunk = trunkChild.get(VIRTUAL_ROOT);
 
-                    // 最初の子はメインカラムに残る
-                    state.pendingChildren.add(childList.get(0));
-
-                    // 残りの子は新しいカラムに分岐
-                    for (int c = 1; c < childList.size(); c++) {
-                        int newCol = findOrCreateColumn(columns);
-                        ensureColumnExists(columns, newCol);
-                        ColumnState newState = columns.get(newCol);
-                        newState.occupiedBy = node.id();
-                        newState.pendingChildren.add(childList.get(c));
-                        childCols.add(newCol);
+            boolean first = true;
+            // branch subtree を先に描画
+            for (NodeId child : virtualChildren) {
+                if (!child.equals(virtualTrunk)) {
+                    if (!first) {
+                        addSubgraphSeparator(child, outRows, outLineInfos);
                     }
-
-                    branchLine = buildBranchLine(columns, nodeCol, childCols);
-                } else {
-                    // 単一の子
-                    state.pendingChildren.add(childList.get(0));
+                    emitSubtree(
+                            child,
+                            0,
+                            false,
+                            Set.of(),
+                            domChildren,
+                            trunkChild,
+                            outLineInfos,
+                            outRows);
+                    first = false;
                 }
             }
-
-            String connectorLine = null;
-            if (!isLast && hasActiveColumns(columns)) {
-                connectorLine = buildConnectorLine(columns);
+            // trunk を最後に描画
+            if (virtualTrunk != null) {
+                if (!first) {
+                    addSubgraphSeparator(virtualTrunk, outRows, outLineInfos);
+                }
+                emitSubtree(
+                        virtualTrunk,
+                        0,
+                        false,
+                        Set.of(),
+                        domChildren,
+                        trunkChild,
+                        outLineInfos,
+                        outRows);
             }
-
-            result.add(new NodeLineInfo(node, graphPrefix, mergeLine, branchLine, connectorLine));
-        }
-
-        return result;
-    }
-
-    private Set<NodeId> getChildren(MigrationNode node) {
-        Set<NodeId> directChildren;
-        if (reversed) {
-            directChildren = node.dependencies();
         } else {
-            directChildren = dependents.getOrDefault(node.id(), Set.of());
+            emitSubtree(
+                    roots.get(0),
+                    0,
+                    false,
+                    Set.of(),
+                    domChildren,
+                    trunkChild,
+                    outLineInfos,
+                    outRows);
         }
-        // 推移的簡約: 冗長な子を除外
-        return removeTransitiveChildren(directChildren);
     }
 
-    /**
-     * 推移的簡約を行い、冗長な子を除外する。
-     *
-     * <p>例: A の子が {B, D} で、D が B を経由して A に到達できる場合、A → D は冗長。
-     */
-    private Set<NodeId> removeTransitiveChildren(Set<NodeId> children) {
-        if (children.size() <= 1) {
-            return children;
+    private void addSubgraphSeparator(
+            NodeId nextRoot, List<RenderRow> outRows, List<NodeLineInfo> prevInfos) {
+        // 前のサブグラフに可視構造があれば空行
+        if (!prevInfos.isEmpty()) {
+            NodeLineInfo last = prevInfos.get(prevInfos.size() - 1);
+            @Nullable NodeId prevRoot = subgraphRoot(last.node().id());
+            if (prevRoot != null && hasVisibleStructure(prevRoot)) {
+                outRows.add(new RenderRow.BlankRow());
+            }
+        }
+    }
+
+    private void emitSubtree(
+            NodeId nodeId,
+            int column,
+            boolean isBranch,
+            Set<Integer> activeColumns,
+            Map<NodeId, List<NodeId>> domChildren,
+            Map<NodeId, @Nullable NodeId> trunkChild,
+            List<NodeLineInfo> outLineInfos,
+            List<RenderRow> outRows) {
+        MigrationNode node = nodeMap.get(nodeId);
+        if (node == null) return;
+
+        outLineInfos.add(new NodeLineInfo(node, column));
+        outRows.add(new RenderRow.NodeRow(node, column, isBranch, new TreeSet<>(activeColumns)));
+
+        List<NodeId> children = domChildren.getOrDefault(nodeId, List.of());
+        @Nullable NodeId trunk = trunkChild.get(nodeId);
+        List<NodeId> branches = new ArrayList<>();
+        for (NodeId child : children) {
+            if (!child.equals(trunk)) branches.add(child);
         }
 
-        Set<NodeId> result = new HashSet<>(children);
+        if (!branches.isEmpty()) {
+            // branch サブツリー描画中は、現在のカラムが active（trunk が続くことを示す）
+            Set<Integer> branchActive = new TreeSet<>(activeColumns);
+            branchActive.add(column);
+
+            for (NodeId branch : branches) {
+                emitSubtree(
+                        branch,
+                        column + 1,
+                        true,
+                        branchActive,
+                        domChildren,
+                        trunkChild,
+                        outLineInfos,
+                        outRows);
+            }
+        }
+
+        if (trunk != null) {
+            if (branches.isEmpty()) {
+                // 純粋なチェーン → コネクタ行を挿入
+                outRows.add(new RenderRow.ConnectorRow(column, new TreeSet<>(activeColumns)));
+            }
+            emitSubtree(
+                    trunk,
+                    column,
+                    false,
+                    activeColumns,
+                    domChildren,
+                    trunkChild,
+                    outLineInfos,
+                    outRows);
+        }
+    }
+
+    // ========== ASCII レンダリング ==========
+
+    private List<String> doRender(Map<NodeId, String> labels) {
+        List<String> output = new ArrayList<>();
+        int graphWidth = maxColumn > 0 ? 2 * maxColumn + 1 : 1;
+
+        for (RenderRow row : renderRows) {
+            switch (row) {
+                case RenderRow.BlankRow ignored -> output.add("");
+                case RenderRow.ConnectorRow cr ->
+                        output.add(buildConnectorLine(cr.column(), cr.activeColumns(), graphWidth));
+                case RenderRow.NodeRow nr -> {
+                    String graphPart =
+                            buildNodeLine(
+                                    nr.column(), nr.isBranch(), nr.activeColumns(), graphWidth);
+                    String label = labels.getOrDefault(nr.node().id(), "");
+                    output.add((graphPart + " " + label).stripTrailing());
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private String buildConnectorLine(int col, Set<Integer> activeColumns, int graphWidth) {
+        StringBuilder sb = new StringBuilder();
+        for (int c = 0; c <= maxColumn; c++) {
+            if (c == col || activeColumns.contains(c)) {
+                sb.append("│");
+            } else {
+                sb.append(" ");
+            }
+            if (c < maxColumn) {
+                sb.append(" ");
+            }
+        }
+        return padToWidth(sb, graphWidth).stripTrailing();
+    }
+
+    private String buildNodeLine(
+            int col, boolean isBranch, Set<Integer> activeColumns, int graphWidth) {
+        StringBuilder sb = new StringBuilder();
+
+        if (isBranch) {
+            for (int c = 0; c <= maxColumn; c++) {
+                if (c < col - 1) {
+                    sb.append(activeColumns.contains(c) ? "│" : " ");
+                    sb.append(" ");
+                } else if (c == col - 1) {
+                    // branch は常に ├（trunk が後に続くため）
+                    sb.append("├");
+                    sb.append("─");
+                } else if (c == col) {
+                    sb.append("●");
+                    if (c < maxColumn) sb.append(" ");
+                } else {
+                    sb.append(activeColumns.contains(c) ? "│" : " ");
+                    if (c < maxColumn) sb.append(" ");
+                }
+            }
+        } else {
+            for (int c = 0; c <= maxColumn; c++) {
+                if (c == col) {
+                    sb.append("●");
+                } else if (activeColumns.contains(c)) {
+                    sb.append("│");
+                } else {
+                    sb.append(" ");
+                }
+                if (c < maxColumn) {
+                    sb.append(" ");
+                }
+            }
+        }
+
+        return padToWidth(sb, graphWidth).stripTrailing();
+    }
+
+    private String padToWidth(StringBuilder sb, int width) {
+        while (sb.length() < width) {
+            sb.append(" ");
+        }
+        return sb.toString();
+    }
+
+    // ========== 支配木ユーティリティ ==========
+
+    private NodeId lcaInDomTree(NodeId a, NodeId b, Map<NodeId, NodeId> idom) {
+        Set<NodeId> ancestorsOfA = new LinkedHashSet<>();
+        NodeId current = a;
+        ancestorsOfA.add(current);
+        while (idom.containsKey(current)) {
+            current = idom.get(current);
+            ancestorsOfA.add(current);
+        }
+
+        current = b;
+        while (!ancestorsOfA.contains(current)) {
+            if (!idom.containsKey(current)) break;
+            current = idom.get(current);
+        }
+        return current;
+    }
+
+    private int computeSubtreeDepth(
+            NodeId nodeId,
+            Map<NodeId, List<NodeId>> domChildren,
+            Map<NodeId, Integer> subtreeDepth) {
+        List<NodeId> children = domChildren.getOrDefault(nodeId, List.of());
+        if (children.isEmpty()) {
+            subtreeDepth.put(nodeId, 0);
+            return 0;
+        }
+        int maxDepth = 0;
+        for (NodeId child : children) {
+            int d = computeSubtreeDepth(child, domChildren, subtreeDepth);
+            maxDepth = Math.max(maxDepth, d);
+        }
+        int depth = maxDepth + 1;
+        subtreeDepth.put(nodeId, depth);
+        return depth;
+    }
+
+    private void computeTrunkChild(
+            NodeId nodeId,
+            Map<NodeId, List<NodeId>> domChildren,
+            Map<NodeId, Integer> subtreeDepth,
+            Map<NodeId, @Nullable NodeId> trunkChild,
+            List<NodeId> topoOrder) {
+        List<NodeId> children = domChildren.getOrDefault(nodeId, List.of());
+        if (children.isEmpty()) {
+            trunkChild.put(nodeId, null);
+        } else if (children.size() == 1) {
+            trunkChild.put(nodeId, children.get(0));
+        } else {
+            // サブツリー深度が最大の子を trunk とする。タイブレーク: トポロジカル順で最後の子
+            int maxDepth = -1;
+            @Nullable NodeId best = null;
+            for (NodeId child : children) {
+                int d = subtreeDepth.getOrDefault(child, 0);
+                int childTopoIdx = topoOrder.indexOf(child);
+                if (d > maxDepth
+                        || (d == maxDepth
+                                && best != null
+                                && childTopoIdx > topoOrder.indexOf(best))) {
+                    maxDepth = d;
+                    best = child;
+                }
+            }
+            trunkChild.put(nodeId, best);
+        }
 
         for (NodeId child : children) {
-            // この子が他の子を経由して到達可能か確認
-            if (isReachableThroughOtherChildren(child, children)) {
-                result.remove(child);
+            computeTrunkChild(child, domChildren, subtreeDepth, trunkChild, topoOrder);
+        }
+    }
+
+    // ========== DAG ユーティリティ ==========
+
+    private List<NodeId> parents(NodeId nodeId) {
+        return parentsOf.getOrDefault(nodeId, List.of());
+    }
+
+    private List<NodeId> children(NodeId nodeId) {
+        return childrenOf.getOrDefault(nodeId, List.of());
+    }
+
+    private boolean hasVisibleStructure(NodeId nodeId) {
+        return !children(nodeId).isEmpty();
+    }
+
+    private @Nullable NodeId subgraphRoot(NodeId nodeId) {
+        List<NodeId> p = parents(nodeId);
+        if (p.isEmpty()) return nodeId;
+        for (NodeId parentId : p) {
+            if (nodeMap.containsKey(parentId)) {
+                return subgraphRoot(parentId);
             }
         }
+        return nodeId;
+    }
 
+    private Set<NodeId> removeTransitive(Set<NodeId> ids) {
+        if (ids.size() <= 1) return ids;
+        Set<NodeId> result = new HashSet<>(ids);
+        for (NodeId id : ids) {
+            if (isReachableViaOthers(id, ids)) {
+                result.remove(id);
+            }
+        }
         return result;
     }
 
-    /**
-     * 指定された子が、他の子を経由して到達可能かどうかを確認する。
-     *
-     * @param target 確認対象の子
-     * @param allChildren 全ての子の集合
-     * @return target が他の子を経由して到達可能な場合 true
-     */
-    private boolean isReachableThroughOtherChildren(NodeId target, Set<NodeId> allChildren) {
-        for (NodeId otherChild : allChildren) {
-            if (otherChild.equals(target)) {
-                continue;
-            }
-
-            // otherChild が target の祖先かどうか確認
-            if (isAncestor(otherChild, target, new HashSet<>())) {
-                return true;
+    private Set<NodeId> removeTransitiveParents(Set<NodeId> parentIds) {
+        if (parentIds.size() <= 1) return parentIds;
+        Set<NodeId> result = new HashSet<>(parentIds);
+        for (NodeId p : parentIds) {
+            for (NodeId other : parentIds) {
+                if (other.equals(p)) continue;
+                // p が other に到達可能 → p は other の祖先 → p を除去（遠い方を消す）
+                if (canReachDown(p, other, new HashSet<>())) {
+                    result.remove(p);
+                    break;
+                }
             }
         }
+        return result;
+    }
 
+    private boolean canReachDown(NodeId from, NodeId target, Set<NodeId> visited) {
+        if (from.equals(target)) return true;
+        if (!visited.add(from)) return false;
+        for (NodeId child : childrenOf.getOrDefault(from, List.of())) {
+            if (canReachDown(child, target, visited)) return true;
+        }
         return false;
     }
 
-    /** ancestor が descendant の祖先かどうかを確認する（再帰的探索）。 */
+    private boolean isReachableViaOthers(NodeId target, Set<NodeId> all) {
+        for (NodeId other : all) {
+            if (other.equals(target)) continue;
+            if (isAncestor(other, target, new HashSet<>())) return true;
+        }
+        return false;
+    }
+
     private boolean isAncestor(NodeId ancestor, NodeId descendant, Set<NodeId> visited) {
-        if (visited.contains(descendant)) {
-            return false;
-        }
+        if (visited.contains(descendant)) return false;
         visited.add(descendant);
-
         MigrationNode node = nodeMap.get(descendant);
-        if (node == null) {
-            return false;
-        }
-
-        Set<NodeId> parents = node.dependencies();
-        if (parents.contains(ancestor)) {
-            return true;
-        }
-
-        for (NodeId parent : parents) {
-            if (isAncestor(ancestor, parent, visited)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private int findOrCreateColumn(List<ColumnState> columns) {
-        for (int i = 0; i < columns.size(); i++) {
-            if (!columns.get(i).isActive()) {
-                return i;
-            }
-        }
-        return columns.size();
-    }
-
-    private void ensureColumnExists(List<ColumnState> columns, int column) {
-        while (columns.size() <= column) {
-            columns.add(new ColumnState());
-        }
-    }
-
-    private String buildNodeLine(List<ColumnState> columns, int nodeCol) {
-        StringBuilder sb = new StringBuilder();
-        int maxCol = Math.max(columns.size(), nodeCol + 1);
-
-        for (int col = 0; col < maxCol; col++) {
-            if (col == nodeCol) {
-                sb.append("●");
-            } else if (col < columns.size() && columns.get(col).isActive()) {
-                sb.append("│");
-            } else {
-                sb.append(" ");
-            }
-            if (col < maxCol - 1) {
-                sb.append(" ");
-            }
-        }
-
-        return sb.toString().stripTrailing();
-    }
-
-    private String buildBranchLine(
-            List<ColumnState> columns, int nodeCol, List<Integer> childCols) {
-        StringBuilder sb = new StringBuilder();
-        int minCol = Collections.min(childCols);
-        int maxCol = Collections.max(childCols);
-
-        for (int col = 0; col <= Math.max(maxCol, columns.size() - 1); col++) {
-            if (col == nodeCol) {
-                sb.append("├");
-            } else if (childCols.contains(col)) {
-                if (col == maxCol) {
-                    sb.append("┐");
-                } else {
-                    sb.append("┬");
-                }
-            } else if (col > minCol && col < maxCol) {
-                sb.append("─");
-            } else if (col < columns.size() && columns.get(col).isActive()) {
-                sb.append("│");
-            } else {
-                sb.append(" ");
-            }
-
-            if (col >= minCol && col < maxCol) {
-                sb.append("─");
-            } else if (col < Math.max(maxCol, columns.size() - 1)) {
-                sb.append(" ");
-            }
-        }
-
-        return sb.toString().stripTrailing();
-    }
-
-    private String buildMergeLine(
-            List<ColumnState> columns, List<Integer> parentCols, int targetCol) {
-        StringBuilder sb = new StringBuilder();
-        int minCol = Collections.min(parentCols);
-        int maxCol = Collections.max(parentCols);
-
-        for (int col = 0; col <= Math.max(maxCol, columns.size() - 1); col++) {
-            if (col == targetCol) {
-                sb.append("├");
-            } else if (parentCols.contains(col)) {
-                if (col == maxCol) {
-                    sb.append("┘");
-                } else if (col > minCol) {
-                    sb.append("┴");
-                } else {
-                    sb.append("│");
-                }
-            } else if (col > minCol && col < maxCol) {
-                sb.append("─");
-            } else if (col < columns.size() && columns.get(col).isActive()) {
-                sb.append("│");
-            } else {
-                sb.append(" ");
-            }
-
-            if (col >= minCol && col < maxCol) {
-                sb.append("─");
-            } else if (col < Math.max(maxCol, columns.size() - 1)) {
-                sb.append(" ");
-            }
-        }
-
-        return sb.toString().stripTrailing();
-    }
-
-    private String buildConnectorLine(List<ColumnState> columns) {
-        StringBuilder sb = new StringBuilder();
-        for (int col = 0; col < columns.size(); col++) {
-            if (columns.get(col).isActive()) {
-                sb.append("│");
-            } else {
-                sb.append(" ");
-            }
-            if (col < columns.size() - 1) {
-                sb.append(" ");
-            }
-        }
-        return sb.toString().stripTrailing();
-    }
-
-    private boolean hasActiveColumns(List<ColumnState> columns) {
-        for (ColumnState state : columns) {
-            if (state.isActive()) {
-                return true;
-            }
+        if (node == null) return false;
+        Set<NodeId> p = node.dependencies();
+        if (p.contains(ancestor)) return true;
+        for (NodeId pid : p) {
+            if (isAncestor(ancestor, pid, visited)) return true;
         }
         return false;
     }
