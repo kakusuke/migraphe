@@ -1,0 +1,7 @@
+name: Create refunds table
+target: main
+dependencies:
+  - 07_payments/003_payments
+  - 06_orders/005_returns
+up: "Create refunds table with id, payment_id, return_id, amount, status, processed_at"
+down: "Drop refunds table"

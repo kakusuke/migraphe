@@ -1,0 +1,6 @@
+name: Create payment providers table
+target: main
+dependencies:
+  - 00_infra/005_grant_permissions
+up: "Create payment_providers table with id, name, code, is_active, config_json"
+down: "Drop payment_providers table"

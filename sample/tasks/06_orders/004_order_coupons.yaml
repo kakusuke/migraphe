@@ -1,0 +1,7 @@
+name: Create order coupons table
+target: main
+dependencies:
+  - 06_orders/001_orders
+  - 05_pricing/004_coupons
+up: "Create order_coupons table with order_id, coupon_id, discount_amount"
+down: "Drop order_coupons table"

@@ -1,0 +1,6 @@
+name: Create locales table
+target: main
+dependencies:
+  - 00_infra/005_grant_permissions
+up: "Create locales table with code, name, date_format, time_format"
+down: "Drop locales table"

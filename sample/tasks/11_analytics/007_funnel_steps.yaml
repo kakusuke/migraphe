@@ -1,0 +1,7 @@
+name: Create funnel step entries table
+target: main
+dependencies:
+  - 11_analytics/006_funnels
+  - 11_analytics/001_sessions
+up: "Create funnel_step_entries table with funnel_id, session_id, step_index, entered_at"
+down: "Drop funnel_step_entries table"

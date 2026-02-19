@@ -1,0 +1,6 @@
+name: Create coupons table
+target: main
+dependencies:
+  - 05_pricing/003_discounts
+up: "Create coupons table with id, code, discount_id, usage_limit, used_count, is_active"
+down: "Drop coupons table"

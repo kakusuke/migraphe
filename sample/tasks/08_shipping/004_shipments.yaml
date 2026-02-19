@@ -1,0 +1,7 @@
+name: Create shipments table
+target: main
+dependencies:
+  - 06_orders/001_orders
+  - 08_shipping/001_carriers
+up: "Create shipments table with id, order_id, carrier_id, tracking_number, status, shipped_at"
+down: "Drop shipments table"

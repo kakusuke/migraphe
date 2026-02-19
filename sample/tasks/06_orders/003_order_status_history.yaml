@@ -1,0 +1,6 @@
+name: Create order status history table
+target: main
+dependencies:
+  - 06_orders/001_orders
+up: "Create order_status_history table with id, order_id, status, notes, created_at"
+down: "Drop order_status_history table"

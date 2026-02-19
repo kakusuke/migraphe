@@ -1,0 +1,6 @@
+name: Create inventory reservations table
+target: main
+dependencies:
+  - 04_inventory/002_inventory_items
+up: "Create inventory_reservations table with id, warehouse_id, variant_id, quantity, order_id, expires_at"
+down: "Drop inventory_reservations table"

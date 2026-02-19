@@ -1,0 +1,6 @@
+name: Create order returns table
+target: main
+dependencies:
+  - 06_orders/002_order_items
+up: "Create order_returns table with id, order_id, item_id, reason, status, refund_amount"
+down: "Drop order_returns table"

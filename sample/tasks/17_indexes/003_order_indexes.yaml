@@ -1,0 +1,9 @@
+name: Create order table indexes
+target: main
+dependencies:
+  - 06_orders/001_orders
+  - 06_orders/002_order_items
+  - 07_payments/003_payments
+  - 08_shipping/004_shipments
+up: "Create indexes on orders, order_items, payments, shipments tables"
+down: "Drop indexes on orders, order_items, payments, shipments tables"

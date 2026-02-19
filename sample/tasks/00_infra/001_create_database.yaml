@@ -1,0 +1,4 @@
+name: Create database
+target: main
+up: "Create the main ecommerce database"
+down: "Drop the main ecommerce database"

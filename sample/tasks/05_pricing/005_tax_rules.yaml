@@ -1,0 +1,6 @@
+name: Create tax rules table
+target: main
+dependencies:
+  - 01_common/001_currencies
+up: "Create tax_rules table with id, name, rate, country_code, region, product_category"
+down: "Drop tax_rules table"

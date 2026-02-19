@@ -1,0 +1,7 @@
+name: Create store settings table
+target: main
+dependencies:
+  - 01_common/001_currencies
+  - 01_common/002_locales
+up: "Create store_settings table with key, value, data_type, description"
+down: "Drop store_settings table"

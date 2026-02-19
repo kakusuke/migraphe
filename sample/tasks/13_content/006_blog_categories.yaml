@@ -1,0 +1,6 @@
+name: Create blog categories table
+target: main
+dependencies:
+  - 01_common/002_locales
+up: "Create blog_categories table with id, slug, name, locale_code, description"
+down: "Drop blog_categories table"

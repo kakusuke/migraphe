@@ -1,0 +1,6 @@
+name: Create notification logs table
+target: main
+dependencies:
+  - 10_notifications/003_queue
+up: "Create notification_logs table with id, queue_id, sent_at, error_message, attempt_count"
+down: "Drop notification_logs table"

@@ -1,0 +1,7 @@
+name: Create search keywords table
+target: main
+dependencies:
+  - 03_catalog/003_products
+  - 01_common/002_locales
+up: "Create product_search_keywords table with product_id, locale_code, keyword"
+down: "Drop product_search_keywords table"

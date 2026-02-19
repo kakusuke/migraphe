@@ -1,0 +1,6 @@
+name: Create inventory alerts table
+target: main
+dependencies:
+  - 04_inventory/002_inventory_items
+up: "Create inventory_alerts table with id, warehouse_id, variant_id, threshold, alert_type, is_active"
+down: "Drop inventory_alerts table"

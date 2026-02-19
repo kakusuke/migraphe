@@ -1,0 +1,7 @@
+name: Create CMS pages table
+target: main
+dependencies:
+  - 13_content/003_cms_templates
+  - 01_common/002_locales
+up: "Create cms_pages table with id, template_id, slug, locale_code, title, content_json, status"
+down: "Drop cms_pages table"

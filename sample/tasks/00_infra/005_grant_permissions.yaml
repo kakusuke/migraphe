@@ -1,0 +1,6 @@
+name: Grant schema permissions
+target: main
+dependencies:
+  - 00_infra/004_create_extensions
+up: "Grant USAGE on schema app to app_user and app_admin"
+down: "Revoke USAGE on schema app from app_user and app_admin"

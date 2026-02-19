@@ -1,0 +1,6 @@
+name: Create page views table
+target: main
+dependencies:
+  - 11_analytics/001_sessions
+up: "Create page_views table with id, session_id, url, referrer, time_on_page, occurred_at"
+down: "Drop page_views table"

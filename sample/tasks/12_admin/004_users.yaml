@@ -1,0 +1,6 @@
+name: Create admin users table
+target: main
+dependencies:
+  - 02_users/001_users
+up: "Create admin_users table with user_id, employee_id, department, is_active"
+down: "Drop admin_users table"

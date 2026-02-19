@@ -1,0 +1,6 @@
+name: Create product categories table
+target: main
+dependencies:
+  - 01_common/002_locales
+up: "Create categories table with id, parent_id, slug, name, description, position"
+down: "Drop categories table"

@@ -1,0 +1,7 @@
+name: Create product pricing table
+target: main
+dependencies:
+  - 03_catalog/004_variants
+  - 01_common/001_currencies
+up: "Create product_pricing table with variant_id, currency_code, base_price, sale_price"
+down: "Drop product_pricing table"

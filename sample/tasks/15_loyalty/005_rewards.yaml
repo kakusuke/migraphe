@@ -1,0 +1,7 @@
+name: Create loyalty rewards table
+target: main
+dependencies:
+  - 15_loyalty/001_programs
+  - 05_pricing/004_coupons
+up: "Create loyalty_rewards table with id, program_id, name, points_cost, coupon_id, is_active"
+down: "Drop loyalty_rewards table"

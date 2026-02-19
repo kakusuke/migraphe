@@ -1,0 +1,8 @@
+name: Create orders table
+target: main
+dependencies:
+  - 02_users/001_users
+  - 02_users/003_addresses
+  - 01_common/001_currencies
+up: "Create orders table with id, user_id, shipping_address_id, billing_address_id, currency_code, status, total_amount"
+down: "Drop orders table"

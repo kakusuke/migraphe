@@ -1,0 +1,6 @@
+name: Create OAuth accounts table
+target: main
+dependencies:
+  - 02_users/001_users
+up: "Create oauth_accounts table with user_id, provider, provider_user_id, access_token"
+down: "Drop oauth_accounts table"

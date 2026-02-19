@@ -1,0 +1,6 @@
+name: Create invoices table
+target: main
+dependencies:
+  - 06_orders/001_orders
+up: "Create invoices table with id, order_id, invoice_number, issued_at, due_at, status"
+down: "Drop invoices table"

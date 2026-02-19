@@ -1,0 +1,6 @@
+name: Create analytics sessions table
+target: main
+dependencies:
+  - 02_users/001_users
+up: "Create analytics_sessions table with id, user_id, session_key, started_at, ended_at, device_type, ip_address"
+down: "Drop analytics_sessions table"

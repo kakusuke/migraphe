@@ -6,7 +6,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 15 (Gradle Plugin) - COMPLETE
-**Tests**: 293, 100% passing
+**Tests**: 304, 100% passing
 
 ## Module Structure
 
@@ -44,7 +44,8 @@ io.github.kakusuke.migraphe.core/
 ├── config/         # ProjectConfig, TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
 ├── factory/        # EnvironmentFactory, MigrationNodeFactory (generic, uses PluginRegistry)
 ├── plugin/         # PluginRegistry, PluginLoadException
-└── plugin/         # SimpleMigrationNode, SimpleEnvironment, SimpleTask (reference impl)
+├── plugin/         # SimpleMigrationNode, SimpleEnvironment, SimpleTask (reference impl)
+└── plugin/noop/    # NoopPlugin + providers (type="noop", InMemory history, noop execution)
 
 io.github.kakusuke.migraphe.postgresql/
 ├── PostgreSQL{Environment,MigrationNode,UpTask,DownTask,HistoryRepository}.java
@@ -174,14 +175,22 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-02-19 (Session 21)
+- **noop プラグイン追加**: `migraphe-core/src/main/java/.../plugin/noop/` に実装
+  - `NoopPlugin` (type="noop"), `NoopTaskDefinition`, `NoopEnvironmentDefinition`
+  - `NoopEnvironmentProvider`, `NoopMigrationNodeProvider`, `NoopHistoryRepositoryProvider`
+  - ServiceLoader 登録: `migraphe-core/src/main/resources/META-INF/services/`
+- **sample/ ディレクトリ作成**: ECサイト模倣 105 タスク YAML（18 ディレクトリ）
+  - `./gradlew validate` / `up -y` で正常動作確認済み
+  - 実行方法: `cd sample && java -jar ../migraphe-cli/build/libs/migraphe-cli-*-all.jar <cmd>`
+- Tests: 304, 100% passing
+
 ### 2026-02-19 (Session 20)
 - **バグ修正**: `ExecutionGraphView` レーン再利用で中間行の縦線が消える問題
   - 原因: `laneRange[lane]` 上書きにより、再利用レーンの旧グループ範囲が消失
   - 修正: `int[][] laneRange` → `boolean[][] laneActive`（行×レーン累積行列）に変更
   - Refactor: `ConnectorRow` / `BlankRow` の重複 lane char ロジックを1つにまとめた
   - 回帰テスト追加: `laneReuseKeepsIntermediateVerticalLines`
-- Tests: 294, 100% passing
-
 ### 2026-02-12 (Session 19) - COMPLETE
 - **ExecutionGraphView 再設計**: 支配木ベース描画 + 非支配木辺レーン描画
   - 詳細計画: `PLAN-ExecutionGraphView.md`
@@ -190,4 +199,4 @@ Update when code changes:
 ---
 
 **Last Updated**: 2026-02-19
-**Current Work**: laneRange バグ修正 - COMPLETE
+**Current Work**: noop プラグイン + sample/ ディレクトリ - COMPLETE

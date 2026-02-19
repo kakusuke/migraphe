@@ -1,0 +1,7 @@
+name: Create media files table
+target: main
+dependencies:
+  - 13_content/001_media_folders
+  - 02_users/001_users
+up: "Create media_files table with id, folder_id, filename, mime_type, size_bytes, url, uploaded_by"
+down: "Drop media_files table"

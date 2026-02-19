@@ -1,0 +1,6 @@
+name: Create order notes table
+target: main
+dependencies:
+  - 06_orders/001_orders
+up: "Create order_notes table with id, order_id, note, is_internal, created_by"
+down: "Drop order_notes table"

@@ -1,0 +1,7 @@
+name: Create product view analytics table
+target: main
+dependencies:
+  - 11_analytics/001_sessions
+  - 03_catalog/003_products
+up: "Create product_views table with id, session_id, product_id, variant_id, duration_ms, occurred_at"
+down: "Drop product_views table"

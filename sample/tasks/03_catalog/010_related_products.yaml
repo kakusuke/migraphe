@@ -1,0 +1,6 @@
+name: Create related products table
+target: main
+dependencies:
+  - 03_catalog/003_products
+up: "Create related_products table with product_id, related_product_id, relation_type"
+down: "Drop related_products table"

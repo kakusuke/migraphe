@@ -1,0 +1,7 @@
+name: Create shipping rates table
+target: main
+dependencies:
+  - 08_shipping/002_shipping_zones
+  - 01_common/001_currencies
+up: "Create shipping_rates table with id, zone_id, name, min_weight, max_weight, base_rate, currency_code"
+down: "Drop shipping_rates table"

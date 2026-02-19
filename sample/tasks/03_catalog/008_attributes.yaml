@@ -1,0 +1,6 @@
+name: Create product attributes table
+target: main
+dependencies:
+  - 03_catalog/003_products
+up: "Create attribute_groups, attributes, and product_attribute_values tables"
+down: "Drop product_attribute_values, attributes, attribute_groups tables"

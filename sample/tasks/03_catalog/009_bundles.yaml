@@ -1,0 +1,7 @@
+name: Create product bundles table
+target: main
+dependencies:
+  - 03_catalog/003_products
+  - 03_catalog/004_variants
+up: "Create product_bundles and bundle_items tables"
+down: "Drop bundle_items and product_bundles tables"

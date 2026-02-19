@@ -1,0 +1,6 @@
+name: Create CMS content blocks table
+target: main
+dependencies:
+  - 13_content/004_cms_pages
+up: "Create cms_blocks table with id, page_id, block_type, content_json, position, is_visible"
+down: "Drop cms_blocks table"

@@ -1,0 +1,6 @@
+name: Create payment transactions table
+target: main
+dependencies:
+  - 07_payments/003_payments
+up: "Create payment_transactions table with id, payment_id, type, amount, provider_ref, created_at"
+down: "Drop payment_transactions table"

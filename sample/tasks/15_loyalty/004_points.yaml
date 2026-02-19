@@ -1,0 +1,7 @@
+name: Create loyalty points transactions table
+target: main
+dependencies:
+  - 15_loyalty/003_memberships
+  - 06_orders/001_orders
+up: "Create loyalty_points table with id, user_id, program_id, points, type, order_id, created_at"
+down: "Drop loyalty_points table"

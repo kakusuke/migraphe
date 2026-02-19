@@ -1,0 +1,6 @@
+name: Create user devices table
+target: main
+dependencies:
+  - 02_users/001_users
+up: "Create user_devices table with user_id, device_token, platform, last_seen_at"
+down: "Drop user_devices table"

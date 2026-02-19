@@ -1,0 +1,7 @@
+name: Create blog posts table
+target: main
+dependencies:
+  - 13_content/006_blog_categories
+  - 02_users/001_users
+up: "Create blog_posts table with id, category_id, author_id, slug, title, body, status, published_at"
+down: "Drop blog_posts table"

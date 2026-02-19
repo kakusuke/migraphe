@@ -1,0 +1,7 @@
+name: Create price list items table
+target: main
+dependencies:
+  - 05_pricing/001_price_lists
+  - 03_catalog/004_variants
+up: "Create price_list_items table with price_list_id, variant_id, price, min_quantity"
+down: "Drop price_list_items table"
