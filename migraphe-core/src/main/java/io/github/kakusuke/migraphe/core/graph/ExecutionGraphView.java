@@ -545,14 +545,17 @@ public final class ExecutionGraphView {
         }
 
         // レーン範囲とアクション情報を構築
-        int[][] laneRange = new int[lc][2];
+        // boolean[row][lane] — レーン再利用に対応するため行ごとに累積
+        boolean[][] laneActive = new boolean[initialRows.size()][lc];
         Map<NodeId, List<int[]>> nodeLaneActions = new LinkedHashMap<>();
         Map<NodeId, Integer> targetLaneMap = new LinkedHashMap<>();
 
         for (int g = 0; g < groups.size(); g++) {
             GroupInfo group = groups.get(g);
             int lane = groupLane[g];
-            laneRange[lane] = new int[] {group.startRow(), group.endRow()};
+            for (int r = group.startRow(); r < group.endRow(); r++) {
+                laneActive[r][lane] = true;
+            }
             targetLaneMap.put(group.target(), lane);
 
             boolean first = true;
@@ -575,16 +578,13 @@ public final class ExecutionGraphView {
                 NodeId nodeId = nr.node().id();
                 List<int[]> actions = nodeLaneActions.getOrDefault(nodeId, List.of());
                 for (int l = 0; l < lc; l++) {
-                    char ch = computeNodeLaneChar(i, l, actions, laneRange);
+                    char ch = computeNodeLaneChar(i, l, actions, laneActive);
                     sb.append(ch);
                 }
-            } else if (row instanceof RenderRow.ConnectorRow) {
+            } else if (row instanceof RenderRow.ConnectorRow
+                    || row instanceof RenderRow.BlankRow) {
                 for (int l = 0; l < lc; l++) {
-                    sb.append(isLaneActiveAtRow(i, l, laneRange) ? '│' : ' ');
-                }
-            } else if (row instanceof RenderRow.BlankRow) {
-                for (int l = 0; l < lc; l++) {
-                    sb.append(isLaneActiveAtRow(i, l, laneRange) ? '│' : ' ');
+                    sb.append(isLaneActiveAtRow(i, l, laneActive) ? '│' : ' ');
                 }
             } else {
                 for (int l = 0; l < lc; l++) {
@@ -616,9 +616,9 @@ public final class ExecutionGraphView {
                     if (l == targetLane) {
                         mlc.append('┘');
                     } else if (l < targetLane) {
-                        mlc.append(isLaneActiveAtRow(i, l, laneRange) ? '┼' : '─');
+                        mlc.append(isLaneActiveAtRow(i, l, laneActive) ? '┼' : '─');
                     } else {
-                        mlc.append(isLaneActiveAtRow(i, l, laneRange) ? '│' : ' ');
+                        mlc.append(isLaneActiveAtRow(i, l, laneActive) ? '│' : ' ');
                     }
                 }
                 finalLaneChars.add(mlc.toString());
@@ -632,7 +632,7 @@ public final class ExecutionGraphView {
     }
 
     private char computeNodeLaneChar(
-            int rowIndex, int lane, List<int[]> actions, int[][] laneRange) {
+            int rowIndex, int lane, List<int[]> actions, boolean[][] laneActive) {
         // このノードがこのレーンで START/JOIN するか
         for (int[] action : actions) {
             if (action[0] == lane) {
@@ -640,15 +640,16 @@ public final class ExecutionGraphView {
             }
         }
         // レーンがアクティブか（通過中）
-        if (isLaneActiveAtRow(rowIndex, lane, laneRange)) {
+        if (isLaneActiveAtRow(rowIndex, lane, laneActive)) {
             return '│';
         }
         return ' ';
     }
 
-    private boolean isLaneActiveAtRow(int rowIndex, int lane, int[][] laneRange) {
-        if (lane >= laneRange.length) return false;
-        return rowIndex >= laneRange[lane][0] && rowIndex < laneRange[lane][1];
+    private boolean isLaneActiveAtRow(int rowIndex, int lane, boolean[][] laneActive) {
+        if (rowIndex < 0 || rowIndex >= laneActive.length) return false;
+        if (lane < 0 || lane >= laneActive[rowIndex].length) return false;
+        return laneActive[rowIndex][lane];
     }
 
     // ========== ASCII レンダリング ==========

@@ -928,6 +928,38 @@ class ExecutionGraphViewTest {
         }
 
         @Test
+        @DisplayName("レーン再利用: 中間行の縦線が消えない (laneRange 上書きバグ回帰)")
+        void laneReuseKeepsIntermediateVerticalLines() {
+            // Given: A→{B,C}→D where B→X→Y (Bの子チェーン), D→{P,Q}→R
+            // 非支配木辺:
+            //   Group1 (target D): B→D, C→D — lane 0, rows 1〜6 がアクティブ
+            //   Group2 (target R): P→R, Q→R — lane 0 を再利用 (Group1 終了後)
+            // バグ: laneRange[0] が Group2 の範囲で上書きされ、Group1 の中間行(X, Y行)で │ が消える
+            MigrationNode nodeA = node("a").name("A").build();
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeX = node("x").name("X").dependencies(NodeId.of("b")).build();
+            MigrationNode nodeY = node("y").name("Y").dependencies(NodeId.of("x")).build();
+            MigrationNode nodeD =
+                    node("d").name("D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            MigrationNode nodeP = node("p").name("P").dependencies(NodeId.of("d")).build();
+            MigrationNode nodeQ = node("q").name("Q").dependencies(NodeId.of("d")).build();
+            MigrationNode nodeR =
+                    node("r").name("R").dependencies(NodeId.of("p"), NodeId.of("q")).build();
+
+            List<MigrationNode> nodes =
+                    List.of(nodeA, nodeB, nodeC, nodeX, nodeY, nodeD, nodeP, nodeQ, nodeR);
+            ExecutionGraphView view = new ExecutionGraphView(nodes, false);
+            String text = view.toString();
+
+            // X と Y の行: trunk chain の中間ノード。lane 0 がアクティブなので │ が見えるはず
+            String xLine = text.lines().filter(l -> l.contains("[ ] x - X")).findFirst().orElse("");
+            String yLine = text.lines().filter(l -> l.contains("[ ] y - Y")).findFirst().orElse("");
+            assertThat(xLine).as("X行にレーン│が見えるはず").contains("│");
+            assertThat(yLine).as("Y行にレーン│が見えるはず").contains("│");
+        }
+
+        @Test
         @DisplayName("非支配木辺なし: チェーンは変更なし")
         void noNonDomEdgesChain() {
             MigrationNode nodeA = node("a").name("A").build();

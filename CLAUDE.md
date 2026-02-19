@@ -100,8 +100,10 @@ Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`
 ## Development Process
 
 ### TDD (t-wada style) - MANDATORY
-1. Red → Green → Refactor
-2. All tests MUST pass 100%
+1. **Red**: 失敗するテストを書く
+2. **Green**: テストを通す最小限の実装
+3. **Refactor**: 重複除去・可読性向上（テストが通り続けることを確認）。Green で終わらず必ずこのフェーズを実施すること
+4. All tests MUST pass 100%
 
 ### Build Commands
 ```bash
@@ -172,39 +174,20 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-02-19 (Session 20)
+- **バグ修正**: `ExecutionGraphView` レーン再利用で中間行の縦線が消える問題
+  - 原因: `laneRange[lane]` 上書きにより、再利用レーンの旧グループ範囲が消失
+  - 修正: `int[][] laneRange` → `boolean[][] laneActive`（行×レーン累積行列）に変更
+  - Refactor: `ConnectorRow` / `BlankRow` の重複 lane char ロジックを1つにまとめた
+  - 回帰テスト追加: `laneReuseKeepsIntermediateVerticalLines`
+- Tests: 294, 100% passing
+
 ### 2026-02-12 (Session 19) - COMPLETE
-- **ExecutionGraphView 再設計**: インライン分岐 + マージレーン方式に変更
-  - 目的: git graph 風の視覚的に分かりやすいグラフ表示
-  - 描画ルール:
-    - フォーク（リーフのみ）: `├─●` `└─●` インライン表示
-    - フォーク（マージあり）: `├─●─┐` `└─●─┤` + マージレーン `┐` `┤`
-    - マージ: コネクタ行 `┌───┘` + マージ結果ノード
-    - チェーン: ノード間に `│` 行（継続を明示）
-    - レーン深度: 表（`├` `└`）と裏（`┴` `┘`）の区別
-    - クロス依存: `●─┐` `●─│┐` + `├┴─●` `└┴─●` 形式
-  - **部分マージ対応**: マージに参加しないフォーク子がマージ結果の前に表示されるように改善
-    - `reorderForVisualization()`: ノード再順序付けロジック追加
-    - `closedForks` 追跡: マージ後のフォーク子の正しい表示
+- **ExecutionGraphView 再設計**: 支配木ベース描画 + 非支配木辺レーン描画
   - 詳細計画: `PLAN-ExecutionGraphView.md`
-  - テスト: 34ケース（14基本パターン + 部分マージ含む複雑パターン）
 - Tests: 293, 100% passing
-
-### 2026-01-30 (Session 18)
-- **Gradle/CLI 共通処理抽出**: 重複コードを Core に共通化
-  - `ExecutionContext.createHistoryRepository()`: HistoryRepository 生成を一元化（CLI 3箇所 + Gradle 3箇所の重複を解消）
-  - `ExecutionPlan.filterNodesInOrder()`: Plan ノード DFS 順フィルタを一元化（CLI 2箇所 + Gradle 2箇所）
-  - `ExecutionGraphView.renderLines(Function)`: グラフ行レンダリングループを一元化（CLI Up/Down + Gradle Up/Down）
-  - `FormatUtils`: Duration/DateTime フォーマットを Core に新規追加（CLI StatusCommand + Gradle MigrapheStatusTask）
-  - `HistoryRepositoryHelper.java` **削除**（`ExecutionContext.createHistoryRepository()` に統合）
-  - 新規テスト 8 件追加（createHistoryRepository ×2, filterNodesInOrder ×2, renderLines ×3, FormatUtils ×3 ※ネストクラス含む）
-- Tests: 265+, 100% passing
-
-### 2026-01-28 (Session 17)
-- **Gradle Plugin 実装 (Phase 15)**: `migraphe-gradle-plugin` モジュール新規作成
-- Tests: 257, 100% passing
 
 ---
 
-**Last Updated**: 2026-02-12
-**Current Work**: ExecutionGraphView 再設計 - COMPLETE
-**Plan File**: `PLAN-ExecutionGraphView.md`
+**Last Updated**: 2026-02-19
+**Current Work**: laneRange バグ修正 - COMPLETE
