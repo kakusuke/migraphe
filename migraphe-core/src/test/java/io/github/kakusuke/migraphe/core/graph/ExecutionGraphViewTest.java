@@ -1045,16 +1045,17 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(nodes, false);
             String text = view.toString();
 
+            // 新アルゴリズム: G_d と G_e は非重複のためレーン0を再利用 (lc=1)
             String expected =
                     """
-                    ●      [ ] a - A
-                    ├─●─┐  [ ] b - B
-                    ├─●─┤  [ ] c - C
+                    ●     [ ] a - A
+                    ├─●─┐ [ ] b - B
+                    ├─●─┤ [ ] c - C
                     ├───┘
-                    ├─●──┐ [ ] d - D
-                    ├─●──┤ [ ] f - F
-                    ├────┘
-                    ●      [ ] e - E
+                    ├─●─┐ [ ] d - D
+                    ├─●─┤ [ ] f - F
+                    ├───┘
+                    ●     [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }

@@ -65,4 +65,23 @@ class GraphCanvasTest {
         assertThat(lines).hasSize(3);
         assertThat(lines.get(1)).contains("│");
     }
+
+    @Test
+    @DisplayName("マージ行の閉じ括弧（┘）の右側に余計な縦棒（│）が表示されない")
+    void mergeRowShouldNotShowExtraVerticalBarsAfterClosing() {
+        MigrationNode nodeA = TestHelpers.node("a").build();
+        MigrationNode nodeB = TestHelpers.node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeC = TestHelpers.node("c").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeD =
+                TestHelpers.node("d").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+        MigrationNode nodeE =
+                TestHelpers.node("e").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+
+        DominatorTree dt = new DominatorTree(List.of(nodeA, nodeB, nodeC, nodeD, nodeE), false);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.layout(dt);
+
+        List<String> lines = canvas.render(n -> n.id().value());
+        assertThat(lines).noneMatch(line -> line.contains("┘│"));
+    }
 }

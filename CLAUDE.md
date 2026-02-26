@@ -6,7 +6,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 15 (Gradle Plugin) - COMPLETE
-**Tests**: 304, 100% passing
+**Tests**: 305, 100% passing
 
 ## Module Structure
 
@@ -182,6 +182,14 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-02-26 (Session 23)
+- **GraphCanvas レーン割り当てバグ修正**: `status` コマンドで `┘` の右側に余計な `│` が出る不具合を修正
+  - 原因: 重複 interval のグループで endRow が大きい（長い）グループが高い lane 番号を取得していた
+  - 修正: `GraphCanvas.assignLanesAndInsertMergeRows()` のソート順を endRow 降順に変更 + lane 再利用条件に「上位 lane の invariant 維持チェック（condition 2）」を追加
+  - 不変条件: 重複するグループ間では endRow が大きいグループが低い lane 番号を持つ
+  - 新テスト: `GraphCanvasTest.mergeRowShouldNotShowExtraVerticalBarsAfterClosing`
+- Tests: 305, 100% passing
+
 ### 2026-02-25 (Session 22)
 - **ExecutionGraphView.java 分割完了**: 1,014行 → 54行（オーケストレーターのみ）
   - 新ファイル: `DominatorTree.java`, `GraphCanvas.java`, `NonDomEdge.java`, `BranchClassification.java`, `GroupInfo.java`
@@ -191,12 +199,7 @@ Update when code changes:
   - 4件の pre-existing Red テストは引き続き `@Disabled`
 - Tests: 304, 100% passing
 
-### 2026-02-19 (Session 21)
-- **noop プラグイン追加**: `migraphe-core/src/main/java/.../plugin/noop/` に実装
-- **sample/ ディレクトリ作成**: ECサイト模倣 105 タスク YAML（18 ディレクトリ）
-- Tests: 304, 100% passing
-
 ---
 
-**Last Updated**: 2026-02-25
-**Current Work**: ExecutionGraphView 分割 - COMPLETE
+**Last Updated**: 2026-02-26
+**Current Work**: GraphCanvas レーン割り当てバグ修正 - COMPLETE

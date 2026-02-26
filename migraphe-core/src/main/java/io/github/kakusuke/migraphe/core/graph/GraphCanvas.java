@@ -331,11 +331,16 @@ final class GraphCanvas {
             int endRow = endRowObj;
             groups.add(new GroupInfo(target, sources, startRow, endRow));
         }
-        groups.sort(Comparator.comparingInt(GroupInfo::startRow));
+        // endRow 降順にソート：長い（後まで続く）グループを低い lane に割り当てるため
+        groups.sort(
+                Comparator.<GroupInfo>comparingInt(GroupInfo::endRow)
+                        .reversed()
+                        .thenComparingInt(GroupInfo::startRow));
 
         // レーン割り当て（再利用あり）
-        int[] laneEndRow = new int[groups.size()];
-        Arrays.fill(laneEndRow, -1);
+        // endRow 降順で処理するため、再利用可能条件は group.endRow() <= laneMinStartRow
+        int[] laneMinStartRow = new int[groups.size()];
+        Arrays.fill(laneMinStartRow, Integer.MAX_VALUE);
         int lc = 0;
         int[] groupLane = new int[groups.size()];
 
@@ -343,7 +348,18 @@ final class GraphCanvas {
             GroupInfo group = groups.get(g);
             int lane = -1;
             for (int i = 0; i < lc; i++) {
-                if (laneEndRow[i] < group.startRow()) {
+                // 条件1: lane i の既存グループと重複しない
+                if (group.endRow() > laneMinStartRow[i]) continue;
+                // 条件2: 上位 lane (m > i) に group と重複し endRow が大きいグループがない
+                // （あれば lane i に入ると invariant 違反: 下位 lane が低 endRow になる）
+                boolean higherLaneOverlaps = false;
+                for (int m = i + 1; m < lc; m++) {
+                    if (laneMinStartRow[m] < group.endRow()) {
+                        higherLaneOverlaps = true;
+                        break;
+                    }
+                }
+                if (!higherLaneOverlaps) {
                     lane = i;
                     break;
                 }
@@ -352,7 +368,7 @@ final class GraphCanvas {
                 lane = lc++;
             }
             groupLane[g] = lane;
-            laneEndRow[lane] = group.endRow();
+            laneMinStartRow[lane] = Math.min(laneMinStartRow[lane], group.startRow());
         }
 
         // レーン範囲とアクション情報を構築
