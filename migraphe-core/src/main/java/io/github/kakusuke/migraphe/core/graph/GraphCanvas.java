@@ -418,7 +418,8 @@ final class GraphCanvas {
                 Set<Integer> mergeActive = new TreeSet<>(nr.activeColumns());
                 mergeActive.add(nr.column());
 
-                finalRows.add(new Row.MergeRow(nr.column(), mergeActive));
+                int mergeCol = nr.isBranch() ? nr.column() - 1 : nr.column();
+                finalRows.add(new Row.MergeRow(mergeCol, mergeActive));
 
                 // マージ行のレーン文字
                 StringBuilder mlc = new StringBuilder();
@@ -428,7 +429,7 @@ final class GraphCanvas {
                     } else if (l < targetLane) {
                         mlc.append(isLaneActiveAtRow(i, l, laneActive) ? '┼' : '─');
                     } else {
-                        mlc.append(isLaneActiveAtRow(i, l, laneActive) ? '│' : ' ');
+                        mlc.append(isLaneActiveAtRow(i - 1, l, laneActive) ? '│' : ' ');
                     }
                 }
                 finalLaneChars.add(mlc.toString());

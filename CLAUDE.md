@@ -97,6 +97,9 @@ Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`
 1. **Keep CLAUDE.md compact**: When editing this file, maintain brevity. Avoid verbose explanations; use tables, bullet points, and concise descriptions.
 2. **Think in English, respond in Japanese**: Internal reasoning should be in English for efficiency. User-facing output should be translated to Japanese.
 3. **Changelog maintenance**: Keep only the last 2-3 sessions. Remove older entries to prevent file bloat.
+4. **Subagent delegation**: Main agent = orchestrator. Delegate broad exploration to `Explore` subagent; use direct `Glob`/`Grep`/`Read` only for targeted lookup of known file/line locations. Do not duplicate research that subagents already perform.
+5. **jdtls-lsp first**: For Java symbol lookup (class/method definitions, cross-references), all agents should prefer jdtls-lsp tools over `Read`/`Grep` to save context.
+6. **Large output**: Commands producing many lines (e.g., `status` on sample/) — always limit with `sed -n 'X,Yp'`, `grep -n pattern | head -N`, or `wc -l` first. Never consume full large output in main context.
 
 ## Development Process
 

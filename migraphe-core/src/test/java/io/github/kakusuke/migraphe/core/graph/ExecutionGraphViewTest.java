@@ -1002,7 +1002,6 @@ class ExecutionGraphViewTest {
         }
 
         @Test
-        @Disabled("pre-existing Red: not yet implemented")
         @DisplayName("分岐ノードへの非支配木辺マージ行: ├ が col-1 (分岐コネクタ列) に配置される")
         void mergeRowForBranchNodePlacesJunctionAtConnectorColumn() {
             // A→{B(pre-trunk branch), C(trunk)→D}, {B,D}→E(post-trunk branch of A)
@@ -1031,7 +1030,6 @@ class ExecutionGraphViewTest {
         }
 
         @Test
-        @Disabled("pre-existing Red: not yet implemented")
         @DisplayName("マージ行: ターゲットノードが開くレーンを誤表示しない")
         void mergeRowDoesNotShowLanesOpenedByMergeTarget() {
             MigrationNode nodeA = node("a").name("A").build();
