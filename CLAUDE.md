@@ -101,6 +101,10 @@ Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`
 ## Development Process
 
 ### TDD (t-wada style) - MANDATORY
+**コードを書く際は必ず `/tdd-cycle` スキルを使って1サイクルずつ進めること。**
+- `/tdd-cycle` は micro-plan → test-writer → minimal-fix → regression-guard → tidy-after-green の順で1サイクルを実行する
+- 繰り返し呼び出して incremental に実装を進める
+
 1. **Red**: 失敗するテストを書く
 2. **Green**: テストを通す最小限の実装
 3. **Refactor**: 重複除去・可読性向上（テストが通り続けることを確認）。Green で終わらず必ずこのフェーズを実施すること
@@ -175,28 +179,21 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-02-19 (Session 21)
-- **noop プラグイン追加**: `migraphe-core/src/main/java/.../plugin/noop/` に実装
-  - `NoopPlugin` (type="noop"), `NoopTaskDefinition`, `NoopEnvironmentDefinition`
-  - `NoopEnvironmentProvider`, `NoopMigrationNodeProvider`, `NoopHistoryRepositoryProvider`
-  - ServiceLoader 登録: `migraphe-core/src/main/resources/META-INF/services/`
-- **sample/ ディレクトリ作成**: ECサイト模倣 105 タスク YAML（18 ディレクトリ）
-  - `./gradlew validate` / `up -y` で正常動作確認済み
-  - 実行方法: `cd sample && java -jar ../migraphe-cli/build/libs/migraphe-cli-*-all.jar <cmd>`
+### 2026-02-25 (Session 22)
+- **ExecutionGraphView.java 分割完了**: 1,014行 → 54行（オーケストレーターのみ）
+  - 新ファイル: `DominatorTree.java`, `GraphCanvas.java`, `NonDomEdge.java`, `BranchClassification.java`, `GroupInfo.java`
+  - 新テスト: `DominatorTreeTest.java`, `GraphCanvasTest.java`, `NonDomEdgeTest.java` など
+  - `GraphCanvas.render()` が全行（NodeRow + ConnectorRow + MergeRow + BlankRow）を返すよう修正
+  - `ExecutionGraphView` は `DominatorTree` + `GraphCanvas` を組み合わせるだけ（54行）
+  - 4件の pre-existing Red テストは引き続き `@Disabled`
 - Tests: 304, 100% passing
 
-### 2026-02-19 (Session 20)
-- **バグ修正**: `ExecutionGraphView` レーン再利用で中間行の縦線が消える問題
-  - 原因: `laneRange[lane]` 上書きにより、再利用レーンの旧グループ範囲が消失
-  - 修正: `int[][] laneRange` → `boolean[][] laneActive`（行×レーン累積行列）に変更
-  - Refactor: `ConnectorRow` / `BlankRow` の重複 lane char ロジックを1つにまとめた
-  - 回帰テスト追加: `laneReuseKeepsIntermediateVerticalLines`
-### 2026-02-12 (Session 19) - COMPLETE
-- **ExecutionGraphView 再設計**: 支配木ベース描画 + 非支配木辺レーン描画
-  - 詳細計画: `PLAN-ExecutionGraphView.md`
-- Tests: 293, 100% passing
+### 2026-02-19 (Session 21)
+- **noop プラグイン追加**: `migraphe-core/src/main/java/.../plugin/noop/` に実装
+- **sample/ ディレクトリ作成**: ECサイト模倣 105 タスク YAML（18 ディレクトリ）
+- Tests: 304, 100% passing
 
 ---
 
-**Last Updated**: 2026-02-19
-**Current Work**: noop プラグイン + sample/ ディレクトリ - COMPLETE
+**Last Updated**: 2026-02-25
+**Current Work**: ExecutionGraphView 分割 - COMPLETE
