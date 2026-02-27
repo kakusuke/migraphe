@@ -438,17 +438,18 @@ final class GraphCanvas {
                 finalRows.add(new Row.MergeRow(mergeCol, mergeActive));
 
                 // マージ行のレーン文字
-                StringBuilder mlc = new StringBuilder();
+                // マージ行はノード行 i の直前に挿入されるため、レーンのアクティブ状態は i-1 行目を参照する
+                StringBuilder mergeLaneChars = new StringBuilder();
                 for (int l = 0; l < lc; l++) {
                     if (l == targetLane) {
-                        mlc.append('┘');
+                        mergeLaneChars.append('┘');
                     } else if (l < targetLane) {
-                        mlc.append(isLaneActiveAtRow(i, l, laneActive) ? '┼' : '─');
+                        mergeLaneChars.append(isLaneActiveAtRow(i - 1, l, laneActive) ? '┼' : '─');
                     } else {
-                        mlc.append(isLaneActiveAtRow(i - 1, l, laneActive) ? '│' : ' ');
+                        mergeLaneChars.append(isLaneActiveAtRow(i - 1, l, laneActive) ? '│' : ' ');
                     }
                 }
-                finalLaneChars.add(mlc.toString());
+                finalLaneChars.add(mergeLaneChars.toString());
             }
 
             finalRows.add(row);

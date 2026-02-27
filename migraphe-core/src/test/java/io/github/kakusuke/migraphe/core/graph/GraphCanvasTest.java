@@ -67,6 +67,35 @@ class GraphCanvasTest {
     }
 
     @Test
+    @DisplayName("マージ行（┘）の左レーン文字が、ターゲット行から始まるレーンを ┼ と誤表示しない")
+    void mergeRowShouldNotShowSpuriousCrossCharactersBeforeClosing() {
+        // d はノード b,c の非支配木辺ターゲット（マージ行が挿入される）
+        // かつ d はノード e への非支配木辺のソース（d の行からレーンが開始する）
+        // → d 直前のマージ行の時点ではまだ開始していないレーンが ┼ と誤表示されないことを検証する
+        MigrationNode nodeA = TestHelpers.node("a").build();
+        MigrationNode nodeB = TestHelpers.node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeC = TestHelpers.node("c").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeD =
+                TestHelpers.node("d").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+        MigrationNode nodeF =
+                TestHelpers.node("f").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+        MigrationNode nodeX = TestHelpers.node("x").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeE =
+                TestHelpers.node("e").dependencies(NodeId.of("d"), NodeId.of("x")).build();
+
+        DominatorTree dt =
+                new DominatorTree(List.of(nodeA, nodeB, nodeC, nodeD, nodeF, nodeX, nodeE), false);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.layout(dt);
+
+        List<String> lines = canvas.render(n -> n.id().value());
+        List<String> mergeLines = lines.stream().filter(line -> line.contains("┘")).toList();
+        assertThat(mergeLines).isNotEmpty();
+        // マージ行でターゲット行から始まるレーンが ┼ と誤表示されると隣接 ┼┼ が現れる
+        assertThat(mergeLines).noneMatch(line -> line.contains("┼┼"));
+    }
+
+    @Test
     @DisplayName("マージ行の閉じ括弧（┘）の右側に余計な縦棒（│）が表示されない")
     void mergeRowShouldNotShowExtraVerticalBarsAfterClosing() {
         MigrationNode nodeA = TestHelpers.node("a").build();

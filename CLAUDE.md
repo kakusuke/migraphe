@@ -182,6 +182,13 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-02-26 (Session 24)
+- **GraphCanvas マージ行の ┼ 誤表示バグ修正**: `status` コマンドで接続先のない `┼` が大量表示される不具合を修正
+  - 原因: マージ行（ノード行 i の直前）で `laneActive[i][l]` を参照していたため、行 i から始まるレーン（ノード i が非支配木辺のソース）が誤って `┼` と表示された
+  - 修正: `isLaneActiveAtRow(i, l, ...)` → `isLaneActiveAtRow(i - 1, l, ...)` に変更（1行修正）
+  - 新テスト: `GraphCanvasTest.mergeRowShouldNotShowSpuriousCrossCharactersBeforeClosing`
+- Tests: 306, 100% passing
+
 ### 2026-02-26 (Session 23)
 - **GraphCanvas レーン割り当てバグ修正**: `status` コマンドで `┘` の右側に余計な `│` が出る不具合を修正
   - 原因: 重複 interval のグループで endRow が大きい（長い）グループが高い lane 番号を取得していた
