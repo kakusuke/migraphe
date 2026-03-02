@@ -34,6 +34,23 @@ final class GridBuilder {
         grid.get(row).set(col, cell);
     }
 
+    void addRow() {
+        int cols = cols();
+        List<Cell> row = new ArrayList<>(cols);
+        for (int c = 0; c < cols; c++) {
+            row.add(new Cell.SpaceCell());
+        }
+        grid.add(row);
+    }
+
+    void addColumns(int n) {
+        for (List<Cell> row : grid) {
+            for (int i = 0; i < n; i++) {
+                row.add(new Cell.SpaceCell());
+            }
+        }
+    }
+
     void insertRow(int r) {
         int cols = cols();
         List<Cell> newRow = new ArrayList<>(cols);

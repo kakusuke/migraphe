@@ -124,4 +124,33 @@ class GridBuilderTest {
 
         assertThat(grid.get(1, 1)).isInstanceOf(Cell.SpaceCell.class);
     }
+
+    @Test
+    @DisplayName("addRow は末尾に SpaceCell 行を追加する")
+    void addRowAppendsSpaceCellRow() {
+        GridBuilder grid = new GridBuilder(2, 3);
+
+        grid.addRow();
+
+        assertThat(grid.rows()).isEqualTo(3);
+        assertThat(grid.get(2, 0)).isInstanceOf(Cell.SpaceCell.class);
+        assertThat(grid.get(2, 1)).isInstanceOf(Cell.SpaceCell.class);
+        assertThat(grid.get(2, 2)).isInstanceOf(Cell.SpaceCell.class);
+    }
+
+    @Test
+    @DisplayName("addColumns は既存全行の末尾に SpaceCell 列を追加する")
+    void addColumnsAppendsSpaceCellColumns() {
+        GridBuilder grid = new GridBuilder(2, 2);
+        Cell.TaskCell taskCell = new Cell.TaskCell(NodeId.of("a"));
+        grid.set(0, 0, taskCell);
+
+        grid.addColumns(3);
+
+        assertThat(grid.cols()).isEqualTo(5);
+        assertThat(grid.get(0, 0)).isEqualTo(taskCell);
+        assertThat(grid.get(0, 2)).isInstanceOf(Cell.SpaceCell.class);
+        assertThat(grid.get(0, 4)).isInstanceOf(Cell.SpaceCell.class);
+        assertThat(grid.get(1, 4)).isInstanceOf(Cell.SpaceCell.class);
+    }
 }
