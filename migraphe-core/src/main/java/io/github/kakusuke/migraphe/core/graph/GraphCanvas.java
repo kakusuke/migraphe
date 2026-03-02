@@ -121,35 +121,295 @@ final class GraphCanvas {
     // ========== Phase 2: 文字列化 ==========
 
     List<String> render(Function<MigrationNode, String> labelFn) {
-        Map<NodeId, String> labels = new LinkedHashMap<>();
-        for (NodeLineInfo info : lineInfos) {
-            labels.put(info.node().id(), labelFn.apply(info.node()));
-        }
-
-        List<Row> finalRows;
-        int laneCount;
-        List<String> rowLaneChars;
-
-        if (nonDomEdges.isEmpty()) {
-            finalRows = List.copyOf(initialRows);
-            laneCount = 0;
-            rowLaneChars = Collections.nCopies(initialRows.size(), "");
-        } else {
-            LaneResult laneResult = assignLanesAndInsertMergeRows(initialRows, nonDomEdges);
-            finalRows = List.copyOf(laneResult.rows);
-            laneCount = laneResult.laneCount;
-            rowLaneChars = List.copyOf(laneResult.laneChars);
-        }
-
-        List<String> allLines = doRender(finalRows, laneCount, rowLaneChars, labels);
-
-        return allLines;
+        return renderGrid(labelFn);
     }
 
     // ========== 結果 ==========
 
     List<NodeLineInfo> getNodeLineInfos() {
         return List.copyOf(lineInfos);
+    }
+
+    List<String> renderGrid(Function<MigrationNode, String> labelFn) {
+        Map<NodeId, String> labels = new LinkedHashMap<>();
+        for (NodeLineInfo info : lineInfos) {
+            labels.put(info.node().id(), labelFn.apply(info.node()));
+        }
+
+        List<List<Cell>> grid = buildGrid();
+        List<String> output = new ArrayList<>();
+        boolean hasLanes =
+                grid.stream()
+                        .flatMap(List::stream)
+                        .anyMatch(
+                                c ->
+                                        c instanceof Cell.SepSpaceCell
+                                                || c instanceof Cell.SepHBarCell);
+        for (List<Cell> rowCells : grid) {
+            StringBuilder sb = new StringBuilder();
+            NodeId nodeId = null;
+            for (Cell cell : rowCells) {
+                sb.append(cell.symbol());
+                if (cell instanceof Cell.TaskCell tc) nodeId = tc.id();
+            }
+            String line;
+            if (nodeId != null && labels.containsKey(nodeId)) {
+                String graphStr = hasLanes ? sb.toString() : sb.toString().stripTrailing();
+                line = (graphStr + " " + labels.get(nodeId)).stripTrailing();
+            } else {
+                line = sb.toString().stripTrailing();
+            }
+            output.add(line);
+        }
+        return output;
+    }
+
+    List<List<Cell>> buildGrid() {
+        int gridWidth = maxColumn > 0 ? 2 * maxColumn + 1 : 1;
+        List<List<Cell>> grid = new ArrayList<>();
+        for (Row row : initialRows) {
+            List<Cell> rowCells =
+                    new ArrayList<>(Collections.nCopies(gridWidth, new Cell.SpaceCell()));
+            if (row instanceof Row.NodeRow nr) {
+                if (nr.isBranch()) {
+                    int forkGridCol = 2 * (nr.column() - 1);
+                    rowCells.set(forkGridCol, new Cell.ForkCell());
+                    if (forkGridCol + 1 < gridWidth)
+                        rowCells.set(forkGridCol + 1, new Cell.HBarCell());
+                    rowCells.set(2 * nr.column(), new Cell.TaskCell(nr.node().id()));
+                    for (int c : nr.activeColumns()) {
+                        int gridCol = 2 * c;
+                        if (gridCol < forkGridCol && gridCol < gridWidth)
+                            rowCells.set(gridCol, new Cell.VBarCell());
+                    }
+                } else {
+                    rowCells.set(2 * nr.column(), new Cell.TaskCell(nr.node().id()));
+                    applyActiveColumnBars(rowCells, nr.activeColumns(), gridWidth, nr.column());
+                }
+            } else if (row instanceof Row.ConnectorRow cr) {
+                rowCells.set(2 * cr.column(), new Cell.VBarCell());
+                applyActiveColumnBars(rowCells, cr.activeColumns(), gridWidth, -1);
+            }
+            grid.add(rowCells);
+        }
+
+        if (!nonDomEdges.isEmpty()) {
+            Map<NodeId, Integer> nodeRowIndex = new LinkedHashMap<>();
+            for (int i = 0; i < initialRows.size(); i++) {
+                if (initialRows.get(i) instanceof Row.NodeRow nr) {
+                    nodeRowIndex.put(nr.node().id(), i);
+                }
+            }
+
+            Map<NodeId, List<NonDomEdge>> edgesByTarget = new LinkedHashMap<>();
+            for (NonDomEdge edge : nonDomEdges) {
+                edgesByTarget.computeIfAbsent(edge.target(), k -> new ArrayList<>()).add(edge);
+            }
+
+            List<GroupInfo> groups = new ArrayList<>();
+            for (Map.Entry<NodeId, List<NonDomEdge>> entry : edgesByTarget.entrySet()) {
+                NodeId target = entry.getKey();
+                List<NonDomEdge> edges = entry.getValue();
+                List<NodeId> sources =
+                        edges.stream()
+                                .map(NonDomEdge::source)
+                                .sorted(
+                                        Comparator.comparingInt(
+                                                s -> nodeRowIndex.getOrDefault(s, 0)))
+                                .toList();
+                int startRow =
+                        sources.stream()
+                                .mapToInt(s -> nodeRowIndex.getOrDefault(s, 0))
+                                .min()
+                                .orElse(0);
+                Integer endRowObj = nodeRowIndex.get(target);
+                if (endRowObj == null) continue;
+                groups.add(new GroupInfo(target, sources, startRow, endRowObj));
+            }
+            groups.sort(
+                    Comparator.<GroupInfo>comparingInt(GroupInfo::endRow)
+                            .reversed()
+                            .thenComparingInt(GroupInfo::startRow));
+
+            int[] laneMinStartRow = new int[groups.size()];
+            Arrays.fill(laneMinStartRow, Integer.MAX_VALUE);
+            int lc = 0;
+            int[] groupLane = new int[groups.size()];
+            for (int g = 0; g < groups.size(); g++) {
+                GroupInfo group = groups.get(g);
+                int lane = -1;
+                for (int i = 0; i < lc; i++) {
+                    if (group.endRow() > laneMinStartRow[i]) continue;
+                    boolean higherLaneOverlaps = false;
+                    for (int m = i + 1; m < lc; m++) {
+                        if (laneMinStartRow[m] < group.endRow()) {
+                            higherLaneOverlaps = true;
+                            break;
+                        }
+                    }
+                    if (!higherLaneOverlaps) {
+                        lane = i;
+                        break;
+                    }
+                }
+                if (lane == -1) lane = lc++;
+                groupLane[g] = lane;
+                laneMinStartRow[lane] = Math.min(laneMinStartRow[lane], group.startRow());
+            }
+
+            boolean[][] laneActive = new boolean[initialRows.size()][lc];
+            Map<NodeId, List<int[]>> nodeLaneActions = new LinkedHashMap<>();
+            Map<NodeId, Integer> targetLaneMap = new LinkedHashMap<>();
+            for (int g = 0; g < groups.size(); g++) {
+                GroupInfo group = groups.get(g);
+                int lane = groupLane[g];
+                for (int r = group.startRow(); r < group.endRow(); r++) {
+                    laneActive[r][lane] = true;
+                }
+                targetLaneMap.put(group.target(), lane);
+                boolean first = true;
+                for (NodeId source : group.sources()) {
+                    int action = first ? 0 : 1;
+                    nodeLaneActions
+                            .computeIfAbsent(source, k -> new ArrayList<>())
+                            .add(new int[] {lane, action});
+                    first = false;
+                }
+            }
+
+            for (int i = 0; i < grid.size(); i++) {
+                List<Cell> rowCells = grid.get(i);
+                rowCells.add(new Cell.SepSpaceCell());
+                int sepIdx = rowCells.size() - 1;
+                Row row = initialRows.get(i);
+                if (row instanceof Row.NodeRow nr) {
+                    NodeId nodeId = nr.node().id();
+                    List<int[]> actions = nodeLaneActions.getOrDefault(nodeId, List.of());
+                    for (int l = 0; l < lc; l++) {
+                        rowCells.add(computeNodeLaneCellForGrid(i, l, actions, laneActive));
+                    }
+                } else {
+                    for (int l = 0; l < lc; l++) {
+                        rowCells.add(
+                                laneActive[i][l]
+                                        ? new Cell.LanePassCell()
+                                        : new Cell.LaneSpaceCell());
+                    }
+                }
+                List<Cell> laneArea = rowCells.subList(sepIdx + 1, rowCells.size());
+                boolean shouldDrawSepAsHBar = laneArea.stream().anyMatch(this::isVisibleLaneCell);
+                if (shouldDrawSepAsHBar) rowCells.set(sepIdx, new Cell.SepHBarCell());
+                if (shouldDrawSepAsHBar && row instanceof Row.NodeRow nr2 && !nr2.isBranch()) {
+                    int nodeGridCol = 2 * nr2.column();
+                    for (int gc = nodeGridCol + 1; gc < sepIdx; gc++) {
+                        if (rowCells.get(gc) instanceof Cell.SpaceCell) {
+                            rowCells.set(gc, new Cell.HBarCell());
+                        }
+                    }
+                }
+            }
+
+            List<Map.Entry<NodeId, Integer>> targets = new ArrayList<>(targetLaneMap.entrySet());
+            targets.sort(Comparator.comparingInt(e -> nodeRowIndex.get(e.getKey())));
+
+            int rowOffset = 0;
+            for (Map.Entry<NodeId, Integer> entry : targets) {
+                NodeId targetId = entry.getKey();
+                int targetLane = entry.getValue();
+
+                Integer targetRowObj = nodeRowIndex.get(targetId);
+                if (targetRowObj == null) continue;
+                int targetRow = targetRowObj + rowOffset;
+                if (targetRow <= 0) continue;
+
+                boolean isBranchTarget =
+                        grid.get(targetRow).stream().anyMatch(c2 -> c2 instanceof Cell.ForkCell);
+                int treeWidth = maxColumn > 0 ? 2 * maxColumn + 1 : 1;
+                int col = 0;
+                for (int gc = 0; gc < treeWidth; gc += 2) {
+                    if (grid.get(targetRow).get(gc) instanceof Cell.TaskCell tc
+                            && tc.id().equals(targetId)) {
+                        col = gc / 2;
+                        break;
+                    }
+                }
+                int mergeJoinGridCol = isBranchTarget ? 2 * (col - 1) : 2 * col;
+
+                int gridTotalWidth = grid.get(targetRow).size();
+                List<Cell> mergeRow =
+                        new ArrayList<>(Collections.nCopies(gridTotalWidth, new Cell.SpaceCell()));
+                grid.add(targetRow, mergeRow);
+
+                List<Cell> aboveRow = grid.get(targetRow - 1);
+
+                for (int gc = 0; gc < mergeJoinGridCol; gc++) {
+                    mergeRow.set(
+                            gc,
+                            aboveRow.get(gc) instanceof Cell.VBarCell
+                                    ? new Cell.VBarCell()
+                                    : new Cell.SpaceCell());
+                }
+
+                mergeRow.set(mergeJoinGridCol, new Cell.MergeJoinCell());
+                for (int gc = mergeJoinGridCol + 1; gc < treeWidth; gc++) {
+                    mergeRow.set(gc, new Cell.HBarCell());
+                }
+
+                if (treeWidth < gridTotalWidth) {
+                    mergeRow.set(treeWidth, new Cell.SepHBarCell());
+                }
+
+                for (int l = 0; l < lc; l++) {
+                    int laneGridCol = treeWidth + 1 + l;
+                    Cell prevLaneCell = aboveRow.get(laneGridCol);
+                    boolean isConnecting =
+                            prevLaneCell instanceof Cell.LanePassCell
+                                    || prevLaneCell instanceof Cell.LaneStartCell
+                                    || prevLaneCell instanceof Cell.LaneJoinCell;
+
+                    Cell laneCell;
+                    if (l == targetLane) {
+                        laneCell = new Cell.LaneCloseCell();
+                    } else if (l < targetLane) {
+                        laneCell =
+                                isConnecting ? new Cell.LaneCrossCell() : new Cell.LaneHBarCell();
+                    } else {
+                        laneCell =
+                                isConnecting ? new Cell.LanePassCell() : new Cell.LaneSpaceCell();
+                    }
+                    mergeRow.set(laneGridCol, laneCell);
+                }
+
+                rowOffset++;
+            }
+        }
+
+        return grid;
+    }
+
+    private boolean isVisibleLaneCell(Cell c) {
+        return c instanceof Cell.LaneStartCell
+                || c instanceof Cell.LaneJoinCell
+                || c instanceof Cell.LaneCloseCell
+                || c instanceof Cell.LaneCrossCell
+                || c instanceof Cell.LaneHBarCell;
+    }
+
+    private Cell computeNodeLaneCellForGrid(
+            int rowIndex, int lane, List<int[]> actions, boolean[][] laneActive) {
+        for (int[] action : actions) {
+            if (action[0] == lane) {
+                return action[1] == 0 ? new Cell.LaneStartCell() : new Cell.LaneJoinCell();
+            }
+        }
+        return laneActive[rowIndex][lane] ? new Cell.LanePassCell() : new Cell.LaneSpaceCell();
+    }
+
+    private void applyActiveColumnBars(
+            List<Cell> rowCells, Set<Integer> activeColumns, int gridWidth, int excludeColumn) {
+        for (int c : activeColumns) {
+            if (c != excludeColumn && 2 * c < gridWidth) rowCells.set(2 * c, new Cell.VBarCell());
+        }
     }
 
     // ========== 支配木 DFS レンダリング ==========
@@ -294,394 +554,6 @@ final class GraphCanvas {
             }
         }
         return result;
-    }
-
-    // ========== レーン割り当て ==========
-
-    private record LaneResult(List<Row> rows, int laneCount, List<String> laneChars) {}
-
-    private LaneResult assignLanesAndInsertMergeRows(List<Row> rows, List<NonDomEdge> nonDomEdges) {
-        // nodeId → rowIndex マップ
-        Map<NodeId, Integer> nodeRowIndex = new LinkedHashMap<>();
-        for (int i = 0; i < rows.size(); i++) {
-            if (rows.get(i) instanceof Row.NodeRow nr) {
-                nodeRowIndex.put(nr.node().id(), i);
-            }
-        }
-
-        // ターゲット別にグループ化
-        Map<NodeId, List<NonDomEdge>> edgesByTarget = new LinkedHashMap<>();
-        for (NonDomEdge edge : nonDomEdges) {
-            edgesByTarget.computeIfAbsent(edge.target(), k -> new ArrayList<>()).add(edge);
-        }
-
-        // グループ情報を構築
-        List<GroupInfo> groups = new ArrayList<>();
-        for (Map.Entry<NodeId, List<NonDomEdge>> entry : edgesByTarget.entrySet()) {
-            NodeId target = entry.getKey();
-            List<NonDomEdge> edges = entry.getValue();
-            List<NodeId> sources =
-                    edges.stream()
-                            .map(NonDomEdge::source)
-                            .sorted(Comparator.comparingInt(s -> nodeRowIndex.get(s)))
-                            .toList();
-            int startRow = sources.stream().mapToInt(s -> nodeRowIndex.get(s)).min().orElse(0);
-            Integer endRowObj = nodeRowIndex.get(target);
-            if (endRowObj == null) continue;
-            int endRow = endRowObj;
-            groups.add(new GroupInfo(target, sources, startRow, endRow));
-        }
-        // endRow 降順にソート：長い（後まで続く）グループを低い lane に割り当てるため
-        groups.sort(
-                Comparator.<GroupInfo>comparingInt(GroupInfo::endRow)
-                        .reversed()
-                        .thenComparingInt(GroupInfo::startRow));
-
-        // レーン割り当て（再利用あり）
-        // endRow 降順で処理するため、再利用可能条件は group.endRow() <= laneMinStartRow
-        int[] laneMinStartRow = new int[groups.size()];
-        Arrays.fill(laneMinStartRow, Integer.MAX_VALUE);
-        int lc = 0;
-        int[] groupLane = new int[groups.size()];
-
-        for (int g = 0; g < groups.size(); g++) {
-            GroupInfo group = groups.get(g);
-            int lane = -1;
-            for (int i = 0; i < lc; i++) {
-                // 条件1: lane i の既存グループと重複しない
-                if (group.endRow() > laneMinStartRow[i]) continue;
-                // 条件2: 上位 lane (m > i) に group と重複し endRow が大きいグループがない
-                // （あれば lane i に入ると invariant 違反: 下位 lane が低 endRow になる）
-                boolean higherLaneOverlaps = false;
-                for (int m = i + 1; m < lc; m++) {
-                    if (laneMinStartRow[m] < group.endRow()) {
-                        higherLaneOverlaps = true;
-                        break;
-                    }
-                }
-                if (!higherLaneOverlaps) {
-                    lane = i;
-                    break;
-                }
-            }
-            if (lane == -1) {
-                lane = lc++;
-            }
-            groupLane[g] = lane;
-            laneMinStartRow[lane] = Math.min(laneMinStartRow[lane], group.startRow());
-        }
-
-        // レーン範囲とアクション情報を構築
-        // boolean[row][lane] — レーン再利用に対応するため行ごとに累積
-        boolean[][] laneActive = new boolean[rows.size()][lc];
-        Map<NodeId, List<int[]>> nodeLaneActions = new LinkedHashMap<>();
-        Map<NodeId, Integer> targetLaneMap = new LinkedHashMap<>();
-
-        for (int g = 0; g < groups.size(); g++) {
-            GroupInfo group = groups.get(g);
-            int lane = groupLane[g];
-            for (int r = group.startRow(); r < group.endRow(); r++) {
-                laneActive[r][lane] = true;
-            }
-            targetLaneMap.put(group.target(), lane);
-
-            boolean first = true;
-            for (NodeId source : group.sources()) {
-                int action = first ? 0 : 1; // 0=START, 1=JOIN
-                nodeLaneActions
-                        .computeIfAbsent(source, k -> new ArrayList<>())
-                        .add(new int[] {lane, action});
-                first = false;
-            }
-        }
-
-        // 元の行のレーン文字を計算
-        List<String> origLaneChars = new ArrayList<>();
-        for (int i = 0; i < rows.size(); i++) {
-            Row row = rows.get(i);
-            StringBuilder sb = new StringBuilder();
-
-            if (row instanceof Row.NodeRow nr) {
-                NodeId nodeId = nr.node().id();
-                List<int[]> actions = nodeLaneActions.getOrDefault(nodeId, List.of());
-                for (int l = 0; l < lc; l++) {
-                    char ch = computeNodeLaneChar(i, l, actions, laneActive);
-                    sb.append(ch);
-                }
-            } else if (row instanceof Row.ConnectorRow || row instanceof Row.BlankRow) {
-                for (int l = 0; l < lc; l++) {
-                    sb.append(isLaneActiveAtRow(i, l, laneActive) ? '│' : ' ');
-                }
-            } else {
-                for (int l = 0; l < lc; l++) {
-                    sb.append(' ');
-                }
-            }
-            origLaneChars.add(sb.toString());
-        }
-
-        // マージ行を挿入してファイナルリストを構築
-        List<Row> finalRows = new ArrayList<>();
-        List<String> finalLaneChars = new ArrayList<>();
-
-        for (int i = 0; i < rows.size(); i++) {
-            Row row = rows.get(i);
-
-            // ターゲットノードの前にマージ行を挿入
-            if (row instanceof Row.NodeRow nr && targetLaneMap.containsKey(nr.node().id())) {
-                int targetLane = targetLaneMap.get(nr.node().id());
-
-                Set<Integer> mergeActive = new TreeSet<>(nr.activeColumns());
-                mergeActive.add(nr.column());
-
-                int mergeCol = nr.isBranch() ? nr.column() - 1 : nr.column();
-                finalRows.add(new Row.MergeRow(mergeCol, mergeActive));
-
-                // マージ行のレーン文字
-                // マージ行はノード行 i の直前に挿入されるため、レーンのアクティブ状態は i-1 行目を参照する
-                StringBuilder mergeLaneChars = new StringBuilder();
-                for (int l = 0; l < lc; l++) {
-                    if (l == targetLane) {
-                        mergeLaneChars.append('┘');
-                    } else if (l < targetLane) {
-                        mergeLaneChars.append(isLaneActiveAtRow(i - 1, l, laneActive) ? '┼' : '─');
-                    } else {
-                        mergeLaneChars.append(isLaneActiveAtRow(i - 1, l, laneActive) ? '│' : ' ');
-                    }
-                }
-                finalLaneChars.add(mergeLaneChars.toString());
-            }
-
-            finalRows.add(row);
-            finalLaneChars.add(origLaneChars.get(i));
-        }
-
-        return new LaneResult(finalRows, lc, finalLaneChars);
-    }
-
-    private char computeNodeLaneChar(
-            int rowIndex, int lane, List<int[]> actions, boolean[][] laneActive) {
-        for (int[] action : actions) {
-            if (action[0] == lane) {
-                return action[1] == 0 ? '┐' : '┤';
-            }
-        }
-        if (isLaneActiveAtRow(rowIndex, lane, laneActive)) {
-            return '│';
-        }
-        return ' ';
-    }
-
-    private boolean isLaneActiveAtRow(int rowIndex, int lane, boolean[][] laneActive) {
-        if (rowIndex < 0 || rowIndex >= laneActive.length) return false;
-        if (lane < 0 || lane >= laneActive[rowIndex].length) return false;
-        return laneActive[rowIndex][lane];
-    }
-
-    // ========== ASCII レンダリング ==========
-
-    private List<String> doRender(
-            List<Row> renderRows,
-            int laneCount,
-            List<String> rowLaneChars,
-            Map<NodeId, String> labels) {
-        List<String> output = new ArrayList<>();
-        int graphWidth = maxColumn > 0 ? 2 * maxColumn + 1 : 1;
-        boolean hasLanes = laneCount > 0;
-
-        for (int idx = 0; idx < renderRows.size(); idx++) {
-            Row row = renderRows.get(idx);
-            String laneStr = idx < rowLaneChars.size() ? rowLaneChars.get(idx) : "";
-
-            switch (row) {
-                case Row.BlankRow ignored -> {
-                    if (hasLanes && !laneStr.isBlank()) {
-                        String graphPart = " ".repeat(graphWidth);
-                        String lanePart = buildLaneAreaForConnector(laneStr, laneCount);
-                        output.add((graphPart + lanePart).stripTrailing());
-                    } else {
-                        output.add("");
-                    }
-                }
-                case Row.ConnectorRow cr -> {
-                    String graphPart =
-                            buildConnectorLine(
-                                    cr.column(), cr.activeColumns(), graphWidth, hasLanes);
-                    String lanePart = buildLaneAreaForConnector(laneStr, laneCount);
-                    output.add((graphPart + lanePart).stripTrailing());
-                }
-                case Row.MergeRow mr -> {
-                    String graphPart = buildMergeLine(mr.column(), mr.activeColumns(), graphWidth);
-                    String lanePart = buildLaneAreaForMerge(laneStr, laneCount);
-                    output.add((graphPart + lanePart).stripTrailing());
-                }
-                case Row.NodeRow nr -> {
-                    String graphPart =
-                            buildNodeLine(
-                                    nr.column(),
-                                    nr.isBranch(),
-                                    nr.isLastChild(),
-                                    nr.activeColumns(),
-                                    graphWidth,
-                                    hasLanes);
-                    String lanePart = buildLaneAreaForNode(laneStr, laneCount);
-                    if (hasLaneConnection(laneStr)) {
-                        graphPart = fillSpacesAfterNode(graphPart);
-                    }
-                    String label = labels.getOrDefault(nr.node().id(), "");
-                    output.add((graphPart + lanePart + " " + label).stripTrailing());
-                }
-            }
-        }
-
-        return output;
-    }
-
-    private String buildConnectorLine(
-            int col, Set<Integer> activeColumns, int graphWidth, boolean pad) {
-        StringBuilder sb = new StringBuilder();
-        for (int c = 0; c <= maxColumn; c++) {
-            if (c == col || activeColumns.contains(c)) {
-                sb.append("│");
-            } else {
-                sb.append(" ");
-            }
-            if (c < maxColumn) {
-                sb.append(" ");
-            }
-        }
-        return pad ? padToWidth(sb, graphWidth) : sb.toString().stripTrailing();
-    }
-
-    private String buildNodeLine(
-            int col,
-            boolean isBranch,
-            boolean isLastChild,
-            Set<Integer> activeColumns,
-            int graphWidth,
-            boolean pad) {
-        StringBuilder sb = new StringBuilder();
-
-        if (isBranch) {
-            for (int c = 0; c <= maxColumn; c++) {
-                if (c < col - 1) {
-                    sb.append(activeColumns.contains(c) ? "│" : " ");
-                    sb.append(" ");
-                } else if (c == col - 1) {
-                    sb.append(isLastChild ? "└" : "├");
-                    sb.append("─");
-                } else if (c == col) {
-                    sb.append("●");
-                    if (c < maxColumn) sb.append(" ");
-                } else {
-                    sb.append(activeColumns.contains(c) ? "│" : " ");
-                    if (c < maxColumn) sb.append(" ");
-                }
-            }
-        } else {
-            for (int c = 0; c <= maxColumn; c++) {
-                if (c == col) {
-                    sb.append("●");
-                } else if (activeColumns.contains(c)) {
-                    sb.append("│");
-                } else {
-                    sb.append(" ");
-                }
-                if (c < maxColumn) {
-                    sb.append(" ");
-                }
-            }
-        }
-
-        return pad ? padToWidth(sb, graphWidth) : sb.toString().stripTrailing();
-    }
-
-    private String buildMergeLine(int col, Set<Integer> activeColumns, int graphWidth) {
-        StringBuilder sb = new StringBuilder();
-        for (int c = 0; c <= maxColumn; c++) {
-            if (c < col) {
-                sb.append(activeColumns.contains(c) ? "│" : " ");
-                sb.append(" ");
-            } else if (c == col) {
-                sb.append("├");
-                if (c < maxColumn) sb.append("─");
-            } else {
-                sb.append("─");
-                if (c < maxColumn) sb.append("─");
-            }
-        }
-        return padToWidth(sb, graphWidth);
-    }
-
-    private String buildLaneAreaForNode(String laneStr, int laneCount) {
-        if (laneStr.isEmpty() || laneCount == 0) return "";
-
-        int maxConnectedLane = -1;
-        for (int l = 0; l < laneStr.length(); l++) {
-            char ch = laneStr.charAt(l);
-            if (ch == '┐' || ch == '┤') {
-                maxConnectedLane = l;
-            }
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append(maxConnectedLane >= 0 ? '─' : ' ');
-
-        for (int l = 0; l < laneStr.length(); l++) {
-            char ch = laneStr.charAt(l);
-            if (maxConnectedLane >= 0 && ch == ' ' && l <= maxConnectedLane) {
-                sb.append('─');
-            } else {
-                sb.append(ch);
-            }
-        }
-
-        return sb.toString();
-    }
-
-    private String buildLaneAreaForConnector(String laneStr, int laneCount) {
-        if (laneStr.isEmpty() || laneCount == 0) return "";
-
-        StringBuilder sb = new StringBuilder();
-        sb.append(' ');
-        sb.append(laneStr);
-        return sb.toString();
-    }
-
-    private String buildLaneAreaForMerge(String laneStr, int laneCount) {
-        if (laneStr.isEmpty() || laneCount == 0) return "";
-
-        StringBuilder sb = new StringBuilder();
-        sb.append('─');
-        sb.append(laneStr);
-        return sb.toString();
-    }
-
-    private boolean hasLaneConnection(String laneStr) {
-        for (int i = 0; i < laneStr.length(); i++) {
-            char ch = laneStr.charAt(i);
-            if (ch == '┐' || ch == '┤') return true;
-        }
-        return false;
-    }
-
-    private String fillSpacesAfterNode(String graphPart) {
-        int nodePos = graphPart.indexOf('●');
-        if (nodePos < 0) return graphPart;
-        char[] chars = graphPart.toCharArray();
-        for (int i = nodePos + 1; i < chars.length; i++) {
-            if (chars[i] == ' ') {
-                chars[i] = '─';
-            }
-        }
-        return new String(chars);
-    }
-
-    private String padToWidth(StringBuilder sb, int width) {
-        while (sb.length() < width) {
-            sb.append(" ");
-        }
-        return sb.toString();
     }
 
     // ========== ユーティリティ ==========

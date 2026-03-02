@@ -699,7 +699,7 @@ class ExecutionGraphViewTest {
                     ├───┼┘
                     ●───┤  [ ] h - H
                     ├───┘
-                    └─●    [ ] e - E
+                    ├─●    [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -925,8 +925,8 @@ class ExecutionGraphViewTest {
             assertThat(view.lines().get(6).node().id()).isEqualTo(NodeId.of("e")); // post-trunk
 
             String text = view.toString();
-            // E は └ で表示（最後の post-trunk branch）
-            assertThat(text).contains("└─●");
+            // E は ├ で表示（post-trunk branch、└ は廃止）
+            assertThat(text).contains("├─●");
         }
 
         @Test
@@ -1024,7 +1024,7 @@ class ExecutionGraphViewTest {
                     │   │
                     ●───┤ [ ] d - D
                     ├───┘
-                    └─●   [ ] e - E
+                    ├─●   [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -1061,8 +1061,8 @@ class ExecutionGraphViewTest {
         }
 
         @Test
-        @DisplayName("└ vs ├: post-trunk branch の最後が └ になる")
-        void lastPostTrunkBranchUsesElbow() {
+        @DisplayName("├ のみ: post-trunk branch を含めて常に ├ を使う")
+        void lastPostTrunkBranchUsesFork() {
             MigrationNode nodeA = node("a").name("A").build();
             MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
@@ -1078,9 +1078,9 @@ class ExecutionGraphViewTest {
                             List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
             String text = view.toString();
 
-            // E は post-trunk の最後 → └─● で表示
-            assertThat(text).contains("└─●");
-            // C は pre-trunk → ├─● で表示
+            // E は post-trunk でも ├─● で表示（└ は廃止、├ に統一）
+            assertThat(text).contains("├─●");
+            // C は pre-trunk → ├─●─┐ で表示
             assertThat(text).contains("├─●─┐");
         }
 
