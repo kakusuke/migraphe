@@ -138,13 +138,8 @@ final class GraphCanvas {
 
         List<List<Cell>> grid = buildGrid();
         List<String> output = new ArrayList<>();
-        boolean hasLanes =
-                grid.stream()
-                        .flatMap(List::stream)
-                        .anyMatch(
-                                c ->
-                                        c instanceof Cell.SepSpaceCell
-                                                || c instanceof Cell.SepHBarCell);
+        int treeWidth = maxColumn > 0 ? 2 * maxColumn + 1 : 1;
+        boolean hasLanes = grid.stream().anyMatch(row -> row.size() > treeWidth);
         for (List<Cell> rowCells : grid) {
             StringBuilder sb = new StringBuilder();
             NodeId nodeId = null;
@@ -173,21 +168,22 @@ final class GraphCanvas {
             if (row instanceof Row.NodeRow nr) {
                 if (nr.isBranch()) {
                     int forkGridCol = 2 * (nr.column() - 1);
-                    rowCells.set(forkGridCol, new Cell.ForkCell());
+                    rowCells.set(forkGridCol, new Cell.ConnectorCell(true, true, false, true));
                     if (forkGridCol + 1 < gridWidth)
-                        rowCells.set(forkGridCol + 1, new Cell.HBarCell());
+                        rowCells.set(
+                                forkGridCol + 1, new Cell.ConnectorCell(false, false, true, true));
                     rowCells.set(2 * nr.column(), new Cell.TaskCell(nr.node().id()));
                     for (int c : nr.activeColumns()) {
                         int gridCol = 2 * c;
                         if (gridCol < forkGridCol && gridCol < gridWidth)
-                            rowCells.set(gridCol, new Cell.VBarCell());
+                            rowCells.set(gridCol, new Cell.ConnectorCell(true, true, false, false));
                     }
                 } else {
                     rowCells.set(2 * nr.column(), new Cell.TaskCell(nr.node().id()));
                     applyActiveColumnBars(rowCells, nr.activeColumns(), gridWidth, nr.column());
                 }
             } else if (row instanceof Row.ConnectorRow cr) {
-                rowCells.set(2 * cr.column(), new Cell.VBarCell());
+                rowCells.set(2 * cr.column(), new Cell.ConnectorCell(true, true, false, false));
                 applyActiveColumnBars(rowCells, cr.activeColumns(), gridWidth, -1);
             }
             grid.add(rowCells);
@@ -279,7 +275,7 @@ final class GraphCanvas {
 
             for (int i = 0; i < grid.size(); i++) {
                 List<Cell> rowCells = grid.get(i);
-                rowCells.add(new Cell.SepSpaceCell());
+                rowCells.add(new Cell.SpaceCell());
                 int sepIdx = rowCells.size() - 1;
                 Row row = initialRows.get(i);
                 if (row instanceof Row.NodeRow nr) {
@@ -292,18 +288,19 @@ final class GraphCanvas {
                     for (int l = 0; l < lc; l++) {
                         rowCells.add(
                                 laneActive[i][l]
-                                        ? new Cell.LanePassCell()
-                                        : new Cell.LaneSpaceCell());
+                                        ? new Cell.ConnectorCell(true, true, false, false)
+                                        : new Cell.SpaceCell());
                     }
                 }
                 List<Cell> laneArea = rowCells.subList(sepIdx + 1, rowCells.size());
                 boolean shouldDrawSepAsHBar = laneArea.stream().anyMatch(this::isVisibleLaneCell);
-                if (shouldDrawSepAsHBar) rowCells.set(sepIdx, new Cell.SepHBarCell());
+                if (shouldDrawSepAsHBar)
+                    rowCells.set(sepIdx, new Cell.ConnectorCell(false, false, true, true));
                 if (shouldDrawSepAsHBar && row instanceof Row.NodeRow nr2 && !nr2.isBranch()) {
                     int nodeGridCol = 2 * nr2.column();
                     for (int gc = nodeGridCol + 1; gc < sepIdx; gc++) {
                         if (rowCells.get(gc) instanceof Cell.SpaceCell) {
-                            rowCells.set(gc, new Cell.HBarCell());
+                            rowCells.set(gc, new Cell.ConnectorCell(false, false, true, true));
                         }
                     }
                 }
@@ -323,7 +320,7 @@ final class GraphCanvas {
                 if (targetRow <= 0) continue;
 
                 boolean isBranchTarget =
-                        grid.get(targetRow).stream().anyMatch(c2 -> c2 instanceof Cell.ForkCell);
+                        initialRows.get(targetRowObj) instanceof Row.NodeRow tnr && tnr.isBranch();
                 int treeWidth = maxColumn > 0 ? 2 * maxColumn + 1 : 1;
                 int col = 0;
                 for (int gc = 0; gc < treeWidth; gc += 2) {
@@ -345,37 +342,39 @@ final class GraphCanvas {
                 for (int gc = 0; gc < mergeJoinGridCol; gc++) {
                     mergeRow.set(
                             gc,
-                            aboveRow.get(gc) instanceof Cell.VBarCell
-                                    ? new Cell.VBarCell()
+                            aboveRow.get(gc) instanceof Cell.ConnectorCell
+                                    ? new Cell.ConnectorCell(true, true, false, false)
                                     : new Cell.SpaceCell());
                 }
 
-                mergeRow.set(mergeJoinGridCol, new Cell.MergeJoinCell());
+                mergeRow.set(mergeJoinGridCol, new Cell.ConnectorCell(true, true, false, true));
                 for (int gc = mergeJoinGridCol + 1; gc < treeWidth; gc++) {
-                    mergeRow.set(gc, new Cell.HBarCell());
+                    mergeRow.set(gc, new Cell.ConnectorCell(false, false, true, true));
                 }
 
                 if (treeWidth < gridTotalWidth) {
-                    mergeRow.set(treeWidth, new Cell.SepHBarCell());
+                    mergeRow.set(treeWidth, new Cell.ConnectorCell(false, false, true, true));
                 }
 
                 for (int l = 0; l < lc; l++) {
                     int laneGridCol = treeWidth + 1 + l;
                     Cell prevLaneCell = aboveRow.get(laneGridCol);
                     boolean isConnecting =
-                            prevLaneCell instanceof Cell.LanePassCell
-                                    || prevLaneCell instanceof Cell.LaneStartCell
-                                    || prevLaneCell instanceof Cell.LaneJoinCell;
+                            prevLaneCell instanceof Cell.ConnectorCell cc && cc.down();
 
                     Cell laneCell;
                     if (l == targetLane) {
-                        laneCell = new Cell.LaneCloseCell();
+                        laneCell = new Cell.ConnectorCell(true, false, true, false);
                     } else if (l < targetLane) {
                         laneCell =
-                                isConnecting ? new Cell.LaneCrossCell() : new Cell.LaneHBarCell();
+                                isConnecting
+                                        ? new Cell.ConnectorCell(true, true, true, true)
+                                        : new Cell.ConnectorCell(false, false, true, true);
                     } else {
                         laneCell =
-                                isConnecting ? new Cell.LanePassCell() : new Cell.LaneSpaceCell();
+                                isConnecting
+                                        ? new Cell.ConnectorCell(true, true, false, false)
+                                        : new Cell.SpaceCell();
                     }
                     mergeRow.set(laneGridCol, laneCell);
                 }
@@ -388,27 +387,28 @@ final class GraphCanvas {
     }
 
     private boolean isVisibleLaneCell(Cell c) {
-        return c instanceof Cell.LaneStartCell
-                || c instanceof Cell.LaneJoinCell
-                || c instanceof Cell.LaneCloseCell
-                || c instanceof Cell.LaneCrossCell
-                || c instanceof Cell.LaneHBarCell;
+        return c instanceof Cell.ConnectorCell cc && cc.left();
     }
 
     private Cell computeNodeLaneCellForGrid(
             int rowIndex, int lane, List<int[]> actions, boolean[][] laneActive) {
         for (int[] action : actions) {
             if (action[0] == lane) {
-                return action[1] == 0 ? new Cell.LaneStartCell() : new Cell.LaneJoinCell();
+                return action[1] == 0
+                        ? new Cell.ConnectorCell(false, true, true, false)
+                        : new Cell.ConnectorCell(true, true, true, false);
             }
         }
-        return laneActive[rowIndex][lane] ? new Cell.LanePassCell() : new Cell.LaneSpaceCell();
+        return laneActive[rowIndex][lane]
+                ? new Cell.ConnectorCell(true, true, false, false)
+                : new Cell.SpaceCell();
     }
 
     private void applyActiveColumnBars(
             List<Cell> rowCells, Set<Integer> activeColumns, int gridWidth, int excludeColumn) {
         for (int c : activeColumns) {
-            if (c != excludeColumn && 2 * c < gridWidth) rowCells.set(2 * c, new Cell.VBarCell());
+            if (c != excludeColumn && 2 * c < gridWidth)
+                rowCells.set(2 * c, new Cell.ConnectorCell(true, true, false, false));
         }
     }
 
