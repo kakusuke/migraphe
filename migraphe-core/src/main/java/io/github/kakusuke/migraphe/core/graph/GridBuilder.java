@@ -74,14 +74,28 @@ final class GridBuilder {
         int cols = cols();
         List<Cell> newRow = new ArrayList<>(cols);
         for (int c = 0; c < cols; c++) {
-            boolean hasUp =
-                    r > 0
-                            && grid.get(r - 1).get(c) instanceof Cell.ConnectorCell conn
-                            && conn.down();
-            boolean hasDown =
-                    r < grid.size()
-                            && grid.get(r).get(c) instanceof Cell.ConnectorCell conn
-                            && conn.up();
+            boolean hasUp = false;
+            for (int ur = r - 1; ur >= 0; ur--) {
+                Cell above = grid.get(ur).get(c);
+                if (above instanceof Cell.ConnectorCell conn && (conn.up() || conn.down())) {
+                    hasUp = conn.down();
+                    break;
+                }
+                if (!(above instanceof Cell.ConnectorCell)) {
+                    break;
+                }
+            }
+            boolean hasDown = false;
+            for (int dr = r; dr < grid.size(); dr++) {
+                Cell below = grid.get(dr).get(c);
+                if (below instanceof Cell.ConnectorCell conn && (conn.up() || conn.down())) {
+                    hasDown = conn.up();
+                    break;
+                }
+                if (!(below instanceof Cell.ConnectorCell)) {
+                    break;
+                }
+            }
             if (hasUp || hasDown) {
                 newRow.add(new Cell.ConnectorCell(true, true, false, false));
             } else {
@@ -94,10 +108,28 @@ final class GridBuilder {
     void insertColumn(int c) {
         for (int r = 0; r < grid.size(); r++) {
             List<Cell> row = grid.get(r);
-            boolean hasLeft =
-                    c > 0 && row.get(c - 1) instanceof Cell.ConnectorCell conn && conn.right();
-            boolean hasRight =
-                    c < row.size() && row.get(c) instanceof Cell.ConnectorCell conn && conn.left();
+            boolean hasLeft = false;
+            for (int lc = c - 1; lc >= 0; lc--) {
+                Cell left = row.get(lc);
+                if (left instanceof Cell.ConnectorCell conn) {
+                    hasLeft = conn.right();
+                    break;
+                }
+                if (!(left instanceof Cell.TaskCell)) {
+                    break;
+                }
+            }
+            boolean hasRight = false;
+            for (int rc = c; rc < row.size(); rc++) {
+                Cell right = row.get(rc);
+                if (right instanceof Cell.ConnectorCell conn) {
+                    hasRight = conn.left();
+                    break;
+                }
+                if (!(right instanceof Cell.TaskCell)) {
+                    break;
+                }
+            }
             if (hasLeft || hasRight) {
                 row.add(c, new Cell.ConnectorCell(false, false, true, true));
             } else {
@@ -173,6 +205,18 @@ final class GridBuilder {
         set(forkRow, laneCol, new Cell.ConnectorCell(false, true, false, false));
         for (int r = forkRow + 1; r < mergeRow; r++) {
             set(r, laneCol, new Cell.ConnectorCell(true, true, false, false));
+        }
+
+        for (int junctionCol = 0; junctionCol < laneCol; junctionCol++) {
+            Cell cell = get(forkRow, junctionCol);
+            if (cell instanceof Cell.ConnectorCell cc && !cc.up() && cc.down() && !cc.left() && !cc.right()) {
+                set(forkRow, junctionCol, new Cell.ConnectorCell(false, true, true, true));
+                for (int fillCol = junctionCol + 1; fillCol < laneCol; fillCol++) {
+                    set(forkRow, fillCol, new Cell.ConnectorCell(false, false, true, true));
+                }
+                set(forkRow, laneCol, new Cell.ConnectorCell(false, true, true, false));
+                break;
+            }
         }
 
         insertRow(mergeRow);

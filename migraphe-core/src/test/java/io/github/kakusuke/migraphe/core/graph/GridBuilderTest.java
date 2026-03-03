@@ -314,4 +314,96 @@ class GridBuilderTest {
                                                                         && !cc.right()));
         assertThat(hasMergeClose).isTrue();
     }
+
+    @Test
+    @DisplayName("同じ forkId に drawNonDomEdge を2回呼ぶと、既存の ┐ が ┬ に更新される")
+    void drawNonDomEdgeTwiceOnSameForkReplacesBranchWithTee() {
+        GridBuilder grid = new GridBuilder();
+        NodeId a = NodeId.of("a");
+        NodeId b = NodeId.of("b");
+        NodeId c = NodeId.of("c");
+
+        grid.addBranch(GridBuilder.VIRTUAL_ROOT, List.of(a, b, c));
+        grid.drawNonDomEdge(a, c); // 1回目: forkRow に ┐ が置かれる
+
+        int firstLaneCol = grid.cols() - 1;
+        int forkRow = grid.getCellPosition(a).row();
+
+        grid.drawNonDomEdge(a, b); // 2回目: 同じ forkRow を使う
+
+        Cell cellAtFirstLane = grid.get(forkRow, firstLaneCol);
+        assertThat(cellAtFirstLane).isInstanceOf(Cell.ConnectorCell.class);
+        Cell.ConnectorCell cc = (Cell.ConnectorCell) cellAtFirstLane;
+        assertThat(cc.down()).isTrue();
+        assertThat(cc.left()).isTrue();
+        assertThat(cc.right()).isTrue();
+    }
+
+    @Test
+    @DisplayName("insertColumn は左隣が TaskCell でもさらに左の ConnectorCell を横パススルーする")
+    void insertColumnPassesThroughHorizontalConnectorBeyondTaskCell() {
+        GridBuilder grid = new GridBuilder(1, 3);
+        grid.set(0, 0, new Cell.ConnectorCell(false, false, false, true));
+        grid.set(0, 1, new Cell.TaskCell(NodeId.of("x")));
+
+        grid.insertColumn(2);
+
+        Cell inserted = grid.get(0, 2);
+        assertThat(inserted).isInstanceOf(Cell.ConnectorCell.class);
+        Cell.ConnectorCell connector = (Cell.ConnectorCell) inserted;
+        assertThat(connector.up()).isFalse();
+        assertThat(connector.down()).isFalse();
+        assertThat(connector.left()).isTrue();
+        assertThat(connector.right()).isTrue();
+    }
+
+    @Test
+    @DisplayName("insertRow は水平 ConnectorCell をスキップしてさらに上の down=true を hasUp と判定する")
+    void insertRowPassesThroughVerticalConnectorAboveHorizontalBridge() {
+        GridBuilder grid = new GridBuilder(3, 1);
+        grid.set(0, 0, new Cell.ConnectorCell(false, true, false, false));
+        grid.set(1, 0, new Cell.ConnectorCell(false, false, true, true));
+        // row 2 remains SpaceCell
+
+        grid.insertRow(2);
+
+        Cell inserted = grid.get(2, 0);
+        assertThat(inserted).isInstanceOf(Cell.ConnectorCell.class);
+        Cell.ConnectorCell connector = (Cell.ConnectorCell) inserted;
+        assertThat(connector.up()).isTrue();
+        assertThat(connector.down()).isTrue();
+        assertThat(connector.left()).isFalse();
+        assertThat(connector.right()).isFalse();
+    }
+
+    @Test
+    @DisplayName("drawNonDomEdge の水平ブリッジは途中の ConnectorCell (│) を ─ で上書きする")
+    void drawNonDomEdgeHorizontalBridgeOverwritesConnectorCellWithHorizontal() {
+        GridBuilder grid = new GridBuilder();
+        NodeId a = NodeId.of("a");
+        NodeId b = NodeId.of("b");
+        NodeId c = NodeId.of("c");
+        NodeId d = NodeId.of("d");
+
+        grid.addBranch(GridBuilder.VIRTUAL_ROOT, List.of(a, b, c, d));
+        grid.drawNonDomEdge(a, d); // first lane: places ┐ at a's row, column = L1
+
+        int firstLaneCol = grid.cols() - 1;
+        int forkRow = grid.getCellPosition(a).row();
+
+        grid.addColumns(1); // manually add one extra column at L1+1
+
+        int midCol = grid.cols() - 1;
+        grid.set(forkRow, midCol, new Cell.ConnectorCell(true, true, false, false)); // place │
+
+        grid.drawNonDomEdge(a, b); // second lane: new laneCol = L1+2; bridge should overwrite midCol
+
+        Cell midCell = grid.get(forkRow, midCol);
+        assertThat(midCell).isInstanceOf(Cell.ConnectorCell.class);
+        Cell.ConnectorCell connector = (Cell.ConnectorCell) midCell;
+        assertThat(connector.up()).isFalse();
+        assertThat(connector.down()).isFalse();
+        assertThat(connector.left()).isTrue();
+        assertThat(connector.right()).isTrue();
+    }
 }
