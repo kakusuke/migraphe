@@ -182,6 +182,15 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-03-03 (Session 25)
+- **Fix: GraphCanvas branch classification bug (transitive fixpoint)**
+  - Cause: `classifyBranches()` only checked direct non-dom edges from trunk subtree; branches T with deps S/X (both post-trunk) were incorrectly pre-trunk
+  - Fix: replaced single-pass logic with transitive fixpoint iteration in `GraphCanvas.classifyBranches()` — iteratively expands "extended trunk" to include confirmed post-trunk subtrees
+  - Re-enabled `ExecutionGraphViewTest.reversedNonDomEdgeGroupProducesNoSpuriousMergeRow`
+- **New: GridBuilder virtual trunk API** — added `GridBuilder()` (no-arg), `addBranch`, `getCellPosition`, `toVisibleGrid`, `drawNonDomEdge`, `CellPosition` record, `VIRTUAL_ROOT`/`VIRTUAL_END` constants
+  - Re-enabled `ExecutionGraphViewTest.nestedDiamondRendering`
+- Tests: 397 (all modules), 100% passing
+
 ### 2026-02-26 (Session 24)
 - **Fix: GraphCanvas spurious `┼` in merge rows**: `status` command showed disconnected `┼` characters
   - Cause: merge row for node `i` incorrectly checked `laneActive[i][l]` — lanes starting at row `i` (non-dom-edge sources) were misclassified as active
@@ -207,5 +216,5 @@ Update when code changes:
 
 ---
 
-**Last Updated**: 2026-02-27
-**Current Work**: CLAUDE.md cleanup and English-only policy enforced
+**Last Updated**: 2026-03-03
+**Current Work**: GraphCanvas branch classification fix + GridBuilder virtual trunk API

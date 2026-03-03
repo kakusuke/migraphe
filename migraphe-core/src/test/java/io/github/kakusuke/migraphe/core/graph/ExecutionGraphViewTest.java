@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import java.util.List;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -668,7 +667,6 @@ class ExecutionGraphViewTest {
         }
 
         @Test
-        @Disabled("pre-existing Red: expected output not yet corrected")
         @DisplayName("ネストダイヤモンド: A→{B→{F,G}→H, C}→E — post-trunk + レーン描画")
         void nestedDiamondRendering() {
             MigrationNode nodeA = node("a").name("A").build();
@@ -1085,7 +1083,6 @@ class ExecutionGraphViewTest {
         }
 
         @Test
-        @Disabled("pre-existing Red: not yet implemented")
         @DisplayName("post-trunk サブツリーから non-dom edge が来るブランチも post-trunk に分類される")
         void reversedNonDomEdgeGroupProducesNoSpuriousMergeRow() {
             // CA → TCx → TCA (trunk chain)

@@ -520,26 +520,31 @@ final class GraphCanvas {
             return new BranchClassification(branches, List.of());
         }
 
-        Set<NodeId> trunkSubtree = collectSubtreeNodes(trunk, domChildren);
-        List<NodeId> preTrunk = new ArrayList<>();
+        Set<NodeId> extendedTrunk = new LinkedHashSet<>(collectSubtreeNodes(trunk, domChildren));
         List<NodeId> postTrunk = new ArrayList<>();
+        Set<NodeId> remaining = new LinkedHashSet<>(branches);
 
-        for (NodeId branch : branches) {
-            Set<NodeId> branchSubtree = collectSubtreeNodes(branch, domChildren);
-            boolean hasNonDomFromTrunk =
-                    nonDomEdges.stream()
-                            .anyMatch(
-                                    e ->
-                                            trunkSubtree.contains(e.source())
-                                                    && branchSubtree.contains(e.target()));
-            if (hasNonDomFromTrunk) {
-                postTrunk.add(branch);
-            } else {
-                preTrunk.add(branch);
+        boolean changed = true;
+        while (changed) {
+            changed = false;
+            for (NodeId branch : new ArrayList<>(remaining)) {
+                Set<NodeId> branchSubtree = collectSubtreeNodes(branch, domChildren);
+                boolean hasNonDomFromExtendedTrunk =
+                        nonDomEdges.stream()
+                                .anyMatch(
+                                        e ->
+                                                extendedTrunk.contains(e.source())
+                                                        && branchSubtree.contains(e.target()));
+                if (hasNonDomFromExtendedTrunk) {
+                    postTrunk.add(branch);
+                    extendedTrunk.addAll(branchSubtree);
+                    remaining.remove(branch);
+                    changed = true;
+                }
             }
         }
 
-        return new BranchClassification(preTrunk, postTrunk);
+        return new BranchClassification(new ArrayList<>(remaining), postTrunk);
     }
 
     private Set<NodeId> collectSubtreeNodes(NodeId root, Map<NodeId, List<NodeId>> domChildren) {
