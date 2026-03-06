@@ -448,37 +448,14 @@ final class GraphCanvas {
             if (!child.equals(trunk)) branches.add(child);
         }
 
-        // branch を pre-trunk と post-trunk に分類
-        BranchClassification classification =
-                classifyBranches(trunk, branches, domChildren, nonDomEdges);
-        List<NodeId> preTrunk = classification.preTrunk();
-        List<NodeId> postTrunk = classification.postTrunk();
-
-        boolean hasPostTrunk = !postTrunk.isEmpty();
-
-        // Pre-trunk branches
-        if (!preTrunk.isEmpty()) {
-            Set<Integer> branchActive = new TreeSet<>(activeColumns);
-            branchActive.add(column);
-
-            for (NodeId branch : preTrunk) {
-                emitSubtree(branch, column + 1, true, false, branchActive, domChildren, trunkChild);
-            }
-        }
-
         // Trunk
         if (trunk != null) {
-            if (preTrunk.isEmpty() && !hasPostTrunk) {
-                // 純粋なチェーン → コネクタ行を挿入
-                initialRows.add(new Row.ConnectorRow(column, new TreeSet<>(activeColumns)));
-            } else if (preTrunk.isEmpty()) {
-                // post-trunk のみ → コネクタ行を挿入
-                initialRows.add(new Row.ConnectorRow(column, new TreeSet<>(activeColumns)));
-            }
+            // コネクタ行を挿入
+            initialRows.add(new Row.ConnectorRow(column, new TreeSet<>(activeColumns)));
 
-            // post-trunk がある場合、trunk サブツリー中も column を active に保つ
+            // branches がある場合、trunk サブツリー中も column を active に保つ
             Set<Integer> trunkActive;
-            if (hasPostTrunk) {
+            if (!branches.isEmpty()) {
                 trunkActive = new TreeSet<>(activeColumns);
                 trunkActive.add(column);
             } else {
@@ -488,23 +465,23 @@ final class GraphCanvas {
             emitSubtree(trunk, column, false, false, trunkActive, domChildren, trunkChild);
         }
 
-        // Post-trunk branches
-        if (hasPostTrunk) {
-            for (int i = 0; i < postTrunk.size(); i++) {
-                boolean isLast = (i == postTrunk.size() - 1);
-                Set<Integer> ptActive;
+        // Branches
+        if (!branches.isEmpty()) {
+            for (int i = 0; i < branches.size(); i++) {
+                boolean isLast = (i == branches.size() - 1);
+                Set<Integer> branchActive;
                 if (isLast) {
-                    ptActive = new TreeSet<>(activeColumns);
+                    branchActive = new TreeSet<>(activeColumns);
                 } else {
-                    ptActive = new TreeSet<>(activeColumns);
-                    ptActive.add(column);
+                    branchActive = new TreeSet<>(activeColumns);
+                    branchActive.add(column);
                 }
                 emitSubtree(
-                        postTrunk.get(i),
+                        branches.get(i),
                         column + 1,
                         true,
                         isLast,
-                        ptActive,
+                        branchActive,
                         domChildren,
                         trunkChild);
             }

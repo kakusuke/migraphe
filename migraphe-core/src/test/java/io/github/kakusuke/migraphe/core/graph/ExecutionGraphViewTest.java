@@ -93,12 +93,13 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(nodes, false);
             String text = view.toString();
 
-            // 支配木方式: B は branch (├●)、C は trunk (●)
+            // 支配木方式: C は trunk (●)、B は branch-after-trunk (├●)
             String expected =
                     """
                     ● [ ] a - Node A
-                    ├● [ ] b - Node B
+                    │
                     ● [ ] c - Node C
+                    ├● [ ] b - Node B
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -164,10 +165,11 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
-                    ├●──┐ [ ] b - Node B
-                    ├●──┤ [ ] c - Node C
+                    │
                     ├───┘
                     ●     [ ] d - Node D
+                    ├●──┐ [ ] b - Node B
+                    ├●──┤ [ ] c - Node C
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -217,9 +219,10 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ● [ ] a - Node A
+                    │
+                    ● [ ] d - Node D
                     ├● [ ] b - Node B
                     ├● [ ] c - Node C
-                    ● [ ] d - Node D
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -321,14 +324,16 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
-                    ├●──┐ [ ] b - Node B
-                    ├●──┤ [ ] c - Node C
+                    │
                     ├───┘
                     ●     [ ] d - Node D
-                    ├●──┐ [ ] e - Node E
-                    ├●──┤ [ ] f - Node F
+                    │
                     ├───┘
                     ●     [ ] g - Node G
+                    ├●──┐ [ ] e - Node E
+                    ├●──┤ [ ] f - Node F
+                    ├●──┐ [ ] b - Node B
+                    ├●──┤ [ ] c - Node C
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -405,11 +410,12 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
+                    │
+                    ├───┘
+                    ●     [ ] e - Node E
                     ├●──┐ [ ] b - Node B
                     ├●──┤ [ ] c - Node C
                     ├●──┤ [ ] d - Node D
-                    ├───┘
-                    ●     [ ] e - Node E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -432,10 +438,11 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ● [ ] a - Node A
-                    ├● [ ] b - Node B
+                    │
                     ● [ ] c - Node C
                     │
                     ● [ ] d - Node D
+                    ├● [ ] b - Node B
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -521,11 +528,12 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
-                    ├●──┐ [ ] b - Node B
-                    ├●──┤ [ ] c - Node C
-                    ├●  │ [ ] d - Node D
+                    │
                     ├───┘
                     ●     [ ] e - Node E
+                    ├●──┐ [ ] b - Node B
+                    ├●──┤ [ ] c - Node C
+                    ├●    [ ] d - Node D
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -634,12 +642,13 @@ class ExecutionGraphViewTest {
             MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
             ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
             String text = view.toString();
-            // A: trunk parent, B: branch (├●), C: trunk (●)
+            // C: trunk (●)、B: branch-after-trunk (├●)
             String expected =
                     """
                     ● [ ] a - A
-                    ├● [ ] b - B
+                    │
                     ● [ ] c - C
+                    ├● [ ] b - B
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -658,10 +667,11 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - A
-                    ├●──┐ [ ] b - B
-                    ├●──┤ [ ] c - C
+                    │
                     ├───┘
                     ●     [ ] d - D
+                    ├●──┐ [ ] b - B
+                    ├●──┤ [ ] c - C
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -684,19 +694,20 @@ class ExecutionGraphViewTest {
                             List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
             String text = view.toString();
 
-            // 新モデル: B はフォークストリーム、C はメインストリーム (topo-last trunk)
-            // Lane 0: H group (F→H, G→H), Lane 1: E group (H→E, C→E)
+            // 新モデル: E は trunk-first、B はフォークストリーム (post-trunk)、C はさらに後
             String expected =
                     """
                     ●       [ ] a - A
-                    ├●      [ ] b - B
-                    │ ├●──┐ [ ] f - F
-                    │ ├●──┤ [ ] g - G
-                    │ ├───┘
-                    │ ●───┐ [ ] h - H
-                    ├●────┤ [ ] c - C
+                    │
                     ├─────┘
                     ●       [ ] e - E
+                    ├●      [ ] b - B
+                    │ │
+                    │ ├───┘
+                    │ ●───┐ [ ] h - H
+                    │ ├●──┐ [ ] f - F
+                    │ ├●──┤ [ ] g - G
+                    ├●────┤ [ ] c - C
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -733,10 +744,10 @@ class ExecutionGraphViewTest {
             MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
             ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
-            // A: col 0 (root), B: col 1 (branch), C: col 0 (trunk)
+            // A: col 0 (root), C: col 0 (trunk), B: col 1 (branch-after-trunk)
             assertThat(view.lines().get(0).column()).isEqualTo(0); // A
-            assertThat(view.lines().get(1).column()).isEqualTo(1); // B (branch)
-            assertThat(view.lines().get(2).column()).isEqualTo(0); // C (trunk)
+            assertThat(view.lines().get(1).column()).isEqualTo(0); // C (trunk)
+            assertThat(view.lines().get(2).column()).isEqualTo(1); // B (branch)
         }
 
         @Test
@@ -750,9 +761,9 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view =
                     new ExecutionGraphView(List.of(nodeA, nodeB, nodeC, nodeD), false);
             assertThat(view.lines().get(0).column()).isEqualTo(0); // A
-            assertThat(view.lines().get(1).column()).isEqualTo(1); // B (branch)
-            assertThat(view.lines().get(2).column()).isEqualTo(1); // C (branch)
-            assertThat(view.lines().get(3).column()).isEqualTo(0); // D (trunk)
+            assertThat(view.lines().get(1).column()).isEqualTo(0); // D (trunk)
+            assertThat(view.lines().get(2).column()).isEqualTo(1); // B (branch)
+            assertThat(view.lines().get(3).column()).isEqualTo(1); // C (branch)
         }
 
         @Test
@@ -770,14 +781,14 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view =
                     new ExecutionGraphView(
                             List.of(nodeA, nodeB, nodeC, nodeD, nodeE, nodeF, nodeG), false);
-            // Trunk path: A→D→G (all col 0)
+            // Trunk path: A→D→G (all col 0), branches after trunk
             assertThat(view.lines().get(0).column()).isEqualTo(0); // A
-            assertThat(view.lines().get(1).column()).isEqualTo(1); // B (branch)
-            assertThat(view.lines().get(2).column()).isEqualTo(1); // C (branch)
-            assertThat(view.lines().get(3).column()).isEqualTo(0); // D (trunk)
-            assertThat(view.lines().get(4).column()).isEqualTo(1); // E (branch)
-            assertThat(view.lines().get(5).column()).isEqualTo(1); // F (branch)
-            assertThat(view.lines().get(6).column()).isEqualTo(0); // G (trunk)
+            assertThat(view.lines().get(1).column()).isEqualTo(0); // D (trunk)
+            assertThat(view.lines().get(2).column()).isEqualTo(0); // G (trunk)
+            assertThat(view.lines().get(3).column()).isEqualTo(1); // E (branch)
+            assertThat(view.lines().get(4).column()).isEqualTo(1); // F (branch)
+            assertThat(view.lines().get(5).column()).isEqualTo(1); // B (branch)
+            assertThat(view.lines().get(6).column()).isEqualTo(1); // C (branch)
         }
     }
 
@@ -811,8 +822,8 @@ class ExecutionGraphViewTest {
 
             List<String> lines = view.renderLines(n -> "[ ] " + n.id().value() + " - " + n.name());
 
-            // 支配木方式: ノード行4 + マージ行1 = 5行
-            assertThat(lines).hasSize(5);
+            // 新描画: ノード行4 + コネクタ行1 + マージ行1 = 6行
+            assertThat(lines).hasSize(6);
             long nodeLines = lines.stream().filter(l -> l.contains("[ ]")).count();
             assertThat(nodeLines).isEqualTo(4);
         }
@@ -853,14 +864,15 @@ class ExecutionGraphViewTest {
                     new ExecutionGraphView(List.of(nodeA, nodeB, nodeC, nodeD), false);
             String text = view.toString();
 
-            // B→D と C→D が1つのレーンに共通化
+            // B→D と C→D が1つのレーンに共通化 (branch-after-trunk)
             String expected =
                     """
                     ●     [ ] a - A
-                    ├●──┐ [ ] b - B
-                    ├●──┤ [ ] c - C
+                    │
                     ├───┘
                     ●     [ ] d - D
+                    ├●──┐ [ ] b - B
+                    ├●──┤ [ ] c - C
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -882,18 +894,20 @@ class ExecutionGraphViewTest {
                             List.of(nodeA, nodeB, nodeC, nodeD, nodeE, nodeF, nodeG), false);
             String text = view.toString();
 
-            // 2つのダイヤモンドが連続、レーン再利用
+            // 2つのダイヤモンドが連続、trunk-first で branch-after-trunk
             String expected =
                     """
                     ●     [ ] a - A
-                    ├●──┐ [ ] b - B
-                    ├●──┤ [ ] c - C
+                    │
                     ├───┘
                     ●     [ ] d - D
-                    ├●──┐ [ ] e - E
-                    ├●──┤ [ ] f - F
+                    │
                     ├───┘
                     ●     [ ] g - G
+                    ├●──┐ [ ] e - E
+                    ├●──┤ [ ] f - F
+                    ├●──┐ [ ] b - B
+                    ├●──┤ [ ] c - C
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -915,11 +929,11 @@ class ExecutionGraphViewTest {
                     new ExecutionGraphView(
                             List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
 
-            // 新モデル: B はフォークストリーム、C はメインストリーム (topo-last trunk)
+            // 新モデル: E は trunk-first、B・C はフォークストリーム (branch-after-trunk)
             assertThat(view.lines().get(0).node().id()).isEqualTo(NodeId.of("a"));
-            assertThat(view.lines().get(1).node().id()).isEqualTo(NodeId.of("b")); // fork stream
-            assertThat(view.lines().get(5).node().id()).isEqualTo(NodeId.of("c")); // main stream
-            assertThat(view.lines().get(6).node().id()).isEqualTo(NodeId.of("e")); // post-trunk
+            assertThat(view.lines().get(1).node().id()).isEqualTo(NodeId.of("e")); // trunk first
+            assertThat(view.lines().get(2).node().id()).isEqualTo(NodeId.of("b")); // branch
+            assertThat(view.lines().get(6).node().id()).isEqualTo(NodeId.of("c")); // branch
 
             String text = view.toString();
             assertThat(text).contains("├●");
@@ -987,12 +1001,13 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
             String text = view.toString();
 
-            // レーンなし
+            // レーンなし (branch-after-trunk)
             String expected =
                     """
                     ● [ ] a - A
-                    ├● [ ] b - B
+                    │
                     ● [ ] c - C
+                    ├● [ ] b - B
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -1015,12 +1030,13 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - A
-                    ├●──┐ [ ] b - B
-                    ├●  │ [ ] c - C
-                    │ │ │
-                    │ ●─┤ [ ] d - D
+                    │
                     ├───┘
                     ●     [ ] e - E
+                    ├●──┐ [ ] b - B
+                    ├●    [ ] c - C
+                      │
+                      ●─┤ [ ] d - D
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -1041,17 +1057,18 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(nodes, false);
             String text = view.toString();
 
-            // 新アルゴリズム: G_d と G_e は非重複のためレーン0を再利用 (lc=1)
+            // 新描画: trunk-first で E が先、branch-after-trunk
             String expected =
                     """
                     ●     [ ] a - A
+                    │
+                    ├───┘
+                    ●     [ ] e - E
                     ├●──┐ [ ] b - B
                     ├●──┤ [ ] c - C
                     ├───┘
                     ├●──┐ [ ] d - D
                     ├●──┤ [ ] f - F
-                    ├───┘
-                    ●     [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -1121,13 +1138,13 @@ class ExecutionGraphViewTest {
                                     nodeT),
                             false);
 
-            // T は S・X より後に描画される（post-trunk に正しく分類される）
+            // 新描画: T は trunk-first、S・X は branch-after-trunk で後に描画される
             List<String> nodeOrder = view.lines().stream().map(l -> l.node().id().value()).toList();
             int tIdx = nodeOrder.indexOf("t");
             int sIdx = nodeOrder.indexOf("s");
             int xIdx = nodeOrder.indexOf("x");
-            assertThat(tIdx).as("T は S より後に描画される").isGreaterThan(sIdx);
-            assertThat(tIdx).as("T は X より後に描画される").isGreaterThan(xIdx);
+            assertThat(sIdx).as("S は T より後に描画される").isGreaterThan(tIdx);
+            assertThat(xIdx).as("X は T より後に描画される").isGreaterThan(tIdx);
         }
     }
 
@@ -1240,12 +1257,13 @@ class ExecutionGraphViewTest {
             int shipmentsIdx = nodeOrder.indexOf("shipments");
             int orderIndexesIdx = nodeOrder.indexOf("order_indexes");
 
-            assertThat(orderIndexesIdx)
-                    .as("order_indexes は payments より後に描画される")
-                    .isGreaterThan(paymentsIdx);
+            // 新描画: shipments は trunk-first で先に、order_indexes・payments は後に描画される
             assertThat(orderIndexesIdx)
                     .as("order_indexes は shipments より後に描画される")
                     .isGreaterThan(shipmentsIdx);
+            assertThat(paymentsIdx)
+                    .as("payments は order_indexes より後に描画される")
+                    .isGreaterThan(orderIndexesIdx);
         }
 
         @Test
@@ -1300,10 +1318,11 @@ class ExecutionGraphViewTest {
             int pIdx = nodeOrder.indexOf("p");
             int tIdx = nodeOrder.indexOf("t");
 
-            assertThat(tIdx)
-                    .as("T (order_indexes) は O2 (order_items) より後に描画される")
-                    .isGreaterThan(o2Idx);
-            assertThat(tIdx).as("T (order_indexes) は P (payments) より後に描画される").isGreaterThan(pIdx);
+            // 新描画: T は trunk-first、O2・P は branch-after-trunk で後に描画される
+            assertThat(o2Idx)
+                    .as("O2 (order_items) は T (order_indexes) より後に描画される")
+                    .isGreaterThan(tIdx);
+            assertThat(pIdx).as("P (payments) は T (order_indexes) より後に描画される").isGreaterThan(tIdx);
         }
     }
 }

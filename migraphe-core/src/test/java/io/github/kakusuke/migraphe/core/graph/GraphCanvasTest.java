@@ -216,6 +216,27 @@ class GraphCanvasTest {
     }
 
     @Test
+    @DisplayName("非支配木辺がない単純フォークでも、branchはtrunkの後に描画される")
+    void branchShouldBeRenderedAfterTrunkEvenWithoutNonDomEdges() {
+        MigrationNode nodeA = TestHelpers.node("a").build();
+        MigrationNode nodeB = TestHelpers.node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeC = TestHelpers.node("c").dependencies(NodeId.of("a")).build();
+
+        DominatorTree dt = new DominatorTree(List.of(nodeA, nodeB, nodeC), false);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.layout(dt);
+
+        List<NodeLineInfo> infos = canvas.getNodeLineInfos();
+        int indexB = -1;
+        int indexC = -1;
+        for (int i = 0; i < infos.size(); i++) {
+            if (infos.get(i).node().equals(nodeB)) indexB = i;
+            if (infos.get(i).node().equals(nodeC)) indexC = i;
+        }
+        assertThat(indexB).isGreaterThan(indexC);
+    }
+
+    @Test
     @DisplayName("マージ行の閉じ括弧（┘）の右側に余計な縦棒（│）が表示されない")
     void mergeRowShouldNotShowExtraVerticalBarsAfterClosing() {
         MigrationNode nodeA = TestHelpers.node("a").build();
