@@ -209,7 +209,11 @@ final class GridBuilder {
 
         for (int junctionCol = 0; junctionCol < laneCol; junctionCol++) {
             Cell cell = get(forkRow, junctionCol);
-            if (cell instanceof Cell.ConnectorCell cc && !cc.up() && cc.down() && !cc.left() && !cc.right()) {
+            if (cell instanceof Cell.ConnectorCell cc
+                    && !cc.up()
+                    && cc.down()
+                    && !cc.left()
+                    && !cc.right()) {
                 set(forkRow, junctionCol, new Cell.ConnectorCell(false, true, true, true));
                 for (int fillCol = junctionCol + 1; fillCol < laneCol; fillCol++) {
                     set(forkRow, fillCol, new Cell.ConnectorCell(false, false, true, true));

@@ -396,7 +396,8 @@ class GridBuilderTest {
         int midCol = grid.cols() - 1;
         grid.set(forkRow, midCol, new Cell.ConnectorCell(true, true, false, false)); // place │
 
-        grid.drawNonDomEdge(a, b); // second lane: new laneCol = L1+2; bridge should overwrite midCol
+        grid.drawNonDomEdge(
+                a, b); // second lane: new laneCol = L1+2; bridge should overwrite midCol
 
         Cell midCell = grid.get(forkRow, midCol);
         assertThat(midCell).isInstanceOf(Cell.ConnectorCell.class);

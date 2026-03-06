@@ -168,12 +168,7 @@ final class GraphCanvas {
                 if (nr.isBranch()) {
                     int forkGridCol = 2 * (nr.column() - 1);
                     grid.set(ri, forkGridCol, new Cell.ConnectorCell(true, true, false, true));
-                    if (forkGridCol + 1 < gridWidth)
-                        grid.set(
-                                ri,
-                                forkGridCol + 1,
-                                new Cell.ConnectorCell(false, false, true, true));
-                    grid.set(ri, 2 * nr.column(), new Cell.TaskCell(nr.node().id()));
+                    grid.set(ri, forkGridCol + 1, new Cell.TaskCell(nr.node().id()));
                     for (int c : nr.activeColumns()) {
                         int gridCol = 2 * c;
                         if (gridCol < forkGridCol && gridCol < gridWidth)
@@ -305,9 +300,16 @@ final class GraphCanvas {
                 }
                 if (shouldDrawSepAsHBar)
                     grid.set(i, sepCol, new Cell.ConnectorCell(false, false, true, true));
-                if (shouldDrawSepAsHBar && row instanceof Row.NodeRow nr2 && !nr2.isBranch()) {
-                    int nodeGridCol = 2 * nr2.column();
-                    for (int gc = nodeGridCol + 1; gc < sepCol; gc++) {
+                if (shouldDrawSepAsHBar && row instanceof Row.NodeRow nr2) {
+                    int taskGridCol = nr2.isBranch() ? 2 * nr2.column() - 1 : 2 * nr2.column();
+                    int fillEnd = sepCol;
+                    for (int l = lc - 1; l >= 0; l--) {
+                        if (isVisibleLaneCell(grid.get(i, sepCol + 1 + l))) {
+                            fillEnd = sepCol + 1 + l;
+                            break;
+                        }
+                    }
+                    for (int gc = taskGridCol + 1; gc < fillEnd; gc++) {
                         if (grid.get(i, gc) instanceof Cell.SpaceCell) {
                             grid.set(i, gc, new Cell.ConnectorCell(false, false, true, true));
                         }
@@ -332,10 +334,10 @@ final class GraphCanvas {
                         initialRows.get(targetRowObj) instanceof Row.NodeRow tnr && tnr.isBranch();
                 int treeWidth = maxColumn > 0 ? 2 * maxColumn + 1 : 1;
                 int col = 0;
-                for (int gc = 0; gc < treeWidth; gc += 2) {
+                for (int gc = 0; gc < treeWidth; gc++) {
                     if (grid.get(targetRow, gc) instanceof Cell.TaskCell tc
                             && tc.id().equals(targetId)) {
-                        col = gc / 2;
+                        col = (gc + 1) / 2;
                         break;
                     }
                 }

@@ -93,11 +93,11 @@ class ExecutionGraphViewTest {
             ExecutionGraphView view = new ExecutionGraphView(nodes, false);
             String text = view.toString();
 
-            // 支配木方式: B は branch (├─●)、C は trunk (●)
+            // 支配木方式: B は branch (├●)、C は trunk (●)
             String expected =
                     """
                     ● [ ] a - Node A
-                    ├─● [ ] b - Node B
+                    ├● [ ] b - Node B
                     ● [ ] c - Node C
                     """;
             assertThat(text).isEqualTo(expected);
@@ -164,8 +164,8 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
-                    ├─●─┐ [ ] b - Node B
-                    ├─●─┤ [ ] c - Node C
+                    ├●──┐ [ ] b - Node B
+                    ├●──┤ [ ] c - Node C
                     ├───┘
                     ●     [ ] d - Node D
                     """;
@@ -217,8 +217,8 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ● [ ] a - Node A
-                    ├─● [ ] b - Node B
-                    ├─● [ ] c - Node C
+                    ├● [ ] b - Node B
+                    ├● [ ] c - Node C
                     ● [ ] d - Node D
                     """;
             assertThat(text).isEqualTo(expected);
@@ -321,12 +321,12 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
-                    ├─●─┐ [ ] b - Node B
-                    ├─●─┤ [ ] c - Node C
+                    ├●──┐ [ ] b - Node B
+                    ├●──┤ [ ] c - Node C
                     ├───┘
                     ●     [ ] d - Node D
-                    ├─●─┐ [ ] e - Node E
-                    ├─●─┤ [ ] f - Node F
+                    ├●──┐ [ ] e - Node E
+                    ├●──┤ [ ] f - Node F
                     ├───┘
                     ●     [ ] g - Node G
                     """;
@@ -405,9 +405,9 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
-                    ├─●─┐ [ ] b - Node B
-                    ├─●─┤ [ ] c - Node C
-                    ├─●─┤ [ ] d - Node D
+                    ├●──┐ [ ] b - Node B
+                    ├●──┤ [ ] c - Node C
+                    ├●──┤ [ ] d - Node D
                     ├───┘
                     ●     [ ] e - Node E
                     """;
@@ -432,7 +432,7 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ● [ ] a - Node A
-                    ├─● [ ] b - Node B
+                    ├● [ ] b - Node B
                     ● [ ] c - Node C
                     │
                     ● [ ] d - Node D
@@ -521,9 +521,9 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - Node A
-                    ├─●─┐ [ ] b - Node B
-                    ├─●─┤ [ ] c - Node C
-                    ├─● │ [ ] d - Node D
+                    ├●──┐ [ ] b - Node B
+                    ├●──┤ [ ] c - Node C
+                    ├●  │ [ ] d - Node D
                     ├───┘
                     ●     [ ] e - Node E
                     """;
@@ -634,11 +634,11 @@ class ExecutionGraphViewTest {
             MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("a")).build();
             ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
             String text = view.toString();
-            // A: trunk parent, B: branch (├─●), C: trunk (●)
+            // A: trunk parent, B: branch (├●), C: trunk (●)
             String expected =
                     """
                     ● [ ] a - A
-                    ├─● [ ] b - B
+                    ├● [ ] b - B
                     ● [ ] c - C
                     """;
             assertThat(text).isEqualTo(expected);
@@ -658,8 +658,8 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - A
-                    ├─●─┐ [ ] b - B
-                    ├─●─┤ [ ] c - C
+                    ├●──┐ [ ] b - B
+                    ├●──┤ [ ] c - C
                     ├───┘
                     ●     [ ] d - D
                     """;
@@ -690,14 +690,14 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●      [ ] a - A
-                    ├─●─┐  [ ] c - C
+                    ├●──┐  [ ] c - C
                     ●   │  [ ] b - B
-                    ├─●─│┐ [ ] f - F
-                    ├─●─│┤ [ ] g - G
+                    ├●──│┐ [ ] f - F
+                    ├●──│┤ [ ] g - G
                     ├───┼┘
                     ●───┤  [ ] h - H
                     ├───┘
-                    ├─●    [ ] e - E
+                    ├●     [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -858,8 +858,8 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - A
-                    ├─●─┐ [ ] b - B
-                    ├─●─┤ [ ] c - C
+                    ├●──┐ [ ] b - B
+                    ├●──┤ [ ] c - C
                     ├───┘
                     ●     [ ] d - D
                     """;
@@ -887,12 +887,12 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - A
-                    ├─●─┐ [ ] b - B
-                    ├─●─┤ [ ] c - C
+                    ├●──┐ [ ] b - B
+                    ├●──┤ [ ] c - C
                     ├───┘
                     ●     [ ] d - D
-                    ├─●─┐ [ ] e - E
-                    ├─●─┤ [ ] f - F
+                    ├●──┐ [ ] e - E
+                    ├●──┤ [ ] f - F
                     ├───┘
                     ●     [ ] g - G
                     """;
@@ -924,7 +924,7 @@ class ExecutionGraphViewTest {
 
             String text = view.toString();
             // E は ├ で表示（post-trunk branch、└ は廃止）
-            assertThat(text).contains("├─●");
+            assertThat(text).contains("├●");
         }
 
         @Test
@@ -993,7 +993,7 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ● [ ] a - A
-                    ├─● [ ] b - B
+                    ├● [ ] b - B
                     ● [ ] c - C
                     """;
             assertThat(text).isEqualTo(expected);
@@ -1017,12 +1017,12 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - A
-                    ├─●─┐ [ ] b - B
+                    ├●──┐ [ ] b - B
                     ●   │ [ ] c - C
                     │   │
                     ●───┤ [ ] d - D
                     ├───┘
-                    ├─●   [ ] e - E
+                    ├●    [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -1047,11 +1047,11 @@ class ExecutionGraphViewTest {
             String expected =
                     """
                     ●     [ ] a - A
-                    ├─●─┐ [ ] b - B
-                    ├─●─┤ [ ] c - C
+                    ├●──┐ [ ] b - B
+                    ├●──┤ [ ] c - C
                     ├───┘
-                    ├─●─┐ [ ] d - D
-                    ├─●─┤ [ ] f - F
+                    ├●──┐ [ ] d - D
+                    ├●──┤ [ ] f - F
                     ├───┘
                     ●     [ ] e - E
                     """;
@@ -1076,10 +1076,10 @@ class ExecutionGraphViewTest {
                             List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
             String text = view.toString();
 
-            // E は post-trunk でも ├─● で表示（└ は廃止、├ に統一）
-            assertThat(text).contains("├─●");
-            // C は pre-trunk → ├─●─┐ で表示
-            assertThat(text).contains("├─●─┐");
+            // E は post-trunk でも ├● で表示（└ は廃止、├ に統一）
+            assertThat(text).contains("├●");
+            // C は pre-trunk → ├●──┐ で表示
+            assertThat(text).contains("├●──┐");
         }
 
         @Test

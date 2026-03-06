@@ -182,6 +182,15 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-03-06 (Session 26)
+- **Fix: GraphCanvas horizontal fill didn't reach lane columns**
+  - Cause: fill loop in `buildGrid()` covered only tree columns (`taskGridCol+1..sepCol-1`); inactive SpaceCell lane columns before visible ┐/┤ were not filled with `─`
+  - Symptom: `├●────                      ┐` (spaces before ┐) in `status` output
+  - Fix: compute `fillEnd` = position of rightmost visible lane cell (left=true), extend fill loop there
+  - Key insight: `childrenOf`/`parentsOf` use transitive reduction — `a→w` is removed if path `a→b→u→w` exists
+  - New test: `GraphCanvasTest.branchNodeRowShouldNotHaveSpacesBetweenNodeAndLaneCornerWhenMultipleLanes`
+- Tests: 398 (all modules), 100% passing
+
 ### 2026-03-03 (Session 25)
 - **Fix: GraphCanvas branch classification bug (transitive fixpoint)**
   - Cause: `classifyBranches()` only checked direct non-dom edges from trunk subtree; branches T with deps S/X (both post-trunk) were incorrectly pre-trunk
@@ -190,13 +199,6 @@ Update when code changes:
 - **New: GridBuilder virtual trunk API** — added `GridBuilder()` (no-arg), `addBranch`, `getCellPosition`, `toVisibleGrid`, `drawNonDomEdge`, `CellPosition` record, `VIRTUAL_ROOT`/`VIRTUAL_END` constants
   - Re-enabled `ExecutionGraphViewTest.nestedDiamondRendering`
 - Tests: 397 (all modules), 100% passing
-
-### 2026-02-26 (Session 24)
-- **Fix: GraphCanvas spurious `┼` in merge rows**: `status` command showed disconnected `┼` characters
-  - Cause: merge row for node `i` incorrectly checked `laneActive[i][l]` — lanes starting at row `i` (non-dom-edge sources) were misclassified as active
-  - Fix: changed `isLaneActiveAtRow(i, l, ...)` → `isLaneActiveAtRow(i - 1, l, ...)` (1-line fix)
-  - New test: `GraphCanvasTest.mergeRowShouldNotShowSpuriousCrossCharactersBeforeClosing`
-- Tests: 306, 100% passing
 
 ### 2026-02-26 (Session 23)
 - **Fix: GraphCanvas stray `│` to the right of `┘`**: `status` command showed extra vertical bars after lane close
@@ -216,5 +218,5 @@ Update when code changes:
 
 ---
 
-**Last Updated**: 2026-03-03
-**Current Work**: GraphCanvas branch classification fix + GridBuilder virtual trunk API
+**Last Updated**: 2026-03-06
+**Current Work**: GraphCanvas horizontal fill loop fix (lane columns not covered)

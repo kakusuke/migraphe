@@ -140,6 +140,82 @@ class GraphCanvasTest {
     }
 
     @Test
+    @DisplayName("branch ノードは fork 記号（├）の直右にノード記号（●）を配置する（├● であり ├─● でない）")
+    void branchNodeShouldPlaceTaskCellDirectlyAfterForkSymbol() {
+        MigrationNode nodeA = TestHelpers.node("a").build();
+        MigrationNode nodeB = TestHelpers.node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeC = TestHelpers.node("c").dependencies(NodeId.of("a")).build();
+
+        DominatorTree dt = new DominatorTree(List.of(nodeA, nodeB, nodeC), false);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.layout(dt);
+
+        List<String> lines = canvas.render(n -> n.id().value());
+        assertThat(lines).anyMatch(line -> line.contains("├●"));
+        assertThat(lines).noneMatch(line -> line.contains("├─●"));
+    }
+
+    @Test
+    @DisplayName("branch ノード行では ● から最初のレーン角（┐/┤）まで水平線が途切れない")
+    void branchNodeRowShouldHaveNoGapsBetweenNodeSymbolAndLaneCorner() {
+        MigrationNode nodeA = TestHelpers.node("a").build();
+        MigrationNode nodeB = TestHelpers.node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeC = TestHelpers.node("c").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeE = TestHelpers.node("e").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeD =
+                TestHelpers.node("d")
+                        .dependencies(NodeId.of("b"), NodeId.of("c"), NodeId.of("e"))
+                        .build();
+
+        DominatorTree dt = new DominatorTree(List.of(nodeA, nodeB, nodeC, nodeE, nodeD), false);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.layout(dt);
+
+        List<String> lines = canvas.render(n -> n.id().value());
+        assertThat(lines)
+                .filteredOn(line -> line.contains("├●"))
+                .noneMatch(
+                        line ->
+                                line.replaceFirst(".*●", "")
+                                        .replaceFirst("[┐┤].*", "")
+                                        .contains("│"));
+    }
+
+    @Test
+    @DisplayName("複数レーンがある場合、分岐ノード行の ● とレーン角（┐/┤）の間に空白セルが表示されない")
+    void branchNodeRowShouldNotHaveSpacesBetweenNodeAndLaneCornerWhenMultipleLanes() {
+        // G0 (lane 0, endRow大): sources={n(row2), m(row5)}, target=q0(row7)
+        // G1 (lane 1, endRow小): sources={p(row1), m(row5)}, target=q1(row6)
+        // p の行 (row 1) では lane0 (G0.startRow=2) が未開始 → SpaceCell → ' ┐' の空白バグ
+        MigrationNode nodeA = TestHelpers.node("a").build();
+        MigrationNode nodeP = TestHelpers.node("p").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeN = TestHelpers.node("n").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeB = TestHelpers.node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeM = TestHelpers.node("m").dependencies(NodeId.of("b")).build();
+        MigrationNode nodeQ1 =
+                TestHelpers.node("q1").dependencies(NodeId.of("p"), NodeId.of("m")).build();
+        MigrationNode nodeQ0 =
+                TestHelpers.node("q0").dependencies(NodeId.of("m"), NodeId.of("n")).build();
+
+        DominatorTree dt =
+                new DominatorTree(
+                        List.of(nodeA, nodeP, nodeN, nodeB, nodeM, nodeQ1, nodeQ0), false);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.layout(dt);
+
+        List<String> lines = canvas.render(n -> n.id().value());
+        // ┐/┤ を含む分岐ノード行のみを対象に、● からレーン角までの間に空白がない
+        assertThat(lines)
+                .filteredOn(
+                        line -> line.contains("├●") && (line.contains("┐") || line.contains("┤")))
+                .noneMatch(
+                        line ->
+                                line.replaceFirst(".*●", "")
+                                        .replaceFirst("[┐┤].*", "")
+                                        .contains(" "));
+    }
+
+    @Test
     @DisplayName("マージ行の閉じ括弧（┘）の右側に余計な縦棒（│）が表示されない")
     void mergeRowShouldNotShowExtraVerticalBarsAfterClosing() {
         MigrationNode nodeA = TestHelpers.node("a").build();
