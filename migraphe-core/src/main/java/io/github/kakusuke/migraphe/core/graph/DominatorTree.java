@@ -100,15 +100,11 @@ final class DominatorTree {
         this.domChildren = Map.copyOf(domChildrenMap);
 
         // Step 2: Trunk 選択（ノードがない場合はスキップ）
-        Map<NodeId, Integer> subtreeDepth = new LinkedHashMap<>();
         Map<NodeId, @Nullable NodeId> trunkChildMap = new LinkedHashMap<>();
         if (!roots.isEmpty()) {
-            computeSubtreeDepth(
-                    hasVirtualRoot ? VIRTUAL_ROOT : roots.get(0), domChildrenMap, subtreeDepth);
             computeTrunkChild(
                     hasVirtualRoot ? VIRTUAL_ROOT : roots.get(0),
                     domChildrenMap,
-                    subtreeDepth,
                     trunkChildMap,
                     topoOrder);
         }
@@ -134,29 +130,9 @@ final class DominatorTree {
         return current;
     }
 
-    int computeSubtreeDepth(
-            NodeId nodeId,
-            Map<NodeId, List<NodeId>> domChildrenMap,
-            Map<NodeId, Integer> subtreeDepth) {
-        List<NodeId> children = domChildrenMap.getOrDefault(nodeId, List.of());
-        if (children.isEmpty()) {
-            subtreeDepth.put(nodeId, 0);
-            return 0;
-        }
-        int maxDepth = 0;
-        for (NodeId child : children) {
-            int d = computeSubtreeDepth(child, domChildrenMap, subtreeDepth);
-            maxDepth = Math.max(maxDepth, d);
-        }
-        int depth = maxDepth + 1;
-        subtreeDepth.put(nodeId, depth);
-        return depth;
-    }
-
     void computeTrunkChild(
             NodeId nodeId,
             Map<NodeId, List<NodeId>> domChildrenMap,
-            Map<NodeId, Integer> subtreeDepth,
             Map<NodeId, @Nullable NodeId> trunkChildMap,
             List<NodeId> topoOrder) {
         List<NodeId> children = domChildrenMap.getOrDefault(nodeId, List.of());
@@ -165,17 +141,13 @@ final class DominatorTree {
         } else if (children.size() == 1) {
             trunkChildMap.put(nodeId, children.get(0));
         } else {
-            // サブツリー深度が最大の子を trunk とする。タイブレーク: トポロジカル順で最後の子
-            int maxDepth = -1;
+            // トポロジカル順で最後の子を trunk とする
+            int maxTopoIdx = -1;
             @Nullable NodeId best = null;
             for (NodeId child : children) {
-                int d = subtreeDepth.getOrDefault(child, 0);
                 int childTopoIdx = topoOrder.indexOf(child);
-                if (d > maxDepth
-                        || (d == maxDepth
-                                && best != null
-                                && childTopoIdx > topoOrder.indexOf(best))) {
-                    maxDepth = d;
+                if (childTopoIdx > maxTopoIdx) {
+                    maxTopoIdx = childTopoIdx;
                     best = child;
                 }
             }
@@ -183,7 +155,7 @@ final class DominatorTree {
         }
 
         for (NodeId child : children) {
-            computeTrunkChild(child, domChildrenMap, subtreeDepth, trunkChildMap, topoOrder);
+            computeTrunkChild(child, domChildrenMap, trunkChildMap, topoOrder);
         }
     }
 

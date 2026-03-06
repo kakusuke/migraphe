@@ -286,6 +286,30 @@ class TopologicalSortTest {
     }
 
     @Test
+    void shouldSortNodesAtSameLevelBySubtreeDepthDescThenIdAsc() {
+        // given: a <- c (a は c に依存される), b は独立した葉ノード
+        // サブツリー深さ: a=1 (c がある), b=0 (葉)
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId idA = NodeId.of("a");
+
+        MigrationNode nodeA = node("a").build();
+        MigrationNode nodeB = node("b").build();
+        MigrationNode nodeC = node("c").dependencies(idA).build();
+
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        graph.addNode(nodeC);
+
+        // when
+        ExecutionPlan plan = TopologicalSort.createExecutionPlan(graph);
+
+        // then: レベル0のノードが [a, b] の順（サブツリー深さ降順）
+        assertThat(plan.levels().get(0).nodes())
+                .extracting(MigrationNode::id)
+                .containsExactly(idA, NodeId.of("b"));
+    }
+
+    @Test
     void shouldReturnEmptyPlanForEmptyTargetNodesInForwardDirection() {
         // given
         MigrationGraph graph = MigrationGraph.create();

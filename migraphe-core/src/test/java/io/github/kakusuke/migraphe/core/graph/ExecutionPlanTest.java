@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import java.util.List;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class ExecutionPlanTest {
@@ -16,8 +15,8 @@ class ExecutionPlanTest {
         MigrationNode node1 = node("node-1").build();
         MigrationNode node2 = node("node-2").build();
 
-        ExecutionLevel level1 = new ExecutionLevel(0, Set.of(node1));
-        ExecutionLevel level2 = new ExecutionLevel(1, Set.of(node2));
+        ExecutionLevel level1 = new ExecutionLevel(0, List.of(node1));
+        ExecutionLevel level2 = new ExecutionLevel(1, List.of(node2));
 
         // when
         ExecutionPlan plan = new ExecutionPlan(List.of(level1, level2));
@@ -35,8 +34,8 @@ class ExecutionPlanTest {
         MigrationNode node2 = node("node-2").build();
         MigrationNode node3 = node("node-3").build();
 
-        ExecutionLevel level1 = new ExecutionLevel(0, Set.of(node1));
-        ExecutionLevel level2 = new ExecutionLevel(1, Set.of(node2, node3)); // 2 parallel nodes
+        ExecutionLevel level1 = new ExecutionLevel(0, List.of(node1));
+        ExecutionLevel level2 = new ExecutionLevel(1, List.of(node2, node3)); // 2 parallel nodes
 
         // when
         ExecutionPlan plan = new ExecutionPlan(List.of(level1, level2));
@@ -49,7 +48,7 @@ class ExecutionPlanTest {
     void shouldReturnImmutableLevels() {
         // given
         MigrationNode node = node("node-1").build();
-        ExecutionLevel level = new ExecutionLevel(0, Set.of(node));
+        ExecutionLevel level = new ExecutionLevel(0, List.of(node));
         ExecutionPlan plan = new ExecutionPlan(List.of(level));
 
         // when & then
@@ -63,8 +62,8 @@ class ExecutionPlanTest {
         MigrationNode node2 = node("node-2").build();
         MigrationNode node3 = node("node-3").build();
 
-        ExecutionLevel level1 = new ExecutionLevel(0, Set.of(node1, node2));
-        ExecutionLevel level2 = new ExecutionLevel(1, Set.of(node3));
+        ExecutionLevel level1 = new ExecutionLevel(0, List.of(node1, node2));
+        ExecutionLevel level2 = new ExecutionLevel(1, List.of(node3));
 
         // when
         ExecutionPlan plan = new ExecutionPlan(List.of(level1, level2));
@@ -81,7 +80,7 @@ class ExecutionPlanTest {
         MigrationNode nodeC = node("c").build();
         MigrationNode nodeD = node("d").build();
 
-        ExecutionLevel level = new ExecutionLevel(0, Set.of(nodeB, nodeD));
+        ExecutionLevel level = new ExecutionLevel(0, List.of(nodeB, nodeD));
         ExecutionPlan plan = new ExecutionPlan(List.of(level));
 
         List<MigrationNode> allNodes = List.of(nodeA, nodeB, nodeC, nodeD);
@@ -99,7 +98,7 @@ class ExecutionPlanTest {
         MigrationNode nodeA = node("a").build();
         MigrationNode nodeX = node("x").build();
 
-        ExecutionLevel level = new ExecutionLevel(0, Set.of(nodeX));
+        ExecutionLevel level = new ExecutionLevel(0, List.of(nodeX));
         ExecutionPlan plan = new ExecutionPlan(List.of(level));
 
         // when

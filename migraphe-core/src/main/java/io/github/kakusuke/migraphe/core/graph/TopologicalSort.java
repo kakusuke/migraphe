@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.core.graph;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import java.util.*;
+import java.util.Comparator;
 
 /** トポロジカルソートによる実行プラン生成。 Kahn's アルゴリズムを使用。 */
 public final class TopologicalSort {
@@ -23,9 +24,11 @@ public final class TopologicalSort {
         Map<NodeId, Integer> inDegree = calculateInDegree(graph);
         int currentLevel = 0;
 
+        Map<NodeId, Integer> subtreeDepths = computeSubtreeDepths(graph);
+
         while (!inDegree.isEmpty()) {
             // 入次数が0のノード（依存関係が全て解決済み）を取得
-            Set<MigrationNode> nodesAtCurrentLevel = new HashSet<>();
+            List<MigrationNode> nodesAtCurrentLevel = new ArrayList<>();
 
             for (var entry : inDegree.entrySet()) {
                 if (entry.getValue() == 0) {
@@ -36,6 +39,12 @@ public final class TopologicalSort {
             if (nodesAtCurrentLevel.isEmpty()) {
                 throw new IllegalStateException("Graph contains a cycle or invalid dependencies");
             }
+
+            nodesAtCurrentLevel.sort(
+                    Comparator.comparingInt(
+                                    (MigrationNode n) -> subtreeDepths.getOrDefault(n.id(), 0))
+                            .reversed()
+                            .thenComparing(n -> n.id().value()));
 
             levels.add(new ExecutionLevel(currentLevel, nodesAtCurrentLevel));
 
@@ -53,6 +62,25 @@ public final class TopologicalSort {
         }
 
         return new ExecutionPlan(levels);
+    }
+
+    /** 各ノードのサブツリー深さ（葉までの最長パス）を計算 */
+    private static Map<NodeId, Integer> computeSubtreeDepths(MigrationGraph graph) {
+        Map<NodeId, Integer> depth = new HashMap<>();
+        for (MigrationNode node : graph.allNodes()) {
+            computeDepth(node.id(), graph, depth);
+        }
+        return depth;
+    }
+
+    private static int computeDepth(NodeId id, MigrationGraph graph, Map<NodeId, Integer> memo) {
+        if (memo.containsKey(id)) return memo.get(id);
+        int max = 0;
+        for (NodeId dep : graph.getDependents(id)) {
+            max = Math.max(max, 1 + computeDepth(dep, graph, memo));
+        }
+        memo.put(id, max);
+        return max;
     }
 
     /** 各ノードの入次数（依存している数）を計算 */
@@ -95,9 +123,11 @@ public final class TopologicalSort {
         List<ExecutionLevel> levels = new ArrayList<>();
         int currentLevel = 0;
 
+        Map<NodeId, Integer> subtreeDepthsFor = computeSubtreeDepths(graph);
+
         while (!inDegree.isEmpty()) {
             // 入次数が0のノード（依存関係が全て解決済み = 実行可能）
-            Set<MigrationNode> nodesAtCurrentLevel = new HashSet<>();
+            List<MigrationNode> nodesAtCurrentLevel = new ArrayList<>();
 
             for (var entry : inDegree.entrySet()) {
                 if (entry.getValue() == 0) {
@@ -109,6 +139,12 @@ public final class TopologicalSort {
                 throw new IllegalStateException(
                         "Cannot create execution plan: invalid dependencies");
             }
+
+            nodesAtCurrentLevel.sort(
+                    Comparator.comparingInt(
+                                    (MigrationNode n) -> subtreeDepthsFor.getOrDefault(n.id(), 0))
+                            .reversed()
+                            .thenComparing(n -> n.id().value()));
 
             levels.add(new ExecutionLevel(currentLevel, nodesAtCurrentLevel));
 
@@ -160,9 +196,11 @@ public final class TopologicalSort {
         List<ExecutionLevel> levels = new ArrayList<>();
         int currentLevel = 0;
 
+        Map<NodeId, Integer> subtreeDepthsRev = computeSubtreeDepths(graph);
+
         while (!outDegree.isEmpty()) {
             // 出次数が0のノード（誰からも依存されていない = 最初にロールバック可能）
-            Set<MigrationNode> nodesAtCurrentLevel = new HashSet<>();
+            List<MigrationNode> nodesAtCurrentLevel = new ArrayList<>();
 
             for (var entry : outDegree.entrySet()) {
                 if (entry.getValue() == 0) {
@@ -174,6 +212,12 @@ public final class TopologicalSort {
                 throw new IllegalStateException(
                         "Cannot create reverse execution plan: invalid dependencies");
             }
+
+            nodesAtCurrentLevel.sort(
+                    Comparator.comparingInt(
+                                    (MigrationNode n) -> subtreeDepthsRev.getOrDefault(n.id(), 0))
+                            .reversed()
+                            .thenComparing(n -> n.id().value()));
 
             levels.add(new ExecutionLevel(currentLevel, nodesAtCurrentLevel));
 

@@ -46,6 +46,18 @@ class DominatorTreeTest {
     }
 
     @Test
+    void trunkChildShouldBeTopoLastChildRegardlessOfSubtreeDepth() {
+        MigrationNode nodeA = TestHelpers.node("a").name("A").build();
+        MigrationNode nodeB = TestHelpers.node("b").name("B").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeC = TestHelpers.node("c").name("C").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeE = TestHelpers.node("e").name("E").dependencies(NodeId.of("b")).build();
+
+        DominatorTree tree = new DominatorTree(List.of(nodeA, nodeB, nodeC, nodeE), false);
+
+        assertThat(tree.trunkChild.get(NodeId.of("a"))).isEqualTo(NodeId.of("c"));
+    }
+
+    @Test
     void findNonDomEdgesReturnsDiamondEdge() {
         MigrationNode nodeA = TestHelpers.node("a").name("A").build();
         MigrationNode nodeB = TestHelpers.node("b").name("B").dependencies(NodeId.of("a")).build();

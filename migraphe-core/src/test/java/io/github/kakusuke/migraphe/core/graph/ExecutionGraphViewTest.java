@@ -684,20 +684,19 @@ class ExecutionGraphViewTest {
                             List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
             String text = view.toString();
 
-            // E is post-trunk (receives non-dom edge H→E from trunk subtree)
-            // C is pre-trunk
-            // Lane 0: E group (C→E, H→E), Lane 1: H group (F→H, G→H)
+            // 新モデル: B はフォークストリーム、C はメインストリーム (topo-last trunk)
+            // Lane 0: H group (F→H, G→H), Lane 1: E group (H→E, C→E)
             String expected =
                     """
-                    ●      [ ] a - A
-                    ├●──┐  [ ] c - C
-                    ●   │  [ ] b - B
-                    ├●──│┐ [ ] f - F
-                    ├●──│┤ [ ] g - G
-                    ├───┼┘
-                    ●───┤  [ ] h - H
-                    ├───┘
-                    ├●     [ ] e - E
+                    ●       [ ] a - A
+                    ├●      [ ] b - B
+                    │ ├●──┐ [ ] f - F
+                    │ ├●──┤ [ ] g - G
+                    │ ├───┘
+                    │ ●───┐ [ ] h - H
+                    ├●────┤ [ ] c - C
+                    ├─────┘
+                    ●       [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -916,14 +915,13 @@ class ExecutionGraphViewTest {
                     new ExecutionGraphView(
                             List.of(nodeA, nodeB, nodeC, nodeF, nodeG, nodeH, nodeE), false);
 
-            // DFS 順序: C (pre-trunk), B subtree (trunk), E (post-trunk)
+            // 新モデル: B はフォークストリーム、C はメインストリーム (topo-last trunk)
             assertThat(view.lines().get(0).node().id()).isEqualTo(NodeId.of("a"));
-            assertThat(view.lines().get(1).node().id()).isEqualTo(NodeId.of("c")); // pre-trunk
-            assertThat(view.lines().get(2).node().id()).isEqualTo(NodeId.of("b")); // trunk
+            assertThat(view.lines().get(1).node().id()).isEqualTo(NodeId.of("b")); // fork stream
+            assertThat(view.lines().get(5).node().id()).isEqualTo(NodeId.of("c")); // main stream
             assertThat(view.lines().get(6).node().id()).isEqualTo(NodeId.of("e")); // post-trunk
 
             String text = view.toString();
-            // E は ├ で表示（post-trunk branch、└ は廃止）
             assertThat(text).contains("├●");
         }
 
@@ -1018,11 +1016,11 @@ class ExecutionGraphViewTest {
                     """
                     ●     [ ] a - A
                     ├●──┐ [ ] b - B
-                    ●   │ [ ] c - C
-                    │   │
-                    ●───┤ [ ] d - D
+                    ├●  │ [ ] c - C
+                    │ │ │
+                    │ ●─┤ [ ] d - D
                     ├───┘
-                    ├●    [ ] e - E
+                    ●     [ ] e - E
                     """;
             assertThat(text).isEqualTo(expected);
         }
