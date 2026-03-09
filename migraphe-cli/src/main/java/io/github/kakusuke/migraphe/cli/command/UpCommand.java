@@ -130,7 +130,7 @@ public class UpCommand implements Command {
         List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
         // ExecutionGraphView を使用してグラフ表示
-        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
+        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes);
         List<String> lines =
                 graphView.renderLines(
                         node -> {

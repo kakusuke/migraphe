@@ -33,7 +33,7 @@ public class StatusCommand implements Command {
             List<MigrationNode> sortedNodes = new ArrayList<>(context.nodes());
 
             // グラフをレンダリング
-            ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
+            ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
 
             int[] executedCount = {0};
             int[] pendingCount = {0};

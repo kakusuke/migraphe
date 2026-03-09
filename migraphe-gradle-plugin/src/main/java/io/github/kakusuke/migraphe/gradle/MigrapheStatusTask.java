@@ -25,7 +25,7 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
         historyRepo.initialize();
 
         List<MigrationNode> sortedNodes = new ArrayList<>(context.nodes());
-        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
+        ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
 
         int[] executedCount = {0};
         int[] pendingCount = {0};

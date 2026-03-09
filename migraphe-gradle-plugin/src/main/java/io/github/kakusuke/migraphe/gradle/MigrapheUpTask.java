@@ -115,7 +115,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         // プランのノードを DFS 順でフィルタ
         List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
-        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, false);
+        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes);
         List<String> lines =
                 graphView.renderLines(
                         node -> {

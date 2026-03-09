@@ -41,7 +41,7 @@ io.github.kakusuke.migraphe.api/
 
 io.github.kakusuke.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, ExecutionGraphView, NodeLineInfo, FormatUtils
-│                   # + DominatorTree, GraphCanvas, NonDomEdge, BranchClassification, GroupInfo
+│                   # + LayoutSort, LayoutOrder, LayoutStream, LayoutTree, NonTreeEdge, Cell, GridCanvas
 ├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult, ExecutionContext
 ├── history/        # InMemoryHistoryRepository
 ├── config/         # ProjectConfig, TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
@@ -82,7 +82,7 @@ io.github.kakusuke.migraphe.gradle/
 9. **Listener Pattern (Phase 14)**: Business logic (Core) separated from presentation (CLI/Gradle). `ExecutionListener` for progress notifications, `ExecutionGraphView` for graph rendering with `toString()`
 10. **Gradle Plugin (Phase 15)**: `java-gradle-plugin` + Gradle TestKit. Custom `migraphePlugin` configuration for plugin JARs. `@Option` + `-P` property for task arguments. `PluginRegistry.loadFromClassLoader()` for Gradle's classloader
 11. **Shared Logic**: `ExecutionContext.createHistoryRepository()`, `ExecutionPlan.filterNodesInOrder()`, `ExecutionGraphView.renderLines()`, `FormatUtils`
-12. **GraphCanvas Invariant**: Among overlapping lane groups, groups with larger endRow must have lower lane numbers (ensured by sort + condition-2 check in `assignLanesAndInsertMergeRows()`)
+12. **DAG Stream Layout Pipeline**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (10 variants)
 
 ## CLI Project Structure
 
@@ -182,22 +182,21 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-03-09 (Session 29)
+- **Feature: DAG Stream Layout — new graph rendering pipeline**
+  - New pipeline: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`
+  - New classes: `LayoutSort` (Kahn's with priority comparator), `LayoutOrder` (record), `LayoutStream` (record), `LayoutTree` (stream tree builder), `NonTreeEdge` (record), `Cell` (sealed interface, 10 variants), `GridCanvas` (2D grid canvas)
+  - `ExecutionGraphView`: two constructors — `(MigrationGraph, boolean)` for full graph, `(List<MigrationNode>)` for filtered subsets; `toString()` uses `●`/`│` ASCII rendering via `GridCanvas.render()`
+  - Call sites updated: UpCommand/DownCommand use filtered `sortedNodes`, StatusCommand uses `context.graph()`
+  - Deleted: `DominatorTree.java`, `NonDomEdge.java` (+ their test files) — replaced by `LayoutTree` and `NonTreeEdge`
+  - Tests: 334 (all modules), 100% passing
+
 ### 2026-03-09 (Session 28)
 - **Regression: Delete ASCII graph rendering, simplify ExecutionGraphView to plain output**
   - Deleted: `GraphCanvas.java`, `GridBuilder.java`, `Cell.java`, `GroupInfo.java` (+ their test files)
-  - `ExecutionGraphView` rewritten: no `GraphCanvas` dependency; `toString()` → `"[ ] id - name\n"` per node; `lines()` → `NodeLineInfo(n, 0)`; `renderLines()` → direct stream map
-  - CLI tests updated: removed `●`/`│` assertions; kept `[ ]` assertions
   - Tests: 287 (all modules), 100% passing
-
-### 2026-03-09 (Session 27)
-- **Refactor: Rendering Refactor — Main Stream + Fork Streams (Plan Step 1-3)**
-  - **Step 1**: Made `TopologicalSort` deterministic; changed `DominatorTree.trunkChild` to topo-last only
-  - **Step 2**: Removed pre-trunk rendering from `GraphCanvas.emitSubtree()`
-  - **Step 3**: Removed `classifyBranches()` from `layout()`; deleted `BranchClassification.java`
-  - `ExecutionLevel`: `Set<MigrationNode>` → `List<MigrationNode>` for deterministic ordering
-- Tests: 398 (all modules), 100% passing
 
 ---
 
 **Last Updated**: 2026-03-09
-**Current Work**: ASCII graph rendering deleted — ready for clean GridBuilder rebuild
+**Current Work**: DAG Stream Layout pipeline implemented — `addNonTreeEdge()` in GridCanvas still a stub, ready for merge edge rendering

@@ -144,7 +144,7 @@ public class DownCommand implements Command {
         List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
         // ExecutionGraphView を使用してグラフ表示（逆順モード）
-        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, true);
+        ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes);
         List<String> lines =
                 graphView.renderLines(
                         node -> {

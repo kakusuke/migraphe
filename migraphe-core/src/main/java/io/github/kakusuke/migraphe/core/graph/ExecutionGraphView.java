@@ -7,25 +7,44 @@ import java.util.function.Function;
 /**
  * DAG の実行グラフをテキスト表現するクラス。
  *
- * <p>トポロジカル順のプレーンテキスト出力。
+ * <p>LayoutSort → LayoutTree → GridCanvas パイプラインによるテキスト出力。
  */
 public final class ExecutionGraphView {
 
-    private final List<MigrationNode> sortedNodes;
+    private final GridCanvas canvas;
 
     /**
-     * コンストラクタ。
+     * MigrationGraph からパイプラインを構築するコンストラクタ。
+     *
+     * @param graph マイグレーショングラフ
+     * @param reversed true の場合、逆順モード（DOWN用）
+     */
+    public ExecutionGraphView(MigrationGraph graph, boolean reversed) {
+        LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
+        LayoutTree tree = LayoutTree.build(graph, order);
+        this.canvas = new GridCanvas();
+        this.canvas.addStream(tree.rootStream());
+    }
+
+    /**
+     * ソート済みノードリストから構築するコンストラクタ（フィルタ済みサブセット用）。
      *
      * @param sortedNodes ソート済みノードリスト
-     * @param reversed true の場合、逆順モード（DOWN用）。依存関係を逆に解釈する。
      */
-    public ExecutionGraphView(List<MigrationNode> sortedNodes, boolean reversed) {
-        this.sortedNodes = List.copyOf(sortedNodes);
+    public ExecutionGraphView(List<MigrationNode> sortedNodes) {
+        MigrationGraph subGraph = MigrationGraph.create();
+        for (MigrationNode node : sortedNodes) {
+            subGraph.addNode(node);
+        }
+        LayoutSort.LayoutOrder order = LayoutSort.sort(subGraph);
+        LayoutTree tree = LayoutTree.build(subGraph, order);
+        this.canvas = new GridCanvas();
+        this.canvas.addStream(tree.rootStream());
     }
 
     /** 各ノードの行情報リストを取得する。 */
     public List<NodeLineInfo> lines() {
-        return sortedNodes.stream().map(n -> new NodeLineInfo(n, 0)).toList();
+        return canvas.toNodeLineInfos();
     }
 
     /**
@@ -35,16 +54,19 @@ public final class ExecutionGraphView {
      * @return 表示行のリスト
      */
     public List<String> renderLines(Function<MigrationNode, String> labelFn) {
-        return sortedNodes.stream().map(labelFn).toList();
+        String rendered = canvas.render(labelFn);
+        if (rendered.isEmpty()) {
+            return List.of();
+        }
+        // render() は末尾に \n を付けるので、最後の空要素を除去
+        String trimmed =
+                rendered.endsWith("\n") ? rendered.substring(0, rendered.length() - 1) : rendered;
+        return List.of(trimmed.split("\n", -1));
     }
 
-    /** プレーンテキストとしてグラフ全体を出力する（色なし）。 */
+    /** グラフ全体をテキスト表現で出力する。 */
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
-        for (MigrationNode n : sortedNodes) {
-            sb.append("[ ] ").append(n.id().value()).append(" - ").append(n.name()).append("\n");
-        }
-        return sb.toString();
+        return canvas.render(n -> n.id().value() + " - " + n.name());
     }
 }

@@ -18,14 +18,16 @@ class ExecutionGraphViewTest {
     class ToStringTest {
 
         @Test
-        @DisplayName("単一ノードを [ ] id - name 形式で出力する")
+        @DisplayName("単一ノードを ● id - name 形式で出力する")
         void shouldRenderSingleNode() {
             MigrationNode nodeA = node("a").name("Create users table").build();
-            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA), false);
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
 
             String text = view.toString();
 
-            assertThat(text).isEqualTo("[ ] a - Create users table\n");
+            assertThat(text).isEqualTo("● a - Create users table\n");
         }
 
         @Test
@@ -34,16 +36,22 @@ class ExecutionGraphViewTest {
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
             MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("b")).build();
-            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            graph.addNode(nodeC);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
 
             String text = view.toString();
 
             assertThat(text)
                     .isEqualTo(
                             """
-                            [ ] a - Node A
-                            [ ] b - Node B
-                            [ ] c - Node C
+                            ● a - Node A
+                            │
+                            ● b - Node B
+                            │
+                            ● c - Node C
                             """);
         }
 
@@ -51,7 +59,9 @@ class ExecutionGraphViewTest {
         @DisplayName("ノード ID と名前を含む")
         void shouldContainIdAndName() {
             MigrationNode nodeA = node("migration-001").name("Create users table").build();
-            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA), false);
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
 
             String text = view.toString();
 
@@ -69,22 +79,27 @@ class ExecutionGraphViewTest {
         void shouldApplyLabelFunctionToEachNode() {
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
-            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB), false);
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
 
             List<String> lines = view.renderLines(n -> n.id().value() + ":" + n.name());
 
-            assertThat(lines).containsExactly("a:Node A", "b:Node B");
+            assertThat(lines).containsExactly("● a:Node A", "│", "● b:Node B");
         }
 
         @Test
         @DisplayName("単一ノードで正しく動作する")
         void shouldWorkWithSingleNode() {
             MigrationNode nodeA = node("x").name("X Node").build();
-            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA), false);
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
 
             List<String> lines = view.renderLines(n -> n.name());
 
-            assertThat(lines).containsExactly("X Node");
+            assertThat(lines).containsExactly("● X Node");
         }
     }
 
@@ -97,7 +112,10 @@ class ExecutionGraphViewTest {
         void shouldReturnNodeLineInfosWithColumnZero() {
             MigrationNode nodeA = node("a").name("Node A").build();
             MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
-            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB), false);
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
 
             List<NodeLineInfo> lines = view.lines();
 
@@ -112,9 +130,13 @@ class ExecutionGraphViewTest {
         @DisplayName("入力順序を保持する")
         void shouldPreserveInputOrder() {
             MigrationNode nodeA = node("a").name("A").build();
-            MigrationNode nodeB = node("b").name("B").build();
-            MigrationNode nodeC = node("c").name("C").build();
-            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC), false);
+            MigrationNode nodeB = node("b").name("B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("C").dependencies(NodeId.of("b")).build();
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            graph.addNode(nodeC);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
 
             List<NodeLineInfo> lines = view.lines();
 
