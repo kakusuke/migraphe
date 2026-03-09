@@ -182,41 +182,27 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-03-09 (Session 27)
+- **Refactor: Rendering Refactor — Main Stream + Fork Streams (Plan Step 1-3)**
+  - **Step 1**: Made `TopologicalSort` deterministic (subtree-depth-desc + ID-asc for same-level nodes); changed `DominatorTree.trunkChild` selection from depth-first to topo-last only
+  - **Step 2**: Removed pre-trunk rendering from `GraphCanvas.emitSubtree()` — all branches now render after trunk (`classifyBranches()` removed from `emitSubtree`)
+  - **Step 3**: Removed `classifyBranches()` from `layout()` virtualRoot path; fixed virtualTrunk selection to restrict to `dt.roots` only (prevents merge nodes with `idom=VIRTUAL_ROOT` from becoming trunk); deleted `BranchClassification.java` and `BranchClassificationTest.java`
+  - `ExecutionLevel`: `Set<MigrationNode>` → `List<MigrationNode>` for deterministic ordering
+  - No `@Disabled` tests remaining
+- Tests: 398 (all modules), 100% passing
+
 ### 2026-03-06 (Session 26)
 - **Fix: GraphCanvas horizontal fill didn't reach lane columns**
-  - Cause: fill loop in `buildGrid()` covered only tree columns (`taskGridCol+1..sepCol-1`); inactive SpaceCell lane columns before visible ┐/┤ were not filled with `─`
-  - Symptom: `├●────                      ┐` (spaces before ┐) in `status` output
-  - Fix: compute `fillEnd` = position of rightmost visible lane cell (left=true), extend fill loop there
-  - Key insight: `childrenOf`/`parentsOf` use transitive reduction — `a→w` is removed if path `a→b→u→w` exists
+  - Cause: fill loop in `buildGrid()` covered only tree columns; inactive SpaceCell lane columns before visible ┐/┤ not filled with `─`
+  - Fix: compute `fillEnd` = rightmost visible lane cell, extend fill loop there
   - New test: `GraphCanvasTest.branchNodeRowShouldNotHaveSpacesBetweenNodeAndLaneCornerWhenMultipleLanes`
 - Tests: 398 (all modules), 100% passing
 
 ### 2026-03-03 (Session 25)
-- **Fix: GraphCanvas branch classification bug (transitive fixpoint)**
-  - Cause: `classifyBranches()` only checked direct non-dom edges from trunk subtree; branches T with deps S/X (both post-trunk) were incorrectly pre-trunk
-  - Fix: replaced single-pass logic with transitive fixpoint iteration in `GraphCanvas.classifyBranches()` — iteratively expands "extended trunk" to include confirmed post-trunk subtrees
-  - Re-enabled `ExecutionGraphViewTest.reversedNonDomEdgeGroupProducesNoSpuriousMergeRow`
-- **New: GridBuilder virtual trunk API** — added `GridBuilder()` (no-arg), `addBranch`, `getCellPosition`, `toVisibleGrid`, `drawNonDomEdge`, `CellPosition` record, `VIRTUAL_ROOT`/`VIRTUAL_END` constants
-  - Re-enabled `ExecutionGraphViewTest.nestedDiamondRendering`
+- **Fix: GraphCanvas branch classification bug** + **GridBuilder virtual trunk API**
 - Tests: 397 (all modules), 100% passing
-
-### 2026-02-26 (Session 23)
-- **Fix: GraphCanvas stray `│` to the right of `┘`**: `status` command showed extra vertical bars after lane close
-  - Cause: overlapping groups with larger endRow were assigned higher lane numbers, violating the invariant
-  - Fix: sort by endRow descending + add condition-2 check (upper-lane invariant) to lane reuse logic in `GraphCanvas.assignLanesAndInsertMergeRows()`
-  - Invariant: among overlapping groups, larger endRow → lower lane number
-  - New test: `GraphCanvasTest.mergeRowShouldNotShowExtraVerticalBarsAfterClosing`
-- Tests: 305, 100% passing
-
-### 2026-02-25 (Session 22)
-- **Refactor: split ExecutionGraphView.java** from 1,014 lines into 54-line orchestrator
-  - New files: `DominatorTree.java`, `GraphCanvas.java`, `NonDomEdge.java`, `BranchClassification.java`, `GroupInfo.java`
-  - New tests: `DominatorTreeTest.java`, `GraphCanvasTest.java`, `NonDomEdgeTest.java`, etc.
-  - `GraphCanvas.render()` returns all row types (NodeRow, ConnectorRow, MergeRow, BlankRow)
-  - 4 pre-existing `@Disabled` Red tests remain disabled
-- Tests: 304, 100% passing
 
 ---
 
-**Last Updated**: 2026-03-06
-**Current Work**: GraphCanvas horizontal fill loop fix (lane columns not covered)
+**Last Updated**: 2026-03-09
+**Current Work**: Rendering refactor complete — pre-trunk concept fully abolished
