@@ -161,7 +161,7 @@ class UpCommandTest {
         // Then: マイグレーショングラフが表示される
         String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("Migrations to execute:");
-        assertThat(output).contains("●"); // グラフのノード記号
+        assertThat(output).contains("[ ]"); // 未実行マーク
     }
 
     @Test

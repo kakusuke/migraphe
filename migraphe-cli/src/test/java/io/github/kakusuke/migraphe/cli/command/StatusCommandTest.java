@@ -91,12 +91,10 @@ class StatusCommandTest {
         // Then: 成功
         assertThat(exitCode).isEqualTo(0);
 
-        // 出力に git graph 風の表示が含まれる
+        // 出力に表示が含まれる
         String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("Migration Status");
-        assertThat(output).contains("●"); // グラフのノード表示
         assertThat(output).contains("[ ]"); // 未実行マーク
-        assertThat(output).contains("│"); // 縦線（依存関係の線）
     }
 
     @Test
@@ -142,11 +140,9 @@ class StatusCommandTest {
         // Then: 成功
         assertThat(exitCode).isEqualTo(0);
 
-        // 出力にグラフ線で依存関係が表示される
+        // 出力に表示が含まれる
         String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("[ ]"); // 未実行マーク
-        assertThat(output).contains("│"); // 依存関係の線
-        assertThat(output).contains("●"); // ノードマーク
     }
 
     @Test

@@ -7,11 +7,11 @@ import java.util.function.Function;
 /**
  * DAG の実行グラフをテキスト表現するクラス。
  *
- * <p>支配木 (Dominator Tree) ベースの描画方式。
+ * <p>トポロジカル順のプレーンテキスト出力。
  */
 public final class ExecutionGraphView {
 
-    private final GraphCanvas canvas;
+    private final List<MigrationNode> sortedNodes;
 
     /**
      * コンストラクタ。
@@ -20,14 +20,12 @@ public final class ExecutionGraphView {
      * @param reversed true の場合、逆順モード（DOWN用）。依存関係を逆に解釈する。
      */
     public ExecutionGraphView(List<MigrationNode> sortedNodes, boolean reversed) {
-        DominatorTree dt = new DominatorTree(sortedNodes, reversed);
-        this.canvas = new GraphCanvas();
-        canvas.layout(dt);
+        this.sortedNodes = List.copyOf(sortedNodes);
     }
 
     /** 各ノードの行情報リストを取得する。 */
     public List<NodeLineInfo> lines() {
-        return canvas.getNodeLineInfos();
+        return sortedNodes.stream().map(n -> new NodeLineInfo(n, 0)).toList();
     }
 
     /**
@@ -37,17 +35,15 @@ public final class ExecutionGraphView {
      * @return 表示行のリスト
      */
     public List<String> renderLines(Function<MigrationNode, String> labelFn) {
-        return canvas.render(labelFn);
+        return sortedNodes.stream().map(labelFn).toList();
     }
 
     /** プレーンテキストとしてグラフ全体を出力する（色なし）。 */
     @Override
     public String toString() {
-        List<String> rendered =
-                renderLines(node -> "[ ] " + node.id().value() + " - " + node.name());
         StringBuilder sb = new StringBuilder();
-        for (String line : rendered) {
-            sb.append(line).append("\n");
+        for (MigrationNode n : sortedNodes) {
+            sb.append("[ ] ").append(n.id().value()).append(" - ").append(n.name()).append("\n");
         }
         return sb.toString();
     }

@@ -182,27 +182,22 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-03-09 (Session 28)
+- **Regression: Delete ASCII graph rendering, simplify ExecutionGraphView to plain output**
+  - Deleted: `GraphCanvas.java`, `GridBuilder.java`, `Cell.java`, `GroupInfo.java` (+ their test files)
+  - `ExecutionGraphView` rewritten: no `GraphCanvas` dependency; `toString()` → `"[ ] id - name\n"` per node; `lines()` → `NodeLineInfo(n, 0)`; `renderLines()` → direct stream map
+  - CLI tests updated: removed `●`/`│` assertions; kept `[ ]` assertions
+  - Tests: 287 (all modules), 100% passing
+
 ### 2026-03-09 (Session 27)
 - **Refactor: Rendering Refactor — Main Stream + Fork Streams (Plan Step 1-3)**
-  - **Step 1**: Made `TopologicalSort` deterministic (subtree-depth-desc + ID-asc for same-level nodes); changed `DominatorTree.trunkChild` selection from depth-first to topo-last only
-  - **Step 2**: Removed pre-trunk rendering from `GraphCanvas.emitSubtree()` — all branches now render after trunk (`classifyBranches()` removed from `emitSubtree`)
-  - **Step 3**: Removed `classifyBranches()` from `layout()` virtualRoot path; fixed virtualTrunk selection to restrict to `dt.roots` only (prevents merge nodes with `idom=VIRTUAL_ROOT` from becoming trunk); deleted `BranchClassification.java` and `BranchClassificationTest.java`
+  - **Step 1**: Made `TopologicalSort` deterministic; changed `DominatorTree.trunkChild` to topo-last only
+  - **Step 2**: Removed pre-trunk rendering from `GraphCanvas.emitSubtree()`
+  - **Step 3**: Removed `classifyBranches()` from `layout()`; deleted `BranchClassification.java`
   - `ExecutionLevel`: `Set<MigrationNode>` → `List<MigrationNode>` for deterministic ordering
-  - No `@Disabled` tests remaining
 - Tests: 398 (all modules), 100% passing
-
-### 2026-03-06 (Session 26)
-- **Fix: GraphCanvas horizontal fill didn't reach lane columns**
-  - Cause: fill loop in `buildGrid()` covered only tree columns; inactive SpaceCell lane columns before visible ┐/┤ not filled with `─`
-  - Fix: compute `fillEnd` = rightmost visible lane cell, extend fill loop there
-  - New test: `GraphCanvasTest.branchNodeRowShouldNotHaveSpacesBetweenNodeAndLaneCornerWhenMultipleLanes`
-- Tests: 398 (all modules), 100% passing
-
-### 2026-03-03 (Session 25)
-- **Fix: GraphCanvas branch classification bug** + **GridBuilder virtual trunk API**
-- Tests: 397 (all modules), 100% passing
 
 ---
 
 **Last Updated**: 2026-03-09
-**Current Work**: Rendering refactor complete — pre-trunk concept fully abolished
+**Current Work**: ASCII graph rendering deleted — ready for clean GridBuilder rebuild
