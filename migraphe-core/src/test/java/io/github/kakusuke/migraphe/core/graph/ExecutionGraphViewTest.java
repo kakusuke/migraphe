@@ -190,13 +190,13 @@ class ExecutionGraphViewTest {
             assertThat(view.lines()).hasSize(4);
             String expected =
                     """
-                    ● [ ] a - Node A
-                    │
-                    ● [ ] b - Node B
-
                     ● [ ] c - Node C
                     │
                     ● [ ] d - Node D
+
+                    ● [ ] a - Node A
+                    │
+                    ● [ ] b - Node B
                     """;
             assertThat(text).isEqualTo(expected);
         }
@@ -380,9 +380,9 @@ class ExecutionGraphViewTest {
             assertThat(view.lines()).hasSize(3);
             String expected =
                     """
+                    ● [ ] c - Node C
                     ● [ ] a - Node A
                     ● [ ] b - Node B
-                    ● [ ] c - Node C
                     """;
             assertThat(text).isEqualTo(expected);
         }

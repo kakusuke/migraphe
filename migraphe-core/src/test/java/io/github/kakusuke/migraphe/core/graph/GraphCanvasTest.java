@@ -237,6 +237,34 @@ class GraphCanvasTest {
     }
 
     @Test
+    @DisplayName("hasVirtualRoot パスでは全ブランチが trunk の後に描画される")
+    void virtualRootBranchesShouldAllBeRenderedAfterTrunk() {
+        MigrationNode nodeR1 = TestHelpers.node("r1").build();
+        MigrationNode nodeR2 = TestHelpers.node("r2").build();
+        MigrationNode nodeR3 = TestHelpers.node("r3").build();
+        MigrationNode nodeC1 = TestHelpers.node("c1").dependencies(NodeId.of("r1")).build();
+        MigrationNode nodeC2 = TestHelpers.node("c2").dependencies(NodeId.of("r1")).build();
+
+        // r1 を topo-last にする入力順 → virtualTrunk = r1
+        DominatorTree dt =
+                new DominatorTree(List.of(nodeR2, nodeR3, nodeR1, nodeC1, nodeC2), false);
+        GraphCanvas canvas = new GraphCanvas();
+        canvas.layout(dt);
+
+        List<NodeLineInfo> infos = canvas.getNodeLineInfos();
+        int indexR1 = -1;
+        int indexR2 = -1;
+        int indexR3 = -1;
+        for (int i = 0; i < infos.size(); i++) {
+            if (infos.get(i).node().equals(nodeR1)) indexR1 = i;
+            if (infos.get(i).node().equals(nodeR2)) indexR2 = i;
+            if (infos.get(i).node().equals(nodeR3)) indexR3 = i;
+        }
+        assertThat(indexR1).isLessThan(indexR2);
+        assertThat(indexR1).isLessThan(indexR3);
+    }
+
+    @Test
     @DisplayName("マージ行の閉じ括弧（┘）の右側に余計な縦棒（│）が表示されない")
     void mergeRowShouldNotShowExtraVerticalBarsAfterClosing() {
         MigrationNode nodeA = TestHelpers.node("a").build();

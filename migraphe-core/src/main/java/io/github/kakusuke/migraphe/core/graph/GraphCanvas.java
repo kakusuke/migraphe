@@ -74,33 +74,37 @@ final class GraphCanvas {
             List<NodeId> virtualChildren = domChildren.getOrDefault(VIRTUAL_ROOT, List.of());
             @Nullable NodeId virtualTrunk = trunkChild.get(VIRTUAL_ROOT);
 
+            // virtualTrunk は実際のグラフルート (dt.roots) でなければならない。
+            // 非ルートノード（例: G が idom=VIRTUAL_ROOT のマージノード）が選ばれた場合は修正する。
+            if (virtualTrunk != null && !roots.contains(virtualTrunk)) {
+                List<NodeId> topoOrder = new ArrayList<>(dt.nodeMap.keySet());
+                int bestIdx = -1;
+                @Nullable NodeId bestRoot = null;
+                for (NodeId child : virtualChildren) {
+                    if (roots.contains(child)) {
+                        int idx = topoOrder.indexOf(child);
+                        if (idx > bestIdx) {
+                            bestIdx = idx;
+                            bestRoot = child;
+                        }
+                    }
+                }
+                virtualTrunk = bestRoot;
+            }
+
             List<NodeId> virtualBranches = new ArrayList<>();
             for (NodeId child : virtualChildren) {
                 if (!child.equals(virtualTrunk)) virtualBranches.add(child);
             }
 
-            BranchClassification classification =
-                    classifyBranches(virtualTrunk, virtualBranches, domChildren, nonDomEdges);
-
             boolean first = true;
-            // Pre-trunk branches
-            for (NodeId child : classification.preTrunk()) {
-                if (!first) {
-                    addSubgraphSeparator();
-                }
-                emitSubtree(child, 0, false, false, Set.of(), domChildren, trunkChild);
-                first = false;
-            }
             // Trunk
             if (virtualTrunk != null) {
-                if (!first) {
-                    addSubgraphSeparator();
-                }
                 emitSubtree(virtualTrunk, 0, false, false, Set.of(), domChildren, trunkChild);
                 first = false;
             }
-            // Post-trunk branches
-            for (NodeId child : classification.postTrunk()) {
+            // Branches (all after trunk)
+            for (NodeId child : virtualBranches) {
                 if (!first) {
                     addSubgraphSeparator();
                 }
@@ -486,58 +490,6 @@ final class GraphCanvas {
                         trunkChild);
             }
         }
-    }
-
-    // ========== 非支配木辺 ==========
-
-    private BranchClassification classifyBranches(
-            @Nullable NodeId trunk,
-            List<NodeId> branches,
-            Map<NodeId, List<NodeId>> domChildren,
-            List<NonDomEdge> nonDomEdges) {
-        if (trunk == null || branches.isEmpty() || nonDomEdges.isEmpty()) {
-            return new BranchClassification(branches, List.of());
-        }
-
-        Set<NodeId> extendedTrunk = new LinkedHashSet<>(collectSubtreeNodes(trunk, domChildren));
-        List<NodeId> postTrunk = new ArrayList<>();
-        Set<NodeId> remaining = new LinkedHashSet<>(branches);
-
-        boolean changed = true;
-        while (changed) {
-            changed = false;
-            for (NodeId branch : new ArrayList<>(remaining)) {
-                Set<NodeId> branchSubtree = collectSubtreeNodes(branch, domChildren);
-                boolean hasNonDomFromExtendedTrunk =
-                        nonDomEdges.stream()
-                                .anyMatch(
-                                        e ->
-                                                extendedTrunk.contains(e.source())
-                                                        && branchSubtree.contains(e.target()));
-                if (hasNonDomFromExtendedTrunk) {
-                    postTrunk.add(branch);
-                    extendedTrunk.addAll(branchSubtree);
-                    remaining.remove(branch);
-                    changed = true;
-                }
-            }
-        }
-
-        return new BranchClassification(new ArrayList<>(remaining), postTrunk);
-    }
-
-    private Set<NodeId> collectSubtreeNodes(NodeId root, Map<NodeId, List<NodeId>> domChildren) {
-        Set<NodeId> result = new LinkedHashSet<>();
-        Deque<NodeId> stack = new ArrayDeque<>();
-        stack.push(root);
-        while (!stack.isEmpty()) {
-            NodeId node = stack.pop();
-            result.add(node);
-            for (NodeId child : domChildren.getOrDefault(node, List.of())) {
-                stack.push(child);
-            }
-        }
-        return result;
     }
 
     // ========== ユーティリティ ==========
