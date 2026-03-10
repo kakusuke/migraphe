@@ -1,7 +1,10 @@
 package io.github.kakusuke.migraphe.core.graph;
 
+import io.github.kakusuke.migraphe.api.environment.Environment;
+import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.task.Task;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -52,179 +55,222 @@ public final class LayoutTree {
     }
 
     /**
-     * グラフとレイアウト順序からストリームツリーを構築する。
+     * グラフとレイアウト順序からストリームツリーを再帰的に構築する。
+     *
+     * <p>Virtual Root (VR) を導入し、全実ルートを VR の子ストリームとして統一的に処理する。 トランク優先:
+     * ルートからチェーンを最大限延長し、分岐は子ストリームとして再帰的に構築する。
      *
      * @param graph マイグレーショングラフ
      * @param order レイアウト用トポロジカルソート結果
      * @return LayoutTree
      */
     public static LayoutTree build(MigrationGraph graph, LayoutSort.LayoutOrder order) {
-        // nodeId -> which stream it belongs to
-        Map<NodeId, LayoutStream> assignedStream = new HashMap<>();
-        // stream -> mutable child list (built up as children are discovered)
-        Map<LayoutStream, List<LayoutStream>> childrenBuilder = new HashMap<>();
-        // collected non-tree edges
-        List<NonTreeEdge> nonTreeEdges = new ArrayList<>();
+        if (order.nodes().isEmpty()) {
+            return new LayoutTree(new LayoutStream(null, List.of(), List.of()), List.of());
+        }
 
-        // unassigned nodes in topo order
-        List<MigrationNode> remaining = new ArrayList<>(order.nodes());
+        Set<NodeId> assigned = new HashSet<>();
 
-        LayoutStream root = null;
+        // Virtual root 作成
+        MigrationNode virtualRoot = new VirtualNode();
+        assigned.add(virtualRoot.id());
 
-        while (!remaining.isEmpty()) {
-            // pick the first unassigned node that has all parents already assigned,
-            // using min rank (topo order guarantees the first eligible is the min-rank one)
-            MigrationNode startNode = remaining.get(0);
-            remaining.remove(0);
-
-            // determine forkNode: the assigned parent with the highest rank
-            NodeId forkNode = chooseForkParent(startNode.id(), graph, order, assignedStream);
-
-            // collect non-tree edges: parents other than forkNode
-            for (NodeId parentId : graph.getDependencies(startNode.id())) {
-                if (!parentId.equals(forkNode)) {
-                    nonTreeEdges.add(new NonTreeEdge(startNode.id(), parentId));
-                }
-            }
-
-            // build the stream greedily
-            List<MigrationNode> streamNodes = new ArrayList<>();
-            streamNodes.add(startNode);
-
-            MigrationNode tail = startNode;
-            while (true) {
-                // find a dependent of tail that can continue this stream:
-                // it must be unassigned and all its parents must be assigned
-                // (after we tentatively "assign" the current stream nodes)
-                MigrationNode next =
-                        findContinuation(
-                                tail, graph, order, remaining, assignedStream, streamNodes);
-                if (next == null) {
-                    break;
-                }
-                remaining.remove(next);
-
-                // non-tree edges for next's extra parents
-                NodeId continuationFork =
-                        chooseForkParent(next.id(), graph, order, assignedStream, streamNodes);
-                for (NodeId parentId : graph.getDependencies(next.id())) {
-                    if (!parentId.equals(continuationFork) && !parentId.equals(tail.id())) {
-                        nonTreeEdges.add(new NonTreeEdge(next.id(), parentId));
-                    }
-                }
-
-                streamNodes.add(next);
-                tail = next;
-            }
-
-            // create the stream (childStreams filled in later)
-            LayoutStream stream = new LayoutStream(forkNode, streamNodes, List.of());
-            childrenBuilder.put(stream, new ArrayList<>());
-
-            // register assignments
-            for (MigrationNode n : streamNodes) {
-                assignedStream.put(n.id(), stream);
-            }
-
-            // attach to parent stream
-            if (forkNode != null) {
-                LayoutStream parentStream = assignedStream.get(forkNode);
-                if (parentStream != null) {
-                    List<LayoutStream> siblings = childrenBuilder.get(parentStream);
-                    if (siblings != null) {
-                        siblings.add(stream);
-                    }
-                }
-            } else if (root == null) {
-                root = stream;
+        // 全ルート（依存元なし）を VR の子ストリームとして構築
+        List<LayoutStream> rootChildren = new ArrayList<>();
+        for (MigrationNode node : order.nodes()) {
+            if (graph.getDependencies(node.id()).isEmpty() && !assigned.contains(node.id())) {
+                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, assigned));
             }
         }
 
-        if (root == null) {
-            // empty graph
-            root = new LayoutStream(null, List.of(), List.of());
+        // 非ルートだが未割り当てのノード（孤立ノード等）も処理
+        for (MigrationNode node : order.nodes()) {
+            if (!assigned.contains(node.id())) {
+                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, assigned));
+            }
         }
 
-        // rebuild streams with proper childStreams lists
-        root = rebuildWithChildren(root, childrenBuilder);
+        LayoutStream vrStream = new LayoutStream(null, List.of(virtualRoot), rootChildren);
+        List<NonTreeEdge> nonTreeEdges = collectNonTreeEdges(graph, vrStream);
 
-        return new LayoutTree(root, nonTreeEdges);
-    }
-
-    /** 現在のストリーム先頭ノードの "forkNode" を選ぶ。 割り当て済み親のうち最もランクが高い（最後に処理された）ものを返す。 */
-    private static @Nullable NodeId chooseForkParent(
-            NodeId nodeId,
-            MigrationGraph graph,
-            LayoutSort.LayoutOrder order,
-            Map<NodeId, LayoutStream> assignedStream) {
-        return graph.getDependencies(nodeId).stream()
-                .filter(assignedStream::containsKey)
-                .max(Comparator.comparingInt(order::rank))
-                .orElse(null);
-    }
-
-    /** ストリーム延長中の "forkNode" 選択: 割り当て済みノードと現在ストリームのノードも考慮。 */
-    private static @Nullable NodeId chooseForkParent(
-            NodeId nodeId,
-            MigrationGraph graph,
-            LayoutSort.LayoutOrder order,
-            Map<NodeId, LayoutStream> assignedStream,
-            List<MigrationNode> currentStreamNodes) {
-        Set<NodeId> currentIds = new HashSet<>();
-        for (MigrationNode n : currentStreamNodes) {
-            currentIds.add(n.id());
-        }
-        return graph.getDependencies(nodeId).stream()
-                .filter(p -> assignedStream.containsKey(p) || currentIds.contains(p))
-                .max(Comparator.comparingInt(order::rank))
-                .orElse(null);
+        return new LayoutTree(vrStream, nonTreeEdges);
     }
 
     /**
-     * tail の後続ノードのうちストリームを継続できるものを返す。 継続条件: remaining に存在し、全親が assignedStream か currentStreamNodes
-     * に含まれる。
+     * 再帰的にストリームを構築する。
+     *
+     * @param startNode ストリームの先頭ノード
+     * @param forkNode 分岐元ノードID（ルートストリームでは null）
+     * @param graph マイグレーショングラフ
+     * @param order レイアウト順序
+     * @param assigned 割り当て済みノードの集合（副作用で更新される）
+     * @return 構築されたストリーム
      */
-    private static @Nullable MigrationNode findContinuation(
-            MigrationNode tail,
+    private static LayoutStream buildStream(
+            MigrationNode startNode,
+            @Nullable NodeId forkNode,
             MigrationGraph graph,
             LayoutSort.LayoutOrder order,
-            List<MigrationNode> remaining,
-            Map<NodeId, LayoutStream> assignedStream,
-            List<MigrationNode> currentStreamNodes) {
-        Set<NodeId> currentIds = new HashSet<>();
-        for (MigrationNode n : currentStreamNodes) {
-            currentIds.add(n.id());
-        }
-        Set<NodeId> remainingIds = new HashSet<>();
-        for (MigrationNode n : remaining) {
-            remainingIds.add(n.id());
+            Set<NodeId> assigned) {
+
+        List<MigrationNode> nodes = new ArrayList<>();
+        List<LayoutStream> childStreams = new ArrayList<>();
+
+        nodes.add(startNode);
+        assigned.add(startNode.id());
+
+        MigrationNode current = startNode;
+        while (true) {
+            // current の dependents を rank 昇順でソート
+            List<NodeId> dependents =
+                    graph.getDependents(current.id()).stream()
+                            .filter(id -> !assigned.contains(id))
+                            .sorted(Comparator.comparingInt(order::rank))
+                            .toList();
+
+            if (dependents.isEmpty()) {
+                break;
+            }
+
+            // 最小 rank の unassigned dependent = 継続候補
+            NodeId continuationId = dependents.get(0);
+
+            // それ以外 = 子ストリーム（rank 昇順で再帰構築）
+            for (int i = 1; i < dependents.size(); i++) {
+                NodeId branchId = dependents.get(i);
+                if (assigned.contains(branchId)) {
+                    continue;
+                }
+                MigrationNode branchNode = graph.getNode(branchId).orElse(null);
+                if (branchNode == null) {
+                    continue;
+                }
+                LayoutStream childStream =
+                        buildStream(branchNode, current.id(), graph, order, assigned);
+                childStreams.add(childStream);
+            }
+
+            // 子ストリーム構築中に継続候補が割り当て済みになった場合は終了
+            if (assigned.contains(continuationId)) {
+                break;
+            }
+
+            MigrationNode continuationNode = graph.getNode(continuationId).orElse(null);
+            if (continuationNode == null) {
+                break;
+            }
+
+            nodes.add(continuationNode);
+            assigned.add(continuationId);
+            current = continuationNode;
         }
 
-        return graph.getDependents(tail.id()).stream()
-                .filter(remainingIds::contains)
-                .filter(
-                        depId -> {
-                            for (NodeId parentId : graph.getDependencies(depId)) {
-                                if (!assignedStream.containsKey(parentId)
-                                        && !currentIds.contains(parentId)) {
-                                    return false;
-                                }
-                            }
-                            return true;
-                        })
-                .min(Comparator.comparingInt(order::rank))
-                .flatMap(graph::getNode)
-                .orElse(null);
+        return new LayoutStream(forkNode, nodes, childStreams);
     }
 
-    /** childrenBuilder の情報を使って新しい LayoutStream を再帰的に構築する。 */
-    private static LayoutStream rebuildWithChildren(
-            LayoutStream stream, Map<LayoutStream, List<LayoutStream>> childrenBuilder) {
-        List<LayoutStream> children = childrenBuilder.getOrDefault(stream, List.of());
-        List<LayoutStream> rebuiltChildren = new ArrayList<>();
-        for (LayoutStream child : children) {
-            rebuiltChildren.add(rebuildWithChildren(child, childrenBuilder));
+    /**
+     * ツリー構築後にグラフの全エッジをスキャンし、ツリーエッジでないものを非ツリーエッジとして収集する。
+     *
+     * <p>ツリーエッジとは: (1) ストリーム内の連続ノード間のエッジ、(2) forkNode から子ストリーム先頭ノードへのエッジ。
+     */
+    private static List<NonTreeEdge> collectNonTreeEdges(
+            MigrationGraph graph, LayoutStream rootStream) {
+        Set<String> treeEdges = new HashSet<>();
+        collectTreeEdges(rootStream, treeEdges);
+
+        List<NonTreeEdge> nonTreeEdges = new ArrayList<>();
+        collectNonTreeEdgesFromStream(rootStream, graph, treeEdges, nonTreeEdges);
+        return nonTreeEdges;
+    }
+
+    /** ツリーエッジを収集する。 */
+    private static void collectTreeEdges(LayoutStream stream, Set<String> treeEdges) {
+        List<MigrationNode> nodes = stream.nodes();
+        // ストリーム内の連続ノード間エッジ
+        for (int i = 0; i < nodes.size() - 1; i++) {
+            treeEdges.add(edgeKey(nodes.get(i).id(), nodes.get(i + 1).id()));
         }
-        return new LayoutStream(stream.forkNode(), stream.nodes(), rebuiltChildren);
+        // forkNode → 子ストリーム先頭ノードのエッジ
+        for (LayoutStream child : stream.childStreams()) {
+            if (child.forkNode() != null && !child.nodes().isEmpty()) {
+                treeEdges.add(edgeKey(child.forkNode(), child.nodes().get(0).id()));
+            }
+            collectTreeEdges(child, treeEdges);
+        }
+    }
+
+    /** 各ノードの親エッジをスキャンし、ツリーエッジでないものを非ツリーエッジとして追加する。 */
+    private static void collectNonTreeEdgesFromStream(
+            LayoutStream stream,
+            MigrationGraph graph,
+            Set<String> treeEdges,
+            List<NonTreeEdge> nonTreeEdges) {
+        for (MigrationNode node : stream.nodes()) {
+            for (NodeId parentId : graph.getDependencies(node.id())) {
+                if (!treeEdges.contains(edgeKey(parentId, node.id()))) {
+                    nonTreeEdges.add(new NonTreeEdge(node.id(), parentId));
+                }
+            }
+        }
+        for (LayoutStream child : stream.childStreams()) {
+            collectNonTreeEdgesFromStream(child, graph, treeEdges, nonTreeEdges);
+        }
+    }
+
+    private static String edgeKey(NodeId from, NodeId to) {
+        return from.value() + "->" + to.value();
+    }
+
+    /** Virtual Root ノード。レイアウトツリーの内部でのみ使用する。 */
+    static final class VirtualNode implements MigrationNode {
+
+        private static final NodeId VIRTUAL_ROOT_ID = NodeId.of("__virtual_root__");
+        private static final Environment VIRTUAL_ENV =
+                new Environment() {
+                    @Override
+                    public EnvironmentId id() {
+                        return EnvironmentId.of("virtual");
+                    }
+
+                    @Override
+                    public String name() {
+                        return "virtual";
+                    }
+                };
+
+        @Override
+        public NodeId id() {
+            return VIRTUAL_ROOT_ID;
+        }
+
+        @Override
+        public String name() {
+            return "";
+        }
+
+        @Override
+        public @Nullable String description() {
+            return null;
+        }
+
+        @Override
+        public Environment environment() {
+            return VIRTUAL_ENV;
+        }
+
+        @Override
+        public Set<NodeId> dependencies() {
+            return Set.of();
+        }
+
+        @Override
+        public Task upTask() {
+            throw new UnsupportedOperationException("VirtualNode has no tasks");
+        }
+
+        @Override
+        public @Nullable Task downTask() {
+            return null;
+        }
     }
 }

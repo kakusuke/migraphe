@@ -12,10 +12,8 @@ import org.junit.jupiter.api.Test;
 class LayoutTreeTest {
 
     @Test
-    @DisplayName(
-            "単一ノードのグラフで rootStream() がノードを含み、forkNode() が null、childStreams() と nonTreeEdges()"
-                    + " が空である")
-    void shouldBuildSingleNodeTreeWithEmptyForkAndEdges() {
+    @DisplayName("単一ノードのグラフで VR がルートストリーム、実ノードが子ストリームに含まれる")
+    void shouldBuildSingleNodeTreeWithVirtualRoot() {
         MigrationGraph graph = MigrationGraph.create();
         MigrationNode nodeA = node("a").build();
         graph.addNode(nodeA);
@@ -23,18 +21,22 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        assertThat(tree.rootStream()).isNotNull();
-        assertThat(tree.rootStream().nodes()).containsExactly(nodeA);
+        // rootStream は VR
+        assertThat(tree.rootStream().nodes()).hasSize(1);
+        assertThat(tree.rootStream().nodes().get(0)).isInstanceOf(LayoutTree.VirtualNode.class);
         assertThat(tree.rootStream().forkNode()).isNull();
-        assertThat(tree.rootStream().childStreams()).isEmpty();
+
+        // 実ノードは子ストリーム
+        assertThat(tree.rootStream().childStreams()).hasSize(1);
+        LayoutStream realStream = tree.rootStream().childStreams().get(0);
+        assertThat(realStream.nodes()).containsExactly(nodeA);
+        assertThat(realStream.childStreams()).isEmpty();
         assertThat(tree.nonTreeEdges()).isEmpty();
     }
 
     @Test
-    @DisplayName(
-            "A→B→C の線形チェーンで rootStream() が全3ノードを含み、forkNode() が null、childStreams() と"
-                    + " nonTreeEdges() が空である")
-    void shouldBuildLinearChainWithAllNodesInRootStream() {
+    @DisplayName("A→B→C の線形チェーンで VR がルート、実ノードが子ストリームに含まれる")
+    void shouldBuildLinearChainWithVirtualRoot() {
         MigrationGraph graph = MigrationGraph.create();
         MigrationNode nodeA = node("a").build();
         MigrationNode nodeB = node("b").dependencies(NodeId.of("a")).build();
@@ -46,9 +48,11 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        assertThat(tree.rootStream().nodes()).containsExactly(nodeA, nodeB, nodeC);
-        assertThat(tree.rootStream().forkNode()).isNull();
-        assertThat(tree.rootStream().childStreams()).isEmpty();
+        // rootStream は VR、子ストリームに [A, B, C]
+        assertThat(tree.rootStream().childStreams()).hasSize(1);
+        LayoutStream realStream = tree.rootStream().childStreams().get(0);
+        assertThat(realStream.nodes()).containsExactly(nodeA, nodeB, nodeC);
+        assertThat(realStream.childStreams()).isEmpty();
         assertThat(tree.nonTreeEdges()).isEmpty();
     }
 
@@ -68,19 +72,18 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        LayoutStream rootStream = tree.rootStream();
-        LayoutStream childStream = rootStream.childStreams().get(0);
+        // VR の子ストリーム = 実ルートストリーム [A, B]
+        LayoutStream realRoot = tree.rootStream().childStreams().get(0);
+        LayoutStream childStream = realRoot.childStreams().get(0);
 
-        assertThat(tree.streamOf(NodeId.of("a"))).isSameAs(rootStream);
-        assertThat(tree.streamOf(NodeId.of("b"))).isSameAs(rootStream);
+        assertThat(tree.streamOf(NodeId.of("a"))).isSameAs(realRoot);
+        assertThat(tree.streamOf(NodeId.of("b"))).isSameAs(realRoot);
         assertThat(tree.streamOf(NodeId.of("c"))).isSameAs(childStream);
         assertThat(tree.streamOf(NodeId.of("d"))).isSameAs(childStream);
     }
 
     @Test
-    @DisplayName(
-            "ダイヤモンドグラフ A→B, A→C, B→D, C→D で rootStream が [A,B]、childStream が [C,D] を含み、nonTreeEdges"
-                    + " に (D→B) が1件ある")
+    @DisplayName("ダイヤモンドグラフで VR → 実ルート [A,B] → 子 [C,D]、nonTreeEdges に (D→B)")
     void shouldBuildDiamondGraphWithForkStreamAndNonTreeEdge() {
         MigrationGraph graph = MigrationGraph.create();
         MigrationNode nodeA = node("a").build();
@@ -95,12 +98,13 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        LayoutStream rootStream = tree.rootStream();
-        assertThat(rootStream.nodes()).containsExactly(nodeA, nodeB);
-        assertThat(rootStream.forkNode()).isNull();
-        assertThat(rootStream.childStreams()).hasSize(1);
+        // VR の子ストリーム
+        assertThat(tree.rootStream().childStreams()).hasSize(1);
+        LayoutStream realRoot = tree.rootStream().childStreams().get(0);
+        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeB);
+        assertThat(realRoot.childStreams()).hasSize(1);
 
-        LayoutStream childStream = rootStream.childStreams().get(0);
+        LayoutStream childStream = realRoot.childStreams().get(0);
         assertThat(childStream.forkNode()).isEqualTo(NodeId.of("a"));
         assertThat(childStream.nodes()).containsExactly(nodeC, nodeD);
         assertThat(childStream.childStreams()).isEmpty();
@@ -108,5 +112,109 @@ class LayoutTreeTest {
         assertThat(tree.nonTreeEdges()).hasSize(1);
         assertThat(tree.nonTreeEdges().get(0))
                 .isEqualTo(new NonTreeEdge(NodeId.of("d"), NodeId.of("b")));
+    }
+
+    @Test
+    @DisplayName("A→B, A→C, B→C のグラフでストリーム末尾からフォークが発生しない")
+    void shouldNotForkFromLastNodeInStream() {
+        MigrationGraph graph = MigrationGraph.create();
+        MigrationNode nodeA = node("a").build();
+        MigrationNode nodeB = node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeC = node("c").dependencies(NodeId.of("a"), NodeId.of("b")).build();
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        graph.addNode(nodeC);
+
+        LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
+        LayoutTree tree = LayoutTree.build(graph, order);
+
+        LayoutStream realRoot = tree.rootStream().childStreams().get(0);
+        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeB);
+        assertThat(realRoot.childStreams()).hasSize(1);
+
+        LayoutStream childStream = realRoot.childStreams().get(0);
+        assertThat(childStream.forkNode()).isEqualTo(NodeId.of("a"));
+        assertThat(childStream.nodes()).containsExactly(nodeC);
+
+        assertThat(tree.nonTreeEdges()).hasSize(1);
+        assertThat(tree.nonTreeEdges().get(0))
+                .isEqualTo(new NonTreeEdge(NodeId.of("c"), NodeId.of("b")));
+
+        // 末尾フォークが発生しないことを確認（VR は除外）
+        assertNoEndFork(realRoot);
+    }
+
+    @Test
+    @DisplayName(
+            "base→tiers, base→users, tiers→m, users→m, tiers→p, users→p で" + "再帰的構築により末尾フォークが発生しない")
+    void shouldBuildRecursivelyAvoidingEndForkWithSharedDependents() {
+        MigrationGraph graph = MigrationGraph.create();
+        MigrationNode base = node("base").build();
+        MigrationNode tiers = node("tiers").dependencies(NodeId.of("base")).build();
+        MigrationNode users = node("users").dependencies(NodeId.of("base")).build();
+        MigrationNode memberships =
+                node("memberships").dependencies(NodeId.of("tiers"), NodeId.of("users")).build();
+        MigrationNode points =
+                node("points").dependencies(NodeId.of("tiers"), NodeId.of("users")).build();
+        graph.addNode(base);
+        graph.addNode(tiers);
+        graph.addNode(users);
+        graph.addNode(memberships);
+        graph.addNode(points);
+
+        LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
+        LayoutTree tree = LayoutTree.build(graph, order);
+
+        // VR の子ストリームから末尾フォーク検証
+        LayoutStream realRoot = tree.rootStream().childStreams().get(0);
+        assertNoEndFork(realRoot);
+    }
+
+    @Test
+    @DisplayName("マルチルートグラフ A(root), X(root), A→B で全ノードがツリーに含まれ streamOf() が正しく返す")
+    void shouldBuildMultiRootGraphWithVirtualRoot() {
+        MigrationGraph graph = MigrationGraph.create();
+        MigrationNode nodeA = node("a").build();
+        MigrationNode nodeB = node("b").dependencies(NodeId.of("a")).build();
+        MigrationNode nodeX = node("x").build();
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        graph.addNode(nodeX);
+
+        LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
+        LayoutTree tree = LayoutTree.build(graph, order);
+
+        // VR がルートストリーム
+        assertThat(tree.rootStream().nodes().get(0)).isInstanceOf(LayoutTree.VirtualNode.class);
+
+        // 2つの子ストリーム（2つのルート）
+        assertThat(tree.rootStream().childStreams()).hasSize(2);
+
+        // streamOf() で全ノードが見つかる
+        assertThat(tree.streamOf(NodeId.of("a"))).isNotNull();
+        assertThat(tree.streamOf(NodeId.of("b"))).isNotNull();
+        assertThat(tree.streamOf(NodeId.of("x"))).isNotNull();
+
+        // A と B は同じストリーム
+        assertThat(tree.streamOf(NodeId.of("a"))).isSameAs(tree.streamOf(NodeId.of("b")));
+        // X は別のストリーム
+        assertThat(tree.streamOf(NodeId.of("x"))).isNotSameAs(tree.streamOf(NodeId.of("a")));
+
+        assertThat(tree.nonTreeEdges()).isEmpty();
+    }
+
+    /** ストリームの末尾ノードに子ストリームが分岐していないことを再帰的に検証する。 */
+    private void assertNoEndFork(LayoutStream stream) {
+        if (!stream.childStreams().isEmpty()) {
+            MigrationNode lastNode = stream.nodes().get(stream.nodes().size() - 1);
+            for (LayoutStream child : stream.childStreams()) {
+                assertThat(child.forkNode())
+                        .as("ストリーム末尾ノード %s からフォークが発生してはならない", lastNode.id())
+                        .isNotEqualTo(lastNode.id());
+            }
+        }
+        for (LayoutStream child : stream.childStreams()) {
+            assertNoEndFork(child);
+        }
     }
 }

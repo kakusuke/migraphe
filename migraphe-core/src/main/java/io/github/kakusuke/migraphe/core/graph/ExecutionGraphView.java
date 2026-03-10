@@ -42,9 +42,13 @@ public final class ExecutionGraphView {
         this.canvas.addStream(tree.rootStream());
     }
 
-    /** 各ノードの行情報リストを取得する。 */
+    /** 各ノードの行情報リストを取得する（VirtualNode を除外、column を -1 調整）。 */
     public List<NodeLineInfo> lines() {
-        return canvas.toNodeLineInfos();
+        List<NodeLineInfo> raw = canvas.toNodeLineInfos();
+        return raw.stream()
+                .filter(info -> !(info.node() instanceof LayoutTree.VirtualNode))
+                .map(info -> new NodeLineInfo(info.node(), info.column() - 1))
+                .toList();
     }
 
     /**
@@ -54,19 +58,36 @@ public final class ExecutionGraphView {
      * @return 表示行のリスト
      */
     public List<String> renderLines(Function<MigrationNode, String> labelFn) {
-        String rendered = canvas.render(labelFn);
+        // VirtualNode には labelFn を適用しない（副作用の回避）
+        Function<MigrationNode, String> safeLabelFn =
+                n -> n instanceof LayoutTree.VirtualNode ? "" : labelFn.apply(n);
+        String rendered = canvas.render(safeLabelFn);
         if (rendered.isEmpty()) {
             return List.of();
         }
         // render() は末尾に \n を付けるので、最後の空要素を除去
         String trimmed =
                 rendered.endsWith("\n") ? rendered.substring(0, rendered.length() - 1) : rendered;
-        return List.of(trimmed.split("\n", -1));
+        String[] allLines = trimmed.split("\n", -1);
+        // Row 0 は VR ノード行なのでスキップ、残りは col 0（VR 列）を除去
+        return java.util.Arrays.stream(allLines)
+                .skip(1)
+                .map(line -> line.length() > 1 ? line.substring(1) : "")
+                .filter(line -> !line.isEmpty())
+                .toList();
     }
 
     /** グラフ全体をテキスト表現で出力する。 */
     @Override
     public String toString() {
-        return canvas.render(n -> n.id().value() + " - " + n.name());
+        List<String> lines = renderLines(n -> n.id().value() + " - " + n.name());
+        if (lines.isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String line : lines) {
+            sb.append(line).append("\n");
+        }
+        return sb.toString();
     }
 }
