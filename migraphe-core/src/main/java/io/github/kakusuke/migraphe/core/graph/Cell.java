@@ -22,5 +22,9 @@ public sealed interface Cell {
 
     record ForkAndMerge() implements Cell {}
 
+    record CrossPoint() implements Cell {}
+
+    record MergeJunction() implements Cell {}
+
     record Empty() implements Cell {}
 }

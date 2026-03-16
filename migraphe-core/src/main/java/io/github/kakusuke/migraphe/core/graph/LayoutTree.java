@@ -208,7 +208,7 @@ public final class LayoutTree {
         for (MigrationNode node : stream.nodes()) {
             for (NodeId parentId : graph.getDependencies(node.id())) {
                 if (!treeEdges.contains(edgeKey(parentId, node.id()))) {
-                    nonTreeEdges.add(new NonTreeEdge(node.id(), parentId));
+                    nonTreeEdges.add(new NonTreeEdge(parentId, node.id()));
                 }
             }
         }

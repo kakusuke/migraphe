@@ -104,6 +104,32 @@ class ExecutionGraphViewTest {
     }
 
     @Nested
+    @DisplayName("non-tree edge rendering")
+    class NonTreeEdgeTest {
+
+        @Test
+        @DisplayName("ダイヤモンド DAG の非ツリーエッジを ┐ と ┘ で表現する")
+        void shouldRenderNonTreeEdgesInDiamondDag() {
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD =
+                    node("d").name("Node D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            graph.addNode(nodeC);
+            graph.addNode(nodeD);
+            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+
+            String text = view.toString();
+
+            assertThat(text).contains("┐");
+            assertThat(text).contains("┘");
+        }
+    }
+
+    @Nested
     @DisplayName("lines()")
     class LinesTest {
 

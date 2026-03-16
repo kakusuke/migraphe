@@ -24,6 +24,9 @@ public final class ExecutionGraphView {
         LayoutTree tree = LayoutTree.build(graph, order);
         this.canvas = new GridCanvas();
         this.canvas.addStream(tree.rootStream());
+        for (NonTreeEdge edge : tree.nonTreeEdges()) {
+            canvas.addNonTreeEdge(edge.source(), edge.target());
+        }
     }
 
     /**

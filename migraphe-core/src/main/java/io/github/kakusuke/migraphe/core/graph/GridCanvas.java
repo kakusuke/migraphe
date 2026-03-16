@@ -82,7 +82,23 @@ public final class GridCanvas {
                 || cell instanceof Cell.StreamFork
                 || cell instanceof Cell.MergePoint
                 || cell instanceof Cell.ForkToLane
-                || cell instanceof Cell.ForkAndMerge;
+                || cell instanceof Cell.ForkAndMerge
+                || cell instanceof Cell.CrossPoint;
+    }
+
+    private boolean hasUpwardConnection(Cell cell) {
+        return cell instanceof Cell.Vertical
+                || cell instanceof Cell.StreamFork
+                || cell instanceof Cell.CrossPoint
+                || cell instanceof Cell.MergePoint
+                || cell instanceof Cell.LaneToMerge
+                || cell instanceof Cell.MergeJunction;
+    }
+
+    private boolean hasVerticalAt(int row, int col) {
+        Cell above = cellAt(row - 1, col);
+        Cell below = cellAt(row, col);
+        return hasDownwardConnection(above) || hasUpwardConnection(below);
     }
 
     private void setCell(int row, int col, Cell cell) {
@@ -137,6 +153,150 @@ public final class GridCanvas {
         return result;
     }
 
+    /** 非ツリー辺をグリッドに追加する。 */
+    public void addNonTreeEdge(NodeId source, NodeId target) {
+        int[] srcPos = nodePositions.get(source);
+        int[] tgtPos = nodePositions.get(target);
+        if (srcPos == null || tgtPos == null) {
+            return;
+        }
+        int mergeCol = findOrCreateLaneColumn(source, target);
+        drawHorizontalToLane(source, mergeCol);
+        insertOrReuseMergeRow(target, mergeCol);
+        fillLaneVerticals(source, target, mergeCol);
+    }
+
+    @SuppressWarnings("NullAway") // caller guarantees source/target exist in nodePositions
+    private int findOrCreateLaneColumn(NodeId source, NodeId target) {
+        int[] srcPos = nodePositions.get(source);
+        int[] tgtPos = nodePositions.get(target);
+        int startRow = srcPos[0];
+        int startCol = srcPos[1];
+        int endCol = tgtPos[1];
+        int endRow = tgtPos[0];
+
+        // Try to find an existing empty column to reuse (must be right of both source and target)
+        int minCol = Math.max(startCol, endCol) + 1;
+        int colCount = colCount();
+        for (int c = minCol; c < colCount; c++) {
+            boolean canReuse = true;
+            for (int r = startRow; r <= endRow; r++) {
+                if (!(cellAt(r, c) instanceof Cell.Empty)) {
+                    canReuse = false;
+                    break;
+                }
+            }
+            if (canReuse) {
+                setCell(startRow, c, new Cell.ForkToLane());
+                return c;
+            }
+        }
+
+        // No empty column found, append new one
+        int mergeCol = colCount;
+        for (List<Cell> row : grid) {
+            while (row.size() < mergeCol) {
+                row.add(new Cell.Empty());
+            }
+            row.add(new Cell.Empty());
+        }
+        setCell(startRow, mergeCol, new Cell.ForkToLane());
+        return mergeCol;
+    }
+
+    @SuppressWarnings("NullAway") // caller guarantees source exists in nodePositions
+    private void drawHorizontalToLane(NodeId source, int mergeCol) {
+        int[] srcPos = nodePositions.get(source);
+        int startRow = srcPos[0];
+        int startCol = srcPos[1];
+
+        for (int c = startCol + 1; c < mergeCol; c++) {
+            Cell current = cellAt(startRow, c);
+            if (current instanceof Cell.Empty) {
+                setCell(startRow, c, new Cell.Horizontal());
+            } else if (current instanceof Cell.ForkToLane) {
+                setCell(startRow, c, new Cell.ForkAndMerge());
+            } else if (current instanceof Cell.MergePoint) {
+                setCell(startRow, c, new Cell.CrossPoint());
+            } else if (current instanceof Cell.Vertical) {
+                setCell(startRow, c, new Cell.CrossPoint());
+            }
+        }
+    }
+
+    @SuppressWarnings("NullAway") // caller guarantees target exists in nodePositions
+    private void insertOrReuseMergeRow(NodeId target, int mergeCol) {
+        int[] tgtPos = nodePositions.get(target);
+        int endRow = tgtPos[0];
+        int endCol = tgtPos[1];
+
+        // Step 7a: Check if existing merge row can be reused
+        Cell endColCellAbove = cellAt(endRow - 1, endCol);
+        if (endColCellAbove instanceof Cell.StreamFork) {
+            int mergeRowIdx = endRow - 1;
+            List<Cell> existingMergeRow = grid.get(mergeRowIdx);
+            for (int c = endCol + 1; c < mergeCol; c++) {
+                Cell existing = existingMergeRow.get(c);
+                if (existing instanceof Cell.LaneToMerge) {
+                    existingMergeRow.set(c, new Cell.MergeJunction());
+                } else if (existing instanceof Cell.Empty) {
+                    existingMergeRow.set(c, new Cell.Horizontal());
+                } else if (existing instanceof Cell.Vertical) {
+                    existingMergeRow.set(c, new Cell.CrossPoint());
+                }
+            }
+            existingMergeRow.set(mergeCol, new Cell.LaneToMerge());
+            return;
+        }
+
+        // Step 7b: Build merge row and insert at endRow
+        int colCount = colCount();
+        List<Cell> mergeRow = new ArrayList<>();
+        for (int c = 0; c < colCount; c++) {
+            if (c == endCol) {
+                mergeRow.add(new Cell.StreamFork());
+            } else if (c > endCol && c < mergeCol) {
+                if (hasVerticalAt(endRow, c)) {
+                    mergeRow.add(new Cell.CrossPoint());
+                } else {
+                    mergeRow.add(new Cell.Horizontal());
+                }
+            } else if (c == mergeCol) {
+                mergeRow.add(new Cell.LaneToMerge());
+            } else {
+                if (hasVerticalAt(endRow, c)) {
+                    mergeRow.add(new Cell.Vertical());
+                } else {
+                    mergeRow.add(new Cell.Empty());
+                }
+            }
+        }
+        grid.add(endRow, mergeRow);
+
+        // Update nodePositions for all nodes at or below endRow (they shifted down by 1)
+        for (int[] pos : nodePositions.values()) {
+            if (pos[0] >= endRow) {
+                pos[0]++;
+            }
+        }
+    }
+
+    @SuppressWarnings("NullAway") // caller guarantees source/target exist in nodePositions
+    private void fillLaneVerticals(NodeId source, NodeId target, int mergeCol) {
+        int[] srcPos = nodePositions.get(source);
+        int[] tgtPos = nodePositions.get(target);
+        int startRow = srcPos[0];
+        int endRow = tgtPos[0];
+
+        for (int r = startRow + 1; r < endRow; r++) {
+            if (cellAt(r, mergeCol) instanceof Cell.Empty) {
+                setCell(r, mergeCol, new Cell.Vertical());
+            } else if (cellAt(r, mergeCol) instanceof Cell.Horizontal) {
+                setCell(r, mergeCol, new Cell.CrossPoint());
+            }
+        }
+    }
+
     /** グリッドをテキスト表現で返す。 */
     public String render(Function<MigrationNode, String> labelFn) {
         StringBuilder sb = new StringBuilder();
@@ -158,6 +318,8 @@ public final class GridCanvas {
                     case Cell.LaneToMerge ignored -> line.append("┘");
                     case Cell.ForkAndMerge ignored -> line.append("┬");
                     case Cell.Empty ignored -> line.append(" ");
+                    case Cell.CrossPoint ignored -> line.append("│");
+                    case Cell.MergeJunction ignored -> line.append("┴");
                 }
             }
             if (nodeInRow != null) {

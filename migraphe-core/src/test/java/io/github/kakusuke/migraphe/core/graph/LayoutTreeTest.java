@@ -111,7 +111,7 @@ class LayoutTreeTest {
 
         assertThat(tree.nonTreeEdges()).hasSize(1);
         assertThat(tree.nonTreeEdges().get(0))
-                .isEqualTo(new NonTreeEdge(NodeId.of("d"), NodeId.of("b")));
+                .isEqualTo(new NonTreeEdge(NodeId.of("b"), NodeId.of("d")));
     }
 
     @Test
@@ -138,7 +138,7 @@ class LayoutTreeTest {
 
         assertThat(tree.nonTreeEdges()).hasSize(1);
         assertThat(tree.nonTreeEdges().get(0))
-                .isEqualTo(new NonTreeEdge(NodeId.of("c"), NodeId.of("b")));
+                .isEqualTo(new NonTreeEdge(NodeId.of("b"), NodeId.of("c")));
 
         // 末尾フォークが発生しないことを確認（VR は除外）
         assertNoEndFork(realRoot);
