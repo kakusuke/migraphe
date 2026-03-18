@@ -80,16 +80,19 @@ public final class GridCanvas {
     private boolean hasDownwardConnection(Cell cell) {
         return cell instanceof Cell.Vertical
                 || cell instanceof Cell.StreamFork
+                || cell instanceof Cell.DownRight
                 || cell instanceof Cell.MergePoint
                 || cell instanceof Cell.ForkToLane
                 || cell instanceof Cell.ForkAndMerge
-                || cell instanceof Cell.CrossPoint;
+                || cell instanceof Cell.CrossPoint
+                || cell instanceof Cell.CrossMerge;
     }
 
     private boolean hasUpwardConnection(Cell cell) {
         return cell instanceof Cell.Vertical
                 || cell instanceof Cell.StreamFork
                 || cell instanceof Cell.CrossPoint
+                || cell instanceof Cell.CrossMerge
                 || cell instanceof Cell.MergePoint
                 || cell instanceof Cell.LaneToMerge
                 || cell instanceof Cell.MergeJunction;
@@ -178,6 +181,24 @@ public final class GridCanvas {
         // Try to find an existing empty column to reuse (must be right of both source and target)
         int minCol = Math.max(startCol, endCol) + 1;
         int colCount = colCount();
+
+        // Check for existing lane to same target (lane sharing)
+        Cell mergeRowCheck = cellAt(endRow - 1, endCol);
+        if (mergeRowCheck instanceof Cell.StreamFork || mergeRowCheck instanceof Cell.DownRight) {
+            List<Cell> existingMergeRow = grid.get(endRow - 1);
+            for (int c = minCol; c < existingMergeRow.size(); c++) {
+                Cell mergeCell = existingMergeRow.get(c);
+                if (mergeCell instanceof Cell.LaneToMerge
+                        || mergeCell instanceof Cell.MergeJunction) {
+                    Cell atSource = cellAt(startRow, c);
+                    if (atSource instanceof Cell.Vertical || atSource instanceof Cell.CrossPoint) {
+                        setCell(startRow, c, new Cell.MergePoint());
+                        return c;
+                    }
+                }
+            }
+        }
+
         for (int c = minCol; c < colCount; c++) {
             boolean canReuse = true;
             for (int r = startRow; r <= endRow; r++) {
@@ -217,7 +238,7 @@ public final class GridCanvas {
             } else if (current instanceof Cell.ForkToLane) {
                 setCell(startRow, c, new Cell.ForkAndMerge());
             } else if (current instanceof Cell.MergePoint) {
-                setCell(startRow, c, new Cell.CrossPoint());
+                setCell(startRow, c, new Cell.CrossMerge());
             } else if (current instanceof Cell.Vertical) {
                 setCell(startRow, c, new Cell.CrossPoint());
             }
@@ -254,7 +275,12 @@ public final class GridCanvas {
         List<Cell> mergeRow = new ArrayList<>();
         for (int c = 0; c < colCount; c++) {
             if (c == endCol) {
-                mergeRow.add(new Cell.StreamFork());
+                Cell above = cellAt(endRow - 1, c);
+                if (hasDownwardConnection(above)) {
+                    mergeRow.add(new Cell.StreamFork());
+                } else {
+                    mergeRow.add(new Cell.DownRight());
+                }
             } else if (c > endCol && c < mergeCol) {
                 if (hasVerticalAt(endRow, c)) {
                     mergeRow.add(new Cell.CrossPoint());
@@ -289,9 +315,10 @@ public final class GridCanvas {
         int endRow = tgtPos[0];
 
         for (int r = startRow + 1; r < endRow; r++) {
-            if (cellAt(r, mergeCol) instanceof Cell.Empty) {
+            Cell existing = cellAt(r, mergeCol);
+            if (existing instanceof Cell.Empty) {
                 setCell(r, mergeCol, new Cell.Vertical());
-            } else if (cellAt(r, mergeCol) instanceof Cell.Horizontal) {
+            } else if (existing instanceof Cell.Horizontal) {
                 setCell(r, mergeCol, new Cell.CrossPoint());
             }
         }
@@ -311,6 +338,7 @@ public final class GridCanvas {
                     }
                     case Cell.Vertical ignored -> line.append("│");
                     case Cell.StreamFork ignored -> line.append("├");
+                    case Cell.DownRight ignored -> line.append("┌");
                     case Cell.Fork ignored -> line.append("└");
                     case Cell.Horizontal ignored -> line.append("─");
                     case Cell.ForkToLane ignored -> line.append("┐");
@@ -320,6 +348,7 @@ public final class GridCanvas {
                     case Cell.Empty ignored -> line.append(" ");
                     case Cell.CrossPoint ignored -> line.append("│");
                     case Cell.MergeJunction ignored -> line.append("┴");
+                    case Cell.CrossMerge ignored -> line.append("┼");
                 }
             }
             if (nodeInRow != null) {
