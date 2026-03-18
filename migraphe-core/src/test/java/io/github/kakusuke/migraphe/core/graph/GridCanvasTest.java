@@ -290,6 +290,42 @@ class GridCanvasTest {
         }
 
         @Test
+        @DisplayName("DownRight マージ行がある target への2本目の非ツリー辺はマージ行を再利用する")
+        void shouldReuseMergeRowWhenExistingMergeRowHasDownRight() {
+            MigrationNode nodeA = node("a").build();
+            MigrationNode nodeB = node("b").build();
+            MigrationNode nodeC = node("c").build();
+            MigrationNode nodeD = node("d").build();
+            MigrationNode nodeE = node("e").build();
+            MigrationNode nodeF = node("f").build();
+            LayoutStream childC = new LayoutStream(NodeId.of("a"), List.of(nodeC), List.of());
+            LayoutStream childE = new LayoutStream(NodeId.of("a"), List.of(nodeE), List.of());
+            LayoutStream childD = new LayoutStream(NodeId.of("b"), List.of(nodeD), List.of());
+            LayoutStream rootStream =
+                    new LayoutStream(
+                            null, List.of(nodeA, nodeB, nodeF), List.of(childC, childE, childD));
+
+            GridCanvas canvas = new GridCanvas();
+            canvas.addStream(rootStream);
+            canvas.addNonTreeEdge(NodeId.of("c"), NodeId.of("d"));
+            canvas.addNonTreeEdge(NodeId.of("e"), NodeId.of("d"));
+
+            assertThat(canvas.render(n -> n.id().value()))
+                    .isEqualTo(
+                            """
+                            ●   a
+                            ├●┐ c
+                            ├●┤ e
+                            │ │
+                            ● │ b
+                            │┌┘
+                            ├●  d
+                            │
+                            ●   f
+                            """);
+        }
+
+        @Test
         @DisplayName("水平線が MergePoint を横断すると CrossMerge ┼ を描画する")
         void shouldRenderCrossMergeWhenHorizontalCrossesMergePoint() {
             MigrationNode nodeA = node("a").build();

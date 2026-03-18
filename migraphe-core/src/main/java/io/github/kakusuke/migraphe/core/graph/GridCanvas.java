@@ -253,7 +253,8 @@ public final class GridCanvas {
 
         // Step 7a: Check if existing merge row can be reused
         Cell endColCellAbove = cellAt(endRow - 1, endCol);
-        if (endColCellAbove instanceof Cell.StreamFork) {
+        if (endColCellAbove instanceof Cell.StreamFork
+                || endColCellAbove instanceof Cell.DownRight) {
             int mergeRowIdx = endRow - 1;
             List<Cell> existingMergeRow = grid.get(mergeRowIdx);
             for (int c = endCol + 1; c < mergeCol; c++) {
