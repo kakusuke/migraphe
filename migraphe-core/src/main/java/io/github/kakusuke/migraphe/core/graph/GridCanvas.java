@@ -7,17 +7,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import org.jspecify.annotations.Nullable;
 
 /** ストリームツリーをグリッドセルに配置するキャンバス。 */
 public final class GridCanvas {
 
-    private final List<List<Cell>> grid = new ArrayList<>();
-    private final Map<NodeId, int[]> nodePositions = new HashMap<>();
+    private final Grid internalGrid = new Grid();
 
     /** ストリームをグリッドに追加する。 */
     public void addStream(LayoutStream stream) {
-        int firstRow = appendRow();
-        fillNewRow(firstRow);
+        int firstRow = internalGrid.insertRow(internalGrid.rowCount());
         drawStream(stream, 0, firstRow);
     }
 
@@ -34,122 +33,54 @@ public final class GridCanvas {
             MigrationNode node = nodes.get(i);
 
             if (i == 0) {
-                setCell(currentRow, col, new Cell.Node(node));
+                internalGrid.setCell(currentRow, col, new Cell.Node(node));
             } else {
-                currentRow = appendRow();
-                fillNewRow(currentRow);
-                setCell(currentRow, col, new Cell.Vertical());
+                currentRow = internalGrid.insertRow(internalGrid.rowCount());
+                internalGrid.setCell(currentRow, col, new Cell.Vertical());
 
-                currentRow = appendRow();
-                fillNewRow(currentRow);
-                setCell(currentRow, col, new Cell.Node(node));
+                currentRow = internalGrid.insertRow(internalGrid.rowCount());
+                internalGrid.setCell(currentRow, col, new Cell.Node(node));
             }
-
-            nodePositions.put(node.id(), new int[] {currentRow, col});
 
             List<LayoutStream> children = childMap.get(node.id());
             if (children != null) {
                 for (LayoutStream child : children) {
-                    int forkRow = appendRow();
-                    fillNewRow(forkRow);
-                    setCell(forkRow, col, new Cell.StreamFork());
+                    int forkRow = internalGrid.insertRow(internalGrid.rowCount());
+                    internalGrid.setCell(forkRow, col, new Cell.StreamFork());
                     drawStream(child, col + 1, forkRow);
                 }
             }
         }
     }
 
-    private int appendRow() {
-        grid.add(new ArrayList<>());
-        return grid.size() - 1;
-    }
-
-    private void fillNewRow(int row) {
-        if (row == 0) {
-            return;
-        }
-        int maxCol = colCount();
-        for (int c = 0; c < maxCol; c++) {
-            Cell above = cellAt(row - 1, c);
-            if (hasDownwardConnection(above)) {
-                setCell(row, c, new Cell.Vertical());
-            }
-        }
-    }
-
-    private boolean hasDownwardConnection(Cell cell) {
-        return cell instanceof Cell.Vertical
-                || cell instanceof Cell.StreamFork
-                || cell instanceof Cell.DownRight
-                || cell instanceof Cell.MergePoint
-                || cell instanceof Cell.ForkToLane
-                || cell instanceof Cell.ForkAndMerge
-                || cell instanceof Cell.CrossPoint
-                || cell instanceof Cell.CrossMerge;
-    }
-
-    private boolean hasUpwardConnection(Cell cell) {
-        return cell instanceof Cell.Vertical
-                || cell instanceof Cell.StreamFork
-                || cell instanceof Cell.CrossPoint
-                || cell instanceof Cell.CrossMerge
-                || cell instanceof Cell.MergePoint
-                || cell instanceof Cell.LaneToMerge
-                || cell instanceof Cell.MergeJunction;
-    }
-
-    private boolean hasVerticalAt(int row, int col) {
-        Cell above = cellAt(row - 1, col);
-        Cell below = cellAt(row, col);
-        return hasDownwardConnection(above) || hasUpwardConnection(below);
-    }
-
-    private void setCell(int row, int col, Cell cell) {
-        while (grid.size() <= row) {
-            grid.add(new ArrayList<>());
-        }
-        List<Cell> rowList = grid.get(row);
-        while (rowList.size() <= col) {
-            rowList.add(new Cell.Empty());
-        }
-        rowList.set(col, cell);
+    /** 指定位置のセルを設定する。 */
+    public void setCell(int row, int col, Cell cell) {
+        internalGrid.setCell(row, col, cell);
     }
 
     /** 指定位置のセルを返す。範囲外は Cell.Empty を返す。 */
     public Cell cellAt(int row, int col) {
-        if (row < 0 || row >= grid.size()) {
-            return new Cell.Empty();
-        }
-        List<Cell> rowList = grid.get(row);
-        if (col < 0 || col >= rowList.size()) {
-            return new Cell.Empty();
-        }
-        return rowList.get(col);
+        return internalGrid.cellAt(row, col);
     }
 
     /** グリッドの行数を返す。 */
     public int rowCount() {
-        return grid.size();
+        return internalGrid.rowCount();
     }
 
     /** グリッドの列数（最大列数）を返す。 */
     public int colCount() {
-        int max = 0;
-        for (List<Cell> row : grid) {
-            if (row.size() > max) {
-                max = row.size();
-            }
-        }
-        return max;
+        return internalGrid.colCount();
     }
 
     /** ノード位置情報リストを返す。 */
     public List<NodeLineInfo> toNodeLineInfos() {
         List<NodeLineInfo> result = new ArrayList<>();
-        for (List<Cell> row : grid) {
-            for (int col = 0; col < row.size(); col++) {
-                if (row.get(col) instanceof Cell.Node nodeCell) {
-                    result.add(new NodeLineInfo(nodeCell.node(), col));
+        for (int r = 0; r < internalGrid.rowCount(); r++) {
+            for (int c = 0; c < internalGrid.colCount(); c++) {
+                Cell cell = internalGrid.cellAt(r, c);
+                if (cell instanceof Cell.Node nodeCell) {
+                    result.add(new NodeLineInfo(nodeCell.node(), c));
                 }
             }
         }
@@ -158,8 +89,8 @@ public final class GridCanvas {
 
     /** 非ツリー辺をグリッドに追加する。 */
     public void addNonTreeEdge(NodeId source, NodeId target) {
-        int[] srcPos = nodePositions.get(source);
-        int[] tgtPos = nodePositions.get(target);
+        int[] srcPos = internalGrid.nodePosition(source);
+        int[] tgtPos = internalGrid.nodePosition(target);
         if (srcPos == null || tgtPos == null) {
             return;
         }
@@ -171,8 +102,8 @@ public final class GridCanvas {
 
     @SuppressWarnings("NullAway") // caller guarantees source/target exist in nodePositions
     private int findOrCreateLaneColumn(NodeId source, NodeId target) {
-        int[] srcPos = nodePositions.get(source);
-        int[] tgtPos = nodePositions.get(target);
+        int[] srcPos = internalGrid.nodePosition(source);
+        int[] tgtPos = internalGrid.nodePosition(target);
         int startRow = srcPos[0];
         int startCol = srcPos[1];
         int endCol = tgtPos[1];
@@ -185,9 +116,8 @@ public final class GridCanvas {
         // Check for existing lane to same target (lane sharing)
         Cell mergeRowCheck = cellAt(endRow - 1, endCol);
         if (mergeRowCheck instanceof Cell.StreamFork || mergeRowCheck instanceof Cell.DownRight) {
-            List<Cell> existingMergeRow = grid.get(endRow - 1);
-            for (int c = minCol; c < existingMergeRow.size(); c++) {
-                Cell mergeCell = existingMergeRow.get(c);
+            for (int c = minCol; c < colCount(); c++) {
+                Cell mergeCell = cellAt(endRow - 1, c);
                 if (mergeCell instanceof Cell.LaneToMerge
                         || mergeCell instanceof Cell.MergeJunction) {
                     Cell atSource = cellAt(startRow, c);
@@ -214,20 +144,14 @@ public final class GridCanvas {
         }
 
         // No empty column found, append new one
-        int mergeCol = colCount;
-        for (List<Cell> row : grid) {
-            while (row.size() < mergeCol) {
-                row.add(new Cell.Empty());
-            }
-            row.add(new Cell.Empty());
-        }
+        int mergeCol = internalGrid.insertColumn(colCount);
         setCell(startRow, mergeCol, new Cell.ForkToLane());
         return mergeCol;
     }
 
     @SuppressWarnings("NullAway") // caller guarantees source exists in nodePositions
     private void drawHorizontalToLane(NodeId source, int mergeCol) {
-        int[] srcPos = nodePositions.get(source);
+        int[] srcPos = internalGrid.nodePosition(source);
         int startRow = srcPos[0];
         int startCol = srcPos[1];
 
@@ -247,7 +171,7 @@ public final class GridCanvas {
 
     @SuppressWarnings("NullAway") // caller guarantees target exists in nodePositions
     private void insertOrReuseMergeRow(NodeId target, int mergeCol) {
-        int[] tgtPos = nodePositions.get(target);
+        int[] tgtPos = internalGrid.nodePosition(target);
         int endRow = tgtPos[0];
         int endCol = tgtPos[1];
 
@@ -256,62 +180,45 @@ public final class GridCanvas {
         if (endColCellAbove instanceof Cell.StreamFork
                 || endColCellAbove instanceof Cell.DownRight) {
             int mergeRowIdx = endRow - 1;
-            List<Cell> existingMergeRow = grid.get(mergeRowIdx);
             for (int c = endCol + 1; c < mergeCol; c++) {
-                Cell existing = existingMergeRow.get(c);
+                Cell existing = cellAt(mergeRowIdx, c);
                 if (existing instanceof Cell.LaneToMerge) {
-                    existingMergeRow.set(c, new Cell.MergeJunction());
+                    setCell(mergeRowIdx, c, new Cell.MergeJunction());
                 } else if (existing instanceof Cell.Empty) {
-                    existingMergeRow.set(c, new Cell.Horizontal());
+                    setCell(mergeRowIdx, c, new Cell.Horizontal());
                 } else if (existing instanceof Cell.Vertical) {
-                    existingMergeRow.set(c, new Cell.CrossPoint());
+                    setCell(mergeRowIdx, c, new Cell.CrossPoint());
                 }
             }
-            existingMergeRow.set(mergeCol, new Cell.LaneToMerge());
+            setCell(mergeRowIdx, mergeCol, new Cell.LaneToMerge());
             return;
         }
 
-        // Step 7b: Build merge row and insert at endRow
-        int colCount = colCount();
-        List<Cell> mergeRow = new ArrayList<>();
-        for (int c = 0; c < colCount; c++) {
-            if (c == endCol) {
-                Cell above = cellAt(endRow - 1, c);
-                if (hasDownwardConnection(above)) {
-                    mergeRow.add(new Cell.StreamFork());
-                } else {
-                    mergeRow.add(new Cell.DownRight());
-                }
-            } else if (c > endCol && c < mergeCol) {
-                if (hasVerticalAt(endRow, c)) {
-                    mergeRow.add(new Cell.CrossPoint());
-                } else {
-                    mergeRow.add(new Cell.Horizontal());
-                }
-            } else if (c == mergeCol) {
-                mergeRow.add(new Cell.LaneToMerge());
-            } else {
-                if (hasVerticalAt(endRow, c)) {
-                    mergeRow.add(new Cell.Vertical());
-                } else {
-                    mergeRow.add(new Cell.Empty());
-                }
-            }
-        }
-        grid.add(endRow, mergeRow);
+        // Step 7b: Insert merge row using Grid.insertRow (auto-fills verticals)
+        internalGrid.insertRow(endRow);
 
-        // Update nodePositions for all nodes at or below endRow (they shifted down by 1)
-        for (int[] pos : nodePositions.values()) {
-            if (pos[0] >= endRow) {
-                pos[0]++;
+        // Overlay merge-specific cells
+        Cell above = cellAt(endRow - 1, endCol);
+        if (above.connectsDown()) {
+            setCell(endRow, endCol, new Cell.StreamFork());
+        } else {
+            setCell(endRow, endCol, new Cell.DownRight());
+        }
+        for (int c = endCol + 1; c < mergeCol; c++) {
+            Cell existing = cellAt(endRow, c);
+            if (existing instanceof Cell.Vertical) {
+                setCell(endRow, c, new Cell.CrossPoint());
+            } else {
+                setCell(endRow, c, new Cell.Horizontal());
             }
         }
+        setCell(endRow, mergeCol, new Cell.LaneToMerge());
     }
 
     @SuppressWarnings("NullAway") // caller guarantees source/target exist in nodePositions
     private void fillLaneVerticals(NodeId source, NodeId target, int mergeCol) {
-        int[] srcPos = nodePositions.get(source);
-        int[] tgtPos = nodePositions.get(target);
+        int[] srcPos = internalGrid.nodePosition(source);
+        int[] tgtPos = internalGrid.nodePosition(target);
         int startRow = srcPos[0];
         int endRow = tgtPos[0];
 
@@ -328,7 +235,8 @@ public final class GridCanvas {
     /** グリッドをテキスト表現で返す。 */
     public String render(Function<MigrationNode, String> labelFn) {
         StringBuilder sb = new StringBuilder();
-        for (List<Cell> row : grid) {
+        for (int r = 0; r < internalGrid.rowCount(); r++) {
+            List<Cell> row = internalGrid.rows().get(r);
             StringBuilder line = new StringBuilder();
             MigrationNode nodeInRow = null;
             for (Cell cell : row) {
@@ -362,5 +270,103 @@ public final class GridCanvas {
             sb.append(line).append("\n");
         }
         return sb.toString();
+    }
+
+    static final class Grid {
+        private final List<List<Cell>> rows = new ArrayList<>();
+        private final Map<NodeId, int[]> nodePositions = new HashMap<>();
+
+        List<List<Cell>> rows() {
+            return rows;
+        }
+
+        int insertRow(int index) {
+            int cols = colCount();
+            List<Cell> newRow = new ArrayList<>();
+            int lastNonEmpty = -1;
+            for (int c = 0; c < cols; c++) {
+                Cell above = (index > 0) ? cellAt(index - 1, c) : new Cell.Empty();
+                Cell below = (index < rows.size()) ? cellAt(index, c) : new Cell.Empty();
+                if (above.connectsDown() || below.connectsUp()) {
+                    newRow.add(new Cell.Vertical());
+                    lastNonEmpty = c;
+                } else {
+                    newRow.add(new Cell.Empty());
+                }
+            }
+            // Trim trailing Empty cells
+            if (lastNonEmpty + 1 < newRow.size()) {
+                newRow.subList(lastNonEmpty + 1, newRow.size()).clear();
+            }
+            rows.add(index, newRow);
+            for (int[] pos : nodePositions.values()) {
+                if (pos[0] >= index) {
+                    pos[0]++;
+                }
+            }
+            return index;
+        }
+
+        int insertColumn(int index) {
+            for (int r = 0; r < rows.size(); r++) {
+                Cell left = (index > 0) ? cellAt(r, index - 1) : new Cell.Empty();
+                Cell right = cellAt(r, index);
+                Cell newCell =
+                        (left.connectsRight() || right.connectsLeft())
+                                ? new Cell.Horizontal()
+                                : new Cell.Empty();
+                List<Cell> rowList = rows.get(r);
+                while (rowList.size() < index) {
+                    rowList.add(new Cell.Empty());
+                }
+                rowList.add(index, newCell);
+            }
+            for (int[] pos : nodePositions.values()) {
+                if (pos[1] >= index) {
+                    pos[1]++;
+                }
+            }
+            return index;
+        }
+
+        void setCell(int row, int col, Cell cell) {
+            List<Cell> rowList = rows.get(row);
+            while (rowList.size() <= col) {
+                rowList.add(new Cell.Empty());
+            }
+            rowList.set(col, cell);
+            if (cell instanceof Cell.Node n) {
+                nodePositions.put(n.node().id(), new int[] {row, col});
+            }
+        }
+
+        Cell cellAt(int row, int col) {
+            if (row < 0 || row >= rows.size()) {
+                return new Cell.Empty();
+            }
+            List<Cell> rowList = rows.get(row);
+            if (col < 0 || col >= rowList.size()) {
+                return new Cell.Empty();
+            }
+            return rowList.get(col);
+        }
+
+        int rowCount() {
+            return rows.size();
+        }
+
+        int colCount() {
+            int max = 0;
+            for (List<Cell> row : rows) {
+                if (row.size() > max) {
+                    max = row.size();
+                }
+            }
+            return max;
+        }
+
+        int @Nullable [] nodePosition(NodeId id) {
+            return nodePositions.get(id);
+        }
     }
 }

@@ -402,4 +402,132 @@ class GridCanvasTest {
                     .hasValueSatisfying(info -> assertThat(info.column()).isEqualTo(1));
         }
     }
+
+    @Nested
+    @DisplayName("Grid")
+    class GridTest {
+
+        @Test
+        @DisplayName("新規グリッドは rowCount=0, colCount=0 である")
+        void newGridHasZeroRowsAndColumns() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+
+            assertThat(grid.rowCount()).isEqualTo(0);
+            assertThat(grid.colCount()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("空グリッドに insertRow(0) すると rowCount=1 になる")
+        void insertRowAtEndOfEmptyGridCreatesOneRow() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+
+            grid.insertRow(0);
+
+            assertThat(grid.rowCount()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("setCell で配置した Cell.Vertical を cellAt で取得できる")
+        void setCellAndCellAtReturnStoredCell() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+            grid.insertRow(0);
+
+            grid.setCell(0, 0, new Cell.Vertical());
+
+            assertThat(grid.cellAt(0, 0)).isInstanceOf(Cell.Vertical.class);
+        }
+
+        @Test
+        @DisplayName("範囲外の cellAt は Cell.Empty を返す")
+        void cellAtOutOfBoundsReturnsEmpty() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+
+            assertThat(grid.cellAt(5, 5)).isInstanceOf(Cell.Empty.class);
+        }
+
+        @Test
+        @DisplayName("Cell.Node を setCell すると nodePosition でその行列を取得できる")
+        void setCellWithNodeRegistersNodePosition() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+            grid.insertRow(0);
+            MigrationNode nodeX = node("x").build();
+
+            grid.setCell(0, 0, new Cell.Node(nodeX));
+
+            int[] pos = grid.nodePosition(NodeId.of("x"));
+            assertThat(pos[0]).isEqualTo(0);
+            assertThat(pos[1]).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("上下が縦線で繋がる列に insertRow すると新行にも Vertical が自動補完される")
+        void insertRowAutoFillsVerticalWhenSurroundingCellsConnect() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+            grid.insertRow(0);
+            grid.setCell(0, 0, new Cell.Vertical());
+            grid.insertRow(1);
+            grid.setCell(1, 0, new Cell.Vertical());
+
+            grid.insertRow(1);
+
+            assertThat(grid.cellAt(1, 0)).isInstanceOf(Cell.Vertical.class);
+        }
+
+        @Test
+        @DisplayName("挿入位置以下にあるノードの行番号は insertRow 後に 1 増える")
+        void insertRowShiftsNodePositionsBelow() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+            grid.insertRow(0);
+            grid.insertRow(1);
+            MigrationNode nodeX = node("x").build();
+            grid.setCell(1, 0, new Cell.Node(nodeX));
+
+            grid.insertRow(1);
+
+            int[] pos = grid.nodePosition(NodeId.of("x"));
+            assertThat(pos[0]).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("左右が水平線で繋がる列に insertColumn すると新列にも Horizontal が自動補完される")
+        void insertColumnAutoFillsHorizontalWhenSurroundingCellsConnect() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+            grid.insertRow(0);
+            grid.setCell(0, 0, new Cell.Horizontal());
+            grid.setCell(0, 1, new Cell.Horizontal());
+
+            grid.insertColumn(1);
+
+            assertThat(grid.cellAt(0, 1)).isInstanceOf(Cell.Horizontal.class);
+            assertThat(grid.colCount()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("挿入位置以降にあるノードの列番号は insertColumn 後に 1 増える")
+        void insertColumnShiftsNodePositionsToTheRight() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+            grid.insertRow(0);
+            grid.insertRow(1);
+            MigrationNode nodeX = node("x").build();
+            grid.setCell(0, 1, new Cell.Node(nodeX));
+
+            grid.insertColumn(1);
+
+            int[] pos = grid.nodePosition(NodeId.of("x"));
+            assertThat(pos[1]).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("左右が水平接続しない場合は insertColumn で新列は Empty になる")
+        void insertColumnFillsEmptyWhenNoHorizontalConnection() {
+            GridCanvas.Grid grid = new GridCanvas.Grid();
+            grid.insertRow(0);
+            grid.setCell(0, 0, new Cell.Vertical());
+            grid.setCell(0, 1, new Cell.Vertical());
+
+            grid.insertColumn(1);
+
+            assertThat(grid.cellAt(0, 1)).isInstanceOf(Cell.Empty.class);
+        }
+    }
 }
