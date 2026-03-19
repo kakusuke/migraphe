@@ -9,7 +9,7 @@ dependencyResolutionManagement {
             version("spotless", "6.25.0")
             version("googleJavaFormat", "1.19.2")
             version("postgresql", "42.7.1")
-            version("testcontainers", "1.19.3")
+            version("testcontainers", "2.0.3")
             version("jackson", "2.18.2")
             version("picocli", "4.7.7")
             version("microprofile-config", "3.1")
@@ -33,9 +33,9 @@ dependencyResolutionManagement {
             library("postgresql", "org.postgresql", "postgresql").versionRef("postgresql")
             library("testcontainers-bom", "org.testcontainers", "testcontainers-bom")
                 .versionRef("testcontainers")
-            library("testcontainers-postgresql", "org.testcontainers", "postgresql")
+            library("testcontainers-postgresql", "org.testcontainers", "testcontainers-postgresql")
                 .withoutVersion()
-            library("testcontainers-junit-jupiter", "org.testcontainers", "junit-jupiter")
+            library("testcontainers-junit-jupiter", "org.testcontainers", "testcontainers-junit-jupiter")
                 .withoutVersion()
 
             // CLI Dependencies
