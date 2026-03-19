@@ -27,6 +27,7 @@ public final class ExecutionGraphView {
         for (NonTreeEdge edge : tree.nonTreeEdges()) {
             canvas.addNonTreeEdge(edge.source(), edge.target());
         }
+        this.canvas.removeRedundantRows();
     }
 
     /**
@@ -43,6 +44,7 @@ public final class ExecutionGraphView {
         LayoutTree tree = LayoutTree.build(subGraph, order);
         this.canvas = new GridCanvas();
         this.canvas.addStream(tree.rootStream());
+        this.canvas.removeRedundantRows();
     }
 
     /** 各ノードの行情報リストを取得する（VirtualNode を除外、column を -1 調整）。 */

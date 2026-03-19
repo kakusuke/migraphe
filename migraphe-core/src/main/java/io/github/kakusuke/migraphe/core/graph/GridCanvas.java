@@ -236,6 +236,11 @@ public final class GridCanvas {
         }
     }
 
+    /** 冗長な行（Vertical/Empty のみで、ノード間ブリッジでない行）を除去する。 */
+    public void removeRedundantRows() {
+        internalGrid.removeRedundantRows();
+    }
+
     /** グリッドをテキスト表現で返す。 */
     public String render(Function<MigrationNode, String> labelFn) {
         StringBuilder sb = new StringBuilder();
@@ -371,6 +376,35 @@ public final class GridCanvas {
 
         int @Nullable [] nodePosition(NodeId id) {
             return nodePositions.get(id);
+        }
+
+        void removeRedundantRows() {
+            for (int r = rows.size() - 1; r >= 0; r--) {
+                if (isRedundantRow(r)) {
+                    rows.remove(r);
+                    for (int[] pos : nodePositions.values()) {
+                        if (pos[0] > r) {
+                            pos[0]--;
+                        }
+                    }
+                }
+            }
+        }
+
+        private boolean isRedundantRow(int r) {
+            List<Cell> row = rows.get(r);
+            boolean hasNodeBridge = false;
+            for (int c = 0; c < row.size(); c++) {
+                Cell cell = row.get(c);
+                if (!(cell instanceof Cell.Vertical) && !(cell instanceof Cell.Empty)) {
+                    return false;
+                }
+                if (cellAt(r - 1, c) instanceof Cell.Node
+                        && cellAt(r + 1, c) instanceof Cell.Node) {
+                    hasNodeBridge = true;
+                }
+            }
+            return !hasNodeBridge;
         }
     }
 }

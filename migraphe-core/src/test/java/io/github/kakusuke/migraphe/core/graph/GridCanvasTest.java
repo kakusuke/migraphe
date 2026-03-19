@@ -67,12 +67,13 @@ class GridCanvasTest {
             GridCanvas canvas = new GridCanvas();
             canvas.addStream(rootStream);
 
+            canvas.removeRedundantRows();
+
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
                             """
                             ● a
                             ├● c
-                            │
                             ● b
                             """);
         }
@@ -92,6 +93,8 @@ class GridCanvasTest {
             GridCanvas canvas = new GridCanvas();
             canvas.addStream(rootStream);
 
+            canvas.removeRedundantRows();
+
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
                             """
@@ -99,7 +102,6 @@ class GridCanvasTest {
                             ├● c
                             ││
                             │● d
-                            │
                             ● b
                             """);
         }
@@ -120,15 +122,15 @@ class GridCanvasTest {
             GridCanvas canvas = new GridCanvas();
             canvas.addStream(rootStream);
 
+            canvas.removeRedundantRows();
+
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
                             """
                             ● a
                             ├● d
-                            │
                             ● b
                             ├● e
-                            │
                             ● c
                             """);
         }
@@ -152,15 +154,14 @@ class GridCanvasTest {
             GridCanvas canvas = new GridCanvas();
             canvas.addStream(rootStream);
             canvas.addNonTreeEdge(NodeId.of("b"), NodeId.of("d"));
+            canvas.removeRedundantRows();
 
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
                             """
                             ●   a
                             ├●┐ b
-                            │ │
                             ● │ c
-                            │ │
                             ├─┘
                             ●   d
                             """);
@@ -182,6 +183,7 @@ class GridCanvasTest {
             canvas.addStream(rootStream);
             canvas.addNonTreeEdge(NodeId.of("b"), NodeId.of("d"));
             canvas.addNonTreeEdge(NodeId.of("c"), NodeId.of("d"));
+            canvas.removeRedundantRows();
 
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
@@ -189,7 +191,6 @@ class GridCanvasTest {
                             ●   a
                             ├●┐ b
                             ├●┤ c
-                            │ │
                             ├─┘
                             ●   d
                             """);
@@ -210,6 +211,7 @@ class GridCanvasTest {
             GridCanvas canvas = new GridCanvas();
             canvas.addStream(rootStream);
             canvas.addNonTreeEdge(NodeId.of("c"), NodeId.of("d"));
+            canvas.removeRedundantRows();
 
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
@@ -218,7 +220,6 @@ class GridCanvasTest {
                             ├●  b
                             ││
                             │●┐ c
-                            │ │
                             ├─┘
                             ●   d
                             """);
@@ -243,19 +244,18 @@ class GridCanvasTest {
             canvas.addStream(rootStream);
             canvas.addNonTreeEdge(NodeId.of("e"), NodeId.of("b"));
             canvas.addNonTreeEdge(NodeId.of("f"), NodeId.of("d"));
+            canvas.removeRedundantRows();
 
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
                             """
                             ●   a
                             ├●┐ e
-                            │ │
                             ├─┘
                             ●   b
                             │
                             ●   c
                             ├●┐ f
-                            │ │
                             ├─┘
                             ●   d
                             """);
@@ -276,13 +276,13 @@ class GridCanvasTest {
             GridCanvas canvas = new GridCanvas();
             canvas.addStream(rootStream);
             canvas.addNonTreeEdge(NodeId.of("c"), NodeId.of("d"));
+            canvas.removeRedundantRows();
 
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
                             """
                             ●   a
                             ├●┐ c
-                            │ │
                             ● │ b
                             │┌┘
                             ├●  d
@@ -309,6 +309,7 @@ class GridCanvasTest {
             canvas.addStream(rootStream);
             canvas.addNonTreeEdge(NodeId.of("c"), NodeId.of("d"));
             canvas.addNonTreeEdge(NodeId.of("e"), NodeId.of("d"));
+            canvas.removeRedundantRows();
 
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
@@ -316,11 +317,9 @@ class GridCanvasTest {
                             ●   a
                             ├●┐ c
                             ├●┤ e
-                            │ │
                             ● │ b
                             │┌┘
                             ├●  d
-                            │
                             ●   f
                             """);
         }
@@ -343,6 +342,7 @@ class GridCanvasTest {
             canvas.addNonTreeEdge(NodeId.of("b"), NodeId.of("d"));
             canvas.addNonTreeEdge(NodeId.of("c"), NodeId.of("d"));
             canvas.addNonTreeEdge(NodeId.of("c"), NodeId.of("e"));
+            canvas.removeRedundantRows();
 
             assertThat(canvas.render(n -> n.id().value()))
                     .isEqualTo(
@@ -350,10 +350,8 @@ class GridCanvasTest {
                             ●    a
                             ├●┐  b
                             ├●┼┐ c
-                            │ ││
                             ├─┘│
                             ●  │ d
-                            │  │
                             ├──┘
                             ●    e
                             """);
