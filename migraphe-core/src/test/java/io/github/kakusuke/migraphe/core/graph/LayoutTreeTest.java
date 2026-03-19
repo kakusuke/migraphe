@@ -205,8 +205,8 @@ class LayoutTreeTest {
     }
 
     @Test
-    @DisplayName("非ツリー辺は距離（target rank - source rank）の昇順でソートされる")
-    void shouldSortNonTreeEdgesByTopologicalDistanceAscending() {
+    @DisplayName("非ツリー辺は距離（target rank - source rank）の降順でソートされる")
+    void shouldSortNonTreeEdgesByTopologicalDistanceDescending() {
         MigrationGraph graph = MigrationGraph.create();
         MigrationNode nodeA = node("a").build();
         MigrationNode nodeB = node("b").dependencies(NodeId.of("a")).build();
@@ -225,11 +225,11 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        // 非ツリー辺: D→F (距離2), B→F (距離4) — 距離昇順でソートされるべき
+        // 非ツリー辺: B→F (距離4), D→F (距離2) — 距離降順でソートされるべき
         assertThat(tree.nonTreeEdges()).hasSize(2);
-        assertThat(tree.nonTreeEdges().get(0).source()).isEqualTo(NodeId.of("d"));
+        assertThat(tree.nonTreeEdges().get(0).source()).isEqualTo(NodeId.of("b"));
         assertThat(tree.nonTreeEdges().get(0).target()).isEqualTo(NodeId.of("f"));
-        assertThat(tree.nonTreeEdges().get(1).source()).isEqualTo(NodeId.of("b"));
+        assertThat(tree.nonTreeEdges().get(1).source()).isEqualTo(NodeId.of("d"));
         assertThat(tree.nonTreeEdges().get(1).target()).isEqualTo(NodeId.of("f"));
     }
 

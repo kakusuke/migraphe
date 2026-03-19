@@ -187,9 +187,9 @@ public final class LayoutTree {
         nonTreeEdges.sort(
                 Comparator.<NonTreeEdge>comparingInt(
                                 e ->
-                                        rankMap.getOrDefault(e.target(), 0)
-                                                - rankMap.getOrDefault(e.source(), 0))
-                        .thenComparingInt(e -> rankMap.getOrDefault(e.source(), 0)));
+                                        rankMap.getOrDefault(e.source(), 0)
+                                                - rankMap.getOrDefault(e.target(), 0))
+                        .thenComparingInt(e -> -rankMap.getOrDefault(e.source(), 0)));
         return nonTreeEdges;
     }
 
