@@ -87,7 +87,7 @@ public final class GridCanvas {
         return result;
     }
 
-    /** 非ツリー辺をグリッドに追加する。 */
+    /** 非ツリー辺をグリッドに追加する（ボトムアップ：ターゲット起点）。 */
     public void addNonTreeEdge(NodeId source, NodeId target) {
         int[] srcPos = internalGrid.nodePosition(source);
         int[] tgtPos = internalGrid.nodePosition(target);
@@ -98,30 +98,55 @@ public final class GridCanvas {
         if (srcPos[0] >= tgtPos[0]) {
             return;
         }
-        int mergeCol = findOrCreateLaneColumn(source, target);
-        drawHorizontalToLane(source, mergeCol);
-        insertOrReuseMergeRow(target, mergeCol);
-        fillLaneVerticals(source, target, mergeCol);
+        int mergeRowIdx = insertOrReuseMergeRow(target);
+        int laneCol = selectLaneColumn(source, target, mergeRowIdx);
+        drawMergeRowHorizontal(mergeRowIdx, target, laneCol);
+        drawSourceHorizontal(source, laneCol);
+        fillLaneVerticals(source, mergeRowIdx, laneCol);
+    }
+
+    @SuppressWarnings("NullAway") // caller guarantees target exists in nodePositions
+    private int insertOrReuseMergeRow(NodeId target) {
+        int[] tgtPos = internalGrid.nodePosition(target);
+        int endRow = tgtPos[0];
+        int endCol = tgtPos[1];
+
+        // Reuse existing merge row if present
+        Cell endColCellAbove = cellAt(endRow - 1, endCol);
+        if (endColCellAbove instanceof Cell.StreamFork
+                || endColCellAbove instanceof Cell.DownRight) {
+            return endRow - 1;
+        }
+
+        // Insert new merge row
+        internalGrid.insertRow(endRow);
+
+        Cell above = cellAt(endRow - 1, endCol);
+        if (above.connectsDown()) {
+            setCell(endRow, endCol, new Cell.StreamFork());
+        } else {
+            setCell(endRow, endCol, new Cell.DownRight());
+        }
+        return endRow;
     }
 
     @SuppressWarnings("NullAway") // caller guarantees source/target exist in nodePositions
-    private int findOrCreateLaneColumn(NodeId source, NodeId target) {
+    private int selectLaneColumn(NodeId source, NodeId target, int mergeRowIdx) {
         int[] srcPos = internalGrid.nodePosition(source);
         int[] tgtPos = internalGrid.nodePosition(target);
         int startRow = srcPos[0];
         int startCol = srcPos[1];
         int endCol = tgtPos[1];
-        int endRow = tgtPos[0];
 
-        // Try to find an existing empty column to reuse (must be right of both source and target)
         int minCol = Math.max(startCol, endCol) + 1;
         int colCount = colCount();
 
-        // Check for existing lane to same target (lane sharing)
-        Cell mergeRowCheck = cellAt(endRow - 1, endCol);
-        if (mergeRowCheck instanceof Cell.StreamFork || mergeRowCheck instanceof Cell.DownRight) {
+        // Priority 1: Reuse existing lane (lane sharing)
+        Cell mergeRowTargetCell = cellAt(mergeRowIdx, endCol);
+        if (mergeRowTargetCell instanceof Cell.StreamFork
+                || mergeRowTargetCell instanceof Cell.DownRight) {
             for (int c = minCol; c < colCount(); c++) {
-                Cell mergeCell = cellAt(endRow - 1, c);
+                Cell mergeCell = cellAt(mergeRowIdx, c);
                 if (mergeCell instanceof Cell.LaneToMerge
                         || mergeCell instanceof Cell.MergeJunction) {
                     Cell atSource = cellAt(startRow, c);
@@ -133,33 +158,105 @@ public final class GridCanvas {
             }
         }
 
+        // Priority 2: Reuse lane with gap (verticals don't reach source)
+        for (int c = minCol; c < colCount; c++) {
+            Cell mergeCell = cellAt(mergeRowIdx, c);
+            if (!(mergeCell instanceof Cell.LaneToMerge
+                    || mergeCell instanceof Cell.MergeJunction)) {
+                continue;
+            }
+            // Scan upward from merge row to find top of existing lane
+            int topOfLane = -1;
+            for (int r = mergeRowIdx - 1; r > startRow; r--) {
+                Cell cell = cellAt(r, c);
+                if (cell instanceof Cell.Vertical
+                        || cell instanceof Cell.CrossPoint
+                        || cell instanceof Cell.MergePoint
+                        || cell instanceof Cell.CrossMerge) {
+                    continue;
+                } else if (cell instanceof Cell.ForkToLane || cell instanceof Cell.ForkAndMerge) {
+                    topOfLane = r;
+                    break;
+                } else {
+                    break;
+                }
+            }
+            if (topOfLane == -1) continue;
+            // Check gap: all cells from startRow to topOfLane must be Empty/Horizontal
+            boolean gapClear = true;
+            for (int r = startRow; r < topOfLane; r++) {
+                Cell cell = cellAt(r, c);
+                if (!(cell instanceof Cell.Empty || cell instanceof Cell.Horizontal)) {
+                    gapClear = false;
+                    break;
+                }
+            }
+            if (gapClear) {
+                Cell topCell = cellAt(topOfLane, c);
+                if (topCell instanceof Cell.ForkToLane) {
+                    setCell(topOfLane, c, new Cell.MergePoint());
+                } else if (topCell instanceof Cell.ForkAndMerge) {
+                    setCell(topOfLane, c, new Cell.CrossMerge());
+                }
+                return c;
+            }
+        }
+
+        // Priority 3: Find empty column from source to merge row
         for (int c = minCol; c < colCount; c++) {
             boolean canReuse = true;
-            for (int r = startRow; r <= endRow; r++) {
+            for (int r = startRow; r <= mergeRowIdx; r++) {
                 if (!(cellAt(r, c) instanceof Cell.Empty)) {
                     canReuse = false;
                     break;
                 }
             }
             if (canReuse) {
-                setCell(startRow, c, new Cell.ForkToLane());
                 return c;
             }
         }
 
-        // No empty column found, append new one
-        int mergeCol = internalGrid.insertColumn(colCount);
-        setCell(startRow, mergeCol, new Cell.ForkToLane());
-        return mergeCol;
+        // Priority 4: Insert new column
+        return internalGrid.insertColumn(colCount);
+    }
+
+    @SuppressWarnings("NullAway") // caller guarantees target exists in nodePositions
+    private void drawMergeRowHorizontal(int mergeRowIdx, NodeId target, int laneCol) {
+        // Skip if lane already has LaneToMerge/MergeJunction (Priority 1 reuse)
+        Cell laneCell = cellAt(mergeRowIdx, laneCol);
+        if (laneCell instanceof Cell.LaneToMerge || laneCell instanceof Cell.MergeJunction) {
+            return;
+        }
+
+        int[] tgtPos = internalGrid.nodePosition(target);
+        int endCol = tgtPos[1];
+
+        for (int c = endCol + 1; c < laneCol; c++) {
+            Cell existing = cellAt(mergeRowIdx, c);
+            if (existing instanceof Cell.LaneToMerge) {
+                setCell(mergeRowIdx, c, new Cell.MergeJunction());
+            } else if (existing instanceof Cell.Empty) {
+                setCell(mergeRowIdx, c, new Cell.Horizontal());
+            } else if (existing instanceof Cell.Vertical) {
+                setCell(mergeRowIdx, c, new Cell.CrossPoint());
+            }
+        }
+        setCell(mergeRowIdx, laneCol, new Cell.LaneToMerge());
     }
 
     @SuppressWarnings("NullAway") // caller guarantees source exists in nodePositions
-    private void drawHorizontalToLane(NodeId source, int mergeCol) {
+    private void drawSourceHorizontal(NodeId source, int laneCol) {
         int[] srcPos = internalGrid.nodePosition(source);
         int startRow = srcPos[0];
         int startCol = srcPos[1];
 
-        for (int c = startCol + 1; c < mergeCol; c++) {
+        // Place ForkToLane at laneCol (skip if MergePoint — already placed by selectLaneColumn)
+        Cell laneCell = cellAt(startRow, laneCol);
+        if (!(laneCell instanceof Cell.MergePoint)) {
+            setCell(startRow, laneCol, new Cell.ForkToLane());
+        }
+
+        for (int c = startCol + 1; c < laneCol; c++) {
             Cell current = cellAt(startRow, c);
             if (current instanceof Cell.Empty) {
                 setCell(startRow, c, new Cell.Horizontal());
@@ -173,65 +270,17 @@ public final class GridCanvas {
         }
     }
 
-    @SuppressWarnings("NullAway") // caller guarantees target exists in nodePositions
-    private void insertOrReuseMergeRow(NodeId target, int mergeCol) {
-        int[] tgtPos = internalGrid.nodePosition(target);
-        int endRow = tgtPos[0];
-        int endCol = tgtPos[1];
-
-        // Step 7a: Check if existing merge row can be reused
-        Cell endColCellAbove = cellAt(endRow - 1, endCol);
-        if (endColCellAbove instanceof Cell.StreamFork
-                || endColCellAbove instanceof Cell.DownRight) {
-            int mergeRowIdx = endRow - 1;
-            for (int c = endCol + 1; c < mergeCol; c++) {
-                Cell existing = cellAt(mergeRowIdx, c);
-                if (existing instanceof Cell.LaneToMerge) {
-                    setCell(mergeRowIdx, c, new Cell.MergeJunction());
-                } else if (existing instanceof Cell.Empty) {
-                    setCell(mergeRowIdx, c, new Cell.Horizontal());
-                } else if (existing instanceof Cell.Vertical) {
-                    setCell(mergeRowIdx, c, new Cell.CrossPoint());
-                }
-            }
-            setCell(mergeRowIdx, mergeCol, new Cell.LaneToMerge());
-            return;
-        }
-
-        // Step 7b: Insert merge row using Grid.insertRow (auto-fills verticals)
-        internalGrid.insertRow(endRow);
-
-        // Overlay merge-specific cells
-        Cell above = cellAt(endRow - 1, endCol);
-        if (above.connectsDown()) {
-            setCell(endRow, endCol, new Cell.StreamFork());
-        } else {
-            setCell(endRow, endCol, new Cell.DownRight());
-        }
-        for (int c = endCol + 1; c < mergeCol; c++) {
-            Cell existing = cellAt(endRow, c);
-            if (existing instanceof Cell.Vertical) {
-                setCell(endRow, c, new Cell.CrossPoint());
-            } else {
-                setCell(endRow, c, new Cell.Horizontal());
-            }
-        }
-        setCell(endRow, mergeCol, new Cell.LaneToMerge());
-    }
-
-    @SuppressWarnings("NullAway") // caller guarantees source/target exist in nodePositions
-    private void fillLaneVerticals(NodeId source, NodeId target, int mergeCol) {
+    @SuppressWarnings("NullAway") // caller guarantees source exists in nodePositions
+    private void fillLaneVerticals(NodeId source, int mergeRowIdx, int laneCol) {
         int[] srcPos = internalGrid.nodePosition(source);
-        int[] tgtPos = internalGrid.nodePosition(target);
         int startRow = srcPos[0];
-        int endRow = tgtPos[0];
 
-        for (int r = startRow + 1; r < endRow; r++) {
-            Cell existing = cellAt(r, mergeCol);
+        for (int r = startRow + 1; r < mergeRowIdx; r++) {
+            Cell existing = cellAt(r, laneCol);
             if (existing instanceof Cell.Empty) {
-                setCell(r, mergeCol, new Cell.Vertical());
+                setCell(r, laneCol, new Cell.Vertical());
             } else if (existing instanceof Cell.Horizontal) {
-                setCell(r, mergeCol, new Cell.CrossPoint());
+                setCell(r, laneCol, new Cell.CrossPoint());
             }
         }
     }

@@ -325,6 +325,37 @@ class GridCanvasTest {
         }
 
         @Test
+        @DisplayName("既存レーンの上にギャップがある場合、ForkToLane を MergePoint に変換してレーンを再利用する")
+        void shouldReuseLaneByConvertingForkToLaneToMergePointWhenGapExists() {
+            MigrationNode nodeA = node("a").build();
+            MigrationNode nodeB = node("b").build();
+            MigrationNode nodeC = node("c").build();
+            MigrationNode nodeD = node("d").build();
+            MigrationNode nodeE = node("e").build();
+            LayoutStream childB = new LayoutStream(NodeId.of("a"), List.of(nodeB), List.of());
+            LayoutStream childD = new LayoutStream(NodeId.of("c"), List.of(nodeD), List.of());
+            LayoutStream rootStream =
+                    new LayoutStream(null, List.of(nodeA, nodeC, nodeE), List.of(childB, childD));
+
+            GridCanvas canvas = new GridCanvas();
+            canvas.addStream(rootStream);
+            canvas.addNonTreeEdge(NodeId.of("d"), NodeId.of("e"));
+            canvas.addNonTreeEdge(NodeId.of("b"), NodeId.of("e"));
+            canvas.removeRedundantRows();
+
+            assertThat(canvas.render(n -> n.id().value()))
+                    .isEqualTo(
+                            """
+                            ●   a
+                            ├●┐ b
+                            ● │ c
+                            ├●┤ d
+                            ├─┘
+                            ●   e
+                            """);
+        }
+
+        @Test
         @DisplayName("水平線が MergePoint を横断すると CrossMerge ┼ を描画する")
         void shouldRenderCrossMergeWhenHorizontalCrossesMergePoint() {
             MigrationNode nodeA = node("a").build();
