@@ -356,6 +356,38 @@ class GridCanvasTest {
         }
 
         @Test
+        @DisplayName("距離が近い非ツリー辺が先に描画されると内側レーンを使う")
+        void shouldAssignInnerLaneToCloserNonTreeEdge() {
+            MigrationNode nodeA = node("a").build();
+            MigrationNode nodeB = node("b").build();
+            MigrationNode nodeC = node("c").build();
+            MigrationNode nodeD = node("d").build();
+            MigrationNode nodeE = node("e").build();
+            LayoutStream childB = new LayoutStream(NodeId.of("a"), List.of(nodeB), List.of());
+            LayoutStream rootStream =
+                    new LayoutStream(null, List.of(nodeA, nodeC, nodeD, nodeE), List.of(childB));
+
+            GridCanvas canvas = new GridCanvas();
+            canvas.addStream(rootStream);
+            // 距離順: D→E (近い) を先に、B→E (遠い) を後に追加
+            canvas.addNonTreeEdge(NodeId.of("d"), NodeId.of("e"));
+            canvas.addNonTreeEdge(NodeId.of("b"), NodeId.of("e"));
+            canvas.removeRedundantRows();
+
+            assertThat(canvas.render(n -> n.id().value()))
+                    .isEqualTo(
+                            """
+                            ●   a
+                            ├●┐ b
+                            ● │ c
+                            │ │
+                            ●┐│ d
+                            ├┴┘
+                            ●   e
+                            """);
+        }
+
+        @Test
         @DisplayName("水平線が MergePoint を横断すると CrossMerge ┼ を描画する")
         void shouldRenderCrossMergeWhenHorizontalCrossesMergePoint() {
             MigrationNode nodeA = node("a").build();

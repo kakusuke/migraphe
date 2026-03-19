@@ -95,7 +95,7 @@ public final class LayoutTree {
         }
 
         LayoutStream vrStream = new LayoutStream(null, List.of(virtualRoot), rootChildren);
-        List<NonTreeEdge> nonTreeEdges = collectNonTreeEdges(graph, vrStream);
+        List<NonTreeEdge> nonTreeEdges = collectNonTreeEdges(graph, vrStream, order.rankMap());
 
         return new LayoutTree(vrStream, nonTreeEdges);
     }
@@ -178,12 +178,18 @@ public final class LayoutTree {
      * <p>ツリーエッジとは: (1) ストリーム内の連続ノード間のエッジ、(2) forkNode から子ストリーム先頭ノードへのエッジ。
      */
     private static List<NonTreeEdge> collectNonTreeEdges(
-            MigrationGraph graph, LayoutStream rootStream) {
+            MigrationGraph graph, LayoutStream rootStream, Map<NodeId, Integer> rankMap) {
         Set<String> treeEdges = new HashSet<>();
         collectTreeEdges(rootStream, treeEdges);
 
         List<NonTreeEdge> nonTreeEdges = new ArrayList<>();
         collectNonTreeEdgesFromStream(rootStream, graph, treeEdges, nonTreeEdges);
+        nonTreeEdges.sort(
+                Comparator.<NonTreeEdge>comparingInt(
+                                e ->
+                                        rankMap.getOrDefault(e.target(), 0)
+                                                - rankMap.getOrDefault(e.source(), 0))
+                        .thenComparingInt(e -> rankMap.getOrDefault(e.source(), 0)));
         return nonTreeEdges;
     }
 
