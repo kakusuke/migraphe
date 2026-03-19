@@ -6,6 +6,7 @@ import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.task.Task;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -69,24 +70,27 @@ public final class LayoutTree {
             return new LayoutTree(new LayoutStream(null, List.of(), List.of()), List.of());
         }
 
-        Set<NodeId> assigned = new HashSet<>();
+        // bucket = まだ割り当てられていないノード集合
+        Set<NodeId> bucket = new HashSet<>();
+        for (MigrationNode node : order.nodes()) {
+            bucket.add(node.id());
+        }
 
         // Virtual root 作成
         MigrationNode virtualRoot = new VirtualNode();
-        assigned.add(virtualRoot.id());
 
         // 全ルート（依存元なし）を VR の子ストリームとして構築
         List<LayoutStream> rootChildren = new ArrayList<>();
         for (MigrationNode node : order.nodes()) {
-            if (graph.getDependencies(node.id()).isEmpty() && !assigned.contains(node.id())) {
-                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, assigned));
+            if (graph.getDependencies(node.id()).isEmpty() && bucket.contains(node.id())) {
+                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, bucket));
             }
         }
 
         // 非ルートだが未割り当てのノード（孤立ノード等）も処理
         for (MigrationNode node : order.nodes()) {
-            if (!assigned.contains(node.id())) {
-                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, assigned));
+            if (bucket.contains(node.id())) {
+                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, bucket));
             }
         }
 
@@ -97,13 +101,13 @@ public final class LayoutTree {
     }
 
     /**
-     * 再帰的にストリームを構築する。
+     * バケット方式でストリームを構築する。トランクを先に全構築し、子ストリームを後ろから構築する。
      *
      * @param startNode ストリームの先頭ノード
      * @param forkNode 分岐元ノードID（ルートストリームでは null）
      * @param graph マイグレーショングラフ
      * @param order レイアウト順序
-     * @param assigned 割り当て済みノードの集合（副作用で更新される）
+     * @param bucket 未割り当てノードの集合（副作用で更新される）
      * @return 構築されたストリーム
      */
     private static LayoutStream buildStream(
@@ -111,20 +115,18 @@ public final class LayoutTree {
             @Nullable NodeId forkNode,
             MigrationGraph graph,
             LayoutSort.LayoutOrder order,
-            Set<NodeId> assigned) {
+            Set<NodeId> bucket) {
 
-        List<MigrationNode> nodes = new ArrayList<>();
-        List<LayoutStream> childStreams = new ArrayList<>();
-
-        nodes.add(startNode);
-        assigned.add(startNode.id());
+        // Phase 1: トランク構築（最大ランク continuation を選択）
+        List<MigrationNode> trunk = new ArrayList<>();
+        trunk.add(startNode);
+        bucket.remove(startNode.id());
 
         MigrationNode current = startNode;
         while (true) {
-            // current の dependents を rank 昇順でソート
             List<NodeId> dependents =
                     graph.getDependents(current.id()).stream()
-                            .filter(id -> !assigned.contains(id))
+                            .filter(bucket::contains)
                             .sorted(Comparator.comparingInt(order::rank))
                             .toList();
 
@@ -132,40 +134,42 @@ public final class LayoutTree {
                 break;
             }
 
-            // 最小 rank の unassigned dependent = 継続候補
-            NodeId continuationId = dependents.get(0);
-
-            // それ以外 = 子ストリーム（rank 昇順で再帰構築）
-            for (int i = 1; i < dependents.size(); i++) {
-                NodeId branchId = dependents.get(i);
-                if (assigned.contains(branchId)) {
-                    continue;
-                }
-                MigrationNode branchNode = graph.getNode(branchId).orElse(null);
-                if (branchNode == null) {
-                    continue;
-                }
-                LayoutStream childStream =
-                        buildStream(branchNode, current.id(), graph, order, assigned);
-                childStreams.add(childStream);
-            }
-
-            // 子ストリーム構築中に継続候補が割り当て済みになった場合は終了
-            if (assigned.contains(continuationId)) {
-                break;
-            }
-
+            // 最大ランク = 最も下流のノードを continuation として選択
+            NodeId continuationId = dependents.getLast();
             MigrationNode continuationNode = graph.getNode(continuationId).orElse(null);
             if (continuationNode == null) {
                 break;
             }
 
-            nodes.add(continuationNode);
-            assigned.add(continuationId);
+            trunk.add(continuationNode);
+            bucket.remove(continuationId);
             current = continuationNode;
         }
 
-        return new LayoutStream(forkNode, nodes, childStreams);
+        // Phase 2: 子ストリーム構築をトランクの後ろから
+        List<LayoutStream> childStreams = new ArrayList<>();
+        for (int i = trunk.size() - 1; i >= 0; i--) {
+            MigrationNode trunkNode = trunk.get(i);
+            List<NodeId> children =
+                    graph.getDependents(trunkNode.id()).stream()
+                            .filter(bucket::contains)
+                            .sorted(Comparator.comparingInt(order::rank).reversed())
+                            .toList();
+
+            for (NodeId childId : children) {
+                if (!bucket.contains(childId)) {
+                    continue; // 他のストリームが先に取った
+                }
+                MigrationNode childNode = graph.getNode(childId).orElse(null);
+                if (childNode == null) {
+                    continue;
+                }
+                childStreams.add(buildStream(childNode, trunkNode.id(), graph, order, bucket));
+            }
+        }
+        Collections.reverse(childStreams);
+
+        return new LayoutStream(forkNode, trunk, childStreams);
     }
 
     /**

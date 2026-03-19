@@ -94,6 +94,10 @@ public final class GridCanvas {
         if (srcPos == null || tgtPos == null) {
             return;
         }
+        // source が target より下（または同じ行）の場合は描画をスキップ
+        if (srcPos[0] >= tgtPos[0]) {
+            return;
+        }
         int mergeCol = findOrCreateLaneColumn(source, target);
         drawHorizontalToLane(source, mergeCol);
         insertOrReuseMergeRow(target, mergeCol);

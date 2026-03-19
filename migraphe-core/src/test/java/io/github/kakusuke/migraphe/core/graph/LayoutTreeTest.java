@@ -72,18 +72,18 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        // VR の子ストリーム = 実ルートストリーム [A, B]
+        // VR の子ストリーム = 実ルートストリーム [A, C, D]（最大ランク continuation）
         LayoutStream realRoot = tree.rootStream().childStreams().get(0);
         LayoutStream childStream = realRoot.childStreams().get(0);
 
         assertThat(tree.streamOf(NodeId.of("a"))).isSameAs(realRoot);
-        assertThat(tree.streamOf(NodeId.of("b"))).isSameAs(realRoot);
-        assertThat(tree.streamOf(NodeId.of("c"))).isSameAs(childStream);
-        assertThat(tree.streamOf(NodeId.of("d"))).isSameAs(childStream);
+        assertThat(tree.streamOf(NodeId.of("c"))).isSameAs(realRoot);
+        assertThat(tree.streamOf(NodeId.of("d"))).isSameAs(realRoot);
+        assertThat(tree.streamOf(NodeId.of("b"))).isSameAs(childStream);
     }
 
     @Test
-    @DisplayName("ダイヤモンドグラフで VR → 実ルート [A,B] → 子 [C,D]、nonTreeEdges に (D→B)")
+    @DisplayName("ダイヤモンドグラフで VR → 実ルート [A,C,D] → 子 [B]、nonTreeEdges に (B→D)")
     void shouldBuildDiamondGraphWithForkStreamAndNonTreeEdge() {
         MigrationGraph graph = MigrationGraph.create();
         MigrationNode nodeA = node("a").build();
@@ -98,15 +98,15 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        // VR の子ストリーム
+        // VR の子ストリーム（最大ランク continuation で [A, C, D]）
         assertThat(tree.rootStream().childStreams()).hasSize(1);
         LayoutStream realRoot = tree.rootStream().childStreams().get(0);
-        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeB);
+        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeC, nodeD);
         assertThat(realRoot.childStreams()).hasSize(1);
 
         LayoutStream childStream = realRoot.childStreams().get(0);
         assertThat(childStream.forkNode()).isEqualTo(NodeId.of("a"));
-        assertThat(childStream.nodes()).containsExactly(nodeC, nodeD);
+        assertThat(childStream.nodes()).containsExactly(nodeB);
         assertThat(childStream.childStreams()).isEmpty();
 
         assertThat(tree.nonTreeEdges()).hasSize(1);
@@ -128,13 +128,14 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
+        // 最大ランク continuation で [A, C]、子ストリームに [B]
         LayoutStream realRoot = tree.rootStream().childStreams().get(0);
-        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeB);
+        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeC);
         assertThat(realRoot.childStreams()).hasSize(1);
 
         LayoutStream childStream = realRoot.childStreams().get(0);
         assertThat(childStream.forkNode()).isEqualTo(NodeId.of("a"));
-        assertThat(childStream.nodes()).containsExactly(nodeC);
+        assertThat(childStream.nodes()).containsExactly(nodeB);
 
         assertThat(tree.nonTreeEdges()).hasSize(1);
         assertThat(tree.nonTreeEdges().get(0))
