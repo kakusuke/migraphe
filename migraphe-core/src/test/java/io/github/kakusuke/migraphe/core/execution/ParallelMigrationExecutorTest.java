@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 @DisplayName("ParallelMigrationExecutor")
@@ -48,6 +49,70 @@ class ParallelMigrationExecutorTest {
         syncHistoryRepo = new SynchronizedHistoryRepository(historyRepo);
         listener = new MockExecutionListener();
         testEnv = SimpleEnvironment.create(EnvironmentId.of("test"), "Test Environment");
+    }
+
+    @Nested
+    @DisplayName("対象ノード決定")
+    class DetermineTargetNodes {
+
+        @Test
+        @DisplayName("ターゲット指定なしで全未実行ノードを返す")
+        void shouldReturnAllPendingNodesWhenNoTarget() {
+            // Given
+            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationNode nodeB = createNode("b", "Node B");
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            executor = new ParallelMigrationExecutor(graph, syncHistoryRepo, listener);
+
+            // When
+            Set<NodeId> targets = executor.determineTargetNodes(null);
+
+            // Then
+            assertThat(targets).containsExactlyInAnyOrder(NodeId.of("a"), NodeId.of("b"));
+        }
+
+        @Test
+        @DisplayName("実行済みノードは除外される")
+        void shouldExcludeExecutedNodes() {
+            // Given
+            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationNode nodeB = createNode("b", "Node B");
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+
+            // nodeA を実行済みとして記録
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+
+            executor = new ParallelMigrationExecutor(graph, syncHistoryRepo, listener);
+
+            // When
+            Set<NodeId> targets = executor.determineTargetNodes(null);
+
+            // Then
+            assertThat(targets).containsExactly(NodeId.of("b"));
+        }
+
+        @Test
+        @DisplayName("ターゲット指定でターゲットと依存先を返す")
+        void shouldReturnTargetAndDependencies() {
+            // Given: A -> B -> C
+            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            graph.addNode(nodeC);
+            executor = new ParallelMigrationExecutor(graph, syncHistoryRepo, listener);
+
+            // When: C をターゲットに指定
+            Set<NodeId> targets = executor.determineTargetNodes(NodeId.of("c"));
+
+            // Then: A, B, C が対象
+            assertThat(targets)
+                    .containsExactlyInAnyOrder(NodeId.of("a"), NodeId.of("b"), NodeId.of("c"));
+        }
     }
 
     @Test

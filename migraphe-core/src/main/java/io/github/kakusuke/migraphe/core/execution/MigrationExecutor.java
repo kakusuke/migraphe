@@ -148,17 +148,14 @@ public final class MigrationExecutor implements Executor {
                 } else {
                     // 失敗
                     String errorMsg = result.error();
+                    String message = errorMsg != null ? errorMsg : "Unknown error";
                     String sqlContent = null;
                     Task upTask = node.upTask();
                     if (upTask instanceof SqlContentProvider sqlProvider) {
                         sqlContent = sqlProvider.sqlContent();
                     }
 
-                    listener.onNodeFailed(
-                            node,
-                            ExecutionDirection.UP,
-                            sqlContent,
-                            errorMsg != null ? errorMsg : "Unknown error");
+                    listener.onNodeFailed(node, ExecutionDirection.UP, sqlContent, message);
 
                     // 失敗記録を保存
                     ExecutionRecord failureRecord =
@@ -167,7 +164,7 @@ public final class MigrationExecutor implements Executor {
                                     node.environment().id(),
                                     ExecutionDirection.UP,
                                     node.name(),
-                                    errorMsg != null ? errorMsg : "Unknown error");
+                                    message);
                     historyRepository.record(failureRecord);
 
                     // 失敗時はサマリーを作成して返す

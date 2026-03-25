@@ -225,17 +225,14 @@ public final class ParallelMigrationExecutor implements Executor {
             executedCount.incrementAndGet();
         } else {
             String errorMsg = result.error();
+            String message = errorMsg != null ? errorMsg : "Unknown error";
             String sqlContent = null;
             Task upTask = node.upTask();
             if (upTask instanceof SqlContentProvider sqlProvider) {
                 sqlContent = sqlProvider.sqlContent();
             }
 
-            listener.onNodeFailed(
-                    node,
-                    ExecutionDirection.UP,
-                    sqlContent,
-                    errorMsg != null ? errorMsg : "Unknown error");
+            listener.onNodeFailed(node, ExecutionDirection.UP, sqlContent, message);
 
             ExecutionRecord failureRecord =
                     ExecutionRecord.failure(
@@ -243,7 +240,7 @@ public final class ParallelMigrationExecutor implements Executor {
                             node.environment().id(),
                             ExecutionDirection.UP,
                             node.name(),
-                            errorMsg != null ? errorMsg : "Unknown error");
+                            message);
             historyRepository.record(failureRecord);
 
             failureDetected.set(true);
