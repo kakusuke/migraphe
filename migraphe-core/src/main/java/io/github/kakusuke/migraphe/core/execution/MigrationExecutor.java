@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
 /** UP マイグレーションを実行するサービス。 */
-public final class MigrationExecutor {
+public final class MigrationExecutor implements Executor {
 
     private final MigrationGraph graph;
     private final HistoryRepository historyRepository;

@@ -1,16 +1,22 @@
 package io.github.kakusuke.migraphe.cli.command;
 
+import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.cli.listener.ConsoleExecutionListener;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
+import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.Executor;
 import io.github.kakusuke.migraphe.core.execution.MigrationExecutor;
+import io.github.kakusuke.migraphe.core.execution.ParallelMigrationExecutor;
+import io.github.kakusuke.migraphe.core.execution.SynchronizedExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
+import io.github.kakusuke.migraphe.core.history.SynchronizedHistoryRepository;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -72,8 +78,7 @@ public class UpCommand implements Command {
 
             // 3. Executor と Listener を作成
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
-            MigrationExecutor executor =
-                    new MigrationExecutor(context.graph(), historyRepo, listener);
+            Executor executor = createExecutor(context, historyRepo, listener);
 
             // 4. 実行対象ノードを決定
             Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
@@ -114,6 +119,23 @@ public class UpCommand implements Command {
             e.printStackTrace();
             return 1;
         }
+    }
+
+    /** 設定に基づいて Executor を作成する。 */
+    private Executor createExecutor(
+            ExecutionContext context,
+            HistoryRepository historyRepo,
+            ConsoleExecutionListener listener) {
+        ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
+        ProjectConfig.ExecutionSection execConfig = projectConfig.execution();
+
+        if (execConfig.parallel()) {
+            HistoryRepository syncRepo = new SynchronizedHistoryRepository(historyRepo);
+            ExecutionListener syncListener = new SynchronizedExecutionListener(listener);
+            return new ParallelMigrationExecutor(
+                    context.graph(), syncRepo, syncListener, execConfig.maxParallelism());
+        }
+        return new MigrationExecutor(context.graph(), historyRepo, listener);
     }
 
     /** マイグレーショングラフを表示する。 */

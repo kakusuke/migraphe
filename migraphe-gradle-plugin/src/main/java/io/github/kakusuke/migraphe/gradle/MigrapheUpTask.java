@@ -1,14 +1,20 @@
 package io.github.kakusuke.migraphe.gradle;
 
+import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.Executor;
 import io.github.kakusuke.migraphe.core.execution.MigrationExecutor;
+import io.github.kakusuke.migraphe.core.execution.ParallelMigrationExecutor;
+import io.github.kakusuke.migraphe.core.execution.SynchronizedExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
+import io.github.kakusuke.migraphe.core.history.SynchronizedHistoryRepository;
 import java.util.List;
 import java.util.Set;
 import org.gradle.api.GradleException;
@@ -63,7 +69,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
 
         // Executor を作成
         GradleExecutionListener listener = new GradleExecutionListener(getLogger());
-        MigrationExecutor executor = new MigrationExecutor(context.graph(), historyRepo, listener);
+        Executor executor = createExecutor(context, historyRepo, listener);
 
         // 実行対象ノードを決定
         Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
@@ -98,6 +104,23 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
     /** 副作用のあるタスクはキャッシュしない。 */
     public MigrapheUpTask() {
         getOutputs().upToDateWhen(task -> false);
+    }
+
+    /** 設定に基づいて Executor を作成する。 */
+    private Executor createExecutor(
+            ExecutionContext context,
+            HistoryRepository historyRepo,
+            GradleExecutionListener listener) {
+        ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
+        ProjectConfig.ExecutionSection execConfig = projectConfig.execution();
+
+        if (execConfig.parallel()) {
+            HistoryRepository syncRepo = new SynchronizedHistoryRepository(historyRepo);
+            ExecutionListener syncListener = new SynchronizedExecutionListener(listener);
+            return new ParallelMigrationExecutor(
+                    context.graph(), syncRepo, syncListener, execConfig.maxParallelism());
+        }
+        return new MigrationExecutor(context.graph(), historyRepo, listener);
     }
 
     private void displayMigrationGraph(
