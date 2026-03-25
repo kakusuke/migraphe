@@ -159,7 +159,6 @@ Update when code changes:
 
 - GraalVM Native Image packaging
 - Additional database plugins (MySQL, MongoDB)
-- Gradle configuration cache support
 
 ## Design Principles
 
