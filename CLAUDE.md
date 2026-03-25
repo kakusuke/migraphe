@@ -8,7 +8,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 15 (Gradle Plugin) - COMPLETE
-**Tests**: 306, 100% passing
+**Tests**: 413, 100% passing
 
 ## Module Structure
 
@@ -82,7 +82,7 @@ io.github.kakusuke.migraphe.gradle/
 9. **Listener Pattern (Phase 14)**: Business logic (Core) separated from presentation (CLI/Gradle). `ExecutionListener` for progress notifications, `ExecutionGraphView` for graph rendering with `toString()`
 10. **Gradle Plugin (Phase 15)**: `java-gradle-plugin` + Gradle TestKit. Custom `migraphePlugin` configuration for plugin JARs. `@Option` + `-P` property for task arguments. `PluginRegistry.loadFromClassLoader()` for Gradle's classloader
 11. **Shared Logic**: `ExecutionContext.createHistoryRepository()`, `ExecutionPlan.filterNodesInOrder()`, `ExecutionGraphView.renderLines()`, `FormatUtils`
-12. **DAG Stream Layout Pipeline**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (10 variants)
+12. **DAG Stream Layout Pipeline**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (13 variants), `addNonTreeEdge()` with lane routing, merge row reuse, and crossing detection. Grid extracted as inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
 
 ## CLI Project Structure
 
@@ -154,7 +154,6 @@ Update when code changes:
 
 ### Future Phases
 
-- `history` command
 - GraalVM Native Image packaging
 - Additional database plugins (MySQL, MongoDB)
 - Virtual Threads for parallel execution
@@ -182,21 +181,16 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-03-09 (Session 29)
-- **Feature: DAG Stream Layout — new graph rendering pipeline**
-  - New pipeline: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`
-  - New classes: `LayoutSort` (Kahn's with priority comparator), `LayoutOrder` (record), `LayoutStream` (record), `LayoutTree` (stream tree builder), `NonTreeEdge` (record), `Cell` (sealed interface, 10 variants), `GridCanvas` (2D grid canvas)
-  - `ExecutionGraphView`: two constructors — `(MigrationGraph, boolean)` for full graph, `(List<MigrationNode>)` for filtered subsets; `toString()` uses `●`/`│` ASCII rendering via `GridCanvas.render()`
-  - Call sites updated: UpCommand/DownCommand use filtered `sortedNodes`, StatusCommand uses `context.graph()`
-  - Deleted: `DominatorTree.java`, `NonDomEdge.java` (+ their test files) — replaced by `LayoutTree` and `NonTreeEdge`
-  - Tests: 334 (all modules), 100% passing
-
-### 2026-03-09 (Session 28)
-- **Regression: Delete ASCII graph rendering, simplify ExecutionGraphView to plain output**
-  - Deleted: `GraphCanvas.java`, `GridBuilder.java`, `Cell.java`, `GroupInfo.java` (+ their test files)
-  - Tests: 287 (all modules), 100% passing
+### 2026-03-09 (Sessions 28-30)
+- **Feature: DAG Stream Layout — complete graph rendering pipeline**
+  - Pipeline: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`
+  - Classes: `LayoutSort`, `LayoutOrder`, `LayoutStream`, `LayoutTree`, `NonTreeEdge`, `Cell` (sealed, 13 variants), `GridCanvas` (with Grid inner class)
+  - `addNonTreeEdge()` fully implemented: lane column reuse, horizontal routing, merge row reuse (Step 7a/7b), vertical filling, crossing detection
+  - Cell variants: Node, Empty, Vertical, StreamFork, Fork, Horizontal, ForkToLane, ForkAndMerge, DownRight, MergePoint, LaneToMerge, MergeJunction, CrossPoint, CrossMerge
+  - Grid inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
+  - Tests: 413 (all modules), 100% passing
 
 ---
 
-**Last Updated**: 2026-03-09
-**Current Work**: DAG Stream Layout pipeline implemented — `addNonTreeEdge()` in GridCanvas still a stub, ready for merge edge rendering
+**Last Updated**: 2026-03-25
+**Current Work**: DAG Stream Layout pipeline complete. Ready for next phase.
