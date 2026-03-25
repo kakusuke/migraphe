@@ -14,6 +14,7 @@
 - **プラガブルアーキテクチャ**: PostgreSQLをサポート、他のデータベースへの拡張性
 - **Gradleプラグイン**: `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate` タスクでビルドに統合
 - **YAML設定**: シンプルで読みやすい設定ファイル
+- **並列実行**: Virtual Threadsベースの並列実行（オプトイン、並列数制限可能）
 - **実行履歴**: マイグレーション実行履歴の追跡とロールバックサポート
 - **型安全**: Java 21で構築、モダンな言語機能を活用
 
@@ -227,7 +228,7 @@ cd migraphe
 ./gradlew :migraphe-gradle-plugin:test
 ```
 
-テストカバレッジ: 257テスト、100%合格
+テストカバレッジ: 431テスト、100%合格
 
 ## コントリビューション
 

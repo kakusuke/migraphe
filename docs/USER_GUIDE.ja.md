@@ -664,7 +664,28 @@ java -jar migraphe-cli-all.jar up --env production
 
 ### 並列実行
 
-Migrapheは同じ依存レベルにある独立したマイグレーションを自動的に並列化します:
+MigrapheはJava Virtual Threadsを使用したオプトインの並列実行をサポートしています。有効にすると、依存関係がすべて完了したノードが同時に実行されます。
+
+**設定（`migraphe.yaml`）:**
+
+```yaml
+project:
+  name: my-project
+
+history:
+  target: history
+
+execution:
+  parallel: true        # 並列実行を有効化（デフォルト: false）
+  max-parallelism: 4    # 同時実行タスク数の上限（0 = 無制限、デフォルト: 0）
+```
+
+- `execution.parallel`: `true`に設定すると並列実行が有効になります。`false`（デフォルト）の場合、マイグレーションはトポロジカル順に逐次実行されます。
+- `execution.max-parallelism`: 同時に実行するタスク数を制限します。`0`（デフォルト）で無制限になります。
+
+**動作の仕組み:**
+
+同じ依存レベルのノードがVirtual Threadsを使用して並列実行されます。Ready-basedアプローチにより、ノードのすべての依存関係が満たされ次第、実行対象になります。いずれかのタスクが失敗すると、フェイルファスト動作により新しいタスクの投入が即座に停止されます。
 
 ```
 Level 0（並列実行）:

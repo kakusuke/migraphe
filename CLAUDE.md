@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 15 (Gradle Plugin) - COMPLETE
-**Tests**: 413, 100% passing
+**Current Phase**: 16 (Virtual Threads Parallel Execution) - COMPLETE
+**Tests**: 431, 100% passing
 
 ## Module Structure
 
@@ -40,10 +40,11 @@ io.github.kakusuke.migraphe.api/
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
 
 io.github.kakusuke.migraphe.core/
-├── graph/          # MigrationGraph, ExecutionPlan, TopologicalSort, ExecutionGraphView, NodeLineInfo, FormatUtils
-│                   # + LayoutSort, LayoutOrder, LayoutStream, LayoutTree, NonTreeEdge, Cell, GridCanvas
+├── graph/          # MigrationGraph, ExecutionPlan, ExecutionLevel, TopologicalSort, FormatUtils
+│   └── layout/     # ExecutionGraphView, LayoutSort, LayoutOrder, LayoutTree, LayoutStream, NonTreeEdge, Cell, GridCanvas, NodeLineInfo, GraphVisualizer
 ├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult, ExecutionContext
-├── history/        # InMemoryHistoryRepository
+│                   # + ParallelMigrationExecutor, ReadyNodeTracker, SynchronizedExecutionListener, Executor (interface)
+├── history/        # InMemoryHistoryRepository, SynchronizedHistoryRepository
 ├── config/         # ProjectConfig, TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
 ├── factory/        # EnvironmentFactory, MigrationNodeFactory (generic, uses PluginRegistry)
 ├── plugin/         # PluginRegistry, PluginLoadException
@@ -82,7 +83,8 @@ io.github.kakusuke.migraphe.gradle/
 9. **Listener Pattern (Phase 14)**: Business logic (Core) separated from presentation (CLI/Gradle). `ExecutionListener` for progress notifications, `ExecutionGraphView` for graph rendering with `toString()`
 10. **Gradle Plugin (Phase 15)**: `java-gradle-plugin` + Gradle TestKit. Custom `migraphePlugin` configuration for plugin JARs. `@Option` + `-P` property for task arguments. `PluginRegistry.loadFromClassLoader()` for Gradle's classloader
 11. **Shared Logic**: `ExecutionContext.createHistoryRepository()`, `ExecutionPlan.filterNodesInOrder()`, `ExecutionGraphView.renderLines()`, `FormatUtils`
-12. **DAG Stream Layout Pipeline**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (13 variants), `addNonTreeEdge()` with lane routing, merge row reuse, and crossing detection. Grid extracted as inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
+12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (13 variants), `addNonTreeEdge()` with lane routing, merge row reuse, and crossing detection. Grid extracted as inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
+13. **Parallel Execution (Phase 16)**: Opt-in via `execution.parallel: true`. `ParallelMigrationExecutor` uses Virtual Threads + `PriorityBlockingQueue` + `ReadyNodeTracker` (ready-based approach). Fail-fast on failure. `Semaphore` for `execution.max-parallelism`. `SynchronizedHistoryRepository`/`SynchronizedExecutionListener` decorators for thread safety. `Executor` interface shared by sequential/parallel.
 
 ## CLI Project Structure
 
@@ -151,12 +153,12 @@ Update when code changes:
 | 13 | Validate command | ✅ |
 | 14 | Core logic extraction for Gradle plugin | ✅ |
 | 15 | Gradle plugin (Extension, Tasks, TestKit) | ✅ |
+| 16 | Virtual Threads parallel execution | ✅ |
 
 ### Future Phases
 
 - GraalVM Native Image packaging
 - Additional database plugins (MySQL, MongoDB)
-- Virtual Threads for parallel execution
 - Gradle configuration cache support
 
 ## Design Principles
@@ -181,16 +183,16 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-03-09 (Sessions 28-30)
-- **Feature: DAG Stream Layout — complete graph rendering pipeline**
-  - Pipeline: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`
-  - Classes: `LayoutSort`, `LayoutOrder`, `LayoutStream`, `LayoutTree`, `NonTreeEdge`, `Cell` (sealed, 13 variants), `GridCanvas` (with Grid inner class)
-  - `addNonTreeEdge()` fully implemented: lane column reuse, horizontal routing, merge row reuse (Step 7a/7b), vertical filling, crossing detection
-  - Cell variants: Node, Empty, Vertical, StreamFork, Fork, Horizontal, ForkToLane, ForkAndMerge, DownRight, MergePoint, LaneToMerge, MergeJunction, CrossPoint, CrossMerge
-  - Grid inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
-  - Tests: 413 (all modules), 100% passing
+### 2026-03-25 (Session 31)
+- **Phase 16: Virtual Threads parallel execution**
+  - Step 0: Package refactor — layout classes to `core/graph/layout/`
+  - New classes: `ReadyNodeTracker`, `ParallelMigrationExecutor`, `SynchronizedHistoryRepository`, `SynchronizedExecutionListener`, `Executor` interface
+  - `ProjectConfig.ExecutionSection` with `parallel` and `maxParallelism` settings
+  - Config-based dispatch in CLI `UpCommand` and Gradle `MigrapheUpTask`
+  - Semaphore-based concurrency limiting
+  - Tests: 431 (core 331, cli 44, gradle 15, postgresql 41), 100% passing
 
 ---
 
 **Last Updated**: 2026-03-25
-**Current Work**: DAG Stream Layout pipeline complete. Ready for next phase.
+**Current Work**: Phase 16 complete. Virtual Threads parallel execution with ready-based approach.

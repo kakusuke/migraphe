@@ -664,7 +664,28 @@ java -jar migraphe-cli-all.jar up --env production
 
 ### Parallel Execution
 
-Migraphe automatically parallelizes independent migrations at the same dependency level:
+Migraphe supports opt-in parallel execution using Java Virtual Threads. When enabled, nodes whose dependencies have all completed are executed concurrently.
+
+**Configuration (`migraphe.yaml`):**
+
+```yaml
+project:
+  name: my-project
+
+history:
+  target: history
+
+execution:
+  parallel: true        # Enable parallel execution (default: false)
+  max-parallelism: 4    # Limit concurrent tasks (0 = unlimited, default: 0)
+```
+
+- `execution.parallel`: Set to `true` to enable parallel execution. When `false` (default), migrations run sequentially in topological order.
+- `execution.max-parallelism`: Limits the number of concurrently executing tasks. Set to `0` (default) for unlimited concurrency.
+
+**How it works:**
+
+Nodes at the same dependency level execute in parallel using Virtual Threads. A ready-based approach ensures that as soon as all dependencies of a node are satisfied, it becomes eligible for execution. If any task fails, fail-fast behavior stops new task submission immediately.
 
 ```
 Level 0 (executed in parallel):
