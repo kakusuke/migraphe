@@ -1,6 +1,7 @@
-package io.github.kakusuke.migraphe.core.graph;
+package io.github.kakusuke.migraphe.core.graph.layout;
 
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
+import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import java.util.List;
 import java.util.function.Function;
 

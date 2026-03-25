@@ -1,10 +1,11 @@
-package io.github.kakusuke.migraphe.core.graph;
+package io.github.kakusuke.migraphe.core.graph.layout;
 
 import static io.github.kakusuke.migraphe.core.graph.TestHelpers.node;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.graph.TestHelpers.TestEnvironment;
 import org.junit.jupiter.api.Test;
 

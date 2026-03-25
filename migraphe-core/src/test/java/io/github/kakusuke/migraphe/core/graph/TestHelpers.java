@@ -11,14 +11,14 @@ import java.util.Objects;
 import java.util.Set;
 
 /** テスト用ヘルパークラス */
-class TestHelpers {
+public class TestHelpers {
 
     /** テスト用環境実装 */
-    static class TestEnvironment implements Environment {
+    public static class TestEnvironment implements Environment {
         private final EnvironmentId id;
         private final String name;
 
-        TestEnvironment(String name) {
+        public TestEnvironment(String name) {
             this.name = name;
             this.id = EnvironmentId.of(name);
         }
@@ -35,10 +35,10 @@ class TestHelpers {
     }
 
     /** テスト用タスク実装 */
-    static class TestTask implements Task {
+    public static class TestTask implements Task {
         private final String description;
 
-        TestTask(String description) {
+        public TestTask(String description) {
             this.description = description;
         }
 
@@ -54,13 +54,13 @@ class TestHelpers {
     }
 
     /** テスト用ノード実装 */
-    static class TestMigrationNode implements MigrationNode {
+    public static class TestMigrationNode implements MigrationNode {
         private final NodeId id;
         private final String name;
         private final Environment environment;
         private final Set<NodeId> dependencies;
 
-        TestMigrationNode(
+        public TestMigrationNode(
                 NodeId id, String name, Environment environment, Set<NodeId> dependencies) {
             this.id = id;
             this.name = name;
@@ -117,37 +117,37 @@ class TestHelpers {
     }
 
     /** ビルダーパターンでテストノードを作成 */
-    static TestNodeBuilder node(String id) {
+    public static TestNodeBuilder node(String id) {
         return new TestNodeBuilder(NodeId.of(id));
     }
 
-    static class TestNodeBuilder {
+    public static class TestNodeBuilder {
         private final NodeId id;
         private String name;
         private Environment environment = new TestEnvironment("test");
         private Set<NodeId> dependencies = Set.of();
 
-        TestNodeBuilder(NodeId id) {
+        public TestNodeBuilder(NodeId id) {
             this.id = id;
             this.name = id.value();
         }
 
-        TestNodeBuilder name(String name) {
+        public TestNodeBuilder name(String name) {
             this.name = name;
             return this;
         }
 
-        TestNodeBuilder environment(Environment environment) {
+        public TestNodeBuilder environment(Environment environment) {
             this.environment = environment;
             return this;
         }
 
-        TestNodeBuilder dependencies(NodeId... deps) {
+        public TestNodeBuilder dependencies(NodeId... deps) {
             this.dependencies = Set.of(deps);
             return this;
         }
 
-        TestMigrationNode build() {
+        public TestMigrationNode build() {
             return new TestMigrationNode(id, name, environment, dependencies);
         }
     }

@@ -1,10 +1,11 @@
-package io.github.kakusuke.migraphe.core.graph;
+package io.github.kakusuke.migraphe.core.graph.layout;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.task.Task;
+import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;

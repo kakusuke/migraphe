@@ -1,7 +1,10 @@
-package io.github.kakusuke.migraphe.core.graph;
+package io.github.kakusuke.migraphe.core.graph.layout;
 
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
+import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
+import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import java.util.*;
 
 /** マイグレーショングラフをターミナルに可視化するユーティリティ。 初期マイルストーン機能。 */
