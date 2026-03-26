@@ -35,7 +35,7 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 ### Prerequisites
 
 - Java 21 or later
-- PostgreSQL database
+- A supported database (PostgreSQL, MySQL 8.0+, or any JDBC-compatible database)
 
 ### Build from Source
 
@@ -86,19 +86,27 @@ my-project/
 
 **Available Plugins:**
 
-| Plugin | Description |
-|--------|-------------|
-| `migraphe-plugin-postgresql` | PostgreSQL database support |
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support |
+| `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
 
 **Getting Plugin JARs:**
 
 ```bash
 # Build fat JAR (includes JDBC driver)
 ./gradlew :migraphe-plugin-postgresql:fatJar
+./gradlew :migraphe-plugin-mysql:fatJar
+./gradlew :migraphe-plugin-jdbc:fatJar
 
 # Copy fat JAR to plugins/
 mkdir -p my-project/plugins
 cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
+# Or for MySQL:
+cp migraphe-plugin-mysql/build/libs/migraphe-plugin-mysql-*-all.jar my-project/plugins/
+# Or for generic JDBC:
+cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar my-project/plugins/
 ```
 
 **Note:** Use the `-all.jar` (fat JAR) for CLI usage. The thin JAR is for Gradle/Maven dependency management.
@@ -167,10 +175,12 @@ password: mypassword
 ```
 
 **Fields:**
-- `type` (required): Database type (currently only `postgresql` supported)
+- `type` (required): Database type (`postgresql`, `mysql`, or `jdbc`)
 - `jdbc_url` (required): JDBC connection URL
 - `username` (required): Database username
 - `password` (required): Database password
+- `driver_class` (required for `jdbc` type): Fully qualified JDBC driver class name
+- `db_label` (optional, `jdbc` type only): Display label for the database (e.g., "MariaDB")
 
 Note: The target name is derived from the filename (e.g., `db1.yaml` → target name `db1`).
 
@@ -182,6 +192,28 @@ jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
 username: historyuser
 password: historypass
 ```
+
+**Example: MySQL target (`targets/mysql_db.yaml`)**
+
+```yaml
+type: mysql
+jdbc_url: jdbc:mysql://localhost:3306/myapp
+username: dbuser
+password: secret
+```
+
+**Example: Generic JDBC target (`targets/mariadb.yaml`)**
+
+```yaml
+type: jdbc
+driver_class: org.mariadb.jdbc.Driver
+db_label: MariaDB
+jdbc_url: jdbc:mariadb://localhost:3306/myapp
+username: user
+password: secret
+```
+
+The generic JDBC plugin (`type: jdbc`) can be used with any JDBC-compatible database. You need to provide the `driver_class` and ensure the JDBC driver JAR is available on the classpath.
 
 ### Task Configuration
 
@@ -787,7 +819,10 @@ migraphe {
 }
 
 dependencies {
+    // Choose the plugin(s) for your database:
     migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-jdbc:0.1.0-SNAPSHOT")
 }
 ```
 

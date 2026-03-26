@@ -35,7 +35,7 @@ Migrapheは、複数の環境にわたる複雑なデータベースマイグレ
 ### 前提条件
 
 - Java 21以降
-- PostgreSQLデータベース
+- サポート対象のデータベース（PostgreSQL、MySQL 8.0+、または任意のJDBC対応データベース）
 
 ### ソースからビルド
 
@@ -86,19 +86,27 @@ my-project/
 
 **現在利用可能なプラグイン:**
 
-| プラグイン | 説明 |
-|-----------|------|
-| `migraphe-plugin-postgresql` | PostgreSQL データベースサポート |
+| プラグイン | タイプ | 説明 |
+|-----------|--------|------|
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート |
+| `migraphe-plugin-jdbc` | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
 
 **プラグイン JAR の取得:**
 
 ```bash
 # Fat JAR をビルド（JDBC ドライバ込み）
 ./gradlew :migraphe-plugin-postgresql:fatJar
+./gradlew :migraphe-plugin-mysql:fatJar
+./gradlew :migraphe-plugin-jdbc:fatJar
 
 # Fat JAR を plugins/ にコピー
 mkdir -p my-project/plugins
 cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
+# MySQL の場合:
+cp migraphe-plugin-mysql/build/libs/migraphe-plugin-mysql-*-all.jar my-project/plugins/
+# 汎用 JDBC の場合:
+cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar my-project/plugins/
 ```
 
 **注意:** CLI で使用する場合は `-all.jar`（Fat JAR）を使用してください。通常の JAR は Gradle/Maven 依存関係用です。
@@ -167,10 +175,12 @@ password: mypassword
 ```
 
 **フィールド:**
-- `type`（必須）: データベースタイプ（現在は`postgresql`のみサポート）
+- `type`（必須）: データベースタイプ（`postgresql`、`mysql`、または `jdbc`）
 - `jdbc_url`（必須）: JDBC接続URL
 - `username`（必須）: データベースユーザー名
 - `password`（必須）: データベースパスワード
+- `driver_class`（`jdbc` タイプの場合は必須）: JDBCドライバの完全修飾クラス名
+- `db_label`（オプション、`jdbc` タイプのみ）: データベースの表示ラベル（例: "MariaDB"）
 
 注: ターゲット名はファイル名から導出されます（例: `db1.yaml` → ターゲット名 `db1`）。
 
@@ -182,6 +192,28 @@ jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
 username: historyuser
 password: historypass
 ```
+
+**例: MySQL ターゲット（`targets/mysql_db.yaml`）**
+
+```yaml
+type: mysql
+jdbc_url: jdbc:mysql://localhost:3306/myapp
+username: dbuser
+password: secret
+```
+
+**例: 汎用 JDBC ターゲット（`targets/mariadb.yaml`）**
+
+```yaml
+type: jdbc
+driver_class: org.mariadb.jdbc.Driver
+db_label: MariaDB
+jdbc_url: jdbc:mariadb://localhost:3306/myapp
+username: user
+password: secret
+```
+
+汎用 JDBC プラグイン（`type: jdbc`）は任意の JDBC 対応データベースで使用できます。`driver_class` を指定し、JDBC ドライバ JAR がクラスパスで利用可能であることを確認してください。
 
 ### タスク設定
 
@@ -787,7 +819,10 @@ migraphe {
 }
 
 dependencies {
+    // 使用するデータベースに応じてプラグインを選択:
     migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-jdbc:0.1.0-SNAPSHOT")
 }
 ```
 

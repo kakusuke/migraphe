@@ -7,9 +7,9 @@ import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
+import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLMigrationNode;
-import io.github.kakusuke.migraphe.postgresql.SqlTaskDefinition;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.*;
@@ -74,7 +74,7 @@ class MigrationNodeFactoryTest {
         MigrationNode node = factory.createNode(taskDef, nodeId, environment);
 
         // Then: 正しく生成されている
-        assertThat(node).isInstanceOf(PostgreSQLMigrationNode.class);
+        assertThat(node).isInstanceOf(JdbcMigrationNode.class);
         assertThat(node.id()).isEqualTo(nodeId);
         assertThat(node.name()).isEqualTo("test-task");
         assertThat(node.environment()).isEqualTo(environment);

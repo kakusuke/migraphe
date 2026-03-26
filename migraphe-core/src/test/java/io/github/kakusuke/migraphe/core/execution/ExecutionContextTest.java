@@ -9,8 +9,8 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLHistoryRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -106,8 +106,8 @@ class ExecutionContextTest {
         // When: createHistoryRepository() を呼び出す
         HistoryRepository historyRepo = context.createHistoryRepository();
 
-        // Then: PostgreSQLHistoryRepository が返される（history.target = test-db で type = postgresql）
-        assertThat(historyRepo).isInstanceOf(PostgreSQLHistoryRepository.class);
+        // Then: JdbcHistoryRepository が返される（history.target = test-db で type = postgresql）
+        assertThat(historyRepo).isInstanceOf(JdbcHistoryRepository.class);
     }
 
     @Test

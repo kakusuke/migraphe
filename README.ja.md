@@ -11,7 +11,7 @@
 
 - **DAGベースのマイグレーション**: マイグレーションタスク間の複雑な依存関係を定義
 - **マルチ環境サポート**: 開発、ステージング、本番環境のマイグレーションを管理
-- **プラガブルアーキテクチャ**: PostgreSQLをサポート、他のデータベースへの拡張性
+- **プラガブルアーキテクチャ**: PostgreSQL、MySQL、および汎用JDBCプラグインによる任意のJDBCデータベースをサポート
 - **Gradleプラグイン**: `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate` タスクでビルドに統合
 - **YAML設定**: シンプルで読みやすい設定ファイル
 - **並列実行**: Virtual Threadsベースの並列実行（オプトイン、並列数制限可能）
@@ -23,7 +23,7 @@
 ### 前提条件
 
 - Java 21以降
-- PostgreSQLデータベース（マイグレーション実行用）
+- サポート対象のデータベース（PostgreSQL、MySQL 8.0+、または任意のJDBC対応データベース）
 
 ### ビルド
 
@@ -137,7 +137,10 @@ migraphe {
 }
 
 dependencies {
+    // 使用するデータベースに応じてプラグインを選択:
     migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-jdbc:0.1.0-SNAPSHOT")
 }
 ```
 

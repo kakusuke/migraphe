@@ -11,7 +11,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 
 - **DAG-based Migration**: Define complex dependencies between migration tasks
 - **Multi-Environment Support**: Manage migrations across development, staging, and production
-- **Pluggable Architecture**: Support for PostgreSQL, with extensibility for other databases
+- **Pluggable Architecture**: Support for PostgreSQL, MySQL, and any JDBC database via generic plugin
 - **Gradle Plugin**: Integrate migrations into your Gradle build with `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate`
 - **YAML Configuration**: Simple, readable configuration files
 - **Parallel Execution**: Opt-in Virtual Threads-based parallel execution with configurable concurrency
@@ -23,7 +23,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 ### Prerequisites
 
 - Java 21 or later
-- PostgreSQL database (for running migrations)
+- A supported database (PostgreSQL, MySQL 8.0+, or any JDBC-compatible database)
 
 ### Build
 
@@ -137,7 +137,10 @@ migraphe {
 }
 
 dependencies {
+    // Choose the plugin(s) for your database:
     migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
+    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-jdbc:0.1.0-SNAPSHOT")
 }
 ```
 

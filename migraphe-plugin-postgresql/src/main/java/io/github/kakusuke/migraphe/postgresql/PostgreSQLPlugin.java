@@ -6,6 +6,7 @@ import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 
 /**
  * PostgreSQL プラグイン実装。

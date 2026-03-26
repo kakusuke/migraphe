@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.postgresql;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.jdbc.JdbcException;
 import org.junit.jupiter.api.Test;
 
 class PostgreSQLExceptionTest {
@@ -31,5 +32,15 @@ class PostgreSQLExceptionTest {
         // then
         assertThat(exception.getMessage()).isEqualTo(message);
         assertThat(exception.getCause()).isEqualTo(cause);
+    }
+
+    @Test
+    void shouldExtendJdbcException() {
+        // when
+        PostgreSQLException exception = new PostgreSQLException("test");
+
+        // then
+        assertThat(exception).isInstanceOf(JdbcException.class);
+        assertThat(exception).isInstanceOf(RuntimeException.class);
     }
 }

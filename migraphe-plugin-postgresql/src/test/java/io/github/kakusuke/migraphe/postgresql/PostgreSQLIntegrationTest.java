@@ -10,6 +10,8 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
+import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
+import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
@@ -33,6 +35,9 @@ class PostgreSQLIntegrationTest {
                     .withPassword("test")
                     .waitingFor(new HostPortWaitStrategy().forPorts(5432));
 
+    private static final String PG_SCHEMA_RESOURCE =
+            "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
+
     private PostgreSQLEnvironment environment;
     private HistoryRepository historyRepo;
 
@@ -45,7 +50,7 @@ class PostgreSQLIntegrationTest {
                         postgres.getUsername(),
                         postgres.getPassword());
 
-        historyRepo = new PostgreSQLHistoryRepository(environment);
+        historyRepo = new JdbcHistoryRepository(environment, PG_SCHEMA_RESOURCE);
     }
 
     @AfterEach
@@ -84,8 +89,8 @@ class PostgreSQLIntegrationTest {
         // given
         historyRepo.initialize();
 
-        PostgreSQLMigrationNode node =
-                PostgreSQLMigrationNode.builder()
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
                         .environment(environment)
@@ -134,8 +139,8 @@ class PostgreSQLIntegrationTest {
         historyRepo.initialize();
 
         // First create a table
-        PostgreSQLMigrationNode node =
-                PostgreSQLMigrationNode.builder()
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
                         .environment(environment)
@@ -168,8 +173,8 @@ class PostgreSQLIntegrationTest {
     @Test
     void shouldRollbackOnSqlError() {
         // given
-        PostgreSQLMigrationNode node =
-                PostgreSQLMigrationNode.builder()
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
                         .id("V002")
                         .name("Invalid SQL")
                         .environment(environment)
@@ -191,8 +196,8 @@ class PostgreSQLIntegrationTest {
         // given
         historyRepo.initialize();
 
-        PostgreSQLMigrationNode node1 =
-                PostgreSQLMigrationNode.builder()
+        JdbcMigrationNode node1 =
+                JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
                         .environment(environment)
@@ -200,8 +205,8 @@ class PostgreSQLIntegrationTest {
                         .downSql("DROP TABLE IF EXISTS users;")
                         .build();
 
-        PostgreSQLMigrationNode node2 =
-                PostgreSQLMigrationNode.builder()
+        JdbcMigrationNode node2 =
+                JdbcMigrationNode.builder()
                         .id("V002")
                         .name("Create posts table")
                         .environment(environment)
@@ -312,8 +317,8 @@ class PostgreSQLIntegrationTest {
         // given
         historyRepo.initialize();
 
-        PostgreSQLMigrationNode node =
-                PostgreSQLMigrationNode.builder()
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
                         .id("autocommit_test")
                         .name("Autocommit migration")
                         .environment(environment)
@@ -346,8 +351,8 @@ class PostgreSQLIntegrationTest {
         // given
         historyRepo.initialize();
 
-        PostgreSQLMigrationNode node =
-                PostgreSQLMigrationNode.builder()
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
                         .id("autocommit_down")
                         .name("Autocommit down migration")
                         .environment(environment)

@@ -5,6 +5,8 @@ import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
+import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 import java.util.Set;
 
 /**
@@ -32,15 +34,11 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
                     "TaskDefinition must be SqlTaskDefinition, got: " + task.getClass().getName());
         }
 
-        // UP SQL を取得
         String upSql = task.up();
-
-        // autocommit を取得（デフォルト false）
         boolean autocommit = sqlTask.autocommit().orElse(false);
 
-        // PostgreSQLMigrationNode を構築
         var builder =
-                PostgreSQLMigrationNode.builder()
+                JdbcMigrationNode.builder()
                         .id(nodeId)
                         .name(task.name())
                         .environment(pgEnv)
@@ -48,10 +46,7 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
                         .upSql(upSql)
                         .autocommit(autocommit);
 
-        // description（オプション）
         task.description().ifPresent(builder::description);
-
-        // DOWN SQL（オプション）
         task.down().filter(sql -> !sql.isBlank()).ifPresent(builder::downSql);
 
         return builder.build();

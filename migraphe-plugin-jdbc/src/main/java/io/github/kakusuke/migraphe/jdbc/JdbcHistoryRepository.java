@@ -1,4 +1,4 @@
-package io.github.kakusuke.migraphe.postgresql;
+package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
@@ -17,16 +17,23 @@ import java.util.*;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
-/** PostgreSQL でマイグレーション履歴を永続化する実装。 */
-public final class PostgreSQLHistoryRepository implements HistoryRepository {
+/** JDBC でマイグレーション履歴を永続化する汎用実装。 */
+public final class JdbcHistoryRepository implements HistoryRepository {
 
-    private static final String SCHEMA_RESOURCE =
-            "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
+    private static final String DEFAULT_SCHEMA_RESOURCE =
+            "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql";
 
-    private final PostgreSQLEnvironment environment;
+    private final JdbcEnvironment environment;
+    private final String schemaResourcePath;
 
-    public PostgreSQLHistoryRepository(PostgreSQLEnvironment environment) {
+    public JdbcHistoryRepository(JdbcEnvironment environment) {
+        this(environment, DEFAULT_SCHEMA_RESOURCE);
+    }
+
+    public JdbcHistoryRepository(JdbcEnvironment environment, String schemaResourcePath) {
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
+        this.schemaResourcePath =
+                Objects.requireNonNull(schemaResourcePath, "schemaResourcePath must not be null");
     }
 
     @Override
@@ -36,9 +43,9 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
             String schemaSql = loadSchemaResource();
             stmt.execute(schemaSql);
         } catch (SQLException e) {
-            throw new PostgreSQLException("Failed to initialize history schema", e);
+            throw new JdbcException("Failed to initialize history schema", e);
         } catch (IOException e) {
-            throw new PostgreSQLException("Failed to load schema resource", e);
+            throw new JdbcException("Failed to load schema resource", e);
         }
     }
 
@@ -70,7 +77,7 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
 
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            throw new PostgreSQLException("Failed to record execution history", e);
+            throw new JdbcException("Failed to record execution history", e);
         }
     }
 
@@ -79,7 +86,6 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
-        // 最新のレコードを取得し、UP かつ SUCCESS の場合のみ実行済みとみなす
         String sql =
                 """
                 SELECT direction, status FROM migraphe_history
@@ -103,7 +109,7 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
                 return false;
             }
         } catch (SQLException e) {
-            throw new PostgreSQLException("Failed to check execution status", e);
+            throw new JdbcException("Failed to check execution status", e);
         }
     }
 
@@ -111,7 +117,6 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
     public List<NodeId> executedNodes(EnvironmentId environmentId) {
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
-        // 各ノードの最新レコードが UP かつ SUCCESS のものだけを返す
         String sql =
                 """
                 SELECT node_id FROM (
@@ -137,7 +142,7 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
                 return nodes;
             }
         } catch (SQLException e) {
-            throw new PostgreSQLException("Failed to get executed nodes", e);
+            throw new JdbcException("Failed to get executed nodes", e);
         }
     }
 
@@ -167,7 +172,7 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
                 return null;
             }
         } catch (SQLException e) {
-            throw new PostgreSQLException("Failed to find latest record", e);
+            throw new JdbcException("Failed to find latest record", e);
         }
     }
 
@@ -195,7 +200,7 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
                 return records;
             }
         } catch (SQLException e) {
-            throw new PostgreSQLException("Failed to get all records", e);
+            throw new JdbcException("Failed to get all records", e);
         }
     }
 
@@ -225,9 +230,9 @@ public final class PostgreSQLHistoryRepository implements HistoryRepository {
     }
 
     private String loadSchemaResource() throws IOException {
-        try (InputStream is = getClass().getResourceAsStream(SCHEMA_RESOURCE)) {
+        try (InputStream is = getClass().getResourceAsStream(schemaResourcePath)) {
             if (is == null) {
-                throw new IOException("Schema resource not found: " + SCHEMA_RESOURCE);
+                throw new IOException("Schema resource not found: " + schemaResourcePath);
             }
             try (BufferedReader reader =
                     new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {

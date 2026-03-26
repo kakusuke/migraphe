@@ -1,0 +1,34 @@
+package io.github.kakusuke.migraphe.mysql;
+
+import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
+import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithName;
+import java.util.Optional;
+
+/**
+ * MySQL 用の EnvironmentDefinition サブタイプ。
+ *
+ * <p>YAML ファイルから直接マッピングされる。ターゲット名はファイル名から導出される。
+ *
+ * <p>YAML 例 (targets/db1.yaml):
+ *
+ * <pre>{@code
+ * type: mysql
+ * jdbc_url: jdbc:mysql://localhost:3306/mydb
+ * username: dbuser
+ * password: secret
+ * }</pre>
+ */
+@ConfigMapping(prefix = "")
+public interface MySQLEnvironmentDefinition extends EnvironmentDefinition {
+
+    @Override
+    String type();
+
+    @WithName("jdbc_url")
+    String jdbcUrl();
+
+    String username();
+
+    Optional<String> password();
+}

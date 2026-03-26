@@ -17,6 +17,7 @@ dependencyResolutionManagement {
             version("errorprone", "2.24.1")
             version("nullaway", "0.10.26")
             version("jspecify", "0.3.0")
+            version("h2", "2.3.232")
 
             // Libraries
             library("junit-bom", "org.junit", "junit-bom").versionRef("junit")
@@ -37,6 +38,16 @@ dependencyResolutionManagement {
                 .withoutVersion()
             library("testcontainers-junit-jupiter", "org.testcontainers", "testcontainers-junit-jupiter")
                 .withoutVersion()
+
+            // MySQL Plugin Dependencies
+            version("mysql-connector-j", "9.2.0")
+            library("mysql-connector-j", "com.mysql", "mysql-connector-j")
+                .versionRef("mysql-connector-j")
+            library("testcontainers-mysql", "org.testcontainers", "testcontainers-mysql")
+                .withoutVersion()
+
+            // JDBC Plugin Dependencies
+            library("h2", "com.h2database", "h2").versionRef("h2")
 
             // CLI Dependencies
             library("jackson-databind", "com.fasterxml.jackson.core", "jackson-databind")
@@ -80,6 +91,8 @@ dependencyResolutionManagement {
 
 include("migraphe-api")
 include("migraphe-core")
+include("migraphe-plugin-jdbc")
 include("migraphe-plugin-postgresql")
+include("migraphe-plugin-mysql")
 include("migraphe-cli")
 include("migraphe-gradle-plugin")

@@ -5,6 +5,8 @@ plugins {
 dependencies {
     // API dependency - compileOnly because host application provides it at runtime
     compileOnly(project(":migraphe-api"))
+    // JDBC common module
+    api(project(":migraphe-plugin-jdbc"))
     // API needed for tests
     testImplementation(project(":migraphe-api"))
 

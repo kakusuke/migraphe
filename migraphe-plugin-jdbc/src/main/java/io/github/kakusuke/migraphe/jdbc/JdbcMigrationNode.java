@@ -1,4 +1,4 @@
-package io.github.kakusuke.migraphe.postgresql;
+package io.github.kakusuke.migraphe.jdbc;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -9,22 +9,23 @@ import io.github.kakusuke.migraphe.api.task.Task;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Objects;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** PostgreSQL マイグレーションノードの実装。 Builder パターンで SQL ファイルまたは文字列から構築する。 */
-public final class PostgreSQLMigrationNode implements MigrationNode {
+/** JDBC マイグレーションノードの実装。Builder パターンで SQL ファイルまたは文字列から構築する。 */
+public final class JdbcMigrationNode implements MigrationNode {
 
     private final NodeId id;
     private final String name;
     private final @Nullable String description;
-    private final PostgreSQLEnvironment environment;
+    private final JdbcEnvironment environment;
     private final Set<NodeId> dependencies;
     private final String upSql;
     private final @Nullable String downSql;
     private final boolean autocommit;
 
-    private PostgreSQLMigrationNode(Builder builder) {
+    private JdbcMigrationNode(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
         this.name = Objects.requireNonNull(builder.name, "name must not be null");
         this.description = builder.description;
@@ -67,13 +68,13 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
 
     @Override
     public Task upTask() {
-        return PostgreSQLUpTask.create(environment, upSql, downSql, autocommit);
+        return JdbcUpTask.create(environment, upSql, downSql, autocommit);
     }
 
     @Override
     public @Nullable Task downTask() {
         if (downSql != null) {
-            return PostgreSQLDownTask.create(environment, downSql, autocommit);
+            return JdbcDownTask.create(environment, downSql, autocommit);
         }
         return null;
     }
@@ -86,7 +87,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
         private @Nullable NodeId id;
         private @Nullable String name;
         private @Nullable String description;
-        private @Nullable PostgreSQLEnvironment environment;
+        private @Nullable JdbcEnvironment environment;
         private Set<NodeId> dependencies = Set.of();
         private @Nullable String upSql;
         private @Nullable String downSql;
@@ -112,7 +113,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
             return this;
         }
 
-        public Builder environment(PostgreSQLEnvironment environment) {
+        public Builder environment(JdbcEnvironment environment) {
             this.environment = environment;
             return this;
         }
@@ -127,91 +128,43 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
             return this;
         }
 
-        /**
-         * UP SQL を文字列として設定する。
-         *
-         * @param sql UP SQL
-         * @return Builder
-         */
         public Builder upSql(String sql) {
             this.upSql = sql;
             return this;
         }
 
-        /**
-         * UP SQL をファイルから読み込む。
-         *
-         * @param path SQL ファイルのパス
-         * @return Builder
-         * @throws IOException ファイル読み込みに失敗した場合
-         */
         public Builder upSqlFromFile(Path path) throws IOException {
             this.upSql = Files.readString(path);
             return this;
         }
 
-        /**
-         * UP SQL をリソースから読み込む。
-         *
-         * @param resourcePath リソースパス（例: "/migrations/V001__create_table.sql"）
-         * @return Builder
-         * @throws IOException リソース読み込みに失敗した場合
-         */
         public Builder upSqlFromResource(String resourcePath) throws IOException {
             this.upSql = loadResource(resourcePath);
             return this;
         }
 
-        /**
-         * DOWN SQL を文字列として設定する。
-         *
-         * @param sql DOWN SQL
-         * @return Builder
-         */
         public Builder downSql(@Nullable String sql) {
             this.downSql = sql;
             return this;
         }
 
-        /**
-         * DOWN SQL をファイルから読み込む。
-         *
-         * @param path SQL ファイルのパス
-         * @return Builder
-         * @throws IOException ファイル読み込みに失敗した場合
-         */
         public Builder downSqlFromFile(Path path) throws IOException {
             this.downSql = Files.readString(path);
             return this;
         }
 
-        /**
-         * DOWN SQL をリソースから読み込む。
-         *
-         * @param resourcePath リソースパス
-         * @return Builder
-         * @throws IOException リソース読み込みに失敗した場合
-         */
         public Builder downSqlFromResource(String resourcePath) throws IOException {
             this.downSql = loadResource(resourcePath);
             return this;
         }
 
-        /**
-         * autocommit モードを設定する。
-         *
-         * <p>true の場合、トランザクションを使用せずに実行する。 CREATE DATABASE などトランザクション内で実行できない SQL 用。
-         *
-         * @param autocommit autocommit を有効にする場合は true
-         * @return Builder
-         */
         public Builder autocommit(boolean autocommit) {
             this.autocommit = autocommit;
             return this;
         }
 
-        public PostgreSQLMigrationNode build() {
-            return new PostgreSQLMigrationNode(this);
+        public JdbcMigrationNode build() {
+            return new JdbcMigrationNode(this);
         }
 
         private String loadResource(String resourcePath) throws IOException {
@@ -227,7 +180,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
     @Override
     public boolean equals(Object obj) {
         if (this == obj) return true;
-        if (!(obj instanceof PostgreSQLMigrationNode other)) return false;
+        if (!(obj instanceof JdbcMigrationNode other)) return false;
         return id.equals(other.id);
     }
 
@@ -238,7 +191,7 @@ public final class PostgreSQLMigrationNode implements MigrationNode {
 
     @Override
     public String toString() {
-        return "PostgreSQLMigrationNode{"
+        return "JdbcMigrationNode{"
                 + "id="
                 + id
                 + ", name='"

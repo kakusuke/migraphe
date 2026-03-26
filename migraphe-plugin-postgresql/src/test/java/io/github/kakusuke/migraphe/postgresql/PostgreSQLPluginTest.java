@@ -10,6 +10,9 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
+import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
+import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.List;
@@ -166,7 +169,7 @@ class PostgreSQLPluginTest {
 
         // then
         assertThat(node).isNotNull();
-        assertThat(node).isInstanceOf(PostgreSQLMigrationNode.class);
+        assertThat(node).isInstanceOf(JdbcMigrationNode.class);
         assertThat(node.id()).isEqualTo(nodeId);
         assertThat(node.name()).isEqualTo("Create users table");
         assertThat(node.description()).isEqualTo("Initial schema");
@@ -210,7 +213,7 @@ class PostgreSQLPluginTest {
 
         // then
         assertThat(repo).isNotNull();
-        assertThat(repo).isInstanceOf(PostgreSQLHistoryRepository.class);
+        assertThat(repo).isInstanceOf(JdbcHistoryRepository.class);
     }
 
     @Test

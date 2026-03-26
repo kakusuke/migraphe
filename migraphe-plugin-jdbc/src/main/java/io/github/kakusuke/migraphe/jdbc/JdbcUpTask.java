@@ -1,4 +1,4 @@
-package io.github.kakusuke.migraphe.postgresql;
+package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
@@ -10,16 +10,16 @@ import java.sql.Statement;
 import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
-/** PostgreSQL で UP マイグレーション（前進）を実行するタスク。 */
-public final class PostgreSQLUpTask implements Task, SqlContentProvider {
+/** JDBC で UP マイグレーション（前進）を実行するタスク。 */
+public final class JdbcUpTask implements Task, SqlContentProvider {
 
-    private final PostgreSQLEnvironment environment;
+    private final JdbcEnvironment environment;
     private final String upSql;
     private final @Nullable String downSql;
     private final boolean autocommit;
 
-    private PostgreSQLUpTask(
-            PostgreSQLEnvironment environment,
+    private JdbcUpTask(
+            JdbcEnvironment environment,
             String upSql,
             @Nullable String downSql,
             boolean autocommit) {
@@ -33,21 +33,12 @@ public final class PostgreSQLUpTask implements Task, SqlContentProvider {
         }
     }
 
-    /**
-     * UP SQL と DOWN SQL から UP タスクを作成する。
-     *
-     * @param environment PostgreSQL 環境
-     * @param upSql UP SQL
-     * @param downSql DOWN SQL（ロールバック用、null 許容）
-     * @param autocommit autocommit モードで実行するかどうか
-     * @return UP タスク
-     */
-    public static PostgreSQLUpTask create(
-            PostgreSQLEnvironment environment,
+    public static JdbcUpTask create(
+            JdbcEnvironment environment,
             String upSql,
             @Nullable String downSql,
             boolean autocommit) {
-        return new PostgreSQLUpTask(environment, upSql, downSql, autocommit);
+        return new JdbcUpTask(environment, upSql, downSql, autocommit);
     }
 
     @Override
@@ -69,9 +60,7 @@ public final class PostgreSQLUpTask implements Task, SqlContentProvider {
 
     private Result<TaskResult, String> executeWithAutocommit(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            // autocommit モードでは各ステートメントを個別に実行
-            // （CREATE DATABASE などは暗黙的トランザクションでも実行不可のため）
-            for (String sql : splitStatements(upSql)) {
+            for (String sql : SqlStatements.splitStatements(upSql)) {
                 stmt.execute(sql);
             }
             long durationMs = System.currentTimeMillis() - startTime;
@@ -89,21 +78,6 @@ public final class PostgreSQLUpTask implements Task, SqlContentProvider {
         } catch (SQLException e) {
             return Result.err("Failed to execute UP migration: " + e.getMessage());
         }
-    }
-
-    /**
-     * SQL テキストをステートメントに分割する。
-     *
-     * <p>セミコロン + 空白/コメント + 改行 のパターンで分割。 文字列リテラル内のセミコロンで誤分割しないよう、行末のみを対象とする。
-     */
-    private static String[] splitStatements(String sql) {
-        // セミコロン + 空白/コメント(optional) + 改行 で分割
-        String[] parts = sql.split(";\\s*?(--[^\\n]*)?\\r?\\n");
-        return java.util.Arrays.stream(parts)
-                .map(String::trim)
-                .map(s -> s.endsWith(";") ? s.substring(0, s.length() - 1).trim() : s)
-                .filter(s -> !s.isEmpty())
-                .toArray(String[]::new);
     }
 
     private Result<TaskResult, String> executeWithTransaction(Connection conn, long startTime) {
@@ -134,10 +108,10 @@ public final class PostgreSQLUpTask implements Task, SqlContentProvider {
 
     @Override
     public String description() {
-        return autocommit ? "PostgreSQL UP migration (autocommit)" : "PostgreSQL UP migration";
+        String label = environment.getDbLabel();
+        return autocommit ? label + " UP migration (autocommit)" : label + " UP migration";
     }
 
-    /** UP SQL を取得する（失敗時の詳細表示用）。 */
     public String upSql() {
         return upSql;
     }

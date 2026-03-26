@@ -1,4 +1,4 @@
-package io.github.kakusuke.migraphe.postgresql;
+package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.smallrye.config.ConfigMapping;
@@ -6,7 +6,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * PostgreSQL 用の TaskDefinition サブタイプ。
+ * SQL ベースの TaskDefinition。
  *
  * <p>YAML ファイルから直接マッピングされる。up/down は SQL 文字列。
  *
@@ -15,7 +15,7 @@ import java.util.Optional;
  * <pre>{@code
  * name: create_database
  * target: admin
- * autocommit: true  # トランザクション外で実行
+ * autocommit: true
  * up: "CREATE DATABASE myapp;"
  * down: "DROP DATABASE myapp;"
  * }</pre>
