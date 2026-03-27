@@ -8,6 +8,9 @@ dependencies {
     // API needed for tests
     testImplementation(project(":migraphe-api"))
 
+    // Generator API
+    api(project(":migraphe-generator-api"))
+
     // MicroProfile Config (for @ConfigMapping)
     implementation(libs.smallrye.config)
 

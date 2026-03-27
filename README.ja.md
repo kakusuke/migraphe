@@ -14,6 +14,7 @@
 - **プラガブルアーキテクチャ**: PostgreSQL、MySQL、および汎用JDBCプラグインによる任意のJDBCデータベースをサポート
 - **Gradleプラグイン**: `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate` タスクでビルドに統合
 - **YAML設定**: シンプルで読みやすい設定ファイル
+- **スキーマドキュメント生成**: `generate` コマンドでデータベーススキーマからMarkdownドキュメントを自動生成
 - **並列実行**: Virtual Threadsベースの並列実行（オプトイン、並列数制限可能）
 - **実行履歴**: マイグレーション実行履歴の追跡とロールバックサポート
 - **型安全**: Java 21で構築、モダンな言語機能を活用
@@ -99,6 +100,9 @@ java -jar path/to/migraphe-cli-all.jar status
 
 # マイグレーションの実行
 java -jar path/to/migraphe-cli-all.jar up
+
+# スキーマドキュメントの生成
+java -jar path/to/migraphe-cli-all.jar generate
 ```
 
 ## Gradleプラグイン
@@ -154,6 +158,8 @@ dependencies {
 ./gradlew migrapheUp --target=db1/create_users  # 特定ノードまで実行
 ./gradlew migrapheDown --all        # 全マイグレーションのロールバック
 ./gradlew migrapheDown --target=db1/create_users  # 特定ノードまでロールバック
+./gradlew migrapheGenerate          # スキーマドキュメント生成
+./gradlew migrapheGenerate --name=mydb  # 特定のジェネレータのみ実行
 ```
 
 ## ドキュメント

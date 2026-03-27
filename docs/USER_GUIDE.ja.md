@@ -12,10 +12,11 @@
 6. [マイグレーションの実行](#マイグレーションの実行)
 7. [ロールバック（down）](#ロールバックdown)
 8. [設定の検証（validate）](#設定の検証validate)
-9. [環境管理](#環境管理)
-10. [高度な機能](#高度な機能)
-11. [Gradleプラグイン](#gradleプラグイン)
-12. [トラブルシューティング](#トラブルシューティング)
+9. [スキーマドキュメント生成（generate）](#スキーマドキュメント生成generate)
+10. [環境管理](#環境管理)
+11. [高度な機能](#高度な機能)
+12. [Gradleプラグイン](#gradleプラグイン)
+13. [トラブルシューティング](#トラブルシューティング)
 
 ## はじめに
 
@@ -648,6 +649,98 @@ Validation failed with 5 errors.
 | 0 | 検証成功（エラーなし） |
 | 1 | 検証失敗（1つ以上のエラー） |
 
+## スキーマドキュメント生成（generate）
+
+`generate` コマンドは、データベーススキーマからドキュメントを生成します。ジェネレータプラグインがデータベースに接続し、構造化された出力（例: Markdownファイル）を生成します。
+
+### 設定
+
+`migraphe.yaml` に `generators` セクションを追加します:
+
+```yaml
+project:
+  name: my-project
+
+history:
+  target: history
+
+generators:
+  - name: mydb
+    type: jdbc-markdown
+    target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"
+      - schema: "public"
+        table: "tmp_.*"
+```
+
+**フィールド:**
+- `name`（必須）: ジェネレータの識別子
+- `type`（必須）: ジェネレータプラグインのタイプ（例: `jdbc-markdown`）
+- `target`（必須）: 接続先のターゲット名（ターゲット設定と一致する必要があります）
+- `output-dir`（必須）: 生成ファイルの出力先ディレクトリ
+- `excludes`（オプション）: 除外フィルタのリスト（正規表現パターン）
+  - `schema`: スキーマ名にマッチする正規表現パターン
+  - `table`: テーブル名にマッチする正規表現パターン（`schema` と組み合わせて使用）
+
+### 利用可能なジェネレータプラグイン
+
+| プラグイン | タイプ | 説明 |
+|-----------|--------|------|
+| `migraphe-generator-jdbc-markdown` | `jdbc-markdown` | JDBCデータベーススキーマからMarkdownドキュメントを生成 |
+
+### 基本的な使い方
+
+```bash
+# 設定済みの全ジェネレータでドキュメントを生成
+java -jar migraphe-cli-all.jar generate
+
+# 特定のジェネレータのみ実行
+java -jar migraphe-cli-all.jar generate --name mydb
+```
+
+### 出力構造（jdbc-markdown）
+
+`jdbc-markdown` ジェネレータは以下のディレクトリ構造を生成します:
+
+```
+docs/schema/
+└── mydb/
+    └── public/
+        ├── index.md              # スキーマ概要（テーブル/ビュー一覧）
+        ├── tables/
+        │   ├── users.md          # テーブル詳細（カラム、キー、インデックス）
+        │   └── posts.md
+        └── views/
+            └── recent_posts.md   # ビュー詳細
+```
+
+各テーブルのドキュメントには以下が含まれます:
+- カラム定義（名前、型、NULL許可、デフォルト値）
+- 主キーとユニーク制約
+- 外部キー参照（参照先テーブルへのクロスリンク付き）
+- インデックス
+
+### 除外フィルタリング
+
+`excludes` を使用して、正規表現パターンにマッチするスキーマやテーブルをスキップします:
+
+```yaml
+generators:
+  - name: mydb
+    type: jdbc-markdown
+    target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"     # スキーマ全体を除外
+      - schema: "pg_catalog"             # PostgreSQLシステムスキーマを除外
+      - schema: "public"
+        table: "tmp_.*"                  # publicスキーマの一時テーブルを除外
+      - schema: ".*"
+        table: "flyway_schema_history"   # 全スキーマで特定テーブルを除外
+```
+
 ## 環境管理
 
 ### 開発環境
@@ -834,6 +927,7 @@ dependencies {
 | `migrapheStatus` | マイグレーション実行状況の表示 |
 | `migrapheUp` | マイグレーション（前進）の実行 |
 | `migrapheDown` | ロールバック（後退）の実行 |
+| `migrapheGenerate` | スキーマドキュメントの生成 |
 
 ### タスクオプション
 
@@ -845,6 +939,9 @@ dependencies {
 - `--target=<nodeId>` — 特定のノードまでロールバック
 - `--all` — 全実行済みマイグレーションのロールバック
 - `--preview` — 実行せずにプレビュー
+
+**migrapheGenerate**:
+- `--name=<name>` — 特定のジェネレータのみ実行
 
 プロジェクトプロパティ（`-P`）でも指定可能:
 

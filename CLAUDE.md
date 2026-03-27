@@ -7,19 +7,20 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 17 (JDBC Plugin Extraction + MySQL Plugin) - COMPLETE
-**Tests**: 472, 100% passing
+**Current Phase**: 18 (Generator Plugin System + JDBC Markdown Docs) - COMPLETE
+**Tests**: 509, 100% passing
 
 ## Module Structure
 
 ```
 migraphe-api/              # Lightweight interfaces (no external deps) - for plugin developers
+migraphe-generator-api/    # Generator SPI (GeneratorPlugin, Generator, GeneratorDefinition)
 migraphe-core/             # Orchestration logic, algorithms, config loading, factories
 migraphe-plugin-jdbc/      # Generic JDBC plugin (type="jdbc") - standalone or base for DB-specific plugins
 migraphe-plugin-postgresql/ # PostgreSQL plugin (extends jdbc, driver/DDL fixed)
 migraphe-plugin-mysql/     # MySQL plugin (extends jdbc, driver/DDL fixed)
 migraphe-cli/              # CLI entry point, commands, console output
-migraphe-gradle-plugin/    # Gradle plugin (migrapheUp/Down/Status/Validate tasks)
+migraphe-gradle-plugin/    # Gradle plugin (migrapheUp/Down/Status/Validate/Generate tasks)
 ```
 
 ## Core Interfaces (Plugins implement these)
@@ -28,6 +29,8 @@ migraphe-gradle-plugin/    # Gradle plugin (migrapheUp/Down/Status/Validate task
 - `Environment` - Environment configuration
 - `Task` - Execution logic (up/down)
 - `HistoryRepository` - Execution history persistence
+- `SchemaInfoProvider<T>` - Schema info extraction from Environment
+- `GeneratorPlugin` - Artifact generation SPI (GeneratorDefinition, Generator)
 
 ## Package Structure
 
@@ -38,16 +41,21 @@ io.github.kakusuke.migraphe.api/
 ├── task/           # Task, TaskResult, ExecutionDirection
 ├── history/        # HistoryRepository (interface), ExecutionRecord, ExecutionStatus
 ├── execution/      # ExecutionListener, ExecutionPlanInfo, ExecutionSummary
+├── schema/         # SchemaInfoProvider<T>
 ├── common/         # Result, ValidationResult
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
+
+io.github.kakusuke.migraphe.generator.api/
+└── GeneratorPlugin, Generator, GeneratorDefinition
 
 io.github.kakusuke.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, ExecutionLevel, TopologicalSort, FormatUtils
 │   └── layout/     # ExecutionGraphView, LayoutSort, LayoutOrder, LayoutTree, LayoutStream, NonTreeEdge, Cell, GridCanvas, NodeLineInfo, GraphVisualizer
 ├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult, ExecutionContext
 │                   # + ParallelMigrationExecutor, ReadyNodeTracker, SynchronizedExecutionListener, Executor (interface)
+├── generator/      # GeneratorRegistry, GeneratorExecutor
 ├── history/        # InMemoryHistoryRepository, SynchronizedHistoryRepository
-├── config/         # ProjectConfig, TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
+├── config/         # ProjectConfig (incl. GeneratorSection), TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
 ├── factory/        # EnvironmentFactory, MigrationNodeFactory (generic, uses PluginRegistry)
 ├── plugin/         # PluginRegistry, PluginLoadException
 ├── plugin/         # SimpleMigrationNode, SimpleEnvironment, SimpleTask (reference impl)
@@ -57,7 +65,10 @@ io.github.kakusuke.migraphe.jdbc/
 ├── JdbcEnvironment, JdbcUpTask, JdbcDownTask, JdbcMigrationNode, JdbcHistoryRepository
 ├── JdbcPlugin, Jdbc{Environment,MigrationNode,HistoryRepository}Provider
 ├── JdbcEnvironmentDefinition, SqlTaskDefinition, SqlStatements, JdbcException
-└── META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
+├── schema/         # JdbcSchemaInfo, JdbcSchemaDetail, JdbcTableInfo, JdbcViewInfo, JdbcColumnInfo, etc. (19 types)
+│                   # JdbcSchemaInfoProvider (DatabaseMetaData → JdbcSchemaInfo)
+├── markdown/       # JdbcMarkdownPlugin (type="jdbc-markdown"), JdbcMarkdownGenerator, JdbcMarkdownDefinition
+└── META-INF/services/ # MigraphePlugin + GeneratorPlugin
 
 io.github.kakusuke.migraphe.postgresql/
 ├── PostgreSQLEnvironment (extends JdbcEnvironment), PostgreSQLException (extends JdbcException)
@@ -73,7 +84,7 @@ io.github.kakusuke.migraphe.mysql/
 
 io.github.kakusuke.migraphe.cli/
 ├── Main.java
-├── command/        # Command, UpCommand, DownCommand, StatusCommand, ValidateCommand
+├── command/        # Command, UpCommand, DownCommand, StatusCommand, ValidateCommand, GenerateCommand
 ├── listener/       # ConsoleExecutionListener
 └── util/           # AnsiColor
 
@@ -81,7 +92,7 @@ io.github.kakusuke.migraphe.gradle/
 ├── MigrapheGradlePlugin.java     # Plugin entry point
 ├── MigrapheExtension.java        # DSL extension (baseDir)
 ├── AbstractMigrapheTask.java     # Base task (PluginRegistry, ExecutionContext)
-├── Migraphe{Up,Down,Status,Validate}Task.java  # Gradle tasks
+├── Migraphe{Up,Down,Status,Validate,Generate}Task.java  # Gradle tasks
 └── GradleExecutionListener.java  # Gradle Logger-based listener
 ```
 
@@ -101,6 +112,7 @@ io.github.kakusuke.migraphe.gradle/
 12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (13 variants), `addNonTreeEdge()` with lane routing, merge row reuse, and crossing detection. Grid extracted as inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
 13. **Parallel Execution (Phase 16)**: Opt-in via `execution.parallel: true`. `ParallelMigrationExecutor` uses Virtual Threads + `PriorityBlockingQueue` + `ReadyNodeTracker` (ready-based approach). Fail-fast on failure. `Semaphore` for `execution.max-parallelism`. `SynchronizedHistoryRepository`/`SynchronizedExecutionListener` decorators for thread safety. `Executor` interface shared by sequential/parallel.
 14. **JDBC Plugin Extraction (Phase 17)**: Generic `migraphe-plugin-jdbc` module extracts common JDBC logic (connection, SQL execution, history). DB-specific plugins (`postgresql`, `mysql`) extend `JdbcEnvironment` with fixed driver/label and provide optimized DDL. `SqlStatements` utility for SQL splitting. `JdbcPlugin` (type="jdbc") works standalone for any JDBC database.
+15. **Generator Plugin System (Phase 18)**: `migraphe-generator-api` module defines `GeneratorPlugin` SPI. `SchemaInfoProvider<T>` on `MigraphePlugin` for schema extraction. `JdbcSchemaInfoProvider` uses `DatabaseMetaData` → `JdbcSchemaInfo` (19 record types). `JdbcMarkdownPlugin` (type="jdbc-markdown") generates Markdown docs with directory structure, cross-references, and exclude filtering. `GeneratorRegistry` + `GeneratorExecutor` in core. `GenerateCommand` in CLI (`migraphe generate --name`). `MigrapheGenerateTask` in Gradle plugin.
 
 ## CLI Project Structure
 
@@ -112,7 +124,7 @@ project/
 └── environments/*.yaml  # Environment-specific overrides
 ```
 
-Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`
+Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`, `migraphe generate [--name <name>]`
 
 ## Instructions for Claude
 
@@ -171,10 +183,12 @@ Update when code changes:
 | 15 | Gradle plugin (Extension, Tasks, TestKit) | ✅ |
 | 16 | Virtual Threads parallel execution | ✅ |
 | 17 | JDBC plugin extraction + MySQL plugin | ✅ |
+| 18 | Generator plugin system + JDBC Markdown docs | ✅ |
 
 ### Future Phases
 
 - Additional database plugins (MongoDB, etc.)
+- DB-specific generator plugins (PostgreSQL Markdown, MySQL HTML, JDBC TypeScript)
 
 ## Design Principles
 
@@ -198,24 +212,24 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-03-26 (Session 32)
-- **Phase 17: JDBC Plugin Extraction + MySQL Plugin**
-  - New module: `migraphe-plugin-jdbc` — generic JDBC plugin (type="jdbc"), standalone-capable
-    - `JdbcEnvironment` (concrete, driverClassName/dbLabel as constructor args)
-    - `JdbcUpTask`, `JdbcDownTask`, `JdbcMigrationNode`, `JdbcHistoryRepository`
-    - `SqlStatements` utility, `SqlTaskDefinition` (moved from postgresql)
-    - `JdbcPlugin` + all Providers, ServiceLoader registered
-  - Refactored `migraphe-plugin-postgresql`:
-    - `PostgreSQLEnvironment extends JdbcEnvironment` (driver/label fixed)
-    - `PostgreSQLException extends JdbcException`
-    - Providers use `JdbcMigrationNode`/`JdbcHistoryRepository`
-    - Deleted: `PostgreSQLUpTask`, `PostgreSQLDownTask`, `PostgreSQLMigrationNode`, `PostgreSQLHistoryRepository`, `SqlTaskDefinition`
-  - New module: `migraphe-plugin-mysql` — MySQL 8.0+ plugin (type="mysql")
-    - `MySQLEnvironment extends JdbcEnvironment`, MySQL-optimized DDL
-    - Full Testcontainers integration tests
-  - Tests: 472 (core 331, cli 44, gradle 15, jdbc 55, postgresql 40, mysql 27 [incl. Testcontainers]), 100% passing
+### 2026-03-27 (Session 33)
+- **Phase 18: Generator Plugin System + JDBC Markdown Docs**
+  - New module: `migraphe-generator-api` — GeneratorPlugin SPI (GeneratorPlugin, Generator, GeneratorDefinition)
+  - `migraphe-api`: Added `SchemaInfoProvider<T>` interface, `MigraphePlugin.schemaInfoProvider()` default method
+  - `migraphe-plugin-jdbc`:
+    - `jdbc/schema/` — 19 record/enum types for structured DatabaseMetaData (JdbcSchemaInfo, JdbcTableInfo, JdbcColumnInfo, etc.)
+    - `JdbcSchemaInfoProvider` — DatabaseMetaData API → JdbcSchemaInfo (tables, views, columns, PK, FK, indexes)
+    - `jdbc/markdown/` — JdbcMarkdownPlugin (type="jdbc-markdown"), JdbcMarkdownGenerator (schema → Markdown files), JdbcMarkdownDefinition (@ConfigMapping with excludes)
+    - ServiceLoader registration for GeneratorPlugin
+  - `migraphe-core`:
+    - `ProjectConfig.GeneratorSection` — generators YAML list config
+    - `GeneratorRegistry` — ServiceLoader discovery for GeneratorPlugin
+    - `GeneratorExecutor` — orchestration with name filtering
+  - `migraphe-cli`: GenerateCommand (`migraphe generate --name`)
+  - `migraphe-gradle-plugin`: MigrapheGenerateTask (`migrapheGenerate --name`)
+  - Tests: 509 (core 336, cli 48, gradle 17, jdbc 68, generator-api 1, postgresql 40, mysql 27), 100% passing
 
 ---
 
-**Last Updated**: 2026-03-26
-**Current Work**: Phase 17 complete. JDBC plugin extraction + MySQL plugin.
+**Last Updated**: 2026-03-27
+**Current Work**: Phase 18 complete. Generator plugin system + JDBC Markdown documentation generation.

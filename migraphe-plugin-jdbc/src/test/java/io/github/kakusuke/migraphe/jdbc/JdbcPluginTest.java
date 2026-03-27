@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfoProvider;
 import java.util.ServiceLoader;
 import org.junit.jupiter.api.Test;
 
@@ -79,6 +80,14 @@ class JdbcPluginTest {
                 };
         assertThatThrownBy(() -> provider.createRepository(fakeEnv))
                 .isInstanceOf(JdbcException.class);
+    }
+
+    @Test
+    void schemaInfoProviderReturnsJdbcSchemaInfoProvider() {
+        assertThat(plugin.schemaInfoProvider())
+                .isPresent()
+                .get()
+                .isInstanceOf(JdbcSchemaInfoProvider.class);
     }
 
     @Test

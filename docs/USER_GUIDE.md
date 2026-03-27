@@ -12,10 +12,11 @@
 6. [Running Migrations](#running-migrations)
 7. [Rollback (down)](#rollback-down)
 8. [Configuration Validation (validate)](#configuration-validation-validate)
-9. [Environment Management](#environment-management)
-10. [Advanced Features](#advanced-features)
-11. [Gradle Plugin](#gradle-plugin)
-12. [Troubleshooting](#troubleshooting)
+9. [Schema Documentation Generation (generate)](#schema-documentation-generation-generate)
+10. [Environment Management](#environment-management)
+11. [Advanced Features](#advanced-features)
+12. [Gradle Plugin](#gradle-plugin)
+13. [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -648,6 +649,98 @@ Validation failed with 5 errors.
 | 0 | Validation successful (no errors) |
 | 1 | Validation failed (one or more errors) |
 
+## Schema Documentation Generation (generate)
+
+The `generate` command generates documentation from database schemas. Generator plugins connect to your databases and produce structured output (e.g., Markdown files).
+
+### Configuration
+
+Add a `generators` section to `migraphe.yaml`:
+
+```yaml
+project:
+  name: my-project
+
+history:
+  target: history
+
+generators:
+  - name: mydb
+    type: jdbc-markdown
+    target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"
+      - schema: "public"
+        table: "tmp_.*"
+```
+
+**Fields:**
+- `name` (required): Identifier for this generator
+- `type` (required): Generator plugin type (e.g., `jdbc-markdown`)
+- `target` (required): Target name to connect to (must match a target configuration)
+- `output-dir` (required): Directory where generated files are written
+- `excludes` (optional): List of exclusion filters (regex patterns)
+  - `schema`: Regex pattern to match schema names
+  - `table`: Regex pattern to match table names (used with `schema`)
+
+### Available Generator Plugins
+
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `migraphe-generator-jdbc-markdown` | `jdbc-markdown` | Generates Markdown documentation from JDBC database schemas |
+
+### Basic Usage
+
+```bash
+# Generate documentation for all configured generators
+java -jar migraphe-cli-all.jar generate
+
+# Generate documentation for a specific generator only
+java -jar migraphe-cli-all.jar generate --name mydb
+```
+
+### Output Structure (jdbc-markdown)
+
+The `jdbc-markdown` generator produces the following directory structure:
+
+```
+docs/schema/
+└── mydb/
+    └── public/
+        ├── index.md              # Schema overview (table/view listing)
+        ├── tables/
+        │   ├── users.md          # Table details (columns, keys, indexes)
+        │   └── posts.md
+        └── views/
+            └── recent_posts.md   # View details
+```
+
+Each table documentation includes:
+- Column definitions (name, type, nullable, default)
+- Primary key and unique constraints
+- Foreign key references with cross-links to referenced tables
+- Indexes
+
+### Exclude Filtering
+
+Use `excludes` to skip schemas or tables matching regex patterns:
+
+```yaml
+generators:
+  - name: mydb
+    type: jdbc-markdown
+    target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"     # Exclude entire schema
+      - schema: "pg_catalog"             # Exclude PostgreSQL system schema
+      - schema: "public"
+        table: "tmp_.*"                  # Exclude temp tables in public schema
+      - schema: ".*"
+        table: "flyway_schema_history"   # Exclude specific table in all schemas
+```
+
 ## Environment Management
 
 ### Development Environment
@@ -834,6 +927,7 @@ dependencies {
 | `migrapheStatus` | Show migration execution status |
 | `migrapheUp` | Execute forward (UP) migrations |
 | `migrapheDown` | Execute rollback (DOWN) migrations |
+| `migrapheGenerate` | Generate schema documentation |
 
 ### Task Options
 
@@ -845,6 +939,9 @@ dependencies {
 - `--target=<nodeId>` — Rollback to a specific node
 - `--all` — Rollback all executed migrations
 - `--preview` — Preview without executing
+
+**migrapheGenerate**:
+- `--name=<name>` — Generate for a specific generator only
 
 Options can also be specified via project properties (`-P`):
 

@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.cli;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.command.DownCommand;
+import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
 import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
@@ -37,6 +38,16 @@ public class Main {
             if ("validate".equals(commandName)) {
                 ValidateCommand validateCommand = new ValidateCommand(baseDir, pluginRegistry);
                 int exitCode = validateCommand.execute();
+                System.exit(exitCode);
+                return;
+            }
+
+            // generate コマンドは独自に設定をロードする
+            if ("generate".equals(commandName)) {
+                String nameFilter = parseNameOption(args);
+                GenerateCommand generateCommand =
+                        new GenerateCommand(baseDir, pluginRegistry, nameFilter);
+                int exitCode = generateCommand.execute();
                 System.exit(exitCode);
                 return;
             }
@@ -136,6 +147,17 @@ public class Main {
         return new DownCommand(context, targetVersion, allMigrations, skipConfirm, dryRun);
     }
 
+    /** --name オプションの値を取得する。 */
+    private static @Nullable String parseNameOption(String[] args) {
+        List<String> argList = Arrays.asList(args);
+        for (int i = 0; i < argList.size() - 1; i++) {
+            if ("--name".equals(argList.get(i))) {
+                return argList.get(i + 1);
+            }
+        }
+        return null;
+    }
+
     /** 使用方法を表示する。 */
     private static void printUsage() {
         System.out.println("Migraphe - Database Migration Tool");
@@ -148,6 +170,7 @@ public class Main {
         System.out.println("  status                              Show migration status");
         System.out.println(
                 "  validate                            Validate configuration (offline)");
+        System.out.println("  generate [--name <name>]            Run generators");
         System.out.println();
         System.out.println("Up options:");
         System.out.println("  <id>        Execute migrations up to and including <id>");
@@ -159,6 +182,9 @@ public class Main {
         System.out.println("  --all       Rollback all executed migrations");
         System.out.println("  -y          Skip confirmation prompt");
         System.out.println("  --dry-run   Show plan without executing");
+        System.out.println();
+        System.out.println("Generate options:");
+        System.out.println("  --name <name>  Run only the generator with matching name");
         System.out.println();
     }
 }

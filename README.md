@@ -14,6 +14,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **Pluggable Architecture**: Support for PostgreSQL, MySQL, and any JDBC database via generic plugin
 - **Gradle Plugin**: Integrate migrations into your Gradle build with `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate`
 - **YAML Configuration**: Simple, readable configuration files
+- **Schema Documentation Generation**: Generate Markdown documentation from database schemas via `generate` command
 - **Parallel Execution**: Opt-in Virtual Threads-based parallel execution with configurable concurrency
 - **Execution History**: Track migration execution history with rollback support
 - **Type-Safe**: Built with Java 21, leveraging modern language features
@@ -99,6 +100,9 @@ java -jar path/to/migraphe-cli-all.jar status
 
 # Execute migrations
 java -jar path/to/migraphe-cli-all.jar up
+
+# Generate schema documentation
+java -jar path/to/migraphe-cli-all.jar generate
 ```
 
 ## Gradle Plugin
@@ -154,6 +158,8 @@ Available tasks:
 ./gradlew migrapheUp --target=db1/create_users  # Migrate up to specific node
 ./gradlew migrapheDown --all        # Rollback all migrations
 ./gradlew migrapheDown --target=db1/create_users  # Rollback to specific node
+./gradlew migrapheGenerate          # Generate schema documentation
+./gradlew migrapheGenerate --name=mydb  # Generate for specific generator
 ```
 
 ## Documentation

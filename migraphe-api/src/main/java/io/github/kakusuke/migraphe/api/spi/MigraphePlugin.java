@@ -1,5 +1,8 @@
 package io.github.kakusuke.migraphe.api.spi;
 
+import io.github.kakusuke.migraphe.api.schema.SchemaInfoProvider;
+import java.util.Optional;
+
 /**
  * Migraphe プラグインの統合インターフェース。
  *
@@ -95,4 +98,8 @@ public interface MigraphePlugin<T> {
      * @return HistoryRepositoryProvider
      */
     HistoryRepositoryProvider historyRepositoryProvider();
+
+    default Optional<SchemaInfoProvider<?>> schemaInfoProvider() {
+        return Optional.empty();
+    }
 }
