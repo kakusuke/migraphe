@@ -15,6 +15,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **Gradle Plugin**: Integrate migrations into your Gradle build with `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate`
 - **YAML Configuration**: Simple, readable configuration files
 - **Schema Documentation Generation**: Generate Markdown documentation from database schemas via `generate` command
+- **Flexible Generator System**: Source/output plugin separation — same data source can output in multiple formats (Markdown, JSON, etc.)
 - **Parallel Execution**: Opt-in Virtual Threads-based parallel execution with configurable concurrency
 - **Execution History**: Track migration execution history with rollback support
 - **Type-Safe**: Built with Java 21, leveraging modern language features
@@ -237,7 +238,7 @@ cd migraphe
 ./gradlew :migraphe-gradle-plugin:test
 ```
 
-Test coverage: 431 tests, 100% passing
+Test coverage: 536 tests, 100% passing
 
 ## Contributing
 

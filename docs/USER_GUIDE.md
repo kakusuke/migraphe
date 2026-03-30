@@ -651,7 +651,7 @@ Validation failed with 5 errors.
 
 ## Schema Documentation Generation (generate)
 
-The `generate` command generates documentation from database schemas. Generator plugins connect to your databases and produce structured output (e.g., Markdown files).
+The `generate` command generates documentation and data exports from various sources. The generator system uses a **source/output plugin architecture** — source plugins extract data, and output plugins render it in the desired format. The same data source can be output in multiple formats.
 
 ### Configuration
 
@@ -665,30 +665,53 @@ history:
   target: history
 
 generators:
-  - name: mydb
+  # Schema documentation as Markdown
+  - name: schema-docs
     type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
     target: db1
     output-dir: docs/schema
     excludes:
       - schema: "information_schema"
       - schema: "public"
         table: "tmp_.*"
+
+  # Migration tree as JSON to stdout
+  - name: tree
+    type: output-json
+    source:
+      type: migration-tree
+    target: db1
+    output-dir: docs
 ```
 
 **Fields:**
 - `name` (required): Identifier for this generator
-- `type` (required): Generator plugin type (e.g., `jdbc-markdown`)
-- `target` (required): Target name to connect to (must match a target configuration)
-- `output-dir` (required): Directory where generated files are written
+- `type` (required): Output plugin type (e.g., `jdbc-markdown`, `output-json`)
+- `source` (required for source/output flow):
+  - `type`: Source plugin type (e.g., `jdbc-schema`, `migration-tree`)
+  - `target` (optional): Target name for source plugins that need a database connection
+- `target` (required): Target name
+- `output-dir` (optional, default: `docs/schema`): Directory where generated files are written
 - `excludes` (optional): List of exclusion filters (regex patterns)
   - `schema`: Regex pattern to match schema names
   - `table`: Regex pattern to match table names (used with `schema`)
 
-### Available Generator Plugins
+### Available Source Plugins
+
+| Plugin | Type | Data | Description |
+|--------|------|------|-------------|
+| `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | Extracts database schema metadata via JDBC DatabaseMetaData |
+| (built-in) | `migration-tree` | `MigrationGraphView` | Provides the migration DAG structure |
+
+### Available Output Plugins
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| `migraphe-generator-jdbc-markdown` | `jdbc-markdown` | Generates Markdown documentation from JDBC database schemas |
+| `migraphe-plugin-jdbc` | `jdbc-markdown` | Generates Markdown documentation from `JdbcSchemaInfo` |
+| `migraphe-plugin-generator-json` | `output-json` | Outputs any data as pretty-printed JSON to stdout |
 
 ### Basic Usage
 
@@ -730,6 +753,9 @@ Use `excludes` to skip schemas or tables matching regex patterns:
 generators:
   - name: mydb
     type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
     target: db1
     output-dir: docs/schema
     excludes:

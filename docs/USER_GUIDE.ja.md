@@ -651,7 +651,7 @@ Validation failed with 5 errors.
 
 ## スキーマドキュメント生成（generate）
 
-`generate` コマンドは、データベーススキーマからドキュメントを生成します。ジェネレータプラグインがデータベースに接続し、構造化された出力（例: Markdownファイル）を生成します。
+`generate` コマンドは、各種データソースからドキュメントやデータのエクスポートを生成します。ジェネレータシステムは**ソース/アウトプットプラグインアーキテクチャ**を採用しています。ソースプラグインがデータを抽出し、アウトプットプラグインが希望のフォーマットで出力します。同じデータソースを複数の形式で出力可能です。
 
 ### 設定
 
@@ -665,30 +665,53 @@ history:
   target: history
 
 generators:
-  - name: mydb
+  # スキーマドキュメントをMarkdownで出力
+  - name: schema-docs
     type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
     target: db1
     output-dir: docs/schema
     excludes:
       - schema: "information_schema"
       - schema: "public"
         table: "tmp_.*"
+
+  # マイグレーションツリーをJSONで標準出力に出力
+  - name: tree
+    type: output-json
+    source:
+      type: migration-tree
+    target: db1
+    output-dir: docs
 ```
 
 **フィールド:**
 - `name`（必須）: ジェネレータの識別子
-- `type`（必須）: ジェネレータプラグインのタイプ（例: `jdbc-markdown`）
-- `target`（必須）: 接続先のターゲット名（ターゲット設定と一致する必要があります）
-- `output-dir`（必須）: 生成ファイルの出力先ディレクトリ
+- `type`（必須）: アウトプットプラグインのタイプ（例: `jdbc-markdown`、`output-json`）
+- `source`（ソース/アウトプットフローに必須）:
+  - `type`: ソースプラグインのタイプ（例: `jdbc-schema`、`migration-tree`）
+  - `target`（オプション）: データベース接続が必要なソースプラグイン用のターゲット名
+- `target`（必須）: ターゲット名
+- `output-dir`（オプション、デフォルト: `docs/schema`）: 生成ファイルの出力先ディレクトリ
 - `excludes`（オプション）: 除外フィルタのリスト（正規表現パターン）
   - `schema`: スキーマ名にマッチする正規表現パターン
   - `table`: テーブル名にマッチする正規表現パターン（`schema` と組み合わせて使用）
 
-### 利用可能なジェネレータプラグイン
+### 利用可能なソースプラグイン
+
+| プラグイン | タイプ | データ | 説明 |
+|-----------|--------|--------|------|
+| `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
+| （組み込み） | `migration-tree` | `MigrationGraphView` | マイグレーションDAG構造を提供 |
+
+### 利用可能なアウトプットプラグイン
 
 | プラグイン | タイプ | 説明 |
 |-----------|--------|------|
-| `migraphe-generator-jdbc-markdown` | `jdbc-markdown` | JDBCデータベーススキーマからMarkdownドキュメントを生成 |
+| `migraphe-plugin-jdbc` | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
+| `migraphe-plugin-generator-json` | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
 
 ### 基本的な使い方
 
@@ -730,6 +753,9 @@ docs/schema/
 generators:
   - name: mydb
     type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
     target: db1
     output-dir: docs/schema
     excludes:

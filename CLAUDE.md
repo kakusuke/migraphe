@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 18 (Generator Plugin System + JDBC Markdown Docs) - COMPLETE
-**Tests**: 509, 100% passing
+**Current Phase**: 19 (Generator SPI Refactor — Source/Output Separation + JSON Output) - COMPLETE
+**Tests**: 536, 100% passing
 
 ## Module Structure
 
@@ -19,6 +19,7 @@ migraphe-core/             # Orchestration logic, algorithms, config loading, fa
 migraphe-plugin-jdbc/      # Generic JDBC plugin (type="jdbc") - standalone or base for DB-specific plugins
 migraphe-plugin-postgresql/ # PostgreSQL plugin (extends jdbc, driver/DDL fixed)
 migraphe-plugin-mysql/     # MySQL plugin (extends jdbc, driver/DDL fixed)
+migraphe-plugin-generator-json/ # JSON output plugin (type="output-json") - outputs any data as JSON to stdout
 migraphe-cli/              # CLI entry point, commands, console output
 migraphe-gradle-plugin/    # Gradle plugin (migrapheUp/Down/Status/Validate/Generate tasks)
 ```
@@ -31,6 +32,9 @@ migraphe-gradle-plugin/    # Gradle plugin (migrapheUp/Down/Status/Validate/Gene
 - `HistoryRepository` - Execution history persistence
 - `SchemaInfoProvider<T>` - Schema info extraction from Environment
 - `GeneratorPlugin` - Artifact generation SPI (GeneratorDefinition, Generator)
+- `GeneratorSourcePlugin<T>` - Data extraction SPI (SourceContext → typed data)
+- `GeneratorOutputPlugin` - Data rendering SPI (Object data + OutputContext)
+- `MigrationGraphView` - Read-only view of MigrationGraph
 
 ## Package Structure
 
@@ -46,7 +50,8 @@ io.github.kakusuke.migraphe.api/
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
 
 io.github.kakusuke.migraphe.generator.api/
-└── GeneratorPlugin, Generator, GeneratorDefinition
+└── GeneratorPlugin, Generator, GeneratorDefinition,
+    GeneratorSourcePlugin<T>, SourceContext, GeneratorOutputPlugin, OutputContext
 
 io.github.kakusuke.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, ExecutionLevel, TopologicalSort, FormatUtils
@@ -54,6 +59,7 @@ io.github.kakusuke.migraphe.core/
 ├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult, ExecutionContext
 │                   # + ParallelMigrationExecutor, ReadyNodeTracker, SynchronizedExecutionListener, Executor (interface)
 ├── generator/      # GeneratorRegistry, GeneratorExecutor
+│   └── tree/       # MigrationTreeSourcePlugin (type="migration-tree")
 ├── history/        # InMemoryHistoryRepository, SynchronizedHistoryRepository
 ├── config/         # ProjectConfig (incl. GeneratorSection), TargetConfig, TaskConfig, ConfigLoader, ConfigValidator, YamlFileScanner
 ├── factory/        # EnvironmentFactory, MigrationNodeFactory (generic, uses PluginRegistry)
@@ -81,6 +87,10 @@ io.github.kakusuke.migraphe.mysql/
 ├── MySQLPlugin, MySQL{Environment,MigrationNode,HistoryRepository}Provider
 ├── MySQLEnvironmentDefinition
 └── META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
+
+io.github.kakusuke.migraphe.output.json/
+└── JsonOutputPlugin (type="output-json") — outputs any data as pretty-printed JSON to stdout
+    META-INF/services/ # GeneratorOutputPlugin
 
 io.github.kakusuke.migraphe.cli/
 ├── Main.java
@@ -113,6 +123,7 @@ io.github.kakusuke.migraphe.gradle/
 13. **Parallel Execution (Phase 16)**: Opt-in via `execution.parallel: true`. `ParallelMigrationExecutor` uses Virtual Threads + `PriorityBlockingQueue` + `ReadyNodeTracker` (ready-based approach). Fail-fast on failure. `Semaphore` for `execution.max-parallelism`. `SynchronizedHistoryRepository`/`SynchronizedExecutionListener` decorators for thread safety. `Executor` interface shared by sequential/parallel.
 14. **JDBC Plugin Extraction (Phase 17)**: Generic `migraphe-plugin-jdbc` module extracts common JDBC logic (connection, SQL execution, history). DB-specific plugins (`postgresql`, `mysql`) extend `JdbcEnvironment` with fixed driver/label and provide optimized DDL. `SqlStatements` utility for SQL splitting. `JdbcPlugin` (type="jdbc") works standalone for any JDBC database.
 15. **Generator Plugin System (Phase 18)**: `migraphe-generator-api` module defines `GeneratorPlugin` SPI. `SchemaInfoProvider<T>` on `MigraphePlugin` for schema extraction. `JdbcSchemaInfoProvider` uses `DatabaseMetaData` → `JdbcSchemaInfo` (19 record types). `JdbcMarkdownPlugin` (type="jdbc-markdown") generates Markdown docs with directory structure, cross-references, and exclude filtering. `GeneratorRegistry` + `GeneratorExecutor` in core. `GenerateCommand` in CLI (`migraphe generate --name`). `MigrapheGenerateTask` in Gradle plugin.
+16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: Data extraction decoupled from rendering. `GeneratorSourcePlugin<T>` extracts typed data (`jdbc-schema` → `JdbcSchemaInfo`, `migration-tree` → `MigrationGraphView`). `GeneratorOutputPlugin` renders data (`jdbc-markdown`, `output-json`). Same data source can output in multiple formats. `MigrationGraphView` read-only interface in `migraphe-api`. `SourceContext` (nullable Environment + nullable graph). `OutputContext` (definition + outputDir). `GeneratorExecutor.executeAll()` auto-routes based on `source.type` presence. `ProjectConfig.SourceSection` with `Optional<String> type()`. `MigrationTreeSourcePlugin` built into core. `migraphe-plugin-generator-json` module for JSON stdout output via Jackson.
 
 ## CLI Project Structure
 
@@ -184,6 +195,7 @@ Update when code changes:
 | 16 | Virtual Threads parallel execution | ✅ |
 | 17 | JDBC plugin extraction + MySQL plugin | ✅ |
 | 18 | Generator plugin system + JDBC Markdown docs | ✅ |
+| 19 | Generator SPI refactor (source/output separation) + JSON output | ✅ |
 
 ### Future Phases
 
@@ -212,24 +224,24 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-03-27 (Session 33)
-- **Phase 18: Generator Plugin System + JDBC Markdown Docs**
-  - New module: `migraphe-generator-api` — GeneratorPlugin SPI (GeneratorPlugin, Generator, GeneratorDefinition)
-  - `migraphe-api`: Added `SchemaInfoProvider<T>` interface, `MigraphePlugin.schemaInfoProvider()` default method
-  - `migraphe-plugin-jdbc`:
-    - `jdbc/schema/` — 19 record/enum types for structured DatabaseMetaData (JdbcSchemaInfo, JdbcTableInfo, JdbcColumnInfo, etc.)
-    - `JdbcSchemaInfoProvider` — DatabaseMetaData API → JdbcSchemaInfo (tables, views, columns, PK, FK, indexes)
-    - `jdbc/markdown/` — JdbcMarkdownPlugin (type="jdbc-markdown"), JdbcMarkdownGenerator (schema → Markdown files), JdbcMarkdownDefinition (@ConfigMapping with excludes)
-    - ServiceLoader registration for GeneratorPlugin
+### 2026-03-30 (Session 34)
+- **Phase 19: Generator SPI Refactor — Source/Output Separation + JSON Output**
+  - `migraphe-api`: New `MigrationGraphView` interface (read-only view of MigrationGraph)
+  - `migraphe-generator-api`: New SPIs — `GeneratorSourcePlugin<T>`, `SourceContext`, `GeneratorOutputPlugin`, `OutputContext`
   - `migraphe-core`:
-    - `ProjectConfig.GeneratorSection` — generators YAML list config
-    - `GeneratorRegistry` — ServiceLoader discovery for GeneratorPlugin
-    - `GeneratorExecutor` — orchestration with name filtering
-  - `migraphe-cli`: GenerateCommand (`migraphe generate --name`)
-  - `migraphe-gradle-plugin`: MigrapheGenerateTask (`migrapheGenerate --name`)
-  - Tests: 509 (core 336, cli 48, gradle 17, jdbc 68, generator-api 1, postgresql 40, mysql 27), 100% passing
+    - `MigrationGraph implements MigrationGraphView`
+    - `GeneratorRegistry` — loads all 3 plugin types (GeneratorPlugin, GeneratorSourcePlugin, GeneratorOutputPlugin) via ServiceLoader
+    - `GeneratorExecutor.executeAll()` — auto-routes to source/output flow when `source.type` is present
+    - `ProjectConfig.GeneratorSection.SourceSection` — `Optional<String> type()`, `Optional<String> target()`
+    - `MigrationTreeSourcePlugin` (type="migration-tree") — built-in source plugin
+  - `migraphe-plugin-jdbc`:
+    - `JdbcSchemaSourcePlugin` (type="jdbc-schema") — separated source plugin
+    - `JdbcMarkdownPlugin` now implements both `GeneratorPlugin` and `GeneratorOutputPlugin`
+    - ServiceLoader registrations for `GeneratorSourcePlugin` and `GeneratorOutputPlugin`
+  - New module: `migraphe-plugin-generator-json` — `JsonOutputPlugin` (type="output-json"), outputs any data as JSON to stdout via Jackson
+  - Tests: 536 (core 349, cli 48, gradle 17, jdbc 74, generator-api 3, generator-json 4, postgresql 40, mysql 27), 100% passing
 
 ---
 
-**Last Updated**: 2026-03-27
-**Current Work**: Phase 18 complete. Generator plugin system + JDBC Markdown documentation generation.
+**Last Updated**: 2026-03-30
+**Current Work**: Phase 19 complete. Source/output plugin separation + migration-tree source + JSON output module.
