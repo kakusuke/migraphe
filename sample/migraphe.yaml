@@ -2,3 +2,10 @@ project:
   name: ecommerce-sample
 history:
   target: main
+generators:
+  - name: tree
+    type: output-json
+    source:
+      type: migration-tree
+    target: main
+    output-dir: docs

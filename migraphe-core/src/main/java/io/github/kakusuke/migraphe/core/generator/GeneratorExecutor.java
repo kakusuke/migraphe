@@ -64,6 +64,7 @@ public final class GeneratorExecutor {
     public void executeAll(
             List<ProjectConfig.GeneratorSection> generators,
             Map<String, Environment> environments,
+            @Nullable MigrationGraphView graph,
             Path baseDir,
             @Nullable String nameFilter) {
         for (ProjectConfig.GeneratorSection config : generators) {
@@ -71,7 +72,7 @@ public final class GeneratorExecutor {
                 continue;
             }
             if (config.source().type().isPresent()) {
-                executeWithSourceOutput(config, environments, null, baseDir);
+                executeWithSourceOutput(config, environments, graph, baseDir);
             } else {
                 Environment environment = environments.get(config.target());
                 if (environment == null) {

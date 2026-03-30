@@ -90,7 +90,7 @@ class GeneratorExecutorTest {
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
 
-        executor.executeAll(generators, environments, tempDir, "gen-a");
+        executor.executeAll(generators, environments, null, tempDir, "gen-a");
 
         assertThat(invokedTypes).containsExactly("type-a");
     }
@@ -123,7 +123,7 @@ class GeneratorExecutorTest {
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
 
-        executor.executeAll(generators, environments, tempDir, null);
+        executor.executeAll(generators, environments, null, tempDir, null);
 
         assertThat(invokedNames).containsExactly("a", "b");
     }
@@ -139,7 +139,7 @@ class GeneratorExecutorTest {
                         new StubGeneratorSection("gen-a", "type-a", "nonexistent", "output"));
         Map<String, Environment> environments = Map.of();
 
-        assertThatThrownBy(() -> executor.executeAll(generators, environments, tempDir, null))
+        assertThatThrownBy(() -> executor.executeAll(generators, environments, null, tempDir, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("nonexistent");
     }
@@ -329,7 +329,7 @@ class GeneratorExecutorTest {
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
 
-        executor.executeAll(List.of(config), environments, tempDir, null);
+        executor.executeAll(List.of(config), environments, null, tempDir, null);
 
         assertThat(capturedData.get()).isEqualTo("extracted-data");
     }

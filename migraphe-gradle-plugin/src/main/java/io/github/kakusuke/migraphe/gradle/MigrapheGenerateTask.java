@@ -53,7 +53,12 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
 
         try {
             GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
-            executor.executeAll(generators, context.environments(), context.baseDir(), nameFilter);
+            executor.executeAll(
+                    generators,
+                    context.environments(),
+                    context.graph(),
+                    context.baseDir(),
+                    nameFilter);
             getLogger().lifecycle("");
             getLogger().lifecycle("Generation completed successfully.");
         } catch (IllegalArgumentException e) {
