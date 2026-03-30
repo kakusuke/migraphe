@@ -1,6 +1,8 @@
 package io.github.kakusuke.migraphe.core.generator;
 
+import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.generator.api.GeneratorPlugin;
+import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -15,12 +17,19 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class GeneratorRegistry {
 
     private final Map<String, GeneratorPlugin> plugins = new ConcurrentHashMap<>();
+    private final Map<String, GeneratorSourcePlugin<?>> sourcePlugins = new ConcurrentHashMap<>();
+    private final Map<String, GeneratorOutputPlugin> outputPlugins = new ConcurrentHashMap<>();
 
     /** クラスパスから ServiceLoader を使用してプラグインを読み込む。 */
     public void loadFromClasspath() {
-        ServiceLoader<GeneratorPlugin> loader = ServiceLoader.load(GeneratorPlugin.class);
-        for (GeneratorPlugin plugin : loader) {
+        for (GeneratorPlugin plugin : ServiceLoader.load(GeneratorPlugin.class)) {
             register(plugin);
+        }
+        for (GeneratorSourcePlugin<?> plugin : ServiceLoader.load(GeneratorSourcePlugin.class)) {
+            registerSource(plugin);
+        }
+        for (GeneratorOutputPlugin plugin : ServiceLoader.load(GeneratorOutputPlugin.class)) {
+            registerOutput(plugin);
         }
     }
 
@@ -30,10 +39,16 @@ public final class GeneratorRegistry {
      * @param classLoader プラグインを探索する ClassLoader
      */
     public void loadFromClassLoader(ClassLoader classLoader) {
-        ServiceLoader<GeneratorPlugin> loader =
-                ServiceLoader.load(GeneratorPlugin.class, classLoader);
-        for (GeneratorPlugin plugin : loader) {
+        for (GeneratorPlugin plugin : ServiceLoader.load(GeneratorPlugin.class, classLoader)) {
             register(plugin);
+        }
+        for (GeneratorSourcePlugin<?> plugin :
+                ServiceLoader.load(GeneratorSourcePlugin.class, classLoader)) {
+            registerSource(plugin);
+        }
+        for (GeneratorOutputPlugin plugin :
+                ServiceLoader.load(GeneratorOutputPlugin.class, classLoader)) {
+            registerOutput(plugin);
         }
     }
 
@@ -57,5 +72,27 @@ public final class GeneratorRegistry {
      */
     public Optional<GeneratorPlugin> findByType(String type) {
         return Optional.ofNullable(plugins.get(type));
+    }
+
+    void registerSource(GeneratorSourcePlugin<?> plugin) {
+        Objects.requireNonNull(plugin, "plugin must not be null");
+        String type = plugin.type();
+        Objects.requireNonNull(type, "plugin.type() must not be null");
+        sourcePlugins.put(type, plugin);
+    }
+
+    public Optional<GeneratorSourcePlugin<?>> findSourceByType(String type) {
+        return Optional.ofNullable(sourcePlugins.get(type));
+    }
+
+    void registerOutput(GeneratorOutputPlugin plugin) {
+        Objects.requireNonNull(plugin, "plugin must not be null");
+        String type = plugin.type();
+        Objects.requireNonNull(type, "plugin.type() must not be null");
+        outputPlugins.put(type, plugin);
+    }
+
+    public Optional<GeneratorOutputPlugin> findOutputByType(String type) {
+        return Optional.ofNullable(outputPlugins.get(type));
     }
 }

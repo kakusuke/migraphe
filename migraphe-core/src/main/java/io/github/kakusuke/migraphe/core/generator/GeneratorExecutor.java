@@ -1,10 +1,15 @@
 package io.github.kakusuke.migraphe.core.generator;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
+import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.generator.api.Generator;
 import io.github.kakusuke.migraphe.generator.api.GeneratorDefinition;
+import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.generator.api.GeneratorPlugin;
+import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.generator.api.OutputContext;
+import io.github.kakusuke.migraphe.generator.api.SourceContext;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -65,13 +70,61 @@ public final class GeneratorExecutor {
             if (nameFilter != null && !nameFilter.equals(config.name())) {
                 continue;
             }
-            Environment environment = environments.get(config.target());
-            if (environment == null) {
-                throw new IllegalArgumentException(
-                        "Environment not found for target: " + config.target());
+            if (config.source().type().isPresent()) {
+                executeWithSourceOutput(config, environments, null, baseDir);
+            } else {
+                Environment environment = environments.get(config.target());
+                if (environment == null) {
+                    throw new IllegalArgumentException(
+                            "Environment not found for target: " + config.target());
+                }
+                execute(config, environment, baseDir);
             }
-            execute(config, environment, baseDir);
         }
+    }
+
+    /**
+     * 新しいソース/アウトプットフローで単一のジェネレーター設定を実行する。
+     *
+     * @param config ジェネレーター設定
+     * @param environments 環境マップ
+     * @param graph マイグレーショングラフ（null可）
+     * @param baseDir ベースディレクトリ
+     */
+    public void executeWithSourceOutput(
+            ProjectConfig.GeneratorSection config,
+            Map<String, Environment> environments,
+            @Nullable MigrationGraphView graph,
+            Path baseDir) {
+        String sourceType =
+                config.source()
+                        .type()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "source.type is required for source/output flow"));
+        GeneratorSourcePlugin<?> sourcePlugin =
+                registry.findSourceByType(sourceType)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "Generator source plugin not found for type: "
+                                                        + sourceType));
+        Environment environment = config.source().target().map(environments::get).orElse(null);
+        SourceContext sourceContext = new SourceContext(environment, graph);
+        Object data = sourcePlugin.extract(sourceContext);
+
+        GeneratorOutputPlugin outputPlugin =
+                registry.findOutputByType(config.type())
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "Generator output plugin not found for type: "
+                                                        + config.type()));
+        OutputContext outputContext =
+                new OutputContext(
+                        new GeneratorSectionAdapter(config), baseDir.resolve(config.outputDir()));
+        outputPlugin.output(data, outputContext);
     }
 
     /** GeneratorSection を GeneratorDefinition に適合させるアダプター。 */

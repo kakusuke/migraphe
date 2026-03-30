@@ -1,12 +1,13 @@
 package io.github.kakusuke.migraphe.core.graph;
 
 import io.github.kakusuke.migraphe.api.common.ValidationResult;
+import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import java.util.*;
 
 /** マイグレーションノードの有向非巡回グラフ（DAG）。 集約ルート - グラフの整合性を保証する。 */
-public final class MigrationGraph {
+public final class MigrationGraph implements MigrationGraphView {
     private final Map<NodeId, MigrationNode> nodes;
     private final Map<NodeId, Set<NodeId>> adjacencyList; // ノード -> 依存先ノード
 

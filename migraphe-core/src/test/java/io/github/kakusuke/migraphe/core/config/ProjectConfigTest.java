@@ -36,19 +36,17 @@ class ProjectConfigTest {
                 new SmallRyeConfigBuilder()
                         .withSources(
                                 new TestConfigSource(
-                                        Map.of(
-                                                "project.name",
-                                                "my-migrations",
-                                                "history.target",
-                                                "history_db",
-                                                "generators[0].name",
-                                                "mydb",
-                                                "generators[0].type",
-                                                "jdbc-markdown",
-                                                "generators[0].target",
-                                                "db1",
-                                                "generators[0].output-dir",
-                                                "docs/schema")))
+                                        Map.ofEntries(
+                                                Map.entry("project.name", "my-migrations"),
+                                                Map.entry("history.target", "history_db"),
+                                                Map.entry("generators[0].name", "mydb"),
+                                                Map.entry("generators[0].type", "jdbc-markdown"),
+                                                Map.entry("generators[0].target", "db1"),
+                                                Map.entry(
+                                                        "generators[0].source.type", "jdbc-schema"),
+                                                Map.entry(
+                                                        "generators[0].output-dir",
+                                                        "docs/schema"))))
                         .withMapping(ProjectConfig.class)
                         .build();
 
@@ -62,6 +60,36 @@ class ProjectConfigTest {
         assertThat(gen.type()).isEqualTo("jdbc-markdown");
         assertThat(gen.target()).isEqualTo("db1");
         assertThat(gen.outputDir()).isEqualTo("docs/schema");
+    }
+
+    @Test
+    void shouldLoadGeneratorSourceSection() {
+        SmallRyeConfig config =
+                new SmallRyeConfigBuilder()
+                        .withSources(
+                                new TestConfigSource(
+                                        Map.ofEntries(
+                                                Map.entry("project.name", "my-migrations"),
+                                                Map.entry("history.target", "history_db"),
+                                                Map.entry("generators[0].name", "schema-docs"),
+                                                Map.entry("generators[0].type", "jdbc-markdown"),
+                                                Map.entry("generators[0].target", "dev"),
+                                                Map.entry(
+                                                        "generators[0].source.type", "jdbc-schema"),
+                                                Map.entry("generators[0].source.target", "dev"),
+                                                Map.entry(
+                                                        "generators[0].output-dir",
+                                                        "docs/schema"))))
+                        .withMapping(ProjectConfig.class)
+                        .build();
+
+        ProjectConfig projectConfig = config.getConfigMapping(ProjectConfig.class);
+
+        assertThat(projectConfig.generators()).isPresent();
+        var gen = projectConfig.generators().get().get(0);
+        assertThat(gen.source().type()).hasValue("jdbc-schema");
+        assertThat(gen.source().target()).hasValue("dev");
+        assertThat(gen.type()).isEqualTo("jdbc-markdown");
     }
 
     @Test

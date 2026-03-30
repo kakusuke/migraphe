@@ -88,10 +88,19 @@ public interface ProjectConfig {
 
         String target();
 
+        SourceSection source();
+
         @WithDefault("docs/schema")
         String outputDir();
 
         Optional<List<ExcludeSection>> excludes();
+
+        /** ソースプラグイン設定。 */
+        interface SourceSection {
+            Optional<String> type();
+
+            Optional<String> target();
+        }
 
         /** 除外パターン。 */
         interface ExcludeSection {
