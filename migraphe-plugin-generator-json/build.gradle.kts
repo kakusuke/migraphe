@@ -31,3 +31,17 @@ tasks.test {
         showStandardStreams = false
     }
 }
+
+// Fat JAR task (CLI plugin - includes Jackson dependencies)
+tasks.register<Jar>("fatJar") {
+    archiveClassifier.set("all")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    dependsOn(tasks.jar)
+    dependsOn(configurations.runtimeClasspath)
+
+    from(configurations.runtimeClasspath.get().map {
+        if (it.isDirectory) it else zipTree(it)
+    })
+    with(tasks.jar.get() as CopySpec)
+}

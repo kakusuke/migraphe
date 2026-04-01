@@ -198,7 +198,7 @@ class GeneratorExecutorTest {
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
 
-        executor.executeWithSourceOutput(config, environments, null, tempDir);
+        executor.executeWithSourceOutput(config, environments, null, null, tempDir);
 
         assertThat(capturedData.get()).isEqualTo("extracted-data");
         assertThat(capturedOutputDir.get()).isEqualTo(tempDir.resolve("output"));
@@ -237,7 +237,9 @@ class GeneratorExecutorTest {
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
 
         assertThatThrownBy(
-                        () -> executor.executeWithSourceOutput(config, environments, null, tempDir))
+                        () ->
+                                executor.executeWithSourceOutput(
+                                        config, environments, null, null, tempDir))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("missing-source");
     }
@@ -272,7 +274,9 @@ class GeneratorExecutorTest {
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
 
         assertThatThrownBy(
-                        () -> executor.executeWithSourceOutput(config, environments, null, tempDir))
+                        () ->
+                                executor.executeWithSourceOutput(
+                                        config, environments, null, null, tempDir))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("missing-output");
     }

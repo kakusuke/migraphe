@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.generator;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.generator.api.Generator;
@@ -10,7 +11,9 @@ import io.github.kakusuke.migraphe.generator.api.GeneratorPlugin;
 import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
 import io.github.kakusuke.migraphe.generator.api.OutputContext;
 import io.github.kakusuke.migraphe.generator.api.SourceContext;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class GeneratorRegistryTest {
 
@@ -86,6 +89,15 @@ class GeneratorRegistryTest {
         var registry = new GeneratorRegistry();
 
         assertThat(registry.findOutputByType("unknown-output")).isEmpty();
+    }
+
+    @Test
+    void loadFromDirectoryDoesNothingWhenDirectoryDoesNotExist(@TempDir Path tempDir) {
+        var registry = new GeneratorRegistry();
+        Path nonexistent = tempDir.resolve("nonexistent");
+
+        assertThatCode(() -> registry.loadFromDirectory(nonexistent)).doesNotThrowAnyException();
+        assertThat(registry.findByType("any")).isEmpty();
     }
 
     private static class StubGeneratorSourcePlugin implements GeneratorSourcePlugin<String> {

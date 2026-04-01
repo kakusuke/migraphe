@@ -34,6 +34,7 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
         // GeneratorRegistry を作成してプラグインをロード
         GeneratorRegistry generatorRegistry = new GeneratorRegistry();
         generatorRegistry.loadFromClasspath();
+        generatorRegistry.loadFromDirectory(context.baseDir().resolve("plugins"));
 
         // ProjectConfig からジェネレーター設定を取得
         ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
@@ -57,6 +58,7 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
                     generators,
                     context.environments(),
                     context.graph(),
+                    context.createHistoryRepository(),
                     context.baseDir(),
                     nameFilter);
             getLogger().lifecycle("");

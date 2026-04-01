@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.core.generator;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
+import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.generator.api.Generator;
 import io.github.kakusuke.migraphe.generator.api.GeneratorDefinition;
@@ -67,12 +68,32 @@ public final class GeneratorExecutor {
             @Nullable MigrationGraphView graph,
             Path baseDir,
             @Nullable String nameFilter) {
+        executeAll(generators, environments, graph, null, baseDir, nameFilter);
+    }
+
+    /**
+     * 複数のジェネレーター設定を実行する（HistoryRepository 付き）。
+     *
+     * @param generators ジェネレーター設定リスト
+     * @param environments 環境マップ
+     * @param graph マイグレーショングラフ
+     * @param historyRepository 履歴リポジトリ
+     * @param baseDir ベースディレクトリ
+     * @param nameFilter 名前フィルター
+     */
+    public void executeAll(
+            List<ProjectConfig.GeneratorSection> generators,
+            Map<String, Environment> environments,
+            @Nullable MigrationGraphView graph,
+            @Nullable HistoryRepository historyRepository,
+            Path baseDir,
+            @Nullable String nameFilter) {
         for (ProjectConfig.GeneratorSection config : generators) {
             if (nameFilter != null && !nameFilter.equals(config.name())) {
                 continue;
             }
             if (config.source().type().isPresent()) {
-                executeWithSourceOutput(config, environments, graph, baseDir);
+                executeWithSourceOutput(config, environments, graph, historyRepository, baseDir);
             } else {
                 Environment environment = environments.get(config.target());
                 if (environment == null) {
@@ -96,6 +117,7 @@ public final class GeneratorExecutor {
             ProjectConfig.GeneratorSection config,
             Map<String, Environment> environments,
             @Nullable MigrationGraphView graph,
+            @Nullable HistoryRepository historyRepository,
             Path baseDir) {
         String sourceType =
                 config.source()
@@ -112,7 +134,7 @@ public final class GeneratorExecutor {
                                                 "Generator source plugin not found for type: "
                                                         + sourceType));
         Environment environment = config.source().target().map(environments::get).orElse(null);
-        SourceContext sourceContext = new SourceContext(environment, graph);
+        SourceContext sourceContext = new SourceContext(environment, graph, historyRepository);
         Object data = sourcePlugin.extract(sourceContext);
 
         GeneratorOutputPlugin outputPlugin =

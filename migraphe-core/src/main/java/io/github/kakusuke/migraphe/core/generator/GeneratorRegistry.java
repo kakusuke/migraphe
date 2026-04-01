@@ -3,6 +3,11 @@ package io.github.kakusuke.migraphe.core.generator;
 import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.generator.api.GeneratorPlugin;
 import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
+import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -49,6 +54,37 @@ public final class GeneratorRegistry {
         for (GeneratorOutputPlugin plugin :
                 ServiceLoader.load(GeneratorOutputPlugin.class, classLoader)) {
             registerOutput(plugin);
+        }
+    }
+
+    /**
+     * 指定されたディレクトリ内の JAR ファイルからプラグインを読み込む。
+     *
+     * @param pluginsDir プラグイン JAR を含むディレクトリ
+     */
+    public void loadFromDirectory(Path pluginsDir) {
+        if (!Files.isDirectory(pluginsDir)) {
+            return;
+        }
+        try (var entries = Files.list(pluginsDir)) {
+            entries.filter(p -> p.toString().endsWith(".jar"))
+                    .forEach(
+                            jarPath -> {
+                                try {
+                                    URL jarUrl = jarPath.toUri().toURL();
+                                    URLClassLoader classLoader =
+                                            new URLClassLoader(
+                                                    new URL[] {jarUrl},
+                                                    GeneratorPlugin.class.getClassLoader());
+                                    loadFromClassLoader(classLoader);
+                                } catch (Exception e) {
+                                    throw new IllegalStateException(
+                                            "Failed to load generator plugin from: " + jarPath, e);
+                                }
+                            });
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "Failed to scan generator plugins directory: " + pluginsDir, e);
         }
     }
 

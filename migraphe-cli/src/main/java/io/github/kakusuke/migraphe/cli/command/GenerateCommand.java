@@ -56,11 +56,17 @@ public class GenerateCommand implements Command {
             // 3. GeneratorRegistry を初期化
             GeneratorRegistry generatorRegistry = new GeneratorRegistry();
             generatorRegistry.loadFromClasspath();
+            generatorRegistry.loadFromDirectory(baseDir.resolve("plugins"));
 
             // 4. GeneratorExecutor で実行
             GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
             executor.executeAll(
-                    generators, context.environments(), context.graph(), baseDir, nameFilter);
+                    generators,
+                    context.environments(),
+                    context.graph(),
+                    context.createHistoryRepository(),
+                    baseDir,
+                    nameFilter);
 
             printSuccess("Generation complete.");
             return 0;
