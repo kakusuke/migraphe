@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 19 (Generator SPI Refactor — Source/Output Separation + JSON Output) - COMPLETE
-**Tests**: 536, 100% passing
+**Current Phase**: 20 (CLI Maven Resolver — Plugin Dependency Resolution) - COMPLETE
+**Tests**: 606, 100% passing
 
 ## Module Structure
 
@@ -95,6 +95,7 @@ io.github.kakusuke.migraphe.output.json/
 io.github.kakusuke.migraphe.cli/
 ├── Main.java
 ├── command/        # Command, UpCommand, DownCommand, StatusCommand, ValidateCommand, GenerateCommand
+├── resolver/       # MavenArtifactCoordinate, PluginConfigPreParser, MavenPluginResolver, PluginResolver
 ├── listener/       # ConsoleExecutionListener
 └── util/           # AnsiColor
 
@@ -124,12 +125,13 @@ io.github.kakusuke.migraphe.gradle/
 14. **JDBC Plugin Extraction (Phase 17)**: Generic `migraphe-plugin-jdbc` module extracts common JDBC logic (connection, SQL execution, history). DB-specific plugins (`postgresql`, `mysql`) extend `JdbcEnvironment` with fixed driver/label and provide optimized DDL. `SqlStatements` utility for SQL splitting. `JdbcPlugin` (type="jdbc") works standalone for any JDBC database.
 15. **Generator Plugin System (Phase 18)**: `migraphe-generator-api` module defines `GeneratorPlugin` SPI. `SchemaInfoProvider<T>` on `MigraphePlugin` for schema extraction. `JdbcSchemaInfoProvider` uses `DatabaseMetaData` → `JdbcSchemaInfo` (19 record types). `JdbcMarkdownPlugin` (type="jdbc-markdown") generates Markdown docs with directory structure, cross-references, and exclude filtering. `GeneratorRegistry` + `GeneratorExecutor` in core. `GenerateCommand` in CLI (`migraphe generate --name`). `MigrapheGenerateTask` in Gradle plugin.
 16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: Data extraction decoupled from rendering. `GeneratorSourcePlugin<T>` extracts typed data (`jdbc-schema` → `JdbcSchemaInfo`, `migration-tree` → `MigrationGraphView`). `GeneratorOutputPlugin` renders data (`jdbc-markdown`, `output-json`). Same data source can output in multiple formats. `MigrationGraphView` read-only interface in `migraphe-api`. `SourceContext` (nullable Environment + nullable graph). `OutputContext` (definition + outputDir). `GeneratorExecutor.executeAll()` auto-routes based on `source.type` presence. `ProjectConfig.SourceSection` with `Optional<String> type()`. `MigrationTreeSourcePlugin` built into core. `migraphe-plugin-generator-json` module for JSON stdout output via Jackson.
+17. **CLI Maven Resolver (Phase 20)**: `migraphe.yaml` `plugins:` section declares Maven coordinates. `PluginConfigPreParser` (SnakeYAML) pre-parses before SmallRye Config. `MavenPluginResolver` (Maven Resolver 1.9.22 + maven-resolver-provider 3.9.9) resolves artifacts + transitive deps from `~/.m2` + Maven Central. `PluginResolver` orchestrates: YAML → resolve → URLClassLoader. `Main.java` passes classloader to `PluginRegistry` and `GeneratorRegistry`. `plugins/` directory still supported for backward compat. `DefaultServiceLocator` pattern (deprecated but functional). `session.setSystemProperties(System.getProperties())` required for POM profile activation.
 
 ## CLI Project Structure
 
 ```
 project/
-├── migraphe.yaml        # project.name, history.target
+├── migraphe.yaml        # plugins, project.name, history.target
 ├── targets/*.yaml       # type, jdbc_url, username, password (flat structure)
 ├── tasks/**/*.yaml      # name, target, dependencies, up, down, autocommit (flat structure)
 └── environments/*.yaml  # Environment-specific overrides
@@ -196,6 +198,7 @@ Update when code changes:
 | 17 | JDBC plugin extraction + MySQL plugin | ✅ |
 | 18 | Generator plugin system + JDBC Markdown docs | ✅ |
 | 19 | Generator SPI refactor (source/output separation) + JSON output | ✅ |
+| 20 | CLI Maven Resolver — plugin dependency resolution | ✅ |
 
 ### Future Phases
 
@@ -224,24 +227,26 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-04-02 (Session 35)
+- **Phase 20: CLI Maven Resolver — Plugin Dependency Resolution**
+  - New `migraphe-cli/.../resolver/` package:
+    - `MavenArtifactCoordinate` — record for `groupId:artifactId:version` parsing
+    - `PluginConfigPreParser` — SnakeYAML pre-parse of `plugins:` section from `migraphe.yaml`
+    - `MavenPluginResolver` — Maven Resolver 1.9.22 + maven-resolver-provider 3.9.9, `DefaultServiceLocator` pattern, resolves from `~/.m2` + Maven Central
+    - `PluginResolver` — orchestrator: YAML → resolve → URLClassLoader
+  - `Main.java` — integrates `PluginResolver`, passes classloader to `PluginRegistry` + `GeneratorRegistry`
+  - `GenerateCommand` — accepts `@Nullable URLClassLoader pluginClassLoader`
+  - `migraphe-plugin-generator-json` — removed `fatJar` task (no longer needed)
+  - `sample/` — replaced `plugins/` symlink with `plugins:` Maven coordinates in `migraphe.yaml`
+  - Key fix: `session.setSystemProperties(System.getProperties())` required for Maven POM profile activation (Jackson POM uses JDK version profiles)
+  - Tests: 606 (api 2, core 364, cli 60, gradle 17, jdbc 86, generator-api 5, generator-json 4, postgresql 39, mysql 29), 100% passing
+
 ### 2026-03-30 (Session 34)
 - **Phase 19: Generator SPI Refactor — Source/Output Separation + JSON Output**
-  - `migraphe-api`: New `MigrationGraphView` interface (read-only view of MigrationGraph)
-  - `migraphe-generator-api`: New SPIs — `GeneratorSourcePlugin<T>`, `SourceContext`, `GeneratorOutputPlugin`, `OutputContext`
-  - `migraphe-core`:
-    - `MigrationGraph implements MigrationGraphView`
-    - `GeneratorRegistry` — loads all 3 plugin types (GeneratorPlugin, GeneratorSourcePlugin, GeneratorOutputPlugin) via ServiceLoader
-    - `GeneratorExecutor.executeAll()` — auto-routes to source/output flow when `source.type` is present
-    - `ProjectConfig.GeneratorSection.SourceSection` — `Optional<String> type()`, `Optional<String> target()`
-    - `MigrationTreeSourcePlugin` (type="migration-tree") — built-in source plugin
-  - `migraphe-plugin-jdbc`:
-    - `JdbcSchemaSourcePlugin` (type="jdbc-schema") — separated source plugin
-    - `JdbcMarkdownPlugin` now implements both `GeneratorPlugin` and `GeneratorOutputPlugin`
-    - ServiceLoader registrations for `GeneratorSourcePlugin` and `GeneratorOutputPlugin`
-  - New module: `migraphe-plugin-generator-json` — `JsonOutputPlugin` (type="output-json"), outputs any data as JSON to stdout via Jackson
-  - Tests: 536 (core 349, cli 48, gradle 17, jdbc 74, generator-api 3, generator-json 4, postgresql 40, mysql 27), 100% passing
+  - Source/output plugin separation, MigrationTreeData DTO, JSON output module
+  - Tests: 536, 100% passing
 
 ---
 
-**Last Updated**: 2026-03-30
-**Current Work**: Phase 19 complete. Source/output plugin separation + migration-tree source + JSON output module.
+**Last Updated**: 2026-04-02
+**Current Work**: Phase 20 complete. CLI Maven Resolver integration for plugin dependency resolution.

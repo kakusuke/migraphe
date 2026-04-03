@@ -12,6 +12,7 @@
 - **DAGベースのマイグレーション**: マイグレーションタスク間の複雑な依存関係を定義
 - **マルチ環境サポート**: 開発、ステージング、本番環境のマイグレーションを管理
 - **プラガブルアーキテクチャ**: PostgreSQL、MySQL、および汎用JDBCプラグインによる任意のJDBCデータベースをサポート
+- **プラグイン自動解決**: CLIは`migraphe.yaml`のMaven座標からプラグイン依存を自動解決（Maven Central + ローカルキャッシュ）
 - **Gradleプラグイン**: `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate` タスクでビルドに統合
 - **YAML設定**: シンプルで読みやすい設定ファイル
 - **スキーマドキュメント生成**: `generate` コマンドでデータベーススキーマからMarkdownドキュメントを自動生成
@@ -30,10 +31,10 @@
 ### ビルド
 
 ```bash
-./gradlew fatJar
+./gradlew :migraphe-cli:installDist
 ```
 
-これにより、スタンドアロンのJARファイルが`migraphe-cli/build/libs/migraphe-cli-all.jar`に作成されます。
+これにより、CLIディストリビューションが`migraphe-cli/build/install/migraphe-cli/`に作成されます。
 
 ### プロジェクトの作成
 
@@ -53,6 +54,9 @@ mkdir -p targets tasks/db1
 3. `migraphe.yaml`を作成:
 
 ```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+
 project:
   name: my-project
 
@@ -96,14 +100,17 @@ down: |
 ### マイグレーションの実行
 
 ```bash
+# プラグインをローカルMavenリポジトリに公開（初回のみ）
+./gradlew publishToMavenLocal
+
 # マイグレーションステータスの確認
-java -jar path/to/migraphe-cli-all.jar status
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli status
 
 # マイグレーションの実行
-java -jar path/to/migraphe-cli-all.jar up
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli up
 
-# スキーマドキュメントの生成
-java -jar path/to/migraphe-cli-all.jar generate
+# ドキュメントの生成
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli generate
 ```
 
 ## Gradleプラグイン
@@ -238,7 +245,7 @@ cd migraphe
 ./gradlew :migraphe-gradle-plugin:test
 ```
 
-テストカバレッジ: 536テスト、100%合格
+テストカバレッジ: 606テスト、100%合格
 
 ## コントリビューション
 

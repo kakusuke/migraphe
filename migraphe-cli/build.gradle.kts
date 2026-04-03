@@ -13,6 +13,12 @@ dependencies {
     // CLI フレームワーク
     implementation(libs.picocli)
 
+    // Maven Resolver（プラグイン依存解決）
+    implementation(libs.maven.resolver.provider)
+    implementation(libs.maven.resolver.connector.basic)
+    implementation(libs.maven.resolver.transport.file)
+    implementation(libs.maven.resolver.transport.http)
+
     // テスト
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

@@ -76,6 +76,18 @@ dependencyResolutionManagement {
                 )
                 .versionRef("smallrye-config")
 
+            // Maven Resolver (CLI plugin dependency resolution)
+            version("maven-resolver-provider", "3.9.9")
+            version("maven-resolver", "1.9.22")
+            library("maven-resolver-provider", "org.apache.maven", "maven-resolver-provider")
+                .versionRef("maven-resolver-provider")
+            library("maven-resolver-connector-basic", "org.apache.maven.resolver", "maven-resolver-connector-basic")
+                .versionRef("maven-resolver")
+            library("maven-resolver-transport-file", "org.apache.maven.resolver", "maven-resolver-transport-file")
+                .versionRef("maven-resolver")
+            library("maven-resolver-transport-http", "org.apache.maven.resolver", "maven-resolver-transport-http")
+                .versionRef("maven-resolver")
+
             // Error Prone / NullAway
             library("errorprone-core", "com.google.errorprone", "error_prone_core")
                 .versionRef("errorprone")

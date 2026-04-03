@@ -7,8 +7,10 @@ import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
 import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
+import io.github.kakusuke.migraphe.cli.resolver.PluginResolver;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -31,8 +33,12 @@ public class Main {
             // プロジェクトディレクトリの決定（カレントディレクトリ）
             Path baseDir = Paths.get(System.getProperty("user.dir"));
 
+            // Maven Resolver でプラグイン依存を解決
+            PluginResolver pluginResolver = new PluginResolver();
+            URLClassLoader pluginClassLoader = pluginResolver.resolve(baseDir);
+
             // PluginRegistry を初期化
-            PluginRegistry pluginRegistry = initializePluginRegistry(baseDir);
+            PluginRegistry pluginRegistry = initializePluginRegistry(baseDir, pluginClassLoader);
 
             // validate コマンドは ExecutionContext を必要としない（オフライン検証）
             if ("validate".equals(commandName)) {
@@ -46,7 +52,7 @@ public class Main {
             if ("generate".equals(commandName)) {
                 String nameFilter = parseNameOption(args);
                 GenerateCommand generateCommand =
-                        new GenerateCommand(baseDir, pluginRegistry, nameFilter);
+                        new GenerateCommand(baseDir, pluginRegistry, pluginClassLoader, nameFilter);
                 int exitCode = generateCommand.execute();
                 System.exit(exitCode);
                 return;
@@ -76,13 +82,19 @@ public class Main {
     }
 
     /** PluginRegistry を初期化する。 */
-    private static PluginRegistry initializePluginRegistry(Path baseDir) {
+    private static PluginRegistry initializePluginRegistry(
+            Path baseDir, @Nullable URLClassLoader pluginClassLoader) {
         PluginRegistry registry = new PluginRegistry();
 
         // 1. クラスパスからプラグインをロード
         registry.loadFromClasspath();
 
-        // 2. plugins/ ディレクトリからプラグインをロード
+        // 2. Maven Resolver で解決したプラグインをロード
+        if (pluginClassLoader != null) {
+            registry.loadFromClassLoader(pluginClassLoader);
+        }
+
+        // 3. plugins/ ディレクトリからプラグインをロード（後方互換）
         Path pluginsDir = baseDir.resolve("plugins");
         registry.loadFromDirectory(pluginsDir);
 

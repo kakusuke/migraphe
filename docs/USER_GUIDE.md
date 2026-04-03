@@ -45,11 +45,11 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 git clone https://github.com/yourusername/migraphe.git
 cd migraphe
 
-# Build the Fat JAR
-./gradlew fatJar
+# Build the CLI
+./gradlew :migraphe-cli:installDist
 
-# The executable JAR is created at:
-# migraphe-cli/build/libs/migraphe-cli-all.jar
+# The CLI is created at:
+# migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli
 ```
 
 ### Create an Alias (Optional)
@@ -58,7 +58,7 @@ For convenience, create an alias in your shell:
 
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
-alias migraphe='java -jar /path/to/migraphe-cli-all.jar'
+alias migraphe='/path/to/migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli'
 
 # Reload shell configuration
 source ~/.bashrc  # or source ~/.zshrc
@@ -72,9 +72,41 @@ migraphe up
 
 Migraphe uses a plugin architecture where database support is provided by separate plugins.
 
-**Plugin Placement:**
+**Available Plugins:**
 
-Place plugin JAR files in the `plugins/` directory of your project:
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support |
+| `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
+| `migraphe-plugin-generator-json` | `output-json` | JSON output generator plugin |
+
+#### Method 1: Maven Coordinates (Recommended)
+
+Add a `plugins` section to `migraphe.yaml` with Maven coordinates. The CLI automatically resolves dependencies from `~/.m2/repository` and Maven Central:
+
+```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+
+project:
+  name: my-project
+history:
+  target: history
+```
+
+If using locally built plugins, publish them first:
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+Transitive dependencies (e.g., JDBC drivers, Jackson) are resolved automatically from Maven Central.
+
+#### Method 2: plugins/ Directory (Legacy)
+
+Place plugin JAR files directly in the `plugins/` directory of your project:
 
 ```
 my-project/
@@ -85,32 +117,7 @@ my-project/
 └── tasks/
 ```
 
-**Available Plugins:**
-
-| Plugin | Type | Description |
-|--------|------|-------------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support |
-| `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
-
-**Getting Plugin JARs:**
-
-```bash
-# Build fat JAR (includes JDBC driver)
-./gradlew :migraphe-plugin-postgresql:fatJar
-./gradlew :migraphe-plugin-mysql:fatJar
-./gradlew :migraphe-plugin-jdbc:fatJar
-
-# Copy fat JAR to plugins/
-mkdir -p my-project/plugins
-cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
-# Or for MySQL:
-cp migraphe-plugin-mysql/build/libs/migraphe-plugin-mysql-*-all.jar my-project/plugins/
-# Or for generic JDBC:
-cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar my-project/plugins/
-```
-
-**Note:** Use the `-all.jar` (fat JAR) for CLI usage. The thin JAR is for Gradle/Maven dependency management.
+**Note:** Both methods can be used simultaneously. Maven-resolved plugins are loaded first, then `plugins/` directory.
 
 ## Project Setup
 
@@ -151,6 +158,9 @@ At minimum, you need:
 ### Project Configuration (`migraphe.yaml`)
 
 ```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+
 project:
   name: my-project
 
@@ -159,6 +169,7 @@ history:
 ```
 
 **Fields:**
+- `plugins` (optional): List of Maven coordinates (`groupId:artifactId:version`) for CLI plugin resolution
 - `project.name` (required): Project identifier
 - `history.target` (required): Target name where migration history is stored
 
@@ -986,16 +997,26 @@ Options can also be specified via project properties (`-P`):
 ```
 No plugin found for type 'postgresql'.
 No plugins are currently loaded.
-
-To use this plugin type:
-  1. Place the plugin JAR file in ./plugins/ directory
-  2. Ensure the JAR contains META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 ```
 
 **Solution:**
-- Place plugin JAR file in `plugins/` directory
-- Verify the plugin JAR is the correct version
+- Add the plugin Maven coordinate to the `plugins` section in `migraphe.yaml`
+- Run `./gradlew publishToMavenLocal` if using locally built plugins
+- Alternatively, place plugin JAR file in `plugins/` directory
 - See [Installing Plugins](#installing-plugins) section
+
+#### 1b. "Failed to resolve plugin" Error
+
+**Problem:**
+```
+Failed to resolve plugin: io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+```
+
+**Solution:**
+- Ensure `./gradlew publishToMavenLocal` has been run
+- Check that the Maven coordinate in `migraphe.yaml` is correct
+- Verify `~/.m2/repository` contains the plugin artifacts
+- Check network connectivity for Maven Central (required for transitive dependencies)
 
 #### 2. "Target not found" Error
 

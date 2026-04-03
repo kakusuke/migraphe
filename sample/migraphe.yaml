@@ -1,3 +1,5 @@
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
 project:
   name: ecommerce-sample
 history:

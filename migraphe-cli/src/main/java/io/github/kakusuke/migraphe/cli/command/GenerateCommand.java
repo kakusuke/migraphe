@@ -6,6 +6,7 @@ import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.generator.GeneratorExecutor;
 import io.github.kakusuke.migraphe.core.generator.GeneratorRegistry;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
@@ -16,22 +17,28 @@ public class GenerateCommand implements Command {
 
     private final Path baseDir;
     private final PluginRegistry pluginRegistry;
+    private final @Nullable URLClassLoader pluginClassLoader;
     private final @Nullable String nameFilter;
     private final boolean colorEnabled;
 
     public GenerateCommand(
-            Path baseDir, PluginRegistry pluginRegistry, @Nullable String nameFilter) {
-        this(baseDir, pluginRegistry, nameFilter, AnsiColor.isColorEnabled());
+            Path baseDir,
+            PluginRegistry pluginRegistry,
+            @Nullable URLClassLoader pluginClassLoader,
+            @Nullable String nameFilter) {
+        this(baseDir, pluginRegistry, pluginClassLoader, nameFilter, AnsiColor.isColorEnabled());
     }
 
     /** テスト用コンストラクタ。 */
     public GenerateCommand(
             Path baseDir,
             PluginRegistry pluginRegistry,
+            @Nullable URLClassLoader pluginClassLoader,
             @Nullable String nameFilter,
             boolean colorEnabled) {
         this.baseDir = baseDir;
         this.pluginRegistry = pluginRegistry;
+        this.pluginClassLoader = pluginClassLoader;
         this.nameFilter = nameFilter;
         this.colorEnabled = colorEnabled;
     }
@@ -56,6 +63,9 @@ public class GenerateCommand implements Command {
             // 3. GeneratorRegistry を初期化
             GeneratorRegistry generatorRegistry = new GeneratorRegistry();
             generatorRegistry.loadFromClasspath();
+            if (pluginClassLoader != null) {
+                generatorRegistry.loadFromClassLoader(pluginClassLoader);
+            }
             generatorRegistry.loadFromDirectory(baseDir.resolve("plugins"));
 
             // 4. GeneratorExecutor で実行

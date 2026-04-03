@@ -45,11 +45,11 @@ Migrapheは、複数の環境にわたる複雑なデータベースマイグレ
 git clone https://github.com/yourusername/migraphe.git
 cd migraphe
 
-# Fat JARをビルド
-./gradlew fatJar
+# CLI をビルド
+./gradlew :migraphe-cli:installDist
 
-# 実行可能JARが以下に作成されます:
-# migraphe-cli/build/libs/migraphe-cli-all.jar
+# CLI が以下に作成されます:
+# migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli
 ```
 
 ### エイリアスの作成（オプション）
@@ -58,7 +58,7 @@ cd migraphe
 
 ```bash
 # ~/.bashrc または ~/.zshrc に追加
-alias migraphe='java -jar /path/to/migraphe-cli-all.jar'
+alias migraphe='/path/to/migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli'
 
 # シェル設定を再読み込み
 source ~/.bashrc  # または source ~/.zshrc
@@ -72,9 +72,41 @@ migraphe up
 
 Migraphe はプラグインアーキテクチャを採用しており、データベースサポートは別のプラグインとして提供されます。
 
-**プラグインの配置:**
+**現在利用可能なプラグイン:**
 
-プラグイン JAR ファイルをプロジェクトの `plugins/` ディレクトリに配置します:
+| プラグイン | タイプ | 説明 |
+|-----------|--------|------|
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート |
+| `migraphe-plugin-jdbc` | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
+| `migraphe-plugin-generator-json` | `output-json` | JSON 出力ジェネレータプラグイン |
+
+#### 方法1: Maven 座標（推奨）
+
+`migraphe.yaml` に `plugins` セクションを追加し、Maven 座標を記述します。CLI が `~/.m2/repository` および Maven Central から依存を自動解決します:
+
+```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+
+project:
+  name: my-project
+history:
+  target: history
+```
+
+ローカルビルドのプラグインを使用する場合は、事前に公開が必要です:
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+推移的依存（JDBC ドライバ、Jackson 等）は Maven Central から自動的に解決されます。
+
+#### 方法2: plugins/ ディレクトリ（レガシー）
+
+プラグイン JAR ファイルをプロジェクトの `plugins/` ディレクトリに直接配置します:
 
 ```
 my-project/
@@ -85,32 +117,7 @@ my-project/
 └── tasks/
 ```
 
-**現在利用可能なプラグイン:**
-
-| プラグイン | タイプ | 説明 |
-|-----------|--------|------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート |
-| `migraphe-plugin-jdbc` | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
-
-**プラグイン JAR の取得:**
-
-```bash
-# Fat JAR をビルド（JDBC ドライバ込み）
-./gradlew :migraphe-plugin-postgresql:fatJar
-./gradlew :migraphe-plugin-mysql:fatJar
-./gradlew :migraphe-plugin-jdbc:fatJar
-
-# Fat JAR を plugins/ にコピー
-mkdir -p my-project/plugins
-cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
-# MySQL の場合:
-cp migraphe-plugin-mysql/build/libs/migraphe-plugin-mysql-*-all.jar my-project/plugins/
-# 汎用 JDBC の場合:
-cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar my-project/plugins/
-```
-
-**注意:** CLI で使用する場合は `-all.jar`（Fat JAR）を使用してください。通常の JAR は Gradle/Maven 依存関係用です。
+**注意:** 両方の方法を同時に使用できます。Maven で解決されたプラグインが先に読み込まれ、次に `plugins/` ディレクトリが読み込まれます。
 
 ## プロジェクトのセットアップ
 
@@ -151,6 +158,9 @@ my-project/
 ### プロジェクト設定（`migraphe.yaml`）
 
 ```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+
 project:
   name: my-project
 
@@ -159,6 +169,7 @@ history:
 ```
 
 **フィールド:**
+- `plugins`（任意）: CLI プラグイン解決用の Maven 座標リスト（`groupId:artifactId:version`）
 - `project.name`（必須）: プロジェクト識別子
 - `history.target`（必須）: マイグレーション履歴を保存するターゲット名
 
@@ -986,16 +997,26 @@ dependencies {
 ```
 No plugin found for type 'postgresql'.
 No plugins are currently loaded.
-
-To use this plugin type:
-  1. Place the plugin JAR file in ./plugins/ directory
-  2. Ensure the JAR contains META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 ```
 
 **解決策:**
-- `plugins/` ディレクトリにプラグイン JAR ファイルを配置
-- プラグイン JAR が正しいバージョンであることを確認
+- `migraphe.yaml` の `plugins` セクションにプラグインの Maven 座標を追加
+- ローカルビルドのプラグインを使用する場合は `./gradlew publishToMavenLocal` を実行
+- または `plugins/` ディレクトリにプラグイン JAR ファイルを配置
 - [プラグインのインストール](#プラグインのインストール) セクションを参照
+
+#### 1b. "Failed to resolve plugin" エラー
+
+**問題:**
+```
+Failed to resolve plugin: io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+```
+
+**解決策:**
+- `./gradlew publishToMavenLocal` を実行済みか確認
+- `migraphe.yaml` の Maven 座標が正しいか確認
+- `~/.m2/repository` にプラグインのアーティファクトが存在するか確認
+- Maven Central へのネットワーク接続を確認（推移的依存の取得に必要）
 
 #### 2. "Target not found" エラー
 
