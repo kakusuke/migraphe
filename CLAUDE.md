@@ -8,13 +8,12 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 20 (CLI Maven Resolver — Plugin Dependency Resolution) - COMPLETE
-**Tests**: 606, 100% passing
+**Tests**: 596, 100% passing
 
 ## Module Structure
 
 ```
-migraphe-api/              # Lightweight interfaces (no external deps) - for plugin developers
-migraphe-generator-api/    # Generator SPI (GeneratorPlugin, Generator, GeneratorDefinition)
+migraphe-api/              # Lightweight interfaces (no external deps) - for plugin developers (incl. generator SPI)
 migraphe-core/             # Orchestration logic, algorithms, config loading, factories
 migraphe-plugin-jdbc/      # Generic JDBC plugin (type="jdbc") - standalone or base for DB-specific plugins
 migraphe-plugin-postgresql/ # PostgreSQL plugin (extends jdbc, driver/DDL fixed)
@@ -31,9 +30,9 @@ migraphe-gradle-plugin/    # Gradle plugin (migrapheUp/Down/Status/Validate/Gene
 - `Task` - Execution logic (up/down)
 - `HistoryRepository` - Execution history persistence
 - `SchemaInfoProvider<T>` - Schema info extraction from Environment
-- `GeneratorPlugin` - Artifact generation SPI (GeneratorDefinition, Generator)
 - `GeneratorSourcePlugin<T>` - Data extraction SPI (SourceContext → typed data)
 - `GeneratorOutputPlugin` - Data rendering SPI (Object data + OutputContext)
+- `GeneratorDefinition` - Generator configuration record
 - `MigrationGraphView` - Read-only view of MigrationGraph
 
 ## Package Structure
@@ -47,11 +46,8 @@ io.github.kakusuke.migraphe.api/
 ├── execution/      # ExecutionListener, ExecutionPlanInfo, ExecutionSummary
 ├── schema/         # SchemaInfoProvider<T>
 ├── common/         # Result, ValidationResult
+├── generator/      # GeneratorSourcePlugin<T>, GeneratorOutputPlugin, GeneratorDefinition, SourceContext, OutputContext
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
-
-io.github.kakusuke.migraphe.generator.api/
-└── GeneratorPlugin, Generator, GeneratorDefinition,
-    GeneratorSourcePlugin<T>, SourceContext, GeneratorOutputPlugin, OutputContext
 
 io.github.kakusuke.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, ExecutionLevel, TopologicalSort, FormatUtils
@@ -74,7 +70,7 @@ io.github.kakusuke.migraphe.jdbc/
 ├── schema/         # JdbcSchemaInfo, JdbcSchemaDetail, JdbcTableInfo, JdbcViewInfo, JdbcColumnInfo, etc. (19 types)
 │                   # JdbcSchemaInfoProvider (DatabaseMetaData → JdbcSchemaInfo)
 ├── markdown/       # JdbcMarkdownPlugin (type="jdbc-markdown"), JdbcMarkdownGenerator, JdbcMarkdownDefinition
-└── META-INF/services/ # MigraphePlugin + GeneratorPlugin
+└── META-INF/services/ # MigraphePlugin + GeneratorSourcePlugin + GeneratorOutputPlugin
 
 io.github.kakusuke.migraphe.postgresql/
 ├── PostgreSQLEnvironment (extends JdbcEnvironment), PostgreSQLException (extends JdbcException)
@@ -123,8 +119,8 @@ io.github.kakusuke.migraphe.gradle/
 12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (13 variants), `addNonTreeEdge()` with lane routing, merge row reuse, and crossing detection. Grid extracted as inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
 13. **Parallel Execution (Phase 16)**: Opt-in via `execution.parallel: true`. `ParallelMigrationExecutor` uses Virtual Threads + `PriorityBlockingQueue` + `ReadyNodeTracker` (ready-based approach). Fail-fast on failure. `Semaphore` for `execution.max-parallelism`. `SynchronizedHistoryRepository`/`SynchronizedExecutionListener` decorators for thread safety. `Executor` interface shared by sequential/parallel.
 14. **JDBC Plugin Extraction (Phase 17)**: Generic `migraphe-plugin-jdbc` module extracts common JDBC logic (connection, SQL execution, history). DB-specific plugins (`postgresql`, `mysql`) extend `JdbcEnvironment` with fixed driver/label and provide optimized DDL. `SqlStatements` utility for SQL splitting. `JdbcPlugin` (type="jdbc") works standalone for any JDBC database.
-15. **Generator Plugin System (Phase 18)**: `migraphe-generator-api` module defines `GeneratorPlugin` SPI. `SchemaInfoProvider<T>` on `MigraphePlugin` for schema extraction. `JdbcSchemaInfoProvider` uses `DatabaseMetaData` → `JdbcSchemaInfo` (19 record types). `JdbcMarkdownPlugin` (type="jdbc-markdown") generates Markdown docs with directory structure, cross-references, and exclude filtering. `GeneratorRegistry` + `GeneratorExecutor` in core. `GenerateCommand` in CLI (`migraphe generate --name`). `MigrapheGenerateTask` in Gradle plugin.
-16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: Data extraction decoupled from rendering. `GeneratorSourcePlugin<T>` extracts typed data (`jdbc-schema` → `JdbcSchemaInfo`, `migration-tree` → `MigrationGraphView`). `GeneratorOutputPlugin` renders data (`jdbc-markdown`, `output-json`). Same data source can output in multiple formats. `MigrationGraphView` read-only interface in `migraphe-api`. `SourceContext` (nullable Environment + nullable graph). `OutputContext` (definition + outputDir). `GeneratorExecutor.executeAll()` auto-routes based on `source.type` presence. `ProjectConfig.SourceSection` with `Optional<String> type()`. `MigrationTreeSourcePlugin` built into core. `migraphe-plugin-generator-json` module for JSON stdout output via Jackson.
+15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api` (`io.github.kakusuke.migraphe.api.generator`). `SchemaInfoProvider<T>` on `MigraphePlugin` for schema extraction. `JdbcSchemaInfoProvider` uses `DatabaseMetaData` → `JdbcSchemaInfo` (19 record types). `JdbcMarkdownPlugin` (type="jdbc-markdown") generates Markdown docs with directory structure, cross-references, and exclude filtering. `GeneratorRegistry` + `GeneratorExecutor` in core. `GenerateCommand` in CLI (`migraphe generate --name`). `MigrapheGenerateTask` in Gradle plugin.
+16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: Data extraction decoupled from rendering. `GeneratorSourcePlugin<T>` extracts typed data (`jdbc-schema` → `JdbcSchemaInfo`, `migration-tree` → `MigrationGraphView`). `GeneratorOutputPlugin` renders data (`jdbc-markdown`, `output-json`). Same data source can output in multiple formats. Legacy `GeneratorPlugin`/`Generator` interfaces removed; `migraphe-generator-api` module merged into `migraphe-api` (`io.github.kakusuke.migraphe.api.generator`). `MigrationGraphView` read-only interface in `migraphe-api`. `SourceContext` (nullable Environment + nullable graph). `OutputContext` (definition + outputDir). `GeneratorExecutor.executeAll()` auto-routes based on `source.type` presence. `ProjectConfig.SourceSection` with `Optional<String> type()`. `MigrationTreeSourcePlugin` built into core. `migraphe-plugin-generator-json` module for JSON stdout output via Jackson.
 17. **CLI Maven Resolver (Phase 20)**: `migraphe.yaml` `plugins:` section declares Maven coordinates. `PluginConfigPreParser` (SnakeYAML) pre-parses before SmallRye Config. `MavenPluginResolver` (Maven Resolver 1.9.22 + maven-resolver-provider 3.9.9) resolves artifacts + transitive deps from `~/.m2` + Maven Central. `PluginResolver` orchestrates: YAML → resolve → URLClassLoader. `Main.java` passes classloader to `PluginRegistry` and `GeneratorRegistry`. `plugins/` directory still supported for backward compat. `DefaultServiceLocator` pattern (deprecated but functional). `session.setSystemProperties(System.getProperties())` required for POM profile activation.
 
 ## CLI Project Structure
@@ -241,12 +237,14 @@ Update when code changes:
   - Key fix: `session.setSystemProperties(System.getProperties())` required for Maven POM profile activation (Jackson POM uses JDK version profiles)
   - Tests: 606 (api 2, core 364, cli 60, gradle 17, jdbc 86, generator-api 5, generator-json 4, postgresql 39, mysql 29), 100% passing
 
-### 2026-03-30 (Session 34)
-- **Phase 19: Generator SPI Refactor — Source/Output Separation + JSON Output**
-  - Source/output plugin separation, MigrationTreeData DTO, JSON output module
-  - Tests: 536, 100% passing
+### 2026-04-10 (Session 36)
+- **Cleanup: Remove legacy GeneratorPlugin/Generator, merge generator-api into migraphe-api**
+  - Removed `GeneratorPlugin` interface (legacy artifact generation SPI) and `Generator` functional interface
+  - Merged `migraphe-generator-api` module into `migraphe-api` — new package: `io.github.kakusuke.migraphe.api.generator`
+  - Generator SPI now consists of: `GeneratorSourcePlugin<T>`, `GeneratorOutputPlugin`, `GeneratorDefinition`, `SourceContext`, `OutputContext`
+  - Tests: 596 (api 6, core 356, cli 60, gradle 17, jdbc 85, generator-json 4, postgresql 39, mysql 29), 100% passing
 
 ---
 
-**Last Updated**: 2026-04-02
-**Current Work**: Phase 20 complete. CLI Maven Resolver integration for plugin dependency resolution.
+**Last Updated**: 2026-04-10
+**Current Work**: Generator API cleanup complete. Legacy GeneratorPlugin removed, generator-api merged into migraphe-api.

@@ -1,4 +1,4 @@
-package io.github.kakusuke.migraphe.generator.api;
+package io.github.kakusuke.migraphe.api.generator;
 
 import java.nio.file.Path;
 

@@ -1,8 +1,8 @@
 package io.github.kakusuke.migraphe.jdbc.schema;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
-import io.github.kakusuke.migraphe.generator.api.SourceContext;
+import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.api.generator.SourceContext;
 import java.util.Objects;
 
 public final class JdbcSchemaSourcePlugin implements GeneratorSourcePlugin<JdbcSchemaInfo> {

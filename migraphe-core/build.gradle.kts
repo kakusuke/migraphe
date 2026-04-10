@@ -5,7 +5,6 @@ plugins {
 dependencies {
     // API module
     api(project(":migraphe-api"))
-    api(project(":migraphe-generator-api"))
 
     // MicroProfile Config
     api(libs.microprofile.config.api)

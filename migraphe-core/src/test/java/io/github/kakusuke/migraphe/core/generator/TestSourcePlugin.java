@@ -1,7 +1,7 @@
 package io.github.kakusuke.migraphe.core.generator;
 
-import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
-import io.github.kakusuke.migraphe.generator.api.SourceContext;
+import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.api.generator.SourceContext;
 
 public final class TestSourcePlugin implements GeneratorSourcePlugin<String> {
 

@@ -6,9 +6,9 @@ import com.fasterxml.jackson.core.util.DefaultPrettyPrinter;
 import com.fasterxml.jackson.core.util.Separators;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import io.github.kakusuke.migraphe.generator.api.GeneratorDefinition;
-import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
-import io.github.kakusuke.migraphe.generator.api.OutputContext;
+import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
+import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
+import io.github.kakusuke.migraphe.api.generator.OutputContext;
 
 public final class JsonOutputPlugin implements GeneratorOutputPlugin {
 

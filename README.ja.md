@@ -245,7 +245,7 @@ cd migraphe
 ./gradlew :migraphe-gradle-plugin:test
 ```
 
-テストカバレッジ: 606テスト、100%合格
+テストカバレッジ: 596テスト、100%合格
 
 ## コントリビューション
 

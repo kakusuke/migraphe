@@ -1,8 +1,8 @@
 package io.github.kakusuke.migraphe.core.generator;
 
-import io.github.kakusuke.migraphe.generator.api.GeneratorDefinition;
-import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
-import io.github.kakusuke.migraphe.generator.api.OutputContext;
+import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
+import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
+import io.github.kakusuke.migraphe.api.generator.OutputContext;
 
 public final class TestOutputPlugin implements GeneratorOutputPlugin {
 

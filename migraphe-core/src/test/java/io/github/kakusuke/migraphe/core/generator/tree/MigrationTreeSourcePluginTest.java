@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.api.generator.SourceContext;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
@@ -11,8 +13,6 @@ import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
-import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
-import io.github.kakusuke.migraphe.generator.api.SourceContext;
 import java.util.ServiceLoader;
 import org.junit.jupiter.api.Test;
 

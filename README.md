@@ -245,7 +245,7 @@ cd migraphe
 ./gradlew :migraphe-gradle-plugin:test
 ```
 
-Test coverage: 606 tests, 100% passing
+Test coverage: 596 tests, 100% passing
 
 ## Contributing
 

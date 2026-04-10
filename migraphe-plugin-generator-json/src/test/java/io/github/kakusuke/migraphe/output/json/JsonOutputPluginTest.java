@@ -2,9 +2,9 @@ package io.github.kakusuke.migraphe.output.json;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.generator.api.GeneratorDefinition;
-import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
-import io.github.kakusuke.migraphe.generator.api.OutputContext;
+import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
+import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
+import io.github.kakusuke.migraphe.api.generator.OutputContext;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.file.Path;

@@ -1,6 +1,6 @@
 package io.github.kakusuke.migraphe.jdbc.markdown;
 
-import io.github.kakusuke.migraphe.generator.api.GeneratorDefinition;
+import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 import java.util.List;

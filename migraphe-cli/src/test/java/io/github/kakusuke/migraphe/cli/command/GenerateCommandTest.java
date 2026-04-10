@@ -71,7 +71,7 @@ class GenerateCommandTest {
         // Then
         assertThat(exitCode).isEqualTo(1);
         String errOutput = errorStream.toString(StandardCharsets.UTF_8);
-        assertThat(errOutput).contains("Generator plugin not found");
+        assertThat(errOutput).contains("source.type is required");
     }
 
     @Test
@@ -100,7 +100,7 @@ class GenerateCommandTest {
         // Then
         assertThat(exitCode).isEqualTo(1);
         String errOutput = errorStream.toString(StandardCharsets.UTF_8);
-        assertThat(errOutput).contains("Environment not found");
+        assertThat(errOutput).contains("source.type is required");
     }
 
     // Helper methods

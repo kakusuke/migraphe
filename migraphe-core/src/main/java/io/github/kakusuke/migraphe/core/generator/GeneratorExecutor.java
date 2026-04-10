@@ -1,16 +1,14 @@
 package io.github.kakusuke.migraphe.core.generator;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
+import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
+import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
+import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.api.generator.OutputContext;
+import io.github.kakusuke.migraphe.api.generator.SourceContext;
 import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
-import io.github.kakusuke.migraphe.generator.api.Generator;
-import io.github.kakusuke.migraphe.generator.api.GeneratorDefinition;
-import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
-import io.github.kakusuke.migraphe.generator.api.GeneratorPlugin;
-import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
-import io.github.kakusuke.migraphe.generator.api.OutputContext;
-import io.github.kakusuke.migraphe.generator.api.SourceContext;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +16,7 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
- * GeneratorPlugin を使用してジェネレーターを実行する。
+ * GeneratorSourcePlugin / GeneratorOutputPlugin を使用してジェネレーターを実行する。
  *
  * <p>GeneratorRegistry からプラグインを取得し、設定に基づいてジェネレーターを生成・実行する。
  */
@@ -28,29 +26,6 @@ public final class GeneratorExecutor {
 
     public GeneratorExecutor(GeneratorRegistry registry) {
         this.registry = Objects.requireNonNull(registry, "registry must not be null");
-    }
-
-    /**
-     * 単一のジェネレーター設定を実行する。
-     *
-     * @param config ジェネレーター設定
-     * @param environment 実行環境
-     * @param baseDir ベースディレクトリ
-     * @throws IllegalArgumentException プラグインが見つからない場合
-     */
-    public void execute(
-            ProjectConfig.GeneratorSection config, Environment environment, Path baseDir) {
-        GeneratorPlugin plugin =
-                registry.findByType(config.type())
-                        .orElseThrow(
-                                () ->
-                                        new IllegalArgumentException(
-                                                "Generator plugin not found for type: "
-                                                        + config.type()));
-
-        GeneratorDefinition definition = new GeneratorSectionAdapter(config);
-        Generator generator = plugin.createGenerator(environment, definition);
-        generator.generate(baseDir.resolve(config.outputDir()));
     }
 
     /**
@@ -92,21 +67,12 @@ public final class GeneratorExecutor {
             if (nameFilter != null && !nameFilter.equals(config.name())) {
                 continue;
             }
-            if (config.source().type().isPresent()) {
-                executeWithSourceOutput(config, environments, graph, historyRepository, baseDir);
-            } else {
-                Environment environment = environments.get(config.target());
-                if (environment == null) {
-                    throw new IllegalArgumentException(
-                            "Environment not found for target: " + config.target());
-                }
-                execute(config, environment, baseDir);
-            }
+            executeWithSourceOutput(config, environments, graph, historyRepository, baseDir);
         }
     }
 
     /**
-     * 新しいソース/アウトプットフローで単一のジェネレーター設定を実行する。
+     * ソース/アウトプットフローで単一のジェネレーター設定を実行する。
      *
      * @param config ジェネレーター設定
      * @param environments 環境マップ

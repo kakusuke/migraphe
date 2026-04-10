@@ -2,7 +2,7 @@ package io.github.kakusuke.migraphe.jdbc.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
 import java.util.ServiceLoader;
 import org.junit.jupiter.api.Test;
 

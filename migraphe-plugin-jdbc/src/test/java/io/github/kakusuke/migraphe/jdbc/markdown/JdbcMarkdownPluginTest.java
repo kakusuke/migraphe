@@ -2,9 +2,8 @@ package io.github.kakusuke.migraphe.jdbc.markdown;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
-import io.github.kakusuke.migraphe.generator.api.GeneratorPlugin;
-import io.github.kakusuke.migraphe.generator.api.OutputContext;
+import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
+import io.github.kakusuke.migraphe.api.generator.OutputContext;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfo;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -77,18 +76,6 @@ class JdbcMarkdownPluginTest {
         var indexMd = tempDir.resolve("index.md");
         assertThat(indexMd).exists();
         assertThat(Files.readString(indexMd)).startsWith("# Database: testdb");
-    }
-
-    @Test
-    void discoveredByServiceLoader() {
-        var plugins = ServiceLoader.load(GeneratorPlugin.class);
-        var found =
-                plugins.stream()
-                        .map(ServiceLoader.Provider::get)
-                        .filter(p -> "jdbc-markdown".equals(p.type()))
-                        .findFirst();
-        assertThat(found).isPresent();
-        assertThat(found.get()).isInstanceOf(JdbcMarkdownPlugin.class);
     }
 
     @Test

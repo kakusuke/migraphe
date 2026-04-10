@@ -1,6 +1,5 @@
 package io.github.kakusuke.migraphe.jdbc.markdown;
 
-import io.github.kakusuke.migraphe.generator.api.Generator;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcColumnInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcForeignKeyInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcIndexColumn;
@@ -19,7 +18,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /** JDBC スキーマ情報から Markdown ドキュメントを生成する。 */
-public class JdbcMarkdownGenerator implements Generator {
+public class JdbcMarkdownGenerator {
 
     private static final Pattern DEFAULT_SCHEMA_EXCLUDE =
             Pattern.compile("information_schema", Pattern.CASE_INSENSITIVE);
@@ -37,7 +36,6 @@ public class JdbcMarkdownGenerator implements Generator {
         this.excludes = excludes;
     }
 
-    @Override
     public void generate(Path outputDir) {
         var indexBuilder = new StringBuilder();
         indexBuilder.append("# Database: ").append(name).append("\n\n");

@@ -1,8 +1,7 @@
 package io.github.kakusuke.migraphe.core.generator;
 
-import io.github.kakusuke.migraphe.generator.api.GeneratorOutputPlugin;
-import io.github.kakusuke.migraphe.generator.api.GeneratorPlugin;
-import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
+import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -15,21 +14,17 @@ import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * GeneratorPlugin レジストリ — ServiceLoader で GeneratorPlugin を発見・管理する。
+ * GeneratorPlugin レジストリ — ServiceLoader で GeneratorSourcePlugin / GeneratorOutputPlugin を発見・管理する。
  *
  * <p>同じ type のプラグインが複数見つかった場合、後から登録されたものが優先される。
  */
 public final class GeneratorRegistry {
 
-    private final Map<String, GeneratorPlugin> plugins = new ConcurrentHashMap<>();
     private final Map<String, GeneratorSourcePlugin<?>> sourcePlugins = new ConcurrentHashMap<>();
     private final Map<String, GeneratorOutputPlugin> outputPlugins = new ConcurrentHashMap<>();
 
     /** クラスパスから ServiceLoader を使用してプラグインを読み込む。 */
     public void loadFromClasspath() {
-        for (GeneratorPlugin plugin : ServiceLoader.load(GeneratorPlugin.class)) {
-            register(plugin);
-        }
         for (GeneratorSourcePlugin<?> plugin : ServiceLoader.load(GeneratorSourcePlugin.class)) {
             registerSource(plugin);
         }
@@ -44,9 +39,6 @@ public final class GeneratorRegistry {
      * @param classLoader プラグインを探索する ClassLoader
      */
     public void loadFromClassLoader(ClassLoader classLoader) {
-        for (GeneratorPlugin plugin : ServiceLoader.load(GeneratorPlugin.class, classLoader)) {
-            register(plugin);
-        }
         for (GeneratorSourcePlugin<?> plugin :
                 ServiceLoader.load(GeneratorSourcePlugin.class, classLoader)) {
             registerSource(plugin);
@@ -75,7 +67,7 @@ public final class GeneratorRegistry {
                                     URLClassLoader classLoader =
                                             new URLClassLoader(
                                                     new URL[] {jarUrl},
-                                                    GeneratorPlugin.class.getClassLoader());
+                                                    GeneratorRegistry.class.getClassLoader());
                                     loadFromClassLoader(classLoader);
                                 } catch (Exception e) {
                                     throw new IllegalStateException(
@@ -86,28 +78,6 @@ public final class GeneratorRegistry {
             throw new IllegalStateException(
                     "Failed to scan generator plugins directory: " + pluginsDir, e);
         }
-    }
-
-    /**
-     * プラグインを登録する。
-     *
-     * @param plugin 登録するプラグイン
-     */
-    void register(GeneratorPlugin plugin) {
-        Objects.requireNonNull(plugin, "plugin must not be null");
-        String type = plugin.type();
-        Objects.requireNonNull(type, "plugin.type() must not be null");
-        plugins.put(type, plugin);
-    }
-
-    /**
-     * 指定された型のプラグインを取得する。
-     *
-     * @param type プラグインの型識別子
-     * @return プラグイン（存在しない場合は empty）
-     */
-    public Optional<GeneratorPlugin> findByType(String type) {
-        return Optional.ofNullable(plugins.get(type));
     }
 
     void registerSource(GeneratorSourcePlugin<?> plugin) {

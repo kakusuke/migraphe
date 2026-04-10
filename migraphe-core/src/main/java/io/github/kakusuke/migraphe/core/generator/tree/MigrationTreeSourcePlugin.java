@@ -1,9 +1,9 @@
 package io.github.kakusuke.migraphe.core.generator.tree;
 
+import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
+import io.github.kakusuke.migraphe.api.generator.SourceContext;
 import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.generator.api.GeneratorSourcePlugin;
-import io.github.kakusuke.migraphe.generator.api.SourceContext;
 import java.util.List;
 import java.util.Objects;
 

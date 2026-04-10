@@ -8,10 +8,7 @@ dependencies {
     // API needed for tests
     testImplementation(project(":migraphe-api"))
 
-    // Generator API
-    api(project(":migraphe-generator-api"))
-
-    // Jackson for JSON serialization
+// Jackson for JSON serialization
     implementation(libs.jackson.databind)
 
     // Null safety

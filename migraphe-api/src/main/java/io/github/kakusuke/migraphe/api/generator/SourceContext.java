@@ -1,4 +1,4 @@
-package io.github.kakusuke.migraphe.generator.api;
+package io.github.kakusuke.migraphe.api.generator;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
