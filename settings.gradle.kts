@@ -76,6 +76,9 @@ dependencyResolutionManagement {
                 )
                 .versionRef("smallrye-config")
 
+            // SLF4J NOP (suppress Maven Resolver SLF4J warnings in CLI)
+            library("slf4j-nop", "org.slf4j", "slf4j-nop").version("1.7.36")
+
             // Maven Resolver (CLI plugin dependency resolution)
             version("maven-resolver-provider", "3.9.9")
             version("maven-resolver", "1.9.22")
