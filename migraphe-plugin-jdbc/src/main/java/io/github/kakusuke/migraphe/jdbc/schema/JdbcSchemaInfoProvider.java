@@ -30,7 +30,7 @@ public class JdbcSchemaInfoProvider implements SchemaInfoProvider<JdbcSchemaInfo
             for (String schemaName : schemaNames) {
                 schemas.add(buildSchemaDetail(meta, schemaName));
             }
-            return new JdbcSchemaInfo(schemas);
+            return new DefaultJdbcSchemaInfo(schemas);
         } catch (SQLException e) {
             throw new JdbcException("Failed to retrieve schema info", e);
         }
@@ -160,7 +160,7 @@ public class JdbcSchemaInfoProvider implements SchemaInfoProvider<JdbcSchemaInfo
                     fkName = "";
                 }
                 ForeignKeyBuilder builder =
-                        builders.computeIfAbsent(fkName, k -> new ForeignKeyBuilder(k));
+                        builders.computeIfAbsent(fkName, ForeignKeyBuilder::new);
                 if (imported) {
                     builder.columns.add(rs.getString("FKCOLUMN_NAME"));
                     builder.referencedSchema = nullToEmpty(rs.getString("PKTABLE_SCHEM"));
@@ -192,8 +192,7 @@ public class JdbcSchemaInfoProvider implements SchemaInfoProvider<JdbcSchemaInfo
                 if (indexName == null) {
                     continue;
                 }
-                IndexBuilder builder =
-                        builders.computeIfAbsent(indexName, k -> new IndexBuilder(k));
+                IndexBuilder builder = builders.computeIfAbsent(indexName, IndexBuilder::new);
                 builder.unique = !rs.getBoolean("NON_UNIQUE");
                 String columnName = rs.getString("COLUMN_NAME");
                 String ascOrDesc = rs.getString("ASC_OR_DESC");

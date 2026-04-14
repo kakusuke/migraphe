@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.jdbc.markdown;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.jdbc.schema.DefaultJdbcSchemaInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcCheckConstraintInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcColumnInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcForeignKeyInfo;
@@ -156,7 +157,7 @@ class JdbcMarkdownGeneratorTest {
                         List.<JdbcSequenceInfo>of(),
                         List.<JdbcUdtInfo>of());
 
-        return new JdbcSchemaInfo(List.of(schemaDetail));
+        return new DefaultJdbcSchemaInfo(List.of(schemaDetail));
     }
 
     private static JdbcMarkdownDefinition.ExcludePattern excludeSchema(String schemaName) {

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.OutputContext;
+import io.github.kakusuke.migraphe.jdbc.schema.DefaultJdbcSchemaInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfo;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -40,7 +41,7 @@ class JdbcMarkdownPluginTest {
 
     @Test
     void outputGeneratesIndexMdWithDatabaseName() throws IOException {
-        var schemaInfo = new JdbcSchemaInfo(List.of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of());
         JdbcMarkdownDefinition definition =
                 new JdbcMarkdownDefinition() {
                     @Override

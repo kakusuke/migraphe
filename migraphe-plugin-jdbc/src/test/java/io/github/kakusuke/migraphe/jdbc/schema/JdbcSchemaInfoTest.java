@@ -114,7 +114,7 @@ class JdbcSchemaInfoTest {
                         List.of(sequence),
                         List.of(udt));
 
-        var schemaInfo = new JdbcSchemaInfo(List.of(schemaDetail));
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
 
         assertThat(schemaInfo.schemas()).hasSize(1);
         var schema = schemaInfo.schemas().get(0);
