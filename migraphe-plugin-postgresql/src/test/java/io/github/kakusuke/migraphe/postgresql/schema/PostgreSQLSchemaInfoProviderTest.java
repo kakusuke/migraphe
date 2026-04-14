@@ -164,6 +164,28 @@ class PostgreSQLSchemaInfoProviderTest {
     }
 
     @Test
+    void shouldDelegateBaseSchemaInfoFromJdbc() throws Exception {
+        executeSql("CREATE TABLE schema_delegate_test (id serial PRIMARY KEY, name text NOT NULL)");
+
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+
+        assertThat(info.schemas()).isNotEmpty();
+        var publicSchema =
+                info.schemas().stream()
+                        .filter(s -> s.name().equals("public"))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(publicSchema.tables()).anyMatch(t -> t.name().equals("schema_delegate_test"));
+        var table =
+                publicSchema.tables().stream()
+                        .filter(t -> t.name().equals("schema_delegate_test"))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(table.columns()).anyMatch(c -> c.name().equals("id"));
+        assertThat(table.columns()).anyMatch(c -> c.name().equals("name"));
+    }
+
+    @Test
     void shouldExtractAllPostgreSQLSpecificObjects() throws Exception {
         // Setup all PG objects
         executeSql("CREATE TYPE status AS ENUM ('active', 'inactive')");

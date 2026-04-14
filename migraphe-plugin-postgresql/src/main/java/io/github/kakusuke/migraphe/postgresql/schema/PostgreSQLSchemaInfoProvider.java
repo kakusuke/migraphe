@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.postgresql.schema;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.schema.SchemaInfoProvider;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfoProvider;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLException;
 import java.sql.Connection;
@@ -20,9 +21,10 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                     "Environment must be a PostgreSQLEnvironment: "
                             + environment.getClass().getName());
         }
+        var baseInfo = new JdbcSchemaInfoProvider().getSchemaInfo(environment);
         try (Connection conn = pgEnv.createConnection()) {
             return new PostgreSQLSchemaInfo(
-                    List.of(),
+                    baseInfo.schemas(),
                     List.copyOf(extractExtensions(conn)),
                     List.copyOf(extractEnums(conn)),
                     List.copyOf(extractSequences(conn)),
