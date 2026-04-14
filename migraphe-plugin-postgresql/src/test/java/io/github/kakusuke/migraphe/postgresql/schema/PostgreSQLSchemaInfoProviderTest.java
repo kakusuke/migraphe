@@ -164,6 +164,49 @@ class PostgreSQLSchemaInfoProviderTest {
     }
 
     @Test
+    void shouldExtractAllPostgreSQLSpecificObjects() throws Exception {
+        // Setup all PG objects
+        executeSql("CREATE TYPE status AS ENUM ('active', 'inactive')");
+        executeSql("CREATE SEQUENCE order_seq START 100 INCREMENT 10");
+        executeSql(
+                "CREATE TABLE orders (id serial PRIMARY KEY, status text, created_at timestamp NOT"
+                        + " NULL)");
+        executeSql(
+                "CREATE FUNCTION count_orders() RETURNS bigint AS 'SELECT count(*) FROM orders'"
+                        + " LANGUAGE sql");
+        executeSql(
+                "CREATE FUNCTION order_audit() RETURNS trigger AS 'BEGIN RETURN NEW; END' LANGUAGE"
+                        + " plpgsql");
+        executeSql(
+                "CREATE TRIGGER order_insert_trigger BEFORE INSERT ON orders FOR EACH ROW EXECUTE"
+                        + " FUNCTION order_audit()");
+        executeSql(
+                "CREATE MATERIALIZED VIEW order_summary AS SELECT count(*) AS total FROM orders");
+        executeSql(
+                "CREATE TABLE events (id serial, event_date date NOT NULL) PARTITION BY RANGE"
+                        + " (event_date)");
+        executeSql("CREATE TABLE docs (id serial PRIMARY KEY, owner text)");
+        executeSql("ALTER TABLE docs ENABLE ROW LEVEL SECURITY");
+        executeSql("CREATE POLICY docs_owner ON docs USING (owner = current_user)");
+
+        // Extract
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+
+        // Verify all categories populated
+        assertThat(info.extensions()).isNotEmpty(); // plpgsql always present
+        assertThat(info.enums()).anyMatch(e -> e.name().equals("status"));
+        assertThat(info.sequences()).anyMatch(s -> s.name().equals("order_seq"));
+        assertThat(info.functions()).anyMatch(f -> f.name().equals("count_orders"));
+        assertThat(info.triggers()).anyMatch(t -> t.name().equals("order_insert_trigger"));
+        assertThat(info.materializedViews()).anyMatch(mv -> mv.name().equals("order_summary"));
+        assertThat(info.partitions()).anyMatch(p -> p.name().equals("events"));
+        assertThat(info.policies()).anyMatch(p -> p.name().equals("docs_owner"));
+
+        // Also verify it implements JdbcSchemaInfo
+        assertThat(info).isInstanceOf(io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfo.class);
+    }
+
+    @Test
     void shouldThrowWhenNotPostgreSQLEnvironment() {
         var env =
                 new Environment() {
