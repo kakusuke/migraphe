@@ -715,6 +715,7 @@ generators:
 | プラグイン | タイプ | データ | 説明 |
 |-----------|--------|--------|------|
 | `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
+| `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | JDBC基本スキーマ + PostgreSQL固有メタデータ（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）をpg_catalogから抽出 |
 | （組み込み） | `migration-tree` | `MigrationGraphView` | マイグレーションDAG構造を提供 |
 
 ### 利用可能なアウトプットプラグイン
@@ -722,6 +723,7 @@ generators:
 | プラグイン | タイプ | 説明 |
 |-----------|--------|------|
 | `migraphe-plugin-jdbc` | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
+| `migraphe-plugin-postgresql` | `postgresql-markdown` | PostgreSQL固有オブジェクト（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）を含むMarkdownドキュメントを生成 |
 | `migraphe-plugin-generator-json` | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
 
 ### 基本的な使い方
@@ -755,6 +757,33 @@ docs/schema/
 - 主キーとユニーク制約
 - 外部キー参照（参照先テーブルへのクロスリンク付き）
 - インデックス
+
+### PostgreSQL固有ドキュメント
+
+PostgreSQLデータベースの場合、`postgresql-markdown` アウトプットプラグインと `postgresql-schema` ソースプラグインを使用して、PostgreSQL固有オブジェクトを含む包括的なドキュメントを生成できます:
+
+```yaml
+generators:
+  - name: mydb
+    type: postgresql-markdown
+    source:
+      type: postgresql-schema
+      target: db1
+    target: db1
+    output-dir: docs/schema
+```
+
+標準的なJDBCスキーマ情報（テーブル、ビュー、カラム、キー、インデックス）に加えて、生成されるドキュメントには以下が含まれます:
+- **拡張機能**（例: `pgcrypto`、`uuid-ossp`）
+- **列挙型** とその値
+- **シーケンス** と現在の値・パラメータ
+- **関数** と引数型・戻り値型
+- **トリガー** とタイミング、イベント、関連関数
+- **マテリアライズドビュー** とカラム定義
+- **パーティションテーブル** とパーティション戦略・キー
+- **行レベルセキュリティ（RLS）ポリシー** とロール、コマンド、式
+
+テーブル固有のファイルには、各テーブルに関連するトリガー、ポリシー、パーティション情報も含まれます。
 
 ### 除外フィルタリング
 

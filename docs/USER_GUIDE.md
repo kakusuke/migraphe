@@ -76,7 +76,7 @@ Migraphe uses a plugin architecture where database support is provided by separa
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support |
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support (includes `postgresql-schema` source and `postgresql-markdown` output plugins) |
 | `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support |
 | `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
 | `migraphe-plugin-generator-json` | `output-json` | JSON output generator plugin |
@@ -715,6 +715,7 @@ generators:
 | Plugin | Type | Data | Description |
 |--------|------|------|-------------|
 | `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | Extracts database schema metadata via JDBC DatabaseMetaData |
+| `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | Extracts JDBC base schema + PostgreSQL-specific metadata (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) from pg_catalog |
 | (built-in) | `migration-tree` | `MigrationGraphView` | Provides the migration DAG structure |
 
 ### Available Output Plugins
@@ -722,6 +723,7 @@ generators:
 | Plugin | Type | Description |
 |--------|------|-------------|
 | `migraphe-plugin-jdbc` | `jdbc-markdown` | Generates Markdown documentation from `JdbcSchemaInfo` |
+| `migraphe-plugin-postgresql` | `postgresql-markdown` | Generates Markdown documentation with PostgreSQL-specific objects (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) |
 | `migraphe-plugin-generator-json` | `output-json` | Outputs any data as pretty-printed JSON to stdout |
 
 ### Basic Usage
@@ -755,6 +757,33 @@ Each table documentation includes:
 - Primary key and unique constraints
 - Foreign key references with cross-links to referenced tables
 - Indexes
+
+### PostgreSQL-Specific Documentation
+
+For PostgreSQL databases, use the `postgresql-markdown` output plugin with the `postgresql-schema` source plugin to generate comprehensive documentation that includes PostgreSQL-specific objects:
+
+```yaml
+generators:
+  - name: mydb
+    type: postgresql-markdown
+    source:
+      type: postgresql-schema
+      target: db1
+    target: db1
+    output-dir: docs/schema
+```
+
+In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
+- **Extensions** (e.g., `pgcrypto`, `uuid-ossp`)
+- **Enum types** with their values
+- **Sequences** with current values and parameters
+- **Functions** with argument types and return types
+- **Triggers** with timing, events, and associated functions
+- **Materialized views** with column definitions
+- **Partitioned tables** with partition strategy and key
+- **Row-Level Security (RLS) policies** with roles, commands, and expressions
+
+Table-specific files also include related triggers, policies, and partition information for each table.
 
 ### Exclude Filtering
 

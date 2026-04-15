@@ -8,7 +8,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 20 (CLI Maven Resolver — Plugin Dependency Resolution) - COMPLETE
-**Tests**: 596, 100% passing
+**Tests**: 640, 100% passing
 
 ## Module Structure
 
@@ -16,7 +16,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 migraphe-api/              # Lightweight interfaces (no external deps) - for plugin developers (incl. generator SPI)
 migraphe-core/             # Orchestration logic, algorithms, config loading, factories
 migraphe-plugin-jdbc/      # Generic JDBC plugin (type="jdbc") - standalone or base for DB-specific plugins
-migraphe-plugin-postgresql/ # PostgreSQL plugin (extends jdbc, driver/DDL fixed)
+migraphe-plugin-postgresql/ # PostgreSQL plugin (extends jdbc, driver/DDL fixed, postgresql-markdown/schema generators)
 migraphe-plugin-mysql/     # MySQL plugin (extends jdbc, driver/DDL fixed)
 migraphe-plugin-generator-json/ # JSON output plugin (type="output-json") - outputs any data as JSON to stdout
 migraphe-cli/              # CLI entry point, commands, console output
@@ -76,7 +76,10 @@ io.github.kakusuke.migraphe.postgresql/
 ├── PostgreSQLEnvironment (extends JdbcEnvironment), PostgreSQLException (extends JdbcException)
 ├── PostgreSQLPlugin, PostgreSQL{Environment,MigrationNode,HistoryRepository}Provider
 ├── PostgreSQLEnvironmentDefinition
-└── META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
+├── schema/         # PostgreSQLSchemaInfo, PostgreSQLSchemaInfoProvider (delegates JDBC base + pg_catalog extras)
+│                   # PG-specific: extensions, enums, sequences, functions, triggers, materialized views, partitions, policies
+├── markdown/       # PostgreSQLMarkdownPlugin (type="postgresql-markdown"), PostgreSQLMarkdownGenerator (extends JdbcMarkdownGenerator)
+└── META-INF/services/ # MigraphePlugin + GeneratorSourcePlugin + GeneratorOutputPlugin
 
 io.github.kakusuke.migraphe.mysql/
 ├── MySQLEnvironment (extends JdbcEnvironment), MySQLException (extends JdbcException)
@@ -121,6 +124,7 @@ io.github.kakusuke.migraphe.gradle/
 14. **JDBC Plugin Extraction (Phase 17)**: Generic `migraphe-plugin-jdbc` module extracts common JDBC logic (connection, SQL execution, history). DB-specific plugins (`postgresql`, `mysql`) extend `JdbcEnvironment` with fixed driver/label and provide optimized DDL. `SqlStatements` utility for SQL splitting. `JdbcPlugin` (type="jdbc") works standalone for any JDBC database.
 15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api` (`io.github.kakusuke.migraphe.api.generator`). `SchemaInfoProvider<T>` on `MigraphePlugin` for schema extraction. `JdbcSchemaInfoProvider` uses `DatabaseMetaData` → `JdbcSchemaInfo` (19 record types). `JdbcMarkdownPlugin` (type="jdbc-markdown") generates Markdown docs with directory structure, cross-references, and exclude filtering. `GeneratorRegistry` + `GeneratorExecutor` in core. `GenerateCommand` in CLI (`migraphe generate --name`). `MigrapheGenerateTask` in Gradle plugin.
 16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: Data extraction decoupled from rendering. `GeneratorSourcePlugin<T>` extracts typed data (`jdbc-schema` → `JdbcSchemaInfo`, `migration-tree` → `MigrationGraphView`). `GeneratorOutputPlugin` renders data (`jdbc-markdown`, `output-json`). Same data source can output in multiple formats. Legacy `GeneratorPlugin`/`Generator` interfaces removed; `migraphe-generator-api` module merged into `migraphe-api` (`io.github.kakusuke.migraphe.api.generator`). `MigrationGraphView` read-only interface in `migraphe-api`. `SourceContext` (nullable Environment + nullable graph). `OutputContext` (definition + outputDir). `GeneratorExecutor.executeAll()` auto-routes based on `source.type` presence. `ProjectConfig.SourceSection` with `Optional<String> type()`. `MigrationTreeSourcePlugin` built into core. `migraphe-plugin-generator-json` module for JSON stdout output via Jackson.
+18. **PostgreSQL Generator Plugins**: `PostgreSQLSchemaInfoProvider` (source type=`postgresql-schema`) delegates to `JdbcSchemaInfoProvider` for base JDBC schema, then queries `pg_catalog` for PG-specific objects (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies). `PostgreSQLMarkdownPlugin` (output type=`postgresql-markdown`) extends `JdbcMarkdownGenerator` via Template Method pattern — protected hooks `appendIndexHeader()`, `appendSchemaIndexSections()`, `appendTableSections()` allow DB-specific content injection. Table files include related triggers, policies, and partition info.
 17. **CLI Maven Resolver (Phase 20)**: `migraphe.yaml` `plugins:` section declares Maven coordinates. `PluginConfigPreParser` (SnakeYAML) pre-parses before SmallRye Config. `MavenPluginResolver` (Maven Resolver 1.9.22 + maven-resolver-provider 3.9.9) resolves artifacts + transitive deps from `~/.m2` + Maven Central. `PluginResolver` orchestrates: YAML → resolve → URLClassLoader. `Main.java` passes classloader to `PluginRegistry` and `GeneratorRegistry`. `plugins/` directory still supported for backward compat. `DefaultServiceLocator` pattern (deprecated but functional). `session.setSystemProperties(System.getProperties())` required for POM profile activation.
 
 ## CLI Project Structure
@@ -199,7 +203,7 @@ Update when code changes:
 ### Future Phases
 
 - Additional database plugins (MongoDB, etc.)
-- DB-specific generator plugins (PostgreSQL Markdown, MySQL HTML, JDBC TypeScript)
+- DB-specific generator plugins (MySQL HTML, JDBC TypeScript)
 
 ## Design Principles
 
@@ -223,20 +227,6 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-04-02 (Session 35)
-- **Phase 20: CLI Maven Resolver — Plugin Dependency Resolution**
-  - New `migraphe-cli/.../resolver/` package:
-    - `MavenArtifactCoordinate` — record for `groupId:artifactId:version` parsing
-    - `PluginConfigPreParser` — SnakeYAML pre-parse of `plugins:` section from `migraphe.yaml`
-    - `MavenPluginResolver` — Maven Resolver 1.9.22 + maven-resolver-provider 3.9.9, `DefaultServiceLocator` pattern, resolves from `~/.m2` + Maven Central
-    - `PluginResolver` — orchestrator: YAML → resolve → URLClassLoader
-  - `Main.java` — integrates `PluginResolver`, passes classloader to `PluginRegistry` + `GeneratorRegistry`
-  - `GenerateCommand` — accepts `@Nullable URLClassLoader pluginClassLoader`
-  - `migraphe-plugin-generator-json` — removed `fatJar` task (no longer needed)
-  - `sample/` — replaced `plugins/` symlink with `plugins:` Maven coordinates in `migraphe.yaml`
-  - Key fix: `session.setSystemProperties(System.getProperties())` required for Maven POM profile activation (Jackson POM uses JDK version profiles)
-  - Tests: 606 (api 2, core 364, cli 60, gradle 17, jdbc 86, generator-api 5, generator-json 4, postgresql 39, mysql 29), 100% passing
-
 ### 2026-04-10 (Session 36)
 - **Cleanup: Remove legacy GeneratorPlugin/Generator, merge generator-api into migraphe-api**
   - Removed `GeneratorPlugin` interface (legacy artifact generation SPI) and `Generator` functional interface
@@ -244,7 +234,17 @@ Update when code changes:
   - Generator SPI now consists of: `GeneratorSourcePlugin<T>`, `GeneratorOutputPlugin`, `GeneratorDefinition`, `SourceContext`, `OutputContext`
   - Tests: 596 (api 6, core 356, cli 60, gradle 17, jdbc 85, generator-json 4, postgresql 39, mysql 29), 100% passing
 
+### 2026-04-15 (Session 37)
+- **PostgreSQL Markdown Output Plugin + Schema Source Plugin**
+  - `PostgreSQLMarkdownPlugin` (type=`postgresql-markdown`): Output plugin rendering JDBC base schema + PG-specific objects as Markdown
+  - `PostgreSQLSchemaInfoProvider` (type=`postgresql-schema`): Source plugin extracting PG-specific metadata from `pg_catalog`
+    - Extensions, enums, sequences, functions, triggers, materialized views, partitions, policies
+  - Base schema delegation: `PostgreSQLSchemaInfoProvider` delegates to `JdbcSchemaInfoProvider` for JDBC standard schema data
+  - Template Method in `JdbcMarkdownGenerator`: Protected hooks (`appendIndexHeader`, `appendSchemaIndexSections`, `appendTableSections`) for DB-specific subclass extension
+  - `PostgreSQLMarkdownGenerator` extends `JdbcMarkdownGenerator` — adds PG-specific sections to index and table files
+  - Tests: 640, 100% passing
+
 ---
 
-**Last Updated**: 2026-04-10
-**Current Work**: Generator API cleanup complete. Legacy GeneratorPlugin removed, generator-api merged into migraphe-api.
+**Last Updated**: 2026-04-15
+**Current Work**: PostgreSQL Markdown output plugin and schema source plugin complete. Template Method pattern in JdbcMarkdownGenerator for DB-specific extension.
