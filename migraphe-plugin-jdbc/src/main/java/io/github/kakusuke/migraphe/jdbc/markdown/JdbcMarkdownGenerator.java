@@ -27,6 +27,10 @@ public class JdbcMarkdownGenerator {
     private final JdbcSchemaInfo schemaInfo;
     private final List<JdbcMarkdownDefinition.ExcludePattern> excludes;
 
+    protected String name() {
+        return name;
+    }
+
     public JdbcMarkdownGenerator(
             String name,
             JdbcSchemaInfo schemaInfo,
@@ -39,6 +43,7 @@ public class JdbcMarkdownGenerator {
     public void generate(Path outputDir) {
         var indexBuilder = new StringBuilder();
         indexBuilder.append("# Database: ").append(name).append("\n\n");
+        appendIndexHeader(indexBuilder);
 
         for (JdbcSchemaDetail schema : schemaInfo.schemas()) {
             if (isSchemaExcluded(schema.name())) {
@@ -85,6 +90,8 @@ public class JdbcMarkdownGenerator {
                 }
                 indexBuilder.append("\n");
             }
+
+            appendSchemaIndexSections(indexBuilder, schema.name(), outputDir);
         }
 
         writeFile(outputDir.resolve("index.md"), indexBuilder.toString());
@@ -232,6 +239,8 @@ public class JdbcMarkdownGenerator {
             sb.append("\n");
         }
 
+        appendTableSections(sb, schemaName, table.name());
+
         Path filePath =
                 outputDir
                         .resolve(name)
@@ -297,7 +306,13 @@ public class JdbcMarkdownGenerator {
                 || dataType == Types.LONGNVARCHAR;
     }
 
-    private void writeFile(Path path, String content) {
+    protected void appendIndexHeader(StringBuilder sb) {}
+
+    protected void appendSchemaIndexSections(StringBuilder sb, String schemaName, Path outputDir) {}
+
+    protected void appendTableSections(StringBuilder sb, String schemaName, String tableName) {}
+
+    protected void writeFile(Path path, String content) {
         try {
             Files.createDirectories(path.getParent());
             Files.writeString(path, content);
