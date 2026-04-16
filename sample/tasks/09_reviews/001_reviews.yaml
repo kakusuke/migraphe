@@ -1,7 +1,0 @@
-name: Create product reviews table
-target: main
-dependencies:
-  - 03_catalog/003_products
-  - 02_users/001_users
-up: "Create product_reviews table with id, product_id, user_id, rating, title, body, status"
-down: "Drop product_reviews table"

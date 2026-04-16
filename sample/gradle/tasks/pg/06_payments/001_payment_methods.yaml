@@ -1,0 +1,16 @@
+name: Create payment_methods table
+target: pg
+dependencies:
+  - pg/02_users/001_users
+up: |
+  CREATE TABLE payment_methods (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    provider VARCHAR(32) NOT NULL,
+    last4 VARCHAR(4) NULL,
+    brand VARCHAR(32) NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+down: |
+  DROP TABLE IF EXISTS payment_methods;

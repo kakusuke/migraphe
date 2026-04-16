@@ -1,7 +1,0 @@
-name: Create order items table
-target: main
-dependencies:
-  - 06_orders/001_orders
-  - 03_catalog/004_variants
-up: "Create order_items table with id, order_id, variant_id, quantity, unit_price, total_price"
-down: "Drop order_items table"

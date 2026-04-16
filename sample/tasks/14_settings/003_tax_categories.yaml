@@ -1,6 +1,0 @@
-name: Create tax categories table
-target: main
-dependencies:
-  - 00_infra/005_grant_permissions
-up: "Create tax_categories table with id, name, code, description, is_active"
-down: "Drop tax_categories table"

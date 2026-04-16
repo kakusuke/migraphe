@@ -1,6 +1,0 @@
-name: Create tracking events table
-target: main
-dependencies:
-  - 08_shipping/004_shipments
-up: "Create tracking_events table with id, shipment_id, status, location, description, occurred_at"
-down: "Drop tracking_events table"

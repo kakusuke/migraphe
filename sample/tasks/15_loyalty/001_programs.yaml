@@ -1,6 +1,0 @@
-name: Create loyalty programs table
-target: main
-dependencies:
-  - 01_common/001_currencies
-up: "Create loyalty_programs table with id, name, points_per_currency, currency_code, is_active"
-down: "Drop loyalty_programs table"

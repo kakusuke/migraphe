@@ -1,7 +1,0 @@
-name: Create product images table
-target: main
-dependencies:
-  - 03_catalog/003_products
-  - 03_catalog/004_variants
-up: "Create product_images table with id, product_id, variant_id, url, alt_text, position"
-down: "Drop product_images table"

@@ -1,0 +1,15 @@
+name: Create profiles table
+target: pg
+dependencies:
+  - pg/02_users/001_users
+up: |
+  CREATE TABLE profiles (
+    user_id BIGINT PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+    display_name VARCHAR(128) NOT NULL,
+    bio TEXT NULL,
+    avatar_url VARCHAR(512) NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+down: |
+  DROP TABLE IF EXISTS profiles;

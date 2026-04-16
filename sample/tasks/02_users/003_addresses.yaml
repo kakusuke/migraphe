@@ -1,6 +1,0 @@
-name: Create user addresses table
-target: main
-dependencies:
-  - 02_users/001_users
-up: "Create user_addresses table with user_id, type, street, city, country, postal_code"
-down: "Drop user_addresses table"

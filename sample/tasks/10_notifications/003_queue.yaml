@@ -1,7 +1,0 @@
-name: Create notification queue table
-target: main
-dependencies:
-  - 10_notifications/002_templates
-  - 02_users/001_users
-up: "Create notification_queue table with id, user_id, template_id, payload_json, status, scheduled_at"
-down: "Drop notification_queue table"

@@ -1,0 +1,19 @@
+name: Create order_items table
+target: pg
+dependencies:
+  - pg/05_orders/001_orders
+  - mysql/02_catalog/004_variants
+up: |
+  CREATE TABLE order_items (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+    variant_id BIGINT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price NUMERIC(12,2) NOT NULL,
+    line_total NUMERIC(12,2) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (quantity > 0)
+  );
+  COMMENT ON COLUMN order_items.variant_id IS 'Logical reference to MySQL variants.id (no FK)';
+down: |
+  DROP TABLE IF EXISTS order_items;

@@ -1,0 +1,11 @@
+name: Create review indexes
+target: mysql
+autocommit: true
+dependencies:
+  - mysql/03_reviews/001_reviews
+up: |
+  CREATE INDEX idx_reviews_user ON reviews (user_id);
+  CREATE INDEX idx_reviews_rating ON reviews (rating);
+down: |
+  DROP INDEX idx_reviews_rating ON reviews;
+  DROP INDEX idx_reviews_user ON reviews;

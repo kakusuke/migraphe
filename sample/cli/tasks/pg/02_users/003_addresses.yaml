@@ -1,0 +1,20 @@
+name: Create addresses table
+target: pg
+dependencies:
+  - pg/02_users/001_users
+up: |
+  CREATE TABLE addresses (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    label VARCHAR(64) NOT NULL,
+    line1 VARCHAR(255) NOT NULL,
+    line2 VARCHAR(255) NULL,
+    city VARCHAR(128) NOT NULL,
+    region VARCHAR(128) NULL,
+    postal_code VARCHAR(32) NOT NULL,
+    country VARCHAR(2) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+down: |
+  DROP TABLE IF EXISTS addresses;

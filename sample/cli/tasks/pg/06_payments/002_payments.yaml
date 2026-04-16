@@ -1,0 +1,20 @@
+name: Create payments table
+target: pg
+dependencies:
+  - pg/05_orders/001_orders
+  - pg/06_payments/001_payment_methods
+up: |
+  CREATE TABLE payments (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL REFERENCES orders (id),
+    payment_method_id BIGINT NULL REFERENCES payment_methods (id),
+    amount NUMERIC(12,2) NOT NULL,
+    currency_code VARCHAR(3) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    external_id VARCHAR(128) NULL,
+    processed_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+down: |
+  DROP TABLE IF EXISTS payments;

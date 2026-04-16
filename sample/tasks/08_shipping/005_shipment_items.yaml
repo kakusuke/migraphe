@@ -1,7 +1,0 @@
-name: Create shipment items table
-target: main
-dependencies:
-  - 08_shipping/004_shipments
-  - 06_orders/002_order_items
-up: "Create shipment_items table with shipment_id, order_item_id, quantity"
-down: "Drop shipment_items table"

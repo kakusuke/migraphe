@@ -1,6 +1,0 @@
-name: Create admin sessions table
-target: main
-dependencies:
-  - 12_admin/004_users
-up: "Create admin_sessions table with id, user_id, token, ip_address, expires_at"
-down: "Drop admin_sessions table"

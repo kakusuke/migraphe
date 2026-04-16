@@ -250,7 +250,20 @@ Update when code changes:
   - Testcontainers MySQL 8.0 with `--log-bin-trust-function-creators=1 --event-scheduler=ON`
   - Tests: 668 (api 6, core 356, cli 60, gradle 17, jdbc 86, generator-json 4, postgresql 82, mysql 57), 100% passing
 
+### 2026-04-17 (Session 39)
+- **Sample Project Restructured — CLI + Gradle with Cross-DB Demo**
+  - Replaced old single-target noop `sample/` (119 descriptive tasks) with two executable samples
+  - `sample/docker-compose.yml`: PostgreSQL 16 + MySQL 8.0 with healthchecks
+  - `sample/cli/` — CLI sample (via `migraphe-cli/build/install/`)
+  - `sample/gradle/` — Gradle plugin sample (`mavenLocal()` resolution, standalone wrapper)
+  - **Domain-split design**: PG holds Commerce domain (users, orders, payments — 9 tasks), MySQL holds Catalog domain (currencies, products, reviews — 10 tasks)
+  - **Cross-DB dependencies** in the DAG demonstrate migraphe's core value: `pg/users` depends on `mysql/currencies`; `pg/order_items` depends on `mysql/variants`; `mysql/reviews` depends on `pg/users`
+  - Cross-DB references use plain columns (no FK across databases) — realistic microservice pattern
+  - `history.target: pg` — all task execution records aggregated in PG with `environment_id` discrimination
+  - Generators configured for PG Markdown docs, MySQL Markdown docs, and migration-tree JSON
+  - Validation confirmed for both CLI and Gradle samples (19 tasks, 2 targets, cross-DB DAG resolved correctly)
+
 ---
 
-**Last Updated**: 2026-04-16
-**Current Work**: MySQL Markdown output plugin and schema source plugin complete. Same Template Method pattern as PostgreSQL.
+**Last Updated**: 2026-04-17
+**Current Work**: Sample project restructured into CLI + Gradle examples with cross-DB domain split demonstrating migraphe's unified multi-database migration management.

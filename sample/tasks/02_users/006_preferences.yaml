@@ -1,8 +1,0 @@
-name: Create user preferences table
-target: main
-dependencies:
-  - 02_users/001_users
-  - 01_common/001_currencies
-  - 01_common/002_locales
-up: "Create user_preferences table with user_id, currency_code, locale_code, theme, notifications_enabled"
-down: "Drop user_preferences table"

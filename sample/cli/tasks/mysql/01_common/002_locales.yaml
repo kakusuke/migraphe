@@ -1,0 +1,11 @@
+name: Create locales table
+target: mysql
+up: |
+  CREATE TABLE locales (
+    code VARCHAR(10) PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    native_name VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+down: |
+  DROP TABLE IF EXISTS locales;

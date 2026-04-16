@@ -1,7 +1,0 @@
-name: Create users table
-target: main
-dependencies:
-  - 01_common/001_currencies
-  - 01_common/002_locales
-up: "Create users table with id, email, password_hash, status, created_at"
-down: "Drop users table"

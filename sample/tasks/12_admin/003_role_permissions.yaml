@@ -1,7 +1,0 @@
-name: Create role permissions table
-target: main
-dependencies:
-  - 12_admin/001_roles
-  - 12_admin/002_permissions
-up: "Create role_permissions table with role_id, permission_id"
-down: "Drop role_permissions table"

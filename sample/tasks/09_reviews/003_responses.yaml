@@ -1,6 +1,0 @@
-name: Create review responses table
-target: main
-dependencies:
-  - 09_reviews/001_reviews
-up: "Create review_responses table with id, review_id, body, responder_id, created_at"
-down: "Drop review_responses table"

@@ -1,0 +1,21 @@
+name: Create products table
+target: mysql
+dependencies:
+  - mysql/02_catalog/001_categories
+  - mysql/02_catalog/002_brands
+up: |
+  CREATE TABLE products (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    sku VARCHAR(64) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+    category_id BIGINT NOT NULL,
+    brand_id BIGINT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'draft',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_products_category FOREIGN KEY (category_id) REFERENCES categories (id),
+    CONSTRAINT fk_products_brand FOREIGN KEY (brand_id) REFERENCES brands (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+down: |
+  DROP TABLE IF EXISTS products;

@@ -1,7 +1,0 @@
-name: Create loyalty memberships table
-target: main
-dependencies:
-  - 15_loyalty/002_tiers
-  - 02_users/001_users
-up: "Create loyalty_memberships table with user_id, program_id, tier_id, points_balance, joined_at"
-down: "Drop loyalty_memberships table"

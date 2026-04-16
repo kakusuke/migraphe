@@ -1,7 +1,0 @@
-name: Create invoice items table
-target: main
-dependencies:
-  - 06_orders/006_invoices
-  - 06_orders/002_order_items
-up: "Create invoice_items table with id, invoice_id, order_item_id, description, amount, tax_amount"
-down: "Drop invoice_items table"

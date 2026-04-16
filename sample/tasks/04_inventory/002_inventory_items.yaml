@@ -1,7 +1,0 @@
-name: Create inventory items table
-target: main
-dependencies:
-  - 04_inventory/001_warehouses
-  - 03_catalog/004_variants
-up: "Create inventory_items table with warehouse_id, variant_id, quantity, reserved_quantity"
-down: "Drop inventory_items table"

@@ -1,6 +1,0 @@
-name: Create admin roles table
-target: main
-dependencies:
-  - 00_infra/005_grant_permissions
-up: "Create admin_roles table with id, name, code, description, is_system"
-down: "Drop admin_roles table"

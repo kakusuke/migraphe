@@ -1,0 +1,16 @@
+name: Create product images table
+target: mysql
+dependencies:
+  - mysql/02_catalog/003_products
+up: |
+  CREATE TABLE product_images (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    url VARCHAR(512) NOT NULL,
+    alt_text VARCHAR(255) NULL,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_product_images_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+down: |
+  DROP TABLE IF EXISTS product_images;

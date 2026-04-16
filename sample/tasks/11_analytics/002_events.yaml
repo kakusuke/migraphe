@@ -1,6 +1,0 @@
-name: Create analytics events table
-target: main
-dependencies:
-  - 11_analytics/001_sessions
-up: "Create analytics_events table with id, session_id, event_type, payload_json, occurred_at"
-down: "Drop analytics_events table"

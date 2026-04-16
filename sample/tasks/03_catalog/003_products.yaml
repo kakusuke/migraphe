@@ -1,7 +1,0 @@
-name: Create products table
-target: main
-dependencies:
-  - 03_catalog/001_categories
-  - 03_catalog/002_brands
-up: "Create products table with id, sku, name, description, category_id, brand_id, status"
-down: "Drop products table"

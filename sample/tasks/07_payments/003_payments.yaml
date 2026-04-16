@@ -1,7 +1,0 @@
-name: Create payments table
-target: main
-dependencies:
-  - 06_orders/001_orders
-  - 07_payments/002_payment_methods
-up: "Create payments table with id, order_id, payment_method_id, amount, currency_code, status"
-down: "Drop payments table"

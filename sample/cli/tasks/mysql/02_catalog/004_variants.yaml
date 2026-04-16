@@ -1,0 +1,21 @@
+name: Create variants table
+target: mysql
+dependencies:
+  - mysql/02_catalog/003_products
+  - mysql/01_common/001_currencies
+up: |
+  CREATE TABLE variants (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id BIGINT NOT NULL,
+    sku VARCHAR(64) NOT NULL UNIQUE,
+    price_amount DECIMAL(12,2) NOT NULL,
+    price_currency VARCHAR(3) NOT NULL,
+    stock_quantity INT NOT NULL DEFAULT 0,
+    attributes JSON NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_variants_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    CONSTRAINT fk_variants_currency FOREIGN KEY (price_currency) REFERENCES currencies (code)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+down: |
+  DROP TABLE IF EXISTS variants;

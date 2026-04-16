@@ -1,7 +1,0 @@
-name: Create admin user roles table
-target: main
-dependencies:
-  - 12_admin/004_users
-  - 12_admin/001_roles
-up: "Create admin_user_roles table with user_id, role_id, granted_at, granted_by"
-down: "Drop admin_user_roles table"

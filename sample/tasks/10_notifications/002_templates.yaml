@@ -1,7 +1,0 @@
-name: Create notification templates table
-target: main
-dependencies:
-  - 10_notifications/001_categories
-  - 01_common/002_locales
-up: "Create notification_templates table with id, category_id, locale_code, channel, subject, body"
-down: "Drop notification_templates table"

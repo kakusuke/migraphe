@@ -1,0 +1,20 @@
+name: Create users table
+target: pg
+dependencies:
+  - mysql/01_common/001_currencies
+  - mysql/01_common/002_locales
+up: |
+  CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    preferred_currency VARCHAR(3) NULL,
+    preferred_locale VARCHAR(10) NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  COMMENT ON COLUMN users.preferred_currency IS 'Logical reference to MySQL currencies.code (no FK)';
+  COMMENT ON COLUMN users.preferred_locale IS 'Logical reference to MySQL locales.code (no FK)';
+down: |
+  DROP TABLE IF EXISTS users;

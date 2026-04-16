@@ -1,6 +1,0 @@
-name: Create database roles
-target: main
-dependencies:
-  - 00_infra/001_create_database
-up: "Create app_user and app_admin roles"
-down: "Drop app_user and app_admin roles"
