@@ -17,6 +17,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **YAML Configuration**: Simple, readable configuration files
 - **Schema Documentation Generation**: Generate Markdown documentation from database schemas via `generate` command
 - **PostgreSQL-Specific Documentation**: Generate comprehensive Markdown docs including extensions, enums, sequences, functions, triggers, materialized views, partitions, and policies
+- **MySQL-Specific Documentation**: Generate comprehensive Markdown docs including storage engines, table metadata (ENGINE/collation/row format), triggers, routines (stored procedures/functions), events, and partitions
 - **Flexible Generator System**: Source/output plugin separation — same data source can output in multiple formats (Markdown, JSON, etc.)
 - **Parallel Execution**: Opt-in Virtual Threads-based parallel execution with configurable concurrency
 - **Execution History**: Track migration execution history with rollback support

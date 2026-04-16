@@ -77,7 +77,7 @@ Migraphe uses a plugin architecture where database support is provided by separa
 | Plugin | Type | Description |
 |--------|------|-------------|
 | `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support (includes `postgresql-schema` source and `postgresql-markdown` output plugins) |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support (includes `mysql-schema` source and `mysql-markdown` output plugins) |
 | `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
 | `migraphe-plugin-generator-json` | `output-json` | JSON output generator plugin |
 
@@ -716,6 +716,7 @@ generators:
 |--------|------|------|-------------|
 | `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | Extracts database schema metadata via JDBC DatabaseMetaData |
 | `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | Extracts JDBC base schema + PostgreSQL-specific metadata (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) from pg_catalog |
+| `migraphe-plugin-mysql` | `mysql-schema` | `MySQLSchemaInfo` | Extracts JDBC base schema + MySQL-specific metadata (storage engines, table meta, triggers, routines, events, partitions) from information_schema |
 | (built-in) | `migration-tree` | `MigrationGraphView` | Provides the migration DAG structure |
 
 ### Available Output Plugins
@@ -724,6 +725,7 @@ generators:
 |--------|------|-------------|
 | `migraphe-plugin-jdbc` | `jdbc-markdown` | Generates Markdown documentation from `JdbcSchemaInfo` |
 | `migraphe-plugin-postgresql` | `postgresql-markdown` | Generates Markdown documentation with PostgreSQL-specific objects (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) |
+| `migraphe-plugin-mysql` | `mysql-markdown` | Generates Markdown documentation with MySQL-specific objects (storage engines, table metadata, triggers, routines, events, partitions) |
 | `migraphe-plugin-generator-json` | `output-json` | Outputs any data as pretty-printed JSON to stdout |
 
 ### Basic Usage
@@ -784,6 +786,33 @@ In addition to standard JDBC schema information (tables, views, columns, keys, i
 - **Row-Level Security (RLS) policies** with roles, commands, and expressions
 
 Table-specific files also include related triggers, policies, and partition information for each table.
+
+### MySQL-Specific Documentation
+
+For MySQL databases, use the `mysql-markdown` output plugin with the `mysql-schema` source plugin to generate comprehensive documentation that includes MySQL-specific objects:
+
+```yaml
+generators:
+  mysql-docs:
+    source:
+      type: mysql-schema
+      environment: db1
+    output:
+      type: mysql-markdown
+    name: my-database
+```
+
+In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
+- **Storage engines** available in the MySQL instance
+- **Table metadata** including ENGINE, collation, and row format
+- **Triggers** with timing, events, and SQL statements
+- **Routines** (stored procedures and functions) with parameters and return types
+- **Events** with schedule, status, and SQL body
+- **Partitioned tables** with partition method, expression, and partition details
+
+Table-specific files also include related triggers and partition information for each table.
+
+**Note:** MySQL JDBC returns databases as catalogs (not schemas). The `mysql-schema` source plugin uses catalog-based schema discovery via `connection.getCatalog()`.
 
 ### Exclude Filtering
 

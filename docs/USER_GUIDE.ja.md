@@ -76,8 +76,8 @@ Migraphe はプラグインアーキテクチャを採用しており、デー�
 
 | プラグイン | タイプ | 説明 |
 |-----------|--------|------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート |
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート（`postgresql-schema` ソースおよび `postgresql-markdown` アウトプットプラグインを含む） |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート（`mysql-schema` ソースおよび `mysql-markdown` アウトプットプラグインを含む） |
 | `migraphe-plugin-jdbc` | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
 | `migraphe-plugin-generator-json` | `output-json` | JSON 出力ジェネレータプラグイン |
 
@@ -716,6 +716,7 @@ generators:
 |-----------|--------|--------|------|
 | `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
 | `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | JDBC基本スキーマ + PostgreSQL固有メタデータ（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）をpg_catalogから抽出 |
+| `migraphe-plugin-mysql` | `mysql-schema` | `MySQLSchemaInfo` | JDBC基本スキーマ + MySQL固有メタデータ（ストレージエンジン、テーブルメタ、トリガー、ルーチン、イベント、パーティション）をinformation_schemaから抽出 |
 | （組み込み） | `migration-tree` | `MigrationGraphView` | マイグレーションDAG構造を提供 |
 
 ### 利用可能なアウトプットプラグイン
@@ -724,6 +725,7 @@ generators:
 |-----------|--------|------|
 | `migraphe-plugin-jdbc` | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
 | `migraphe-plugin-postgresql` | `postgresql-markdown` | PostgreSQL固有オブジェクト（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）を含むMarkdownドキュメントを生成 |
+| `migraphe-plugin-mysql` | `mysql-markdown` | MySQL固有オブジェクト（ストレージエンジン、テーブルメタデータ、トリガー、ルーチン、イベント、パーティション）を含むMarkdownドキュメントを生成 |
 | `migraphe-plugin-generator-json` | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
 
 ### 基本的な使い方
@@ -784,6 +786,33 @@ generators:
 - **行レベルセキュリティ（RLS）ポリシー** とロール、コマンド、式
 
 テーブル固有のファイルには、各テーブルに関連するトリガー、ポリシー、パーティション情報も含まれます。
+
+### MySQL固有ドキュメント
+
+MySQLデータベースの場合、`mysql-markdown` アウトプットプラグインと `mysql-schema` ソースプラグインを使用して、MySQL固有オブジェクトを含む包括的なドキュメントを生成できます:
+
+```yaml
+generators:
+  mysql-docs:
+    source:
+      type: mysql-schema
+      environment: db1
+    output:
+      type: mysql-markdown
+    name: my-database
+```
+
+標準的なJDBCスキーマ情報（テーブル、ビュー、カラム、キー、インデックス）に加えて、生成されるドキュメントには以下が含まれます:
+- **ストレージエンジン** MySQLインスタンスで利用可能なエンジン一覧
+- **テーブルメタデータ** ENGINE、照合順序、行フォーマットを含む
+- **トリガー** とタイミング、イベント、SQL文
+- **ルーチン**（ストアドプロシージャおよび関数）とパラメータ・戻り値型
+- **イベント** とスケジュール、ステータス、SQL本体
+- **パーティションテーブル** とパーティション方式、式、パーティション詳細
+
+テーブル固有のファイルには、各テーブルに関連するトリガーおよびパーティション情報も含まれます。
+
+**注意:** MySQL JDBCはデータベースをカタログとして返します（スキーマではありません）。`mysql-schema` ソースプラグインは `connection.getCatalog()` を使用したカタログベースのスキーマ検出を行います。
 
 ### 除外フィルタリング
 
