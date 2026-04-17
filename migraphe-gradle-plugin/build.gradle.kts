@@ -35,9 +35,12 @@ tasks.test {
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         showStandardStreams = false
     }
+    val generatorJsonFiles = configurations["generatorJsonJar"]
+    inputs.files(generatorJsonFiles).withPropertyName("generatorJsonClasspath")
     doFirst {
-        val classpath = configurations["generatorJsonJar"].files
-            .joinToString(File.pathSeparator) { it.absolutePath }
-        systemProperty("generator.json.classpath", classpath)
+        systemProperty(
+            "generator.json.classpath",
+            generatorJsonFiles.files.joinToString(File.pathSeparator) { it.absolutePath },
+        )
     }
 }

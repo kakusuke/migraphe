@@ -1,12 +1,10 @@
 package io.github.kakusuke.migraphe.gradle;
 
-import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
-import java.util.ArrayList;
 import java.util.List;
 import org.gradle.api.tasks.TaskAction;
 
@@ -24,7 +22,6 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
         HistoryRepository historyRepo = context.createHistoryRepository();
         historyRepo.initialize();
 
-        List<MigrationNode> sortedNodes = new ArrayList<>(context.nodes());
         ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
 
         int[] executedCount = {0};
