@@ -2,6 +2,8 @@ package io.github.kakusuke.migraphe.postgresql.markdown;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.api.generator.DefinitionResolver;
+import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.OutputContext;
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownDefinition;
@@ -121,7 +123,14 @@ class PostgreSQLMarkdownPluginTest {
                         return Optional.empty();
                     }
                 };
-        var outputContext = new OutputContext(definition, tempDir);
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
+        var outputContext = new OutputContext(resolver, tempDir);
 
         plugin.output(schemaInfo, outputContext);
 

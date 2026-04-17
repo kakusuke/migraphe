@@ -75,6 +75,7 @@ public class GenerateCommand implements Command {
                     context.environments(),
                     context.graph(),
                     context.createHistoryRepository(),
+                    context.config(),
                     baseDir,
                     nameFilter);
 

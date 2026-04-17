@@ -26,7 +26,7 @@ public final class JdbcMarkdownPlugin implements GeneratorOutputPlugin {
     @Override
     public void output(Object data, OutputContext context) {
         var schemaInfo = (JdbcSchemaInfo) data;
-        var definition = (JdbcMarkdownDefinition) context.definition();
+        var definition = context.definitionAs(JdbcMarkdownDefinition.class);
         var generator =
                 new JdbcMarkdownGenerator(
                         definition.name(), schemaInfo, resolveExcludes(definition));

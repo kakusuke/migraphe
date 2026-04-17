@@ -2,6 +2,8 @@ package io.github.kakusuke.migraphe.jdbc.markdown;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.api.generator.DefinitionResolver;
+import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.OutputContext;
 import io.github.kakusuke.migraphe.jdbc.schema.DefaultJdbcSchemaInfo;
@@ -64,7 +66,14 @@ class JdbcMarkdownPluginTest {
                         return Optional.empty();
                     }
                 };
-        var context = new OutputContext(definition, tempDir);
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
+        var context = new OutputContext(resolver, tempDir);
         var outputPlugin = (GeneratorOutputPlugin) plugin;
 
         outputPlugin.output(schemaInfo, context);

@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.output.json;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.api.generator.DefinitionResolver;
 import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.OutputContext;
@@ -41,7 +42,14 @@ class JsonOutputPluginTest {
                         return "output-json";
                     }
                 };
-        var context = new OutputContext(definition, tempDir);
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
+        var context = new OutputContext(resolver, tempDir);
         var data = Map.of("name", "test", "count", 42);
 
         var originalOut = System.out;

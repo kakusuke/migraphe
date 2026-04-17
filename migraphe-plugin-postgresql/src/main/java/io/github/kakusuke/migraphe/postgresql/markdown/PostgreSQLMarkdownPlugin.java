@@ -26,7 +26,7 @@ public final class PostgreSQLMarkdownPlugin implements GeneratorOutputPlugin {
     @Override
     public void output(Object data, OutputContext context) {
         var schemaInfo = (PostgreSQLSchemaInfo) data;
-        var definition = (JdbcMarkdownDefinition) context.definition();
+        var definition = context.definitionAs(JdbcMarkdownDefinition.class);
         var excludes = definition.excludes().orElse(java.util.List.of());
         var generator = new PostgreSQLMarkdownGenerator(definition.name(), schemaInfo, excludes);
         generator.generate(context.outputDir());

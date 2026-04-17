@@ -231,6 +231,19 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-04-17 (Session 42)
+- **Cross-classloader `ClassCastException` in Markdown plugins fixed (Issue 2 resolved)**
+  - Root cause: `OutputContext.definition()` was a `GeneratorSectionAdapter` loaded by core's AppClassLoader, but markdown plugins cast it to `JdbcMarkdownDefinition` loaded by the plugin's URLClassLoader. Class identities differed → `ClassCastException`.
+  - Fix: introduced `DefinitionResolver` (`migraphe-api`, `@FunctionalInterface`) and reshaped `OutputContext` to `record OutputContext(DefinitionResolver resolver, Path outputDir)`. New `definitionAs(Class<T>)` default method delegates to the resolver. Old `definition()` removed.
+  - `PropertiesDefinitionResolver` (`migraphe-core`): takes a `SmallRyeConfig` + `prefix`, snapshots matching properties, and on each `resolve(klass)` call rebuilds a `SmallRyeConfig` with `withMapping(klass)`. SmallRye uses `klass.getClassLoader()` for proxy generation, so the materialised `@ConfigMapping` proxy lives in the plugin's classloader — no cross-CL cast needed.
+  - `GeneratorExecutor` now accepts an optional `SmallRyeConfig` and wires the per-section resolver (`generators[i]` prefix). Legacy overloads without `SmallRyeConfig` use `GeneratorSectionFallbackResolver` (serves only bare `GeneratorDefinition`).
+  - `CLI GenerateCommand` and `Gradle MigrapheGenerateTask` pass `context.config()` through so `migraphe generate` works end-to-end for all three markdown plugins.
+  - `JdbcMarkdownPlugin` / `PostgreSQLMarkdownPlugin` / `MySQLMarkdownPlugin` changed `(JdbcMarkdownDefinition) context.definition()` → `context.definitionAs(JdbcMarkdownDefinition.class)`.
+  - Tests: added `DefinitionResolverTest` (api) and `PropertiesDefinitionResolverTest` (core, including an isolated `ClassLoader` re-definition test that asserts the returned proxy implements the *foreign-classloader* `SampleDefinition`). All existing plugin tests migrated to construct `OutputContext` with an anonymous `DefinitionResolver`.
+  - `migraphe-api` remains dependency-free: `DefinitionResolver` is a pure interface; SmallRye-backed materialisation lives in core.
+  - `docs/DEFERRED_ISSUES.md` reduced to "No outstanding deferred issues."
+  - Tests: 675 (api 8, core 359, cli 60, gradle 18, jdbc 87, generator-json 4, postgresql 82, mysql 57), 100% passing.
+
 ### 2026-04-17 (Session 41)
 - **Generator Top-level `target` Removal (Issue 1 resolved)**
   - After Phase 19's source/output split, `target` became a source-side concept (which Environment to extract data from) and no longer belonged on the output contract
@@ -255,19 +268,6 @@ Update when code changes:
   - Testcontainers MySQL 8.0 with `--log-bin-trust-function-creators=1 --event-scheduler=ON`
   - Tests: 668 (api 6, core 356, cli 60, gradle 17, jdbc 86, generator-json 4, postgresql 82, mysql 57), 100% passing
 
-### 2026-04-17 (Session 39)
-- **Sample Project Restructured — CLI + Gradle with Cross-DB Demo**
-  - Replaced old single-target noop `sample/` (119 descriptive tasks) with two executable samples
-  - `sample/docker-compose.yml`: PostgreSQL 16 + MySQL 8.0 with healthchecks
-  - `sample/cli/` — CLI sample (via `migraphe-cli/build/install/`)
-  - `sample/gradle/` — Gradle plugin sample (`mavenLocal()` resolution, standalone wrapper)
-  - **Domain-split design**: PG holds Commerce domain (users, orders, payments — 9 tasks), MySQL holds Catalog domain (currencies, products, reviews — 10 tasks)
-  - **Cross-DB dependencies** in the DAG demonstrate migraphe's core value: `pg/users` depends on `mysql/currencies`; `pg/order_items` depends on `mysql/variants`; `mysql/reviews` depends on `pg/users`
-  - Cross-DB references use plain columns (no FK across databases) — realistic microservice pattern
-  - `history.target: pg` — all task execution records aggregated in PG with `environment_id` discrimination
-  - Generators configured for PG Markdown docs, MySQL Markdown docs, and migration-tree JSON
-  - Validation confirmed for both CLI and Gradle samples (19 tasks, 2 targets, cross-DB DAG resolved correctly)
-
 ### 2026-04-17 (Session 40)
 - **Gradle `MigrapheGenerateTask` — Load Generator Plugins from `migraphePlugin` Configuration (Issue 4)**
   - Bug: `MigrapheGenerateTask` only called `GeneratorRegistry.loadFromClasspath()` + `loadFromDirectory()` and ignored the `migraphePlugin` Gradle Configuration's URLClassLoader, so Generator plugins (e.g. `output-json`) declared there were invisible
@@ -280,4 +280,4 @@ Update when code changes:
 ---
 
 **Last Updated**: 2026-04-17
-**Current Work**: Generator top-level `target` field removed from output contract; source/output separation now complete (Issue 1 resolved). Only Issue 2 (cross-classloader cast in markdown plugins) remains in `docs/DEFERRED_ISSUES.md`.
+**Current Work**: Issue 2 (cross-classloader `ClassCastException` in Markdown plugins) resolved. `migraphe generate` now works end-to-end for `jdbc-markdown` / `postgresql-markdown` / `mysql-markdown` via `OutputContext.definitionAs(Class<T>)` + `PropertiesDefinitionResolver`. `docs/DEFERRED_ISSUES.md` is now empty.

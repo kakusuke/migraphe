@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class GeneratorOutputPluginTest {
 
     @Test
-    void outputContextHoldsDefinitionAndOutputDir() {
+    void outputContextDefinitionAsDelegatesToResolver() {
         GeneratorDefinition definition =
                 new GeneratorDefinition() {
                     @Override
@@ -17,11 +17,18 @@ class GeneratorOutputPluginTest {
                         return "test-type";
                     }
                 };
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
         Path outputDir = Path.of("/tmp/output");
 
-        OutputContext context = new OutputContext(definition, outputDir);
+        OutputContext context = new OutputContext(resolver, outputDir);
 
-        assertThat(context.definition()).isSameAs(definition);
+        assertThat(context.definitionAs(GeneratorDefinition.class)).isSameAs(definition);
         assertThat(context.outputDir()).isEqualTo(outputDir);
     }
 
@@ -58,7 +65,14 @@ class GeneratorOutputPluginTest {
                         return "test-type";
                     }
                 };
-        OutputContext context = new OutputContext(definition, Path.of("/tmp/output"));
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
+        OutputContext context = new OutputContext(resolver, Path.of("/tmp/output"));
 
         assertThat(plugin.type()).isEqualTo("test-output");
         assertThat(plugin.canHandle(String.class)).isTrue();
@@ -78,8 +92,16 @@ class GeneratorOutputPluginTest {
                         return "source-only-type";
                     }
                 };
-        OutputContext context = new OutputContext(definition, Path.of("/tmp/output"));
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
+        OutputContext context = new OutputContext(resolver, Path.of("/tmp/output"));
 
-        assertThat(context.definition().type()).isEqualTo("source-only-type");
+        assertThat(context.definitionAs(GeneratorDefinition.class).type())
+                .isEqualTo("source-only-type");
     }
 }

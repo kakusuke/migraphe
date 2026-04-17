@@ -64,6 +64,7 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
                     context.environments(),
                     context.graph(),
                     context.createHistoryRepository(),
+                    context.config(),
                     context.baseDir(),
                     nameFilter);
             getLogger().lifecycle("");
