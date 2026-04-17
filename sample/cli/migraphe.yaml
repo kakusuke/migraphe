@@ -15,7 +15,6 @@ generators:
     source:
       type: postgresql-schema
       target: pg
-    target: pg
     output-dir: docs/postgresql
 
   - name: mysql-schema-docs
@@ -23,12 +22,10 @@ generators:
     source:
       type: mysql-schema
       target: mysql
-    target: mysql
     output-dir: docs/mysql
 
   - name: migration-tree
     type: output-json
     source:
       type: migration-tree
-    target: pg
     output-dir: docs

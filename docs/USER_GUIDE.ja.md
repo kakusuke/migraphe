@@ -682,7 +682,6 @@ generators:
     source:
       type: jdbc-schema
       target: db1
-    target: db1
     output-dir: docs/schema
     excludes:
       - schema: "information_schema"
@@ -694,7 +693,6 @@ generators:
     type: output-json
     source:
       type: migration-tree
-    target: db1
     output-dir: docs
 ```
 
@@ -704,7 +702,6 @@ generators:
 - `source`（ソース/アウトプットフローに必須）:
   - `type`: ソースプラグインのタイプ（例: `jdbc-schema`、`migration-tree`）
   - `target`（オプション）: データベース接続が必要なソースプラグイン用のターゲット名
-- `target`（必須）: ターゲット名
 - `output-dir`（オプション、デフォルト: `docs/schema`）: 生成ファイルの出力先ディレクトリ
 - `excludes`（オプション）: 除外フィルタのリスト（正規表現パターン）
   - `schema`: スキーマ名にマッチする正規表現パターン
@@ -771,7 +768,6 @@ generators:
     source:
       type: postgresql-schema
       target: db1
-    target: db1
     output-dir: docs/schema
 ```
 
@@ -825,7 +821,6 @@ generators:
     source:
       type: jdbc-schema
       target: db1
-    target: db1
     output-dir: docs/schema
     excludes:
       - schema: "information_schema"     # スキーマ全体を除外

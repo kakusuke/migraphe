@@ -4,52 +4,6 @@ Known issues identified during Session 39 sample verification but deferred to se
 
 ---
 
-## Issue 1 — `GeneratorExecutor` does not fall back from `source.target` to top-level `target`
-
-### Symptom
-
-Running `migraphe generate` (CLI or Gradle) fails with `"Environment is required for postgresql-schema source"` unless the user explicitly duplicates `target:` inside `source:` in `migraphe.yaml`. The top-level generator `target:` is silently ignored for source-plugin resolution, so users must write:
-
-```yaml
-generators:
-  - name: pg-schema-docs
-    type: postgresql-markdown
-    source:
-      type: postgresql-schema
-      target: pg       # <-- redundant
-    target: pg
-    output-dir: docs/postgresql
-```
-
-### Location
-
-`migraphe-core/src/main/java/io/github/kakusuke/migraphe/core/generator/GeneratorExecutor.java:102`
-
-```java
-Environment environment = config.source().target().map(environments::get).orElse(null);
-```
-
-### Proposed fix
-
-```java
-Environment environment =
-        config.source().target()
-                .or(() -> Optional.ofNullable(config.target()))
-                .map(environments::get)
-                .orElse(null);
-```
-
-Once merged, remove the redundant `source.target` entries in:
-
-- `sample/cli/migraphe.yaml`
-- `sample/gradle/migraphe.yaml`
-
-### Scope of change
-
-- Small: add a one-line fallback + tests covering both paths (source.target present / absent).
-
----
-
 ## Issue 2 — `JdbcMarkdownPlugin` family: cross-classloader `ClassCastException`
 
 ### Symptom
@@ -62,12 +16,12 @@ var definition = (JdbcMarkdownDefinition) context.definition();
 
 because `context.definition()` is a `GeneratorExecutor.GeneratorSectionAdapter` loaded by core's AppClassLoader, while `JdbcMarkdownDefinition` is loaded by the plugin's URLClassLoader. Their `Class` identities differ even if the interface fully qualified name matches.
 
-Furthermore, `GeneratorSectionAdapter` only implements the bare `GeneratorDefinition` contract (`type()`, `target()`). It has no way to supply the plugin-specific fields that `JdbcMarkdownDefinition` requires: `name()`, `outputDir()`, `excludes()`. Even if the cross-classloader issue were solved, the adapter would not satisfy the interface.
+Furthermore, `GeneratorSectionAdapter` only implements the bare `GeneratorDefinition` contract (`type()`). It has no way to supply the plugin-specific fields that `JdbcMarkdownDefinition` requires: `name()`, `outputDir()`, `excludes()`. Even if the cross-classloader issue were solved, the adapter would not satisfy the interface.
 
 ### Locations
 
-- `migraphe-core/src/main/java/io/github/kakusuke/migraphe/core/generator/GeneratorExecutor.java:113-115, 120-132` — `GeneratorSectionAdapter`
-- `migraphe-plugin-jdbc/src/main/java/io/github/kakusuke/migraphe/jdbc/markdown/JdbcMarkdownPlugin.java:28-32` — failing cast
+- `migraphe-core/src/main/java/io/github/kakusuke/migraphe/core/generator/GeneratorExecutor.java` — `GeneratorSectionAdapter`
+- `migraphe-plugin-jdbc/src/main/java/io/github/kakusuke/migraphe/jdbc/markdown/JdbcMarkdownPlugin.java` — failing cast
 - `migraphe-plugin-postgresql/.../PostgreSQLMarkdownPlugin` — same pattern
 - `migraphe-plugin-mysql/.../MySQLMarkdownPlugin` — same pattern
 
@@ -90,4 +44,4 @@ Preferred: **(A)** — it extends the existing SmallRye Config integration rathe
 
 ## Status
 
-These issues do not block migration execution (`up` / `down` / `status` / `validate`). They only affect the `generate` subcommand. They are tracked here so that future TDD cycles can pick them up without re-discovery.
+This issue does not block migration execution (`up` / `down` / `status` / `validate`). It only affects the `generate` subcommand. It is tracked here so that future TDD cycles can pick it up without re-discovery.

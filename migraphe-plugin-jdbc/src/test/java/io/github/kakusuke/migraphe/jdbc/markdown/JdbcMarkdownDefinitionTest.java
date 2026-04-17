@@ -9,18 +9,16 @@ import org.junit.jupiter.api.Test;
 class JdbcMarkdownDefinitionTest {
 
     @Test
-    void typeAndTargetAreRead() {
+    void typeIsRead() {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
                         .withMapping(JdbcMarkdownDefinition.class)
                         .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("target", "db1")
                         .withDefaultValue("name", "mydb")
                         .build();
 
         JdbcMarkdownDefinition def = config.getConfigMapping(JdbcMarkdownDefinition.class);
         assertThat(def.type()).isEqualTo("jdbc-markdown");
-        assertThat(def.target()).isEqualTo("db1");
     }
 
     @Test
@@ -29,7 +27,6 @@ class JdbcMarkdownDefinitionTest {
                 new SmallRyeConfigBuilder()
                         .withMapping(JdbcMarkdownDefinition.class)
                         .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("target", "db1")
                         .withDefaultValue("name", "mydb")
                         .build();
 
@@ -43,7 +40,6 @@ class JdbcMarkdownDefinitionTest {
                 new SmallRyeConfigBuilder()
                         .withMapping(JdbcMarkdownDefinition.class)
                         .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("target", "db1")
                         .withDefaultValue("name", "mydb")
                         .build();
 
@@ -57,7 +53,6 @@ class JdbcMarkdownDefinitionTest {
                 new SmallRyeConfigBuilder()
                         .withMapping(JdbcMarkdownDefinition.class)
                         .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("target", "db1")
                         .withDefaultValue("name", "mydb")
                         .withDefaultValue("output-dir", "output/docs")
                         .build();
@@ -67,12 +62,24 @@ class JdbcMarkdownDefinitionTest {
     }
 
     @Test
+    void canBeBuiltWithoutTarget() {
+        SmallRyeConfig config =
+                new SmallRyeConfigBuilder()
+                        .withMapping(JdbcMarkdownDefinition.class)
+                        .withDefaultValue("type", "jdbc-markdown")
+                        .withDefaultValue("name", "mydb")
+                        .build();
+
+        JdbcMarkdownDefinition def = config.getConfigMapping(JdbcMarkdownDefinition.class);
+        assertThat(def.name()).isEqualTo("mydb");
+    }
+
+    @Test
     void excludesWithSchemaAndTable() {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
                         .withMapping(JdbcMarkdownDefinition.class)
                         .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("target", "db1")
                         .withDefaultValue("name", "mydb")
                         .withDefaultValue("excludes[0].schema", "internal")
                         .withDefaultValue("excludes[0].table", "audit_log")

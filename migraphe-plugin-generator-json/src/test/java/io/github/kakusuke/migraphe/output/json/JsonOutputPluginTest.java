@@ -40,11 +40,6 @@ class JsonOutputPluginTest {
                     public String type() {
                         return "output-json";
                     }
-
-                    @Override
-                    public String target() {
-                        return "";
-                    }
                 };
         var context = new OutputContext(definition, tempDir);
         var data = Map.of("name", "test", "count", 42);

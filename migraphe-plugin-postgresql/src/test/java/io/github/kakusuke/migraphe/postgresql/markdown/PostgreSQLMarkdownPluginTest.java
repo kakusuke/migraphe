@@ -107,11 +107,6 @@ class PostgreSQLMarkdownPluginTest {
                     }
 
                     @Override
-                    public String target() {
-                        return "test";
-                    }
-
-                    @Override
                     public String name() {
                         return "testdb";
                     }

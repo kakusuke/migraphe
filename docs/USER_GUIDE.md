@@ -682,7 +682,6 @@ generators:
     source:
       type: jdbc-schema
       target: db1
-    target: db1
     output-dir: docs/schema
     excludes:
       - schema: "information_schema"
@@ -694,7 +693,6 @@ generators:
     type: output-json
     source:
       type: migration-tree
-    target: db1
     output-dir: docs
 ```
 
@@ -704,7 +702,6 @@ generators:
 - `source` (required for source/output flow):
   - `type`: Source plugin type (e.g., `jdbc-schema`, `migration-tree`)
   - `target` (optional): Target name for source plugins that need a database connection
-- `target` (required): Target name
 - `output-dir` (optional, default: `docs/schema`): Directory where generated files are written
 - `excludes` (optional): List of exclusion filters (regex patterns)
   - `schema`: Regex pattern to match schema names
@@ -771,7 +768,6 @@ generators:
     source:
       type: postgresql-schema
       target: db1
-    target: db1
     output-dir: docs/schema
 ```
 
@@ -825,7 +821,6 @@ generators:
     source:
       type: jdbc-schema
       target: db1
-    target: db1
     output-dir: docs/schema
     excludes:
       - schema: "information_schema"     # Exclude entire schema

@@ -231,11 +231,16 @@ Update when code changes:
 
 ## Changelog
 
-### 2026-04-15 (Session 37)
-- **PostgreSQL Markdown Output Plugin + Schema Source Plugin**
-  - `PostgreSQLMarkdownPlugin` (type=`postgresql-markdown`), `PostgreSQLSchemaInfoProvider` (type=`postgresql-schema`)
-  - Template Method in `JdbcMarkdownGenerator` for DB-specific subclass extension
-  - Tests: 640, 100% passing
+### 2026-04-17 (Session 41)
+- **Generator Top-level `target` Removal (Issue 1 resolved)**
+  - After Phase 19's source/output split, `target` became a source-side concept (which Environment to extract data from) and no longer belonged on the output contract
+  - Removed: `GeneratorDefinition.target()`, `JdbcMarkdownDefinition.target()`, `ProjectConfig.GeneratorSection.target()`, `GeneratorExecutor.GeneratorSectionAdapter.target()`
+  - Updated: `sample/cli/migraphe.yaml` / `sample/gradle/migraphe.yaml` — top-level `target:` deleted from every generator entry; only `source.target` remains where needed (e.g. `postgresql-schema` / `jdbc-schema`)
+  - Updated tests: `GeneratorExecutorTest`, `JdbcMarkdownPluginTest`, `JdbcMarkdownDefinitionTest`, `PostgreSQLMarkdownPluginTest`, `MySQLMarkdownPluginTest`, `GeneratorOutputPluginTest`, `GeneratorRegistryTest`, `TestOutputPlugin`, `JsonOutputPluginTest` — dead `target()` stubs purged
+  - Updated docs: `docs/USER_GUIDE.md` / `docs/USER_GUIDE.ja.md` — removed top-level `target:` from every generator YAML example and from the field list
+  - Removed Issue 1 from `docs/DEFERRED_ISSUES.md` (resolved); Issue 2 (cross-classloader cast in markdown plugins) still tracked
+  - No runtime behaviour change for `up` / `down` / `status` / `validate`; only affects `generate` config schema
+  - Tests: 672 (api 7, core 357, cli 60, gradle 18, jdbc 87, generator-json 4, postgresql 82, mysql 57), 100% passing
 
 ### 2026-04-16 (Session 38)
 - **MySQL Markdown Output Plugin + Schema Source Plugin**
@@ -275,4 +280,4 @@ Update when code changes:
 ---
 
 **Last Updated**: 2026-04-17
-**Current Work**: Gradle `migrapheGenerate` now discovers Generator plugins from the `migraphePlugin` Configuration (Issue 4 fixed). Issues 1 and 2 tracked in `docs/DEFERRED_ISSUES.md` for future TDD cycles.
+**Current Work**: Generator top-level `target` field removed from output contract; source/output separation now complete (Issue 1 resolved). Only Issue 2 (cross-classloader cast in markdown plugins) remains in `docs/DEFERRED_ISSUES.md`.

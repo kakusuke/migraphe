@@ -50,11 +50,6 @@ class JdbcMarkdownPluginTest {
                     }
 
                     @Override
-                    public String target() {
-                        return "test-target";
-                    }
-
-                    @Override
                     public String name() {
                         return "testdb";
                     }

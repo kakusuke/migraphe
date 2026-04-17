@@ -86,8 +86,6 @@ public interface ProjectConfig {
 
         String type();
 
-        String target();
-
         SourceSection source();
 
         @WithDefault("docs/schema")

@@ -74,7 +74,7 @@ class GeneratorExecutorTest {
         var executor = new GeneratorExecutor(registry);
         var config =
                 new StubGeneratorSectionWithSource(
-                        "gen1", "test-output", "dev", "output", "test-source", null);
+                        "gen1", "test-output", "output", "test-source", null);
         var environments =
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
@@ -112,7 +112,7 @@ class GeneratorExecutorTest {
         var executor = new GeneratorExecutor(registry);
         var config =
                 new StubGeneratorSectionWithSource(
-                        "gen1", "test-output", "dev", "output", "missing-source", null);
+                        "gen1", "test-output", "output", "missing-source", null);
         var environments =
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
@@ -149,7 +149,7 @@ class GeneratorExecutorTest {
         var executor = new GeneratorExecutor(registry);
         var config =
                 new StubGeneratorSectionWithSource(
-                        "gen1", "missing-output", "dev", "output", "test-source", null);
+                        "gen1", "missing-output", "output", "test-source", null);
         var environments =
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
@@ -209,7 +209,7 @@ class GeneratorExecutorTest {
         var executor = new GeneratorExecutor(registry);
         var config =
                 new StubGeneratorSectionWithSource(
-                        "gen1", "test-output", "dev", "output", "test-source", null);
+                        "gen1", "test-output", "output", "test-source", null);
         var environments =
                 Map.<String, Environment>of(
                         "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
@@ -222,7 +222,6 @@ class GeneratorExecutorTest {
     private record StubGeneratorSectionWithSource(
             String name,
             String type,
-            String target,
             String outputDir,
             String sourceType,
             @Nullable String sourceTarget)

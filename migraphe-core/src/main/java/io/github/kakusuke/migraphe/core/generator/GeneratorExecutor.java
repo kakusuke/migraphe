@@ -120,14 +120,8 @@ public final class GeneratorExecutor {
     private record GeneratorSectionAdapter(ProjectConfig.GeneratorSection config)
             implements GeneratorDefinition {
 
-        @Override
         public String type() {
             return config.type();
-        }
-
-        @Override
-        public String target() {
-            return config.target();
         }
     }
 }

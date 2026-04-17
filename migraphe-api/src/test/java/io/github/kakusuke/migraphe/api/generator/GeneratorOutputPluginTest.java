@@ -16,11 +16,6 @@ class GeneratorOutputPluginTest {
                     public String type() {
                         return "test-type";
                     }
-
-                    @Override
-                    public String target() {
-                        return "test-target";
-                    }
                 };
         Path outputDir = Path.of("/tmp/output");
 
@@ -62,11 +57,6 @@ class GeneratorOutputPluginTest {
                     public String type() {
                         return "test-type";
                     }
-
-                    @Override
-                    public String target() {
-                        return "test-target";
-                    }
                 };
         OutputContext context = new OutputContext(definition, Path.of("/tmp/output"));
 
@@ -77,5 +67,19 @@ class GeneratorOutputPluginTest {
 
         plugin.output("data", context);
         assertThat(outputCalled.get()).isTrue();
+    }
+
+    @Test
+    void outputContextAcceptsGeneratorDefinitionWithoutTarget() {
+        GeneratorDefinition definition =
+                new GeneratorDefinition() {
+                    @Override
+                    public String type() {
+                        return "source-only-type";
+                    }
+                };
+        OutputContext context = new OutputContext(definition, Path.of("/tmp/output"));
+
+        assertThat(context.definition().type()).isEqualTo("source-only-type");
     }
 }
