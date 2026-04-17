@@ -140,7 +140,7 @@ class JdbcSchemaInfoProviderTest {
                         .orElseThrow();
         assertThat(usersTable.exportedKeys()).hasSize(1);
         JdbcForeignKeyInfo exportedKey = usersTable.exportedKeys().get(0);
-        assertThat(exportedKey.referencedTable().toUpperCase()).isEqualTo("USERS");
+        assertThat(exportedKey.referencedTable().toUpperCase()).isEqualTo("ORDERS");
         assertThat(exportedKey.columns()).map(String::toUpperCase).containsExactly("ID");
     }
 

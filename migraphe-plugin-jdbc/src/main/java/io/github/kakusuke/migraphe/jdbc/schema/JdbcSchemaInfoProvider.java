@@ -168,8 +168,8 @@ public class JdbcSchemaInfoProvider implements SchemaInfoProvider<JdbcSchemaInfo
                     builder.referencedColumns.add(rs.getString("PKCOLUMN_NAME"));
                 } else {
                     builder.columns.add(rs.getString("PKCOLUMN_NAME"));
-                    builder.referencedSchema = nullToEmpty(rs.getString("PKTABLE_SCHEM"));
-                    builder.referencedTable = rs.getString("PKTABLE_NAME");
+                    builder.referencedSchema = nullToEmpty(rs.getString("FKTABLE_SCHEM"));
+                    builder.referencedTable = rs.getString("FKTABLE_NAME");
                     builder.referencedColumns.add(rs.getString("FKCOLUMN_NAME"));
                 }
                 builder.updateRule = ruleToString(rs.getInt("UPDATE_RULE"));
