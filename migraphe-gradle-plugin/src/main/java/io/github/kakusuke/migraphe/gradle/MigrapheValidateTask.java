@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.gradle;
 import io.github.kakusuke.migraphe.core.config.ConfigValidator;
 import io.github.kakusuke.migraphe.core.config.ConfigValidator.ValidationOutput;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import java.net.URLClassLoader;
 import org.gradle.api.GradleException;
 import org.gradle.api.tasks.TaskAction;
 
@@ -15,7 +16,8 @@ public abstract class MigrapheValidateTask extends AbstractMigrapheTask {
         getLogger().lifecycle("==========");
         getLogger().lifecycle("");
 
-        PluginRegistry registry = createPluginRegistry();
+        URLClassLoader pluginClassLoader = createPluginClassLoader();
+        PluginRegistry registry = createPluginRegistry(pluginClassLoader);
         ConfigValidator validator = new ConfigValidator(registry);
         ValidationOutput result = validator.validate(getBaseDir().get().getAsFile().toPath());
 

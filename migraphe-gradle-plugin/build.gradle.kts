@@ -2,6 +2,11 @@ plugins {
     `java-gradle-plugin`
 }
 
+val generatorJsonJar by configurations.creating {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+}
+
 dependencies {
     implementation(project(":migraphe-core"))
 
@@ -10,6 +15,8 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.assertj.core)
     testImplementation(gradleTestKit())
+
+    generatorJsonJar(project(":migraphe-plugin-generator-json"))
 }
 
 gradlePlugin {
@@ -27,5 +34,10 @@ tasks.test {
         events("passed", "skipped", "failed")
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
         showStandardStreams = false
+    }
+    doFirst {
+        val classpath = configurations["generatorJsonJar"].files
+            .joinToString(File.pathSeparator) { it.absolutePath }
+        systemProperty("generator.json.classpath", classpath)
     }
 }

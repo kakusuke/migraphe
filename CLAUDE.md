@@ -263,7 +263,16 @@ Update when code changes:
   - Generators configured for PG Markdown docs, MySQL Markdown docs, and migration-tree JSON
   - Validation confirmed for both CLI and Gradle samples (19 tasks, 2 targets, cross-DB DAG resolved correctly)
 
+### 2026-04-17 (Session 40)
+- **Gradle `MigrapheGenerateTask` — Load Generator Plugins from `migraphePlugin` Configuration (Issue 4)**
+  - Bug: `MigrapheGenerateTask` only called `GeneratorRegistry.loadFromClasspath()` + `loadFromDirectory()` and ignored the `migraphePlugin` Gradle Configuration's URLClassLoader, so Generator plugins (e.g. `output-json`) declared there were invisible
+  - Fix: `AbstractMigrapheTask.createPluginClassLoader()` extracted (shared between `PluginRegistry` and `GeneratorRegistry`); `createPluginRegistry(@Nullable URLClassLoader)` now takes the classloader; `MigrapheGenerateTask.generate()` mirrors CLI's `GenerateCommand` by sharing one URLClassLoader instance
+  - Matches `Main.java:37-58` / `GenerateCommand.java:63-69` pattern so CLI and Gradle now behave identically
+  - Verified via sample/gradle: `./gradlew migrapheGenerate --name migration-tree` now emits `docs/migration-tree.json` successfully (markdown generators still blocked by Issue 2 — tracked in `docs/DEFERRED_ISSUES.md`)
+  - Tests: 669 (gradle 19; +1 functional test), 100% passing
+  - Deferred: Issue 1 (GeneratorExecutor source.target fallback) and Issue 2 (cross-classloader cast in markdown plugins) recorded in `docs/DEFERRED_ISSUES.md`
+
 ---
 
 **Last Updated**: 2026-04-17
-**Current Work**: Sample project restructured into CLI + Gradle examples with cross-DB domain split demonstrating migraphe's unified multi-database migration management.
+**Current Work**: Gradle `migrapheGenerate` now discovers Generator plugins from the `migraphePlugin` Configuration (Issue 4 fixed). Issues 1 and 2 tracked in `docs/DEFERRED_ISSUES.md` for future TDD cycles.

@@ -60,4 +60,59 @@ class MigrapheGenerateTaskFunctionalTest {
 
         assertThat(result.getOutput()).contains("migrapheGenerate");
     }
+
+    @Test
+    void shouldDiscoverOutputPluginFromMigraphePluginConfiguration() throws IOException {
+        String generatorJsonClasspath = System.getProperty("generator.json.classpath");
+        assertThat(generatorJsonClasspath)
+                .as("generator.json.classpath system property")
+                .isNotNull();
+
+        String filesArgs =
+                java.util.Arrays.stream(generatorJsonClasspath.split(java.io.File.pathSeparator))
+                        .map(p -> "\"" + p.replace("\\", "\\\\") + "\"")
+                        .collect(java.util.stream.Collectors.joining(", "));
+
+        String buildScript =
+                """
+                plugins {
+                    id("io.github.kakusuke.migraphe")
+                }
+                dependencies {
+                    migraphePlugin(files(%s))
+                }
+                """
+                        .formatted(filesArgs);
+        Files.writeString(testProjectDir.resolve("build.gradle.kts"), buildScript);
+
+        String projectYaml =
+                """
+                project:
+                  name: test-project
+                history:
+                  target: noop-db
+                generators:
+                  - name: tree-json
+                    type: output-json
+                    target: noop-db
+                    source:
+                      type: migration-tree
+                """;
+        Files.writeString(testProjectDir.resolve("migraphe.yaml"), projectYaml);
+
+        Path targetsDir = testProjectDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("migrapheGenerate")
+                        .build();
+
+        assertThat(result.getOutput())
+                .contains("Generation completed successfully.")
+                .doesNotContain("Generator output plugin not found");
+    }
 }

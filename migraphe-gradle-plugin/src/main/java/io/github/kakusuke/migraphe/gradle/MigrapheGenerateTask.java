@@ -4,6 +4,7 @@ import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.generator.GeneratorExecutor;
 import io.github.kakusuke.migraphe.core.generator.GeneratorRegistry;
+import java.net.URLClassLoader;
 import java.util.Collections;
 import java.util.List;
 import org.gradle.api.GradleException;
@@ -29,11 +30,15 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
 
     @TaskAction
     public void generate() {
-        ExecutionContext context = loadExecutionContext();
+        URLClassLoader pluginClassLoader = createPluginClassLoader();
+        ExecutionContext context = loadExecutionContext(pluginClassLoader);
 
         // GeneratorRegistry を作成してプラグインをロード
         GeneratorRegistry generatorRegistry = new GeneratorRegistry();
         generatorRegistry.loadFromClasspath();
+        if (pluginClassLoader != null) {
+            generatorRegistry.loadFromClassLoader(pluginClassLoader);
+        }
         generatorRegistry.loadFromDirectory(context.baseDir().resolve("plugins"));
 
         // ProjectConfig からジェネレーター設定を取得
