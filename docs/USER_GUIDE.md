@@ -772,16 +772,18 @@ generators:
 ```
 
 In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
-- **Extensions** (e.g., `pgcrypto`, `uuid-ossp`)
-- **Enum types** with their values
-- **Sequences** with current values and parameters
-- **Functions** with argument types and return types
+- **Extensions** (e.g., `pgcrypto`, `uuid-ossp`) — with `Owner` column
+- **Enum types** with their values — with `Owner` column
+- **Sequences** with current values and parameters — with `Owned By` (dependent table.column from `pg_depend`) and `Owner` (role) columns
+- **Functions** with argument types and return types — individual file shows `Owner` property
 - **Triggers** with timing, events, and associated functions
-- **Materialized views** with column definitions
+- **Materialized views** with column definitions — individual file shows `Owner` property
 - **Partitioned tables** with partition strategy and key
 - **Row-Level Security (RLS) policies** with roles, commands, and expressions
 
 Table-specific files also include related triggers, policies, and partition information for each table.
+
+**Role ownership:** The Tables/Views index tables include an `Owner` column (PostgreSQL role name from `pg_get_userbyid(relowner)`), and each `tables/<name>.md` / `views/<name>.md` file prints an `Owner: <role>` line below the title.
 
 ### MySQL-Specific Documentation
 
@@ -801,12 +803,14 @@ generators:
 In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
 - **Storage engines** available in the MySQL instance
 - **Table metadata** including ENGINE, collation, and row format
-- **Triggers** with timing, events, and SQL statements
-- **Routines** (stored procedures and functions) with parameters and return types
-- **Events** with schedule, status, and SQL body
+- **Triggers** with timing, events, SQL statements, and `Definer`
+- **Routines** (stored procedures and functions) with parameters, return types, and `Definer`
+- **Events** with schedule, status, SQL body, and `Definer`
 - **Partitioned tables** with partition method, expression, and partition details
 
 Table-specific files also include related triggers and partition information for each table.
+
+**`DEFINER` attribution:** The Views index table includes a `Definer` column (from `information_schema.VIEWS.DEFINER`), and each `views/<name>.md` file prints a `Definer: <user>` line below the title. Triggers, routines, and events carry their DEFINER through to the index tables / individual files as well. MySQL tables themselves have no DEFINER, so the Tables index is unchanged.
 
 **Note:** MySQL JDBC returns databases as catalogs (not schemas). The `mysql-schema` source plugin uses catalog-based schema discovery via `connection.getCatalog()`.
 

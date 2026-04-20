@@ -2,6 +2,8 @@ package io.github.kakusuke.migraphe.postgresql.markdown;
 
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownDefinition;
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownGenerator;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSchemaInfo;
 import java.nio.file.Path;
 import java.util.List;
@@ -19,29 +21,77 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
     }
 
     @Override
+    protected List<String> extraTableIndexHeaders() {
+        return pgInfo.tableOwners().isEmpty() ? List.of() : List.of("Owner");
+    }
+
+    @Override
+    protected List<String> extraTableIndexCells(String schemaName, JdbcTableInfo table) {
+        if (pgInfo.tableOwners().isEmpty()) {
+            return List.of();
+        }
+        String owner = pgInfo.tableOwners().getOrDefault(schemaName + "." + table.name(), "");
+        return List.of(owner);
+    }
+
+    @Override
+    protected List<String> extraViewIndexHeaders() {
+        return pgInfo.viewOwners().isEmpty() ? List.of() : List.of("Owner");
+    }
+
+    @Override
+    protected List<String> extraViewIndexCells(String schemaName, JdbcViewInfo view) {
+        if (pgInfo.viewOwners().isEmpty()) {
+            return List.of();
+        }
+        String owner = pgInfo.viewOwners().getOrDefault(schemaName + "." + view.name(), "");
+        return List.of(owner);
+    }
+
+    @Override
+    protected void appendTableFileHeader(StringBuilder sb, String schemaName, JdbcTableInfo table) {
+        String owner = pgInfo.tableOwners().get(schemaName + "." + table.name());
+        if (owner != null && !owner.isBlank()) {
+            sb.append("Owner: ").append(owner).append("\n\n");
+        }
+    }
+
+    @Override
+    protected void appendViewFileHeader(StringBuilder sb, String schemaName, JdbcViewInfo view) {
+        String owner = pgInfo.viewOwners().get(schemaName + "." + view.name());
+        if (owner != null && !owner.isBlank()) {
+            sb.append("Owner: ").append(owner).append("\n\n");
+        }
+    }
+
+    @Override
     protected void appendIndexHeader(StringBuilder sb) {
         if (!pgInfo.extensions().isEmpty()) {
             sb.append("## Extensions\n\n");
-            sb.append("| Name | Version |\n");
-            sb.append("| --- | --- |\n");
+            sb.append("| Name | Version | Owner |\n");
+            sb.append("| --- | --- | --- |\n");
             for (var ext : pgInfo.extensions()) {
                 sb.append("| ")
                         .append(ext.name())
                         .append(" | ")
                         .append(ext.version())
+                        .append(" | ")
+                        .append(ext.owner() != null ? ext.owner() : "")
                         .append(" |\n");
             }
             sb.append("\n");
         }
         if (!pgInfo.enums().isEmpty()) {
             sb.append("## Enum Types\n\n");
-            sb.append("| Name | Labels |\n");
-            sb.append("| --- | --- |\n");
+            sb.append("| Name | Labels | Owner |\n");
+            sb.append("| --- | --- | --- |\n");
             for (var e : pgInfo.enums()) {
                 sb.append("| ")
                         .append(e.name())
                         .append(" | ")
                         .append(String.join(", ", e.labels()))
+                        .append(" | ")
+                        .append(e.owner() != null ? e.owner() : "")
                         .append(" |\n");
             }
             sb.append("\n");
@@ -125,10 +175,11 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 pgInfo.sequences().stream().filter(s -> s.schema().equals(schemaName)).toList();
         if (!sequences.isEmpty()) {
             sb.append("### Sequences\n\n");
-            sb.append("| Name | Type | Start | Increment | Min | Max | Cycle | Owner |\n");
-            sb.append("| --- | --- | --- | --- | --- | --- | --- | --- |\n");
+            sb.append(
+                    "| Name | Type | Start | Increment | Min | Max | Cycle | Owned By | Owner |\n");
+            sb.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
             for (var seq : sequences) {
-                String owner =
+                String ownedBy =
                         (seq.ownerTable() != null && seq.ownerColumn() != null)
                                 ? seq.ownerTable() + "." + seq.ownerColumn()
                                 : "";
@@ -147,7 +198,9 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         .append(" | ")
                         .append(seq.cycle())
                         .append(" | ")
-                        .append(owner)
+                        .append(ownedBy)
+                        .append(" | ")
+                        .append(seq.owner() != null ? seq.owner() : "")
                         .append(" |\n");
             }
             sb.append("\n");
@@ -184,6 +237,9 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 fileSb.append("| Type | ")
                         .append(func.isProcedure() ? "Procedure" : "Function")
                         .append(" |\n");
+                if (func.owner() != null && !func.owner().isBlank()) {
+                    fileSb.append("| Owner | ").append(func.owner()).append(" |\n");
+                }
                 Path funcFile =
                         outputDir
                                 .resolve(name())
@@ -219,6 +275,9 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 fileSb.append("| Tablespace | ")
                         .append(mv.tablespace() != null ? mv.tablespace() : "default")
                         .append(" |\n");
+                if (mv.owner() != null && !mv.owner().isBlank()) {
+                    fileSb.append("| Owner | ").append(mv.owner()).append(" |\n");
+                }
                 fileSb.append("\n## Definition\n\n```sql\n")
                         .append(mv.definition())
                         .append("\n```\n");

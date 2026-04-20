@@ -128,7 +128,9 @@ class MySQLSchemaInfoProviderTest {
                                 t.name().equals("trg_test_insert")
                                         && t.timing().equals("BEFORE")
                                         && t.event().equals("INSERT")
-                                        && t.tableName().equals("trg_test"));
+                                        && t.tableName().equals("trg_test")
+                                        && t.definer() != null
+                                        && !t.definer().isBlank());
     }
 
     @Test
@@ -145,7 +147,9 @@ class MySQLSchemaInfoProviderTest {
                         r ->
                                 r.name().equals("test_proc")
                                         && r.type().equals("PROCEDURE")
-                                        && r.schema().equals("migraphe_test"));
+                                        && r.schema().equals("migraphe_test")
+                                        && r.definer() != null
+                                        && !r.definer().isBlank());
     }
 
     @Test
@@ -162,7 +166,23 @@ class MySQLSchemaInfoProviderTest {
                         e ->
                                 e.name().equals("test_event")
                                         && e.type().equals("RECURRING")
-                                        && e.schema().equals("migraphe_test"));
+                                        && e.schema().equals("migraphe_test")
+                                        && e.definer() != null
+                                        && !e.definer().isBlank());
+    }
+
+    @Test
+    void shouldExtractViewDefiners() throws Exception {
+        executeSql("CREATE TABLE IF NOT EXISTS view_src (id INT PRIMARY KEY)");
+        executeSql("DROP VIEW IF EXISTS test_view");
+        executeSql("CREATE VIEW test_view AS SELECT id FROM view_src");
+        var provider = new MySQLSchemaInfoProvider();
+
+        var info = provider.getSchemaInfo(createEnv());
+
+        assertThat(info.viewDefiners()).isNotEmpty();
+        assertThat(info.viewDefiners()).containsKey("migraphe_test.test_view");
+        assertThat(info.viewDefiners().get("migraphe_test.test_view")).isNotBlank();
     }
 
     @Test

@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.mysql.markdown;
 
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownDefinition;
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownGenerator;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLSchemaInfo;
 import java.nio.file.Path;
 import java.util.List;
@@ -16,6 +17,28 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
             List<JdbcMarkdownDefinition.ExcludePattern> excludes) {
         super(name, schemaInfo, excludes);
         this.mysqlInfo = schemaInfo;
+    }
+
+    @Override
+    protected List<String> extraViewIndexHeaders() {
+        return mysqlInfo.viewDefiners().isEmpty() ? List.of() : List.of("Definer");
+    }
+
+    @Override
+    protected List<String> extraViewIndexCells(String schemaName, JdbcViewInfo view) {
+        if (mysqlInfo.viewDefiners().isEmpty()) {
+            return List.of();
+        }
+        String definer = mysqlInfo.viewDefiners().getOrDefault(schemaName + "." + view.name(), "");
+        return List.of(definer);
+    }
+
+    @Override
+    protected void appendViewFileHeader(StringBuilder sb, String schemaName, JdbcViewInfo view) {
+        String definer = mysqlInfo.viewDefiners().get(schemaName + "." + view.name());
+        if (definer != null && !definer.isBlank()) {
+            sb.append("Definer: ").append(definer).append("\n\n");
+        }
     }
 
     @Override
@@ -73,8 +96,8 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         .toList();
         if (!tableTriggers.isEmpty()) {
             sb.append("## Triggers\n\n");
-            sb.append("| Name | Timing | Event | Statement |\n");
-            sb.append("| --- | --- | --- | --- |\n");
+            sb.append("| Name | Timing | Event | Statement | Definer |\n");
+            sb.append("| --- | --- | --- | --- | --- |\n");
             for (var trig : tableTriggers) {
                 sb.append("| ")
                         .append(trig.name())
@@ -84,6 +107,8 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         .append(trig.event())
                         .append(" | ")
                         .append(trig.statement())
+                        .append(" | ")
+                        .append(trig.definer() != null ? trig.definer() : "")
                         .append(" |\n");
             }
             sb.append("\n");
@@ -141,6 +166,9 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 fileSb.append("| Data Type | ").append(routine.dataType()).append(" |\n");
                 fileSb.append("| Parameters | ").append(routine.parameterList()).append(" |\n");
                 fileSb.append("| Security | ").append(routine.securityType()).append(" |\n");
+                if (routine.definer() != null && !routine.definer().isBlank()) {
+                    fileSb.append("| Definer | ").append(routine.definer()).append(" |\n");
+                }
                 Path routineFile =
                         outputDir
                                 .resolve(name())
@@ -156,8 +184,8 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 mysqlInfo.triggers().stream().filter(t -> t.schema().equals(schemaName)).toList();
         if (!triggers.isEmpty()) {
             sb.append("### Triggers\n\n");
-            sb.append("| Name | Table | Timing | Event | Statement |\n");
-            sb.append("| --- | --- | --- | --- | --- |\n");
+            sb.append("| Name | Table | Timing | Event | Statement | Definer |\n");
+            sb.append("| --- | --- | --- | --- | --- | --- |\n");
             for (var trig : triggers) {
                 sb.append("| ")
                         .append(trig.name())
@@ -169,6 +197,8 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         .append(trig.event())
                         .append(" | ")
                         .append(trig.statement())
+                        .append(" | ")
+                        .append(trig.definer() != null ? trig.definer() : "")
                         .append(" |\n");
             }
             sb.append("\n");
@@ -178,8 +208,8 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 mysqlInfo.events().stream().filter(e -> e.schema().equals(schemaName)).toList();
         if (!events.isEmpty()) {
             sb.append("### Events\n\n");
-            sb.append("| Name | Type | Interval | Status |\n");
-            sb.append("| --- | --- | --- | --- |\n");
+            sb.append("| Name | Type | Interval | Status | Definer |\n");
+            sb.append("| --- | --- | --- | --- | --- |\n");
             for (var event : events) {
                 String interval =
                         event.intervalValue() != null && event.intervalField() != null
@@ -193,6 +223,8 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         .append(interval)
                         .append(" | ")
                         .append(event.status())
+                        .append(" | ")
+                        .append(event.definer() != null ? event.definer() : "")
                         .append(" |\n");
             }
             sb.append("\n");

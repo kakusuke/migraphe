@@ -12,6 +12,7 @@ import io.github.kakusuke.migraphe.jdbc.schema.JdbcSequenceInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcTriggerInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcUdtInfo;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLEnumInfo;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLExtensionInfo;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLFunctionInfo;
@@ -25,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Types;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -547,6 +549,308 @@ class PostgreSQLMarkdownGeneratorTest {
                 .contains("owner_only")
                 .contains("ALL")
                 .contains("owner = current_user");
+    }
+
+    @Test
+    void extensionsTableHasOwnerColumn(@TempDir Path tempDir) throws Exception {
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(new PostgreSQLExtensionInfo("uuid-ossp", "1.1", "alice")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent)
+                .contains("| Name | Version | Owner |")
+                .containsPattern("\\| uuid-ossp \\| 1\\.1 \\| alice \\|");
+    }
+
+    @Test
+    void enumTypesTableHasOwnerColumn(@TempDir Path tempDir) throws Exception {
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(new PostgreSQLEnumInfo("mood", List.of("happy", "sad"), "alice")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent)
+                .contains("| Name | Labels | Owner |")
+                .containsPattern("\\| mood \\| happy, sad \\| alice \\|");
+    }
+
+    @Test
+    void functionsFileHasOwnerRow(@TempDir Path tempDir) throws Exception {
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new PostgreSQLFunctionInfo(
+                                        "public",
+                                        "add_nums",
+                                        "a integer, b integer",
+                                        "integer",
+                                        "sql",
+                                        false,
+                                        "alice")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        Path functionFile =
+                tempDir.resolve("testdb/public/functions/add_nums_a_integer_b_integer.md");
+        String content = Files.readString(functionFile);
+        assertThat(content).contains("| Owner | alice |");
+    }
+
+    @Test
+    void materializedViewsFileHasOwnerRow(@TempDir Path tempDir) throws Exception {
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new PostgreSQLMaterializedViewInfo(
+                                        "mv_test", "public", "SELECT 1", null, "alice")),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        Path mvFile = tempDir.resolve("testdb/public/materialized-views/mv_test.md");
+        String content = Files.readString(mvFile);
+        assertThat(content).contains("| Owner | alice |");
+    }
+
+    @Test
+    void sequencesTableHasOwnedByAndOwnerColumns(@TempDir Path tempDir) throws Exception {
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new PostgreSQLSequenceInfo(
+                                        "public",
+                                        "users_id_seq",
+                                        "bigint",
+                                        1,
+                                        1,
+                                        1,
+                                        9999,
+                                        false,
+                                        "users",
+                                        "id",
+                                        "alice")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent)
+                .contains(
+                        "| Name | Type | Start | Increment | Min | Max | Cycle | Owned By | Owner"
+                                + " |")
+                .containsPattern(
+                        "\\| users_id_seq \\| bigint \\| 1 \\| 1 \\| 1 \\| 9999 \\| false \\|"
+                                + " users\\.id \\| alice \\|");
+    }
+
+    @Test
+    void tableOwnerAppearsInIndexColumnAndTableFileHeader(@TempDir Path tempDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(idColumn),
+                        null,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(usersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of("public.users", "alice"),
+                        Map.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent).contains("| Name | Owner | Remarks |");
+        assertThat(indexContent)
+                .containsPattern(
+                        "\\| \\[users\\]\\(testdb/public/tables/users\\.md\\) \\| alice \\|");
+
+        String tableContent = Files.readString(tempDir.resolve("testdb/public/tables/users.md"));
+        assertThat(tableContent).startsWith("# users\n\nOwner: alice\n\n");
+    }
+
+    @Test
+    void viewOwnerAppearsInIndexColumnAndViewFileHeader(@TempDir Path tempDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var viewInfo = new JdbcViewInfo("active_users", "", List.of(idColumn), "SELECT 1");
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(),
+                        List.of(viewInfo),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of(),
+                        Map.of("public.active_users", "bob"));
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent).contains("| Name | Owner | Remarks |");
+        assertThat(indexContent)
+                .containsPattern(
+                        "\\| \\[active_users\\]\\(testdb/public/views/active_users\\.md\\) \\| bob"
+                                + " \\|");
+
+        String viewContent =
+                Files.readString(tempDir.resolve("testdb/public/views/active_users.md"));
+        assertThat(viewContent).startsWith("# active_users\n\nOwner: bob\n\n");
     }
 
     @Test

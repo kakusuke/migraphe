@@ -42,7 +42,8 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
                     List.copyOf(extractTriggers(conn, catalog)),
                     List.copyOf(extractRoutines(conn, catalog)),
                     List.copyOf(extractEvents(conn, catalog)),
-                    List.copyOf(extractPartitions(conn, catalog)));
+                    List.copyOf(extractPartitions(conn, catalog)),
+                    Map.copyOf(extractViewDefiners(conn, catalog)));
         } catch (SQLException e) {
             throw new MySQLException("Failed to retrieve schema info", e);
         }
@@ -99,7 +100,7 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
         List<MySQLTriggerInfo> result = new ArrayList<>();
         String sql =
                 "SELECT TRIGGER_SCHEMA, EVENT_OBJECT_TABLE, TRIGGER_NAME,"
-                        + " ACTION_TIMING, EVENT_MANIPULATION, ACTION_STATEMENT"
+                        + " ACTION_TIMING, EVENT_MANIPULATION, ACTION_STATEMENT, DEFINER"
                         + " FROM information_schema.TRIGGERS"
                         + " WHERE TRIGGER_SCHEMA = ?";
         try (var ps = conn.prepareStatement(sql)) {
@@ -113,7 +114,8 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
                                     rs.getString("TRIGGER_NAME"),
                                     rs.getString("ACTION_TIMING"),
                                     rs.getString("EVENT_MANIPULATION"),
-                                    rs.getString("ACTION_STATEMENT")));
+                                    rs.getString("ACTION_STATEMENT"),
+                                    rs.getString("DEFINER")));
                 }
             }
         }
@@ -125,7 +127,7 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
         List<MySQLRoutineInfo> result = new ArrayList<>();
         String sql =
                 "SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE,"
-                        + " DTD_IDENTIFIER, SECURITY_TYPE"
+                        + " DTD_IDENTIFIER, SECURITY_TYPE, DEFINER"
                         + " FROM information_schema.ROUTINES"
                         + " WHERE ROUTINE_SCHEMA = ?";
         try (var ps = conn.prepareStatement(sql)) {
@@ -139,7 +141,8 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
                                     rs.getString("ROUTINE_TYPE"),
                                     nullToEmpty(rs.getString("DTD_IDENTIFIER")),
                                     "",
-                                    rs.getString("SECURITY_TYPE")));
+                                    rs.getString("SECURITY_TYPE"),
+                                    rs.getString("DEFINER")));
                 }
             }
         }
@@ -151,7 +154,7 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
         List<MySQLEventInfo> result = new ArrayList<>();
         String sql =
                 "SELECT EVENT_SCHEMA, EVENT_NAME, EVENT_TYPE,"
-                        + " INTERVAL_VALUE, INTERVAL_FIELD, STATUS, EVENT_DEFINITION"
+                        + " INTERVAL_VALUE, INTERVAL_FIELD, STATUS, EVENT_DEFINITION, DEFINER"
                         + " FROM information_schema.EVENTS"
                         + " WHERE EVENT_SCHEMA = ?";
         try (var ps = conn.prepareStatement(sql)) {
@@ -166,7 +169,30 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
                                     rs.getString("INTERVAL_VALUE"),
                                     rs.getString("INTERVAL_FIELD"),
                                     rs.getString("STATUS"),
-                                    rs.getString("EVENT_DEFINITION")));
+                                    rs.getString("EVENT_DEFINITION"),
+                                    rs.getString("DEFINER")));
+                }
+            }
+        }
+        return result;
+    }
+
+    private Map<String, String> extractViewDefiners(Connection conn, String catalog)
+            throws SQLException {
+        Map<String, String> result = new LinkedHashMap<>();
+        String sql =
+                "SELECT TABLE_SCHEMA, TABLE_NAME, DEFINER FROM information_schema.VIEWS"
+                        + " WHERE TABLE_SCHEMA = ?";
+        try (var ps = conn.prepareStatement(sql)) {
+            ps.setString(1, catalog);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    String definer = rs.getString("DEFINER");
+                    if (definer != null) {
+                        result.put(
+                                rs.getString("TABLE_SCHEMA") + "." + rs.getString("TABLE_NAME"),
+                                definer);
+                    }
                 }
             }
         }

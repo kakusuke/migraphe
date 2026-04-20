@@ -247,6 +247,31 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-04-20 (Session 44)
+- **Index-table extension hooks + PostgreSQL OWNER / MySQL DEFINER surface in Markdown docs**
+  - **Phase A — `jdbc-markdown` foundation**:
+    - Converted `index.md` Tables/Views from bullet list to pipe table (`| Name | ... | Remarks |`).
+    - Added 4 column-injection hooks (`extraTableIndexHeaders` / `extraTableIndexCells` / `extraViewIndexHeaders` / `extraViewIndexCells`, default `List.of()`) — subclasses inject cells between `Name` and `Remarks`.
+    - Added 2 file-header hooks (`appendTableFileHeader` / `appendViewFileHeader`) called right after title+remarks paragraph in `tables/<name>.md` / `views/<name>.md`.
+    - Size-mismatch between headers and cells throws `IllegalStateException` (config-error guard).
+    - Index cells normalise `|` → `\|` and `\r?\n` → space via shared `formatIndexRemarks` helper to keep pipe tables intact.
+  - **Phase B — PostgreSQL OWNER**:
+    - `PostgreSQLSchemaInfoProvider` now extracts `pg_get_userbyid(relowner)` for tables/views/extensions/enums/sequences/functions/materialized views.
+    - `extractSequences()` SQL now JOINs `pg_depend` (`deptype='a'`) + `pg_class ot` + `pg_attribute oa` so `ownerTable` / `ownerColumn` (from `OWNED BY`) finally fill in — previously hard-coded `null`.
+    - Record evolution pattern: added `@Nullable String owner` (or `Map<String,String> tableOwners/viewOwners`) with a backward-compat constructor calling the canonical one — existing test fixtures untouched.
+    - `PostgreSQLMarkdownGenerator` overrides `extra*IndexHeaders/Cells` + `appendTableFileHeader` / `appendViewFileHeader` to render `Owner` column / `Owner: <role>` row.
+    - Sequences index now has two distinct columns: `Owned By` (dependent `table.column`) and `Owner` (role) — these are deliberately not conflated.
+    - Extensions / Enum Types / Functions / Materialized Views gained `Owner` column or `Owner` property row.
+  - **Phase C — MySQL DEFINER**:
+    - `MySQLSchemaInfoProvider` now selects `DEFINER` from `information_schema.TRIGGERS` / `ROUTINES` / `EVENTS` + new `extractViewDefiners()` querying `information_schema.VIEWS.DEFINER` into a `Map<"<schema>.<name>", definer>`.
+    - Record evolution: `MySQLTriggerInfo` / `MySQLRoutineInfo` / `MySQLEventInfo` gained `@Nullable String definer`; `MySQLSchemaInfo` gained `Map<String,String> viewDefiners` — all with backward-compat constructors.
+    - `MySQLMarkdownGenerator` overrides the view hooks to render `Definer` column / `Definer: <user>` row; per-table and per-schema Triggers / Events tables and Routines per-file property table gained a `Definer` column/row.
+    - MySQL tables themselves have no DEFINER, so Tables index remains bullet-compatible structure (just the new pipe-table layout, no extra column).
+    - Column naming is deliberate: PostgreSQL uses `Owner` (role), MySQL uses `Definer` (SQL SECURITY user) — same slot, different semantics, and readers should not confuse them.
+  - Test coverage: Testcontainers-backed `PostgreSQLSchemaInfoProviderTest` / `MySQLSchemaInfoProviderTest` assert that owner/definer strings are non-blank; pure-unit `JdbcMarkdownGeneratorTest` / `PostgreSQLMarkdownGeneratorTest` / `MySQLMarkdownGeneratorTest` assert rendering.
+  - Docs updated: `docs/USER_GUIDE.md` + `.ja.md` describe the new `Owner` / `Owned By` / `Definer` columns and title-below header rows.
+  - Tests: all modules 100% passing; Spotless + ErrorProne clean.
+
 ### 2026-04-20 (Session 43)
 - **Table/View `remarks` rendering in JDBC Markdown generator**
   - Gap: `JdbcTableInfo.remarks()` / `JdbcViewInfo.remarks()` were populated from `DatabaseMetaData.getTables()` REMARKS but never written to Markdown output. `COMMENT ON TABLE` (PostgreSQL) and `COMMENT='...'` (MySQL) therefore vanished from docs.
@@ -271,18 +296,7 @@ Update when code changes:
   - `docs/DEFERRED_ISSUES.md` reduced to "No outstanding deferred issues."
   - Tests: 675 (api 8, core 359, cli 60, gradle 18, jdbc 87, generator-json 4, postgresql 82, mysql 57), 100% passing.
 
-### 2026-04-17 (Session 41)
-- **Generator Top-level `target` Removal (Issue 1 resolved)**
-  - After Phase 19's source/output split, `target` became a source-side concept (which Environment to extract data from) and no longer belonged on the output contract
-  - Removed: `GeneratorDefinition.target()`, `JdbcMarkdownDefinition.target()`, `ProjectConfig.GeneratorSection.target()`, `GeneratorExecutor.GeneratorSectionAdapter.target()`
-  - Updated: `sample/cli/migraphe.yaml` / `sample/gradle/migraphe.yaml` — top-level `target:` deleted from every generator entry; only `source.target` remains where needed (e.g. `postgresql-schema` / `jdbc-schema`)
-  - Updated tests: `GeneratorExecutorTest`, `JdbcMarkdownPluginTest`, `JdbcMarkdownDefinitionTest`, `PostgreSQLMarkdownPluginTest`, `MySQLMarkdownPluginTest`, `GeneratorOutputPluginTest`, `GeneratorRegistryTest`, `TestOutputPlugin`, `JsonOutputPluginTest` — dead `target()` stubs purged
-  - Updated docs: `docs/USER_GUIDE.md` / `docs/USER_GUIDE.ja.md` — removed top-level `target:` from every generator YAML example and from the field list
-  - Removed Issue 1 from `docs/DEFERRED_ISSUES.md` (resolved); Issue 2 (cross-classloader cast in markdown plugins) still tracked
-  - No runtime behaviour change for `up` / `down` / `status` / `validate`; only affects `generate` config schema
-  - Tests: 672 (api 7, core 357, cli 60, gradle 18, jdbc 87, generator-json 4, postgresql 82, mysql 57), 100% passing
-
 ---
 
 **Last Updated**: 2026-04-20
-**Current Work**: Table/view SQL comments now flow end-to-end to Markdown docs (`tables/*.md`, `views/*.md`, and `index.md` bullets). `JdbcMarkdownGenerator` renders `remarks()` via two private helpers; sample DDL carries real comments for verification.
+**Current Work**: `index.md` Tables/Views now render as pipe tables with subclass-injected columns. PostgreSQL adds `Owner` (and `Owned By` for sequences) via `pg_get_userbyid` + `pg_depend` JOIN; MySQL adds `Definer` for views / triggers / routines / events via `information_schema`. Extension hooks live in `JdbcMarkdownGenerator` so future plugins can inject their own columns without touching the base.

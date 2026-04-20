@@ -54,43 +54,41 @@ public class JdbcMarkdownGenerator {
 
             if (!schema.tables().isEmpty()) {
                 indexBuilder.append("### Tables\n\n");
+                List<String> extraHeaders = extraTableIndexHeaders();
+                appendIndexTableHeader(indexBuilder, extraHeaders);
                 for (JdbcTableInfo table : schema.tables()) {
                     if (isTableExcluded(table.name())) {
                         continue;
                     }
                     generateTableFile(outputDir, schema.name(), table);
-                    indexBuilder
-                            .append("- [")
-                            .append(table.name())
-                            .append("](")
-                            .append(name)
-                            .append("/")
-                            .append(schema.name())
-                            .append("/tables/")
-                            .append(table.name())
-                            .append(".md)");
-                    appendIndexRemarks(indexBuilder, table.remarks());
-                    indexBuilder.append("\n");
+                    List<String> extraCells = extraTableIndexCells(schema.name(), table);
+                    assertExtraSizeMatches(extraCells, extraHeaders, "extraTableIndexCells");
+                    appendIndexRow(
+                            indexBuilder,
+                            table.name(),
+                            schema.name(),
+                            "tables",
+                            extraCells,
+                            table.remarks());
                 }
                 indexBuilder.append("\n");
             }
 
             if (!schema.views().isEmpty()) {
                 indexBuilder.append("### Views\n\n");
+                List<String> viewExtraHeaders = extraViewIndexHeaders();
+                appendIndexTableHeader(indexBuilder, viewExtraHeaders);
                 for (JdbcViewInfo view : schema.views()) {
                     generateViewFile(outputDir, schema.name(), view);
-                    indexBuilder
-                            .append("- [")
-                            .append(view.name())
-                            .append("](")
-                            .append(name)
-                            .append("/")
-                            .append(schema.name())
-                            .append("/views/")
-                            .append(view.name())
-                            .append(".md)");
-                    appendIndexRemarks(indexBuilder, view.remarks());
-                    indexBuilder.append("\n");
+                    List<String> viewExtraCells = extraViewIndexCells(schema.name(), view);
+                    assertExtraSizeMatches(viewExtraCells, viewExtraHeaders, "extraViewIndexCells");
+                    appendIndexRow(
+                            indexBuilder,
+                            view.name(),
+                            schema.name(),
+                            "views",
+                            viewExtraCells,
+                            view.remarks());
                 }
                 indexBuilder.append("\n");
             }
@@ -139,6 +137,7 @@ public class JdbcMarkdownGenerator {
         var sb = new StringBuilder();
         sb.append("# ").append(table.name()).append("\n\n");
         appendRemarksParagraph(sb, table.remarks());
+        appendTableFileHeader(sb, schemaName, table);
 
         // Columns section
         sb.append("## Columns\n\n");
@@ -259,6 +258,7 @@ public class JdbcMarkdownGenerator {
         var sb = new StringBuilder();
         sb.append("# ").append(view.name()).append("\n\n");
         appendRemarksParagraph(sb, view.remarks());
+        appendViewFileHeader(sb, schemaName, view);
 
         // Columns section
         sb.append("## Columns\n\n");
@@ -318,14 +318,87 @@ public class JdbcMarkdownGenerator {
         }
     }
 
-    private static void appendIndexRemarks(StringBuilder sb, String remarks) {
-        if (remarks != null && !remarks.isBlank()) {
-            String collapsed = remarks.replace('\n', ' ').replace('\r', ' ');
-            sb.append(" \u2014 ").append(collapsed);
+    private static String formatIndexRemarks(String remarks) {
+        if (remarks == null || remarks.isBlank()) {
+            return " ";
+        }
+        return remarks.replace('\n', ' ').replace('\r', ' ').replace("|", "\\|");
+    }
+
+    private static void appendIndexTableHeader(StringBuilder sb, List<String> extraHeaders) {
+        sb.append("| Name |");
+        for (String h : extraHeaders) {
+            sb.append(" ").append(h).append(" |");
+        }
+        sb.append(" Remarks |\n");
+        sb.append("| ---");
+        for (int i = 0; i < extraHeaders.size(); i++) {
+            sb.append(" | ---");
+        }
+        sb.append(" | --- |\n");
+    }
+
+    private void appendIndexRow(
+            StringBuilder sb,
+            String entryName,
+            String schemaName,
+            String subDir,
+            List<String> extraCells,
+            String remarks) {
+        sb.append("| [")
+                .append(entryName)
+                .append("](")
+                .append(name)
+                .append("/")
+                .append(schemaName)
+                .append("/")
+                .append(subDir)
+                .append("/")
+                .append(entryName)
+                .append(".md) |");
+        for (String c : extraCells) {
+            sb.append(" ").append(formatIndexRemarks(c)).append(" |");
+        }
+        sb.append(" ").append(formatIndexRemarks(remarks)).append(" |\n");
+    }
+
+    private static void assertExtraSizeMatches(
+            List<String> cells, List<String> headers, String label) {
+        if (cells.size() != headers.size()) {
+            throw new IllegalStateException(
+                    label
+                            + " size ("
+                            + cells.size()
+                            + ") does not match "
+                            + label.replace("Cells", "Headers")
+                            + " size ("
+                            + headers.size()
+                            + ")");
         }
     }
 
+    protected List<String> extraTableIndexHeaders() {
+        return List.of();
+    }
+
+    protected List<String> extraTableIndexCells(String schemaName, JdbcTableInfo table) {
+        return List.of();
+    }
+
+    protected List<String> extraViewIndexHeaders() {
+        return List.of();
+    }
+
+    protected List<String> extraViewIndexCells(String schemaName, JdbcViewInfo view) {
+        return List.of();
+    }
+
     protected void appendIndexHeader(StringBuilder sb) {}
+
+    protected void appendTableFileHeader(
+            StringBuilder sb, String schemaName, JdbcTableInfo table) {}
+
+    protected void appendViewFileHeader(StringBuilder sb, String schemaName, JdbcViewInfo view) {}
 
     protected void appendSchemaIndexSections(StringBuilder sb, String schemaName, Path outputDir) {}
 

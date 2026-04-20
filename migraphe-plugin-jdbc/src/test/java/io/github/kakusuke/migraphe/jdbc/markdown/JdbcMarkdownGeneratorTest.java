@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.jdbc.markdown;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.jdbc.schema.DefaultJdbcSchemaInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcCheckConstraintInfo;
@@ -350,6 +351,21 @@ class JdbcMarkdownGeneratorTest {
     }
 
     @Test
+    void indexMdTablesUsePipeTable(@TempDir Path outputDir) throws Exception {
+        var generator = new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content)
+                .contains("| Name | Remarks |")
+                .contains("| --- | --- |")
+                .contains("| [users](mydb/PUBLIC/tables/users.md) |")
+                .doesNotContain("- [users]")
+                .doesNotContain("- [orders]");
+    }
+
+    @Test
     void indexMdTableLinkIncludesRemarks(@TempDir Path outputDir) throws Exception {
         var idColumn =
                 new JdbcColumnInfo(
@@ -381,7 +397,7 @@ class JdbcMarkdownGeneratorTest {
         generator.generate(outputDir);
 
         String content = Files.readString(outputDir.resolve("index.md"));
-        assertThat(content).containsPattern("(?m).*\\[users\\].* — Users master table.*");
+        assertThat(content).containsPattern("(?m).*\\[users\\].*\\|.*Users master table.*");
     }
 
     @Test
@@ -410,7 +426,7 @@ class JdbcMarkdownGeneratorTest {
         generator.generate(outputDir);
 
         String content = Files.readString(outputDir.resolve("index.md"));
-        assertThat(content).containsPattern("(?m).*\\[active_users\\].* — アクティブユーザービュー.*");
+        assertThat(content).containsPattern("(?m).*\\[active_users\\].*\\|.*アクティブユーザービュー.*");
     }
 
     @Test
@@ -423,5 +439,144 @@ class JdbcMarkdownGeneratorTest {
 
         assertThat(outputDir.resolve("mydb/PUBLIC/tables/users.md")).exists();
         assertThat(outputDir.resolve("mydb/PUBLIC/tables/orders.md")).doesNotExist();
+    }
+
+    @Test
+    void extraTableIndexHeaderAppearsBetweenNameAndRemarks(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of()) {
+                    @Override
+                    protected List<String> extraTableIndexHeaders() {
+                        return List.of("Engine");
+                    }
+
+                    @Override
+                    protected List<String> extraTableIndexCells(
+                            String schemaName,
+                            io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo table) {
+                        return List.of("InnoDB");
+                    }
+                };
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content)
+                .contains("| Name | Engine | Remarks |")
+                .contains("| --- | --- | --- |")
+                .containsPattern(
+                        "\\| \\[users\\]\\(mydb/PUBLIC/tables/users\\.md\\) \\| InnoDB \\|");
+    }
+
+    @Test
+    void extraTableIndexCellsSizeMismatchThrows(@TempDir Path outputDir) {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of()) {
+                    @Override
+                    protected List<String> extraTableIndexHeaders() {
+                        return List.of("A", "B");
+                    }
+
+                    @Override
+                    protected List<String> extraTableIndexCells(
+                            String schemaName,
+                            io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo table) {
+                        return List.of("only-one");
+                    }
+                };
+
+        assertThatThrownBy(() -> generator.generate(outputDir))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void extraViewIndexHeaderAppearsBetweenNameAndRemarks(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of()) {
+                    @Override
+                    protected List<String> extraViewIndexHeaders() {
+                        return List.of("Definer");
+                    }
+
+                    @Override
+                    protected List<String> extraViewIndexCells(
+                            String schemaName,
+                            io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo view) {
+                        return List.of("root@%");
+                    }
+                };
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content)
+                .contains("| Name | Definer | Remarks |")
+                .contains("| --- | --- | --- |")
+                .containsPattern(
+                        "\\| \\[active_users\\]\\(mydb/PUBLIC/views/active_users\\.md\\) \\| root@%"
+                                + " \\|");
+    }
+
+    @Test
+    void appendTableFileHeaderIsCalledAfterTitleAndRemarks(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of()) {
+                    @Override
+                    protected void appendTableFileHeader(
+                            StringBuilder sb,
+                            String schemaName,
+                            io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo table) {
+                        sb.append("Owner: dba\n\n");
+                    }
+                };
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(content).startsWith("# users\n\nOwner: dba\n\n");
+    }
+
+    @Test
+    void appendViewFileHeaderIsCalledAfterTitleAndRemarks(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of()) {
+                    @Override
+                    protected void appendViewFileHeader(
+                            StringBuilder sb,
+                            String schemaName,
+                            io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo view) {
+                        sb.append("Definer: root@%\n\n");
+                    }
+                };
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/views/active_users.md"));
+        assertThat(content).startsWith("# active_users\n\nDefiner: root@%\n\n");
+    }
+
+    @Test
+    void extraViewIndexCellsSizeMismatchThrows(@TempDir Path outputDir) {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of()) {
+                    @Override
+                    protected List<String> extraViewIndexHeaders() {
+                        return List.of("A", "B");
+                    }
+
+                    @Override
+                    protected List<String> extraViewIndexCells(
+                            String schemaName,
+                            io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo view) {
+                        return List.of("only-one");
+                    }
+                };
+
+        assertThatThrownBy(() -> generator.generate(outputDir))
+                .isInstanceOf(IllegalStateException.class);
     }
 }

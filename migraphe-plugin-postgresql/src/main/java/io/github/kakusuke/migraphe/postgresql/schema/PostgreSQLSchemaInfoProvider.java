@@ -10,7 +10,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreSQLSchemaInfo> {
 
@@ -32,20 +34,48 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                     List.copyOf(extractTriggers(conn)),
                     List.copyOf(extractMaterializedViews(conn)),
                     List.copyOf(extractPartitions(conn)),
-                    List.copyOf(extractPolicies(conn)));
+                    List.copyOf(extractPolicies(conn)),
+                    Map.copyOf(extractRelOwners(conn, "'r','p'")),
+                    Map.copyOf(extractRelOwners(conn, "'v'")));
         } catch (SQLException e) {
             throw new PostgreSQLException("Failed to retrieve schema info", e);
         }
     }
 
+    private Map<String, String> extractRelOwners(Connection conn, String relkindList)
+            throws SQLException {
+        Map<String, String> result = new HashMap<>();
+        String sql =
+                "SELECT n.nspname AS schema, c.relname AS name,"
+                        + " pg_get_userbyid(c.relowner) AS owner"
+                        + " FROM pg_class c"
+                        + " JOIN pg_namespace n ON c.relnamespace = n.oid"
+                        + " WHERE c.relkind IN ("
+                        + relkindList
+                        + ")"
+                        + " AND n.nspname NOT IN ('pg_catalog', 'information_schema')";
+        try (Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
+            while (rs.next()) {
+                result.put(
+                        rs.getString("schema") + "." + rs.getString("name"), rs.getString("owner"));
+            }
+        }
+        return result;
+    }
+
     private List<PostgreSQLExtensionInfo> extractExtensions(Connection conn) throws SQLException {
         List<PostgreSQLExtensionInfo> result = new ArrayList<>();
+        String sql =
+                "SELECT extname, extversion, pg_get_userbyid(extowner) AS owner FROM pg_extension";
         try (Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery("SELECT extname, extversion FROM pg_extension")) {
+                ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 result.add(
                         new PostgreSQLExtensionInfo(
-                                rs.getString("extname"), rs.getString("extversion")));
+                                rs.getString("extname"),
+                                rs.getString("extversion"),
+                                rs.getString("owner")));
             }
         }
         return result;
@@ -55,17 +85,20 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
         List<PostgreSQLEnumInfo> result = new ArrayList<>();
         String sql =
                 "SELECT t.typname AS name,"
-                        + " array_agg(e.enumlabel ORDER BY e.enumsortorder) AS labels"
+                        + " array_agg(e.enumlabel ORDER BY e.enumsortorder) AS labels,"
+                        + " pg_get_userbyid(t.typowner) AS owner"
                         + " FROM pg_type t"
                         + " JOIN pg_enum e ON t.oid = e.enumtypid"
                         + " JOIN pg_namespace n ON t.typnamespace = n.oid"
                         + " WHERE n.nspname NOT IN ('pg_catalog', 'information_schema')"
-                        + " GROUP BY t.typname";
+                        + " GROUP BY t.typname, t.typowner";
         try (Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
                 String[] labels = (String[]) rs.getArray("labels").getArray();
-                result.add(new PostgreSQLEnumInfo(rs.getString("name"), List.of(labels)));
+                result.add(
+                        new PostgreSQLEnumInfo(
+                                rs.getString("name"), List.of(labels), rs.getString("owner")));
             }
         }
         return result;
@@ -74,10 +107,23 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
     private List<PostgreSQLSequenceInfo> extractSequences(Connection conn) throws SQLException {
         List<PostgreSQLSequenceInfo> result = new ArrayList<>();
         String sql =
-                "SELECT schemaname, sequencename, data_type,"
-                        + " start_value, min_value, max_value, increment_by, cycle"
-                        + " FROM pg_sequences"
-                        + " WHERE schemaname NOT IN ('pg_catalog', 'information_schema')";
+                "SELECT s.schemaname, s.sequencename, s.data_type,"
+                        + " s.start_value, s.min_value, s.max_value, s.increment_by, s.cycle,"
+                        + " pg_get_userbyid(c.relowner) AS owner,"
+                        + " ot.relname AS owner_table,"
+                        + " oa.attname AS owner_column"
+                        + " FROM pg_sequences s"
+                        + " JOIN pg_class c ON c.relname = s.sequencename"
+                        + " JOIN pg_namespace sn ON c.relnamespace = sn.oid"
+                        + " AND sn.nspname = s.schemaname"
+                        + " LEFT JOIN pg_depend d ON d.objid = c.oid"
+                        + " AND d.classid = 'pg_class'::regclass"
+                        + " AND d.refclassid = 'pg_class'::regclass"
+                        + " AND d.deptype = 'a'"
+                        + " LEFT JOIN pg_class ot ON ot.oid = d.refobjid"
+                        + " LEFT JOIN pg_attribute oa ON oa.attrelid = d.refobjid"
+                        + " AND oa.attnum = d.refobjsubid"
+                        + " WHERE s.schemaname NOT IN ('pg_catalog', 'information_schema')";
         try (Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) {
@@ -91,8 +137,9 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                                 rs.getLong("min_value"),
                                 rs.getLong("max_value"),
                                 rs.getBoolean("cycle"),
-                                null,
-                                null));
+                                rs.getString("owner_table"),
+                                rs.getString("owner_column"),
+                                rs.getString("owner")));
             }
         }
         return result;
@@ -105,7 +152,8 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                         + " pg_get_function_arguments(p.oid) AS arguments,"
                         + " pg_get_function_result(p.oid) AS return_type,"
                         + " l.lanname AS language,"
-                        + " p.prokind = 'p' AS is_procedure"
+                        + " p.prokind = 'p' AS is_procedure,"
+                        + " pg_get_userbyid(p.proowner) AS owner"
                         + " FROM pg_proc p"
                         + " JOIN pg_namespace n ON p.pronamespace = n.oid"
                         + " JOIN pg_language l ON p.prolang = l.oid"
@@ -120,7 +168,8 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                                 rs.getString("arguments"),
                                 rs.getString("return_type"),
                                 rs.getString("language"),
-                                rs.getBoolean("is_procedure")));
+                                rs.getBoolean("is_procedure"),
+                                rs.getString("owner")));
             }
         }
         return result;
@@ -169,7 +218,8 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
             throws SQLException {
         List<PostgreSQLMaterializedViewInfo> result = new ArrayList<>();
         String sql =
-                "SELECT matviewname AS name, schemaname AS schema, definition, tablespace"
+                "SELECT matviewname AS name, schemaname AS schema, definition, tablespace,"
+                        + " matviewowner AS owner"
                         + " FROM pg_matviews"
                         + " WHERE schemaname NOT IN ('pg_catalog', 'information_schema')";
         try (Statement stmt = conn.createStatement();
@@ -180,7 +230,8 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                                 rs.getString("name"),
                                 rs.getString("schema"),
                                 rs.getString("definition"),
-                                rs.getString("tablespace")));
+                                rs.getString("tablespace"),
+                                rs.getString("owner")));
             }
         }
         return result;

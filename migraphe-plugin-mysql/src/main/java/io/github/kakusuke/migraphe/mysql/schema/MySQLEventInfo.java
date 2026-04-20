@@ -9,4 +9,17 @@ public record MySQLEventInfo(
         @Nullable String intervalValue,
         @Nullable String intervalField,
         String status,
-        String definition) {}
+        String definition,
+        @Nullable String definer) {
+
+    public MySQLEventInfo(
+            String schema,
+            String name,
+            String type,
+            @Nullable String intervalValue,
+            @Nullable String intervalField,
+            String status,
+            String definition) {
+        this(schema, name, type, intervalValue, intervalField, status, definition, null);
+    }
+}

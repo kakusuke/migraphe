@@ -12,6 +12,7 @@ import io.github.kakusuke.migraphe.jdbc.schema.JdbcSequenceInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcTriggerInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcUdtInfo;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLEventInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLPartitionInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLRoutineInfo;
@@ -23,6 +24,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Types;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -230,6 +232,150 @@ class MySQLMarkdownGeneratorTest {
                 .contains("cleanup")
                 .contains("RECURRING")
                 .contains("ENABLED");
+    }
+
+    @Test
+    void viewDefinerAppearsInIndexColumnAndViewFileHeader(@TempDir Path tempDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INT", Types.INTEGER, 10, 0, false, null, true, false, null, 1);
+        var viewInfo = new JdbcViewInfo("active_users", "", List.of(idColumn), "SELECT 1");
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "mydb",
+                        List.of(),
+                        List.of(viewInfo),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new MySQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of("mydb.active_users", "root@%"));
+
+        var generator =
+                new MySQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent).contains("| Name | Definer | Remarks |");
+        assertThat(indexContent)
+                .containsPattern(
+                        "\\| \\[active_users\\]\\(testdb/mydb/views/active_users\\.md\\) \\| root@%"
+                                + " \\|");
+
+        String viewContent = Files.readString(tempDir.resolve("testdb/mydb/views/active_users.md"));
+        assertThat(viewContent).startsWith("# active_users\n\nDefiner: root@%\n\n");
+    }
+
+    @Test
+    void triggersTableIncludesDefinerColumn(@TempDir Path tempDir) throws Exception {
+        var schemaInfo =
+                new MySQLSchemaInfo(
+                        List.of(schemaWithTable("mydb")),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new MySQLTriggerInfo(
+                                        "mydb",
+                                        "users",
+                                        "trg_insert",
+                                        "BEFORE",
+                                        "INSERT",
+                                        "SET NEW.val = 1",
+                                        "root@%")),
+                        List.of(),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new MySQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent)
+                .contains("| Name | Table | Timing | Event | Statement | Definer |")
+                .containsPattern("\\| trg_insert \\| users \\|.*\\| root@% \\|");
+
+        String tableContent = Files.readString(tempDir.resolve("testdb/mydb/tables/users.md"));
+        assertThat(tableContent)
+                .contains("| Name | Timing | Event | Statement | Definer |")
+                .containsPattern("\\| trg_insert \\|.*\\| root@% \\|");
+    }
+
+    @Test
+    void routinesFileIncludesDefinerRow(@TempDir Path tempDir) throws Exception {
+        var schemaInfo =
+                new MySQLSchemaInfo(
+                        List.of(emptySchema("mydb")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new MySQLRoutineInfo(
+                                        "mydb",
+                                        "get_user",
+                                        "FUNCTION",
+                                        "VARCHAR",
+                                        "id INT",
+                                        "DEFINER",
+                                        "root@%")),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new MySQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        Path routineFile = tempDir.resolve("testdb/mydb/routines/get_user.md");
+        String content = Files.readString(routineFile);
+        assertThat(content).contains("| Definer | root@% |");
+    }
+
+    @Test
+    void eventsTableIncludesDefinerColumn(@TempDir Path tempDir) throws Exception {
+        var schemaInfo =
+                new MySQLSchemaInfo(
+                        List.of(emptySchema("mydb")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new MySQLEventInfo(
+                                        "mydb",
+                                        "cleanup",
+                                        "RECURRING",
+                                        "1",
+                                        "DAY",
+                                        "ENABLED",
+                                        "DELETE FROM logs",
+                                        "root@%")),
+                        List.of());
+
+        var generator =
+                new MySQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent)
+                .contains("| Name | Type | Interval | Status | Definer |")
+                .containsPattern("\\| cleanup \\|.*\\| ENABLED \\| root@% \\|");
     }
 
     @Test
