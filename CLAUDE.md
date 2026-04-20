@@ -177,7 +177,23 @@ All tests MUST pass at 100% before committing.
 ./gradlew build          # Build
 ./gradlew test           # Run tests
 ./gradlew spotlessApply  # Format (MANDATORY before commit)
+./gradlew clean build --warning-mode all 2>&1 | grep 警告  # ErrorProne check (MANDATORY before commit)
 ```
+
+### ErrorProne Warnings — MANDATORY
+
+All ErrorProne warnings must be fixed by modifying source code. **Never use `@SuppressWarnings`** without explicit user permission.
+
+| Warning | Fix |
+|---------|-----|
+| `MissingOverride` | Add `@Override` annotation |
+| `UnusedVariable` / `ModifiedButNotUsed` | Remove unused variable and imports |
+| `StringSplitter` | `split(regex)` → `split(regex, -1)` |
+| `DefaultCharset` | Specify `StandardCharsets.UTF_8` explicitly |
+| `StringCaseLocaleUsage` | `toUpperCase()` → `toUpperCase(Locale.ROOT)` |
+| Other warnings | Fix root cause per warning message |
+
+Verify with: `./gradlew clean build --warning-mode all 2>&1 | grep 警告`
 
 ### Documentation — MANDATORY
 
