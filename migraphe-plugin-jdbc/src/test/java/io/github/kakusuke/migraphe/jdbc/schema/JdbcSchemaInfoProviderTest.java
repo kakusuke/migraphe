@@ -125,7 +125,7 @@ class JdbcSchemaInfoProviderTest {
         assertThat(fk.name()).isNotBlank();
         assertThat(fk.columns()).map(String::toUpperCase).containsExactly("USER_ID");
         assertThat(fk.referencedTable()).isNotBlank();
-        assertThat(fk.referencedTable().toUpperCase()).isEqualTo("USERS");
+        assertThat(fk.referencedTable().toUpperCase(java.util.Locale.ROOT)).isEqualTo("USERS");
         assertThat(fk.referencedColumns()).map(String::toUpperCase).containsExactly("ID");
     }
 
@@ -140,7 +140,8 @@ class JdbcSchemaInfoProviderTest {
                         .orElseThrow();
         assertThat(usersTable.exportedKeys()).hasSize(1);
         JdbcForeignKeyInfo exportedKey = usersTable.exportedKeys().get(0);
-        assertThat(exportedKey.referencedTable().toUpperCase()).isEqualTo("ORDERS");
+        assertThat(exportedKey.referencedTable().toUpperCase(java.util.Locale.ROOT))
+                .isEqualTo("ORDERS");
         assertThat(exportedKey.columns()).map(String::toUpperCase).containsExactly("ID");
     }
 

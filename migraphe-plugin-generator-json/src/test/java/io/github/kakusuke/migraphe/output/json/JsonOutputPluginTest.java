@@ -61,7 +61,7 @@ class JsonOutputPluginTest {
             System.setOut(originalOut);
         }
 
-        String output = baos.toString();
+        String output = baos.toString(java.nio.charset.StandardCharsets.UTF_8);
         assertThat(output).contains("\"name\"");
         assertThat(output).contains("\"test\"");
         assertThat(output).contains("42");

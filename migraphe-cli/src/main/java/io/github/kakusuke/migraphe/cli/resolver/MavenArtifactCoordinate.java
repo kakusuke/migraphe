@@ -4,7 +4,7 @@ public record MavenArtifactCoordinate(String groupId, String artifactId, String 
 
     public static MavenArtifactCoordinate parse(String coordinate) {
         java.util.Objects.requireNonNull(coordinate, "coordinate must not be null");
-        String[] parts = coordinate.split(":");
+        String[] parts = coordinate.split(":", -1);
         if (parts.length != 3) {
             throw new IllegalArgumentException(
                     "Invalid Maven coordinate (expected groupId:artifactId:version): "

@@ -14,6 +14,7 @@ import java.util.Optional;
 @ConfigMapping(prefix = "")
 public interface JdbcMarkdownDefinition extends GeneratorDefinition {
 
+    @Override
     String type();
 
     /** データベース名。 */

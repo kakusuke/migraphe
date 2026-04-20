@@ -1,12 +1,10 @@
 package io.github.kakusuke.migraphe.cli.command;
 
-import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
-import java.util.ArrayList;
 import java.util.List;
 
 /** マイグレーションの実行状況を表示するコマンド。 */
@@ -28,9 +26,6 @@ public class StatusCommand implements Command {
             // HistoryRepository を取得
             HistoryRepository historyRepo = context.createHistoryRepository();
             historyRepo.initialize();
-
-            // トポロジカル順序のノードリスト（context.nodes() は既にソート済み）
-            List<MigrationNode> sortedNodes = new ArrayList<>(context.nodes());
 
             // グラフをレンダリング
             ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
