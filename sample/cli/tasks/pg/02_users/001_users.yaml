@@ -14,7 +14,14 @@ up: |
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  COMMENT ON TABLE users IS 'Registered customer accounts authenticating via email + password';
+  COMMENT ON COLUMN users.id IS 'User surrogate key';
+  COMMENT ON COLUMN users.email IS 'Unique login email address';
+  COMMENT ON COLUMN users.password_hash IS 'Salted password hash (never plaintext)';
+  COMMENT ON COLUMN users.status IS 'Account lifecycle state (active/suspended/deleted)';
   COMMENT ON COLUMN users.preferred_currency IS 'Logical reference to MySQL currencies.code (no FK)';
   COMMENT ON COLUMN users.preferred_locale IS 'Logical reference to MySQL locales.code (no FK)';
+  COMMENT ON COLUMN users.created_at IS 'Record creation timestamp';
+  COMMENT ON COLUMN users.updated_at IS 'Record last-update timestamp';
 down: |
   DROP TABLE IF EXISTS users;

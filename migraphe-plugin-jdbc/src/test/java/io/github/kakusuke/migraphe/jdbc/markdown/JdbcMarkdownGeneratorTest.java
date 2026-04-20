@@ -283,6 +283,137 @@ class JdbcMarkdownGeneratorTest {
     }
 
     @Test
+    void tableFileContainsTableRemarks(@TempDir Path outputDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var pk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var tableWithRemarks =
+                new JdbcTableInfo(
+                        "users",
+                        "ユーザーマスタテーブル",
+                        List.of(idColumn),
+                        pk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(tableWithRemarks),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(content).contains("ユーザーマスタテーブル");
+    }
+
+    @Test
+    void viewFileContainsViewRemarks(@TempDir Path outputDir) throws Exception {
+        var viewIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var viewWithRemarks =
+                new JdbcViewInfo(
+                        "active_users",
+                        "アクティブユーザービュー",
+                        List.of(viewIdColumn),
+                        "SELECT id FROM users WHERE name IS NOT NULL");
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(),
+                        List.of(viewWithRemarks),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/views/active_users.md"));
+        assertThat(content)
+                .contains("# active_users")
+                .contains("アクティブユーザービュー")
+                .contains("## Columns");
+    }
+
+    @Test
+    void indexMdTableLinkIncludesRemarks(@TempDir Path outputDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var pk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var tableWithRemarks =
+                new JdbcTableInfo(
+                        "users",
+                        "Users master table",
+                        List.of(idColumn),
+                        pk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(tableWithRemarks),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).containsPattern("(?m).*\\[users\\].* — Users master table.*");
+    }
+
+    @Test
+    void indexMdViewLinkIncludesRemarks(@TempDir Path outputDir) throws Exception {
+        var viewIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var viewWithRemarks =
+                new JdbcViewInfo(
+                        "active_users",
+                        "アクティブユーザービュー",
+                        List.of(viewIdColumn),
+                        "SELECT id FROM users WHERE name IS NOT NULL");
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(),
+                        List.of(viewWithRemarks),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).containsPattern("(?m).*\\[active_users\\].* — アクティブユーザービュー.*");
+    }
+
+    @Test
     void excludesFilteredTables(@TempDir Path outputDir) {
         var generator =
                 new JdbcMarkdownGenerator(

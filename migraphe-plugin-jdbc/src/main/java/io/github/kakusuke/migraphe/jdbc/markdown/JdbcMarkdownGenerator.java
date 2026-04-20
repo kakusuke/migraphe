@@ -68,7 +68,9 @@ public class JdbcMarkdownGenerator {
                             .append(schema.name())
                             .append("/tables/")
                             .append(table.name())
-                            .append(".md)\n");
+                            .append(".md)");
+                    appendIndexRemarks(indexBuilder, table.remarks());
+                    indexBuilder.append("\n");
                 }
                 indexBuilder.append("\n");
             }
@@ -86,7 +88,9 @@ public class JdbcMarkdownGenerator {
                             .append(schema.name())
                             .append("/views/")
                             .append(view.name())
-                            .append(".md)\n");
+                            .append(".md)");
+                    appendIndexRemarks(indexBuilder, view.remarks());
+                    indexBuilder.append("\n");
                 }
                 indexBuilder.append("\n");
             }
@@ -134,6 +138,7 @@ public class JdbcMarkdownGenerator {
     private void generateTableFile(Path outputDir, String schemaName, JdbcTableInfo table) {
         var sb = new StringBuilder();
         sb.append("# ").append(table.name()).append("\n\n");
+        appendRemarksParagraph(sb, table.remarks());
 
         // Columns section
         sb.append("## Columns\n\n");
@@ -253,6 +258,7 @@ public class JdbcMarkdownGenerator {
     private void generateViewFile(Path outputDir, String schemaName, JdbcViewInfo view) {
         var sb = new StringBuilder();
         sb.append("# ").append(view.name()).append("\n\n");
+        appendRemarksParagraph(sb, view.remarks());
 
         // Columns section
         sb.append("## Columns\n\n");
@@ -304,6 +310,19 @@ public class JdbcMarkdownGenerator {
                 || dataType == Types.NCHAR
                 || dataType == Types.LONGVARCHAR
                 || dataType == Types.LONGNVARCHAR;
+    }
+
+    private static void appendRemarksParagraph(StringBuilder sb, String remarks) {
+        if (remarks != null && !remarks.isBlank()) {
+            sb.append(remarks).append("\n\n");
+        }
+    }
+
+    private static void appendIndexRemarks(StringBuilder sb, String remarks) {
+        if (remarks != null && !remarks.isBlank()) {
+            String collapsed = remarks.replace('\n', ' ').replace('\r', ' ');
+            sb.append(" \u2014 ").append(collapsed);
+        }
     }
 
     protected void appendIndexHeader(StringBuilder sb) {}

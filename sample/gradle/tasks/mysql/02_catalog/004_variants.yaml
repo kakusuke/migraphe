@@ -5,17 +5,17 @@ dependencies:
   - mysql/01_common/001_currencies
 up: |
   CREATE TABLE variants (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    product_id BIGINT NOT NULL,
-    sku VARCHAR(64) NOT NULL UNIQUE,
-    price_amount DECIMAL(12,2) NOT NULL,
-    price_currency VARCHAR(3) NOT NULL,
-    stock_quantity INT NOT NULL DEFAULT 0,
-    attributes JSON NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Variant surrogate key',
+    product_id BIGINT NOT NULL COMMENT 'Parent product',
+    sku VARCHAR(64) NOT NULL UNIQUE COMMENT 'Unique stock-keeping unit sold to customers',
+    price_amount DECIMAL(12,2) NOT NULL COMMENT 'Unit price in the currency below',
+    price_currency VARCHAR(3) NOT NULL COMMENT 'ISO 4217 currency code (FK to currencies)',
+    stock_quantity INT NOT NULL DEFAULT 0 COMMENT 'Current on-hand inventory count',
+    attributes JSON NULL COMMENT 'Free-form variant attributes (size, color, etc.)',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Record last-update timestamp',
     CONSTRAINT fk_variants_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
     CONSTRAINT fk_variants_currency FOREIGN KEY (price_currency) REFERENCES currencies (code)
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Sellable SKUs per product with price and inventory';
 down: |
   DROP TABLE IF EXISTS variants;

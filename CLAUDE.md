@@ -247,6 +247,17 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-04-20 (Session 43)
+- **Table/View `remarks` rendering in JDBC Markdown generator**
+  - Gap: `JdbcTableInfo.remarks()` / `JdbcViewInfo.remarks()` were populated from `DatabaseMetaData.getTables()` REMARKS but never written to Markdown output. `COMMENT ON TABLE` (PostgreSQL) and `COMMENT='...'` (MySQL) therefore vanished from docs.
+  - Render sites added in `JdbcMarkdownGenerator`:
+    - `tables/<name>.md` and `views/<name>.md`: remarks appear as a paragraph directly under the H1 title (empty/blank → omitted entirely, no blank line).
+    - `index.md` Tables/Views list: link followed by `\u2014` (em-dash) and collapsed remarks (newlines → spaces) so the bullet stays single-line.
+  - Extracted two private static helpers (`appendRemarksParagraph`, `appendIndexRemarks`) to avoid 4-way duplication. Subclasses (`PostgreSQLMarkdownGenerator`, `MySQLMarkdownGenerator`) inherit the behaviour automatically — no override needed.
+  - Sample YAML DDL updated: 15 unique tables across `sample/cli/tasks/` and `sample/gradle/tasks/` (8 MySQL + 7 PostgreSQL) gained `COMMENT ON TABLE` / `COMMENT='...'` and per-column comments. CLI/Gradle sample trees remain bitwise-identical.
+  - Tests: 4 new `JdbcMarkdownGeneratorTest` cases covering table/view file paragraph and index link suffix in both ASCII and Japanese. Empty-remarks negative case covered implicitly by existing fixtures (all fixture tables have blank remarks).
+  - Tests: 680 total, 100% passing. Spotless + ErrorProne clean.
+
 ### 2026-04-17 (Session 42)
 - **Cross-classloader `ClassCastException` in Markdown plugins fixed (Issue 2 resolved)**
   - Root cause: `OutputContext.definition()` was a `GeneratorSectionAdapter` loaded by core's AppClassLoader, but markdown plugins cast it to `JdbcMarkdownDefinition` loaded by the plugin's URLClassLoader. Class identities differed → `ClassCastException`.
@@ -271,29 +282,7 @@ Update when code changes:
   - No runtime behaviour change for `up` / `down` / `status` / `validate`; only affects `generate` config schema
   - Tests: 672 (api 7, core 357, cli 60, gradle 18, jdbc 87, generator-json 4, postgresql 82, mysql 57), 100% passing
 
-### 2026-04-16 (Session 38)
-- **MySQL Markdown Output Plugin + Schema Source Plugin**
-  - `MySQLSchemaInfoProvider` (source type=`mysql-schema`): Catalog-based schema discovery (`connection.getCatalog()`) to handle MySQL's catalog-vs-schema difference
-    - Queries `information_schema` for: storage engines, table meta (ENGINE/collation/row format), triggers, routines, events, partitions
-    - 7 MySQL-specific record types + `MySQLSchemaInfo implements JdbcSchemaInfo`
-  - `MySQLMarkdownPlugin` (output type=`mysql-markdown`): Extends `JdbcMarkdownGenerator` via Template Method
-    - Index header: Storage Engines table
-    - Table sections: Table Properties, Triggers, Partition Info
-    - Schema index: Routines (with individual files), Triggers, Events, Partitions
-  - `MySQLSchemaSourcePlugin` (type=`mysql-schema`), ServiceLoader registrations
-  - Testcontainers MySQL 8.0 with `--log-bin-trust-function-creators=1 --event-scheduler=ON`
-  - Tests: 668 (api 6, core 356, cli 60, gradle 17, jdbc 86, generator-json 4, postgresql 82, mysql 57), 100% passing
-
-### 2026-04-17 (Session 40)
-- **Gradle `MigrapheGenerateTask` — Load Generator Plugins from `migraphePlugin` Configuration (Issue 4)**
-  - Bug: `MigrapheGenerateTask` only called `GeneratorRegistry.loadFromClasspath()` + `loadFromDirectory()` and ignored the `migraphePlugin` Gradle Configuration's URLClassLoader, so Generator plugins (e.g. `output-json`) declared there were invisible
-  - Fix: `AbstractMigrapheTask.createPluginClassLoader()` extracted (shared between `PluginRegistry` and `GeneratorRegistry`); `createPluginRegistry(@Nullable URLClassLoader)` now takes the classloader; `MigrapheGenerateTask.generate()` mirrors CLI's `GenerateCommand` by sharing one URLClassLoader instance
-  - Matches `Main.java:37-58` / `GenerateCommand.java:63-69` pattern so CLI and Gradle now behave identically
-  - Verified via sample/gradle: `./gradlew migrapheGenerate --name migration-tree` now emits `docs/migration-tree.json` successfully (markdown generators still blocked by Issue 2 — tracked in `docs/DEFERRED_ISSUES.md`)
-  - Tests: 669 (gradle 19; +1 functional test), 100% passing
-  - Deferred: Issue 1 (GeneratorExecutor source.target fallback) and Issue 2 (cross-classloader cast in markdown plugins) recorded in `docs/DEFERRED_ISSUES.md`
-
 ---
 
-**Last Updated**: 2026-04-17
-**Current Work**: Issue 2 (cross-classloader `ClassCastException` in Markdown plugins) resolved. `migraphe generate` now works end-to-end for `jdbc-markdown` / `postgresql-markdown` / `mysql-markdown` via `OutputContext.definitionAs(Class<T>)` + `PropertiesDefinitionResolver`. `docs/DEFERRED_ISSUES.md` is now empty.
+**Last Updated**: 2026-04-20
+**Current Work**: Table/view SQL comments now flow end-to-end to Markdown docs (`tables/*.md`, `views/*.md`, and `index.md` bullets). `JdbcMarkdownGenerator` renders `remarks()` via two private helpers; sample DDL carries real comments for verification.

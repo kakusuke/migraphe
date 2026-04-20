@@ -2,11 +2,11 @@ name: Create currencies table
 target: mysql
 up: |
   CREATE TABLE currencies (
-    code VARCHAR(3) PRIMARY KEY,
-    name VARCHAR(64) NOT NULL,
-    symbol VARCHAR(8) NOT NULL,
-    decimal_digits TINYINT NOT NULL DEFAULT 2,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    code VARCHAR(3) PRIMARY KEY COMMENT 'ISO 4217 currency code',
+    name VARCHAR(64) NOT NULL COMMENT 'English currency name',
+    symbol VARCHAR(8) NOT NULL COMMENT 'Currency symbol (e.g., $, ¥, €)',
+    decimal_digits TINYINT NOT NULL DEFAULT 2 COMMENT 'Minor unit fractional digits',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp'
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Currency master referenced by product prices and orders';
 down: |
   DROP TABLE IF EXISTS currencies;

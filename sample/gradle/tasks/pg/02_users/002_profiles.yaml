@@ -11,5 +11,12 @@ up: |
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  COMMENT ON TABLE profiles IS 'Public-facing profile information (1:1 with users)';
+  COMMENT ON COLUMN profiles.user_id IS 'Owning user (primary key + FK to users)';
+  COMMENT ON COLUMN profiles.display_name IS 'Name shown publicly on the site';
+  COMMENT ON COLUMN profiles.bio IS 'Short user biography';
+  COMMENT ON COLUMN profiles.avatar_url IS 'Absolute URL of the avatar image';
+  COMMENT ON COLUMN profiles.created_at IS 'Record creation timestamp';
+  COMMENT ON COLUMN profiles.updated_at IS 'Record last-update timestamp';
 down: |
   DROP TABLE IF EXISTS profiles;

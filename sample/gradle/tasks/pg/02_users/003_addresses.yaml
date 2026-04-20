@@ -16,5 +16,17 @@ up: |
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  COMMENT ON TABLE addresses IS 'Shipping and billing addresses saved to a user';
+  COMMENT ON COLUMN addresses.id IS 'Address surrogate key';
+  COMMENT ON COLUMN addresses.user_id IS 'Owning user';
+  COMMENT ON COLUMN addresses.label IS 'User-chosen label (e.g., Home, Office)';
+  COMMENT ON COLUMN addresses.line1 IS 'Street address line 1';
+  COMMENT ON COLUMN addresses.line2 IS 'Street address line 2 (optional)';
+  COMMENT ON COLUMN addresses.city IS 'City name';
+  COMMENT ON COLUMN addresses.region IS 'State / prefecture / region';
+  COMMENT ON COLUMN addresses.postal_code IS 'Postal / ZIP code';
+  COMMENT ON COLUMN addresses.country IS 'ISO 3166-1 alpha-2 country code';
+  COMMENT ON COLUMN addresses.created_at IS 'Record creation timestamp';
+  COMMENT ON COLUMN addresses.updated_at IS 'Record last-update timestamp';
 down: |
   DROP TABLE IF EXISTS addresses;
