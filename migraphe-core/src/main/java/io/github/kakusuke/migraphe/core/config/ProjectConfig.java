@@ -2,6 +2,8 @@ package io.github.kakusuke.migraphe.core.config;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * プロジェクト全体の設定。
@@ -31,6 +33,13 @@ public interface ProjectConfig {
      * @return 実行設定
      */
     ExecutionSection execution();
+
+    /**
+     * ジェネレーター設定リスト。
+     *
+     * @return ジェネレーター設定（未設定の場合は空）
+     */
+    Optional<List<GeneratorSection>> generators();
 
     /** プロジェクト情報。 */
     interface ProjectSection {
@@ -69,5 +78,33 @@ public interface ProjectConfig {
          */
         @WithDefault("0")
         int maxParallelism();
+    }
+
+    /** ジェネレーター設定。 */
+    interface GeneratorSection {
+        String name();
+
+        String type();
+
+        SourceSection source();
+
+        @WithDefault("docs/schema")
+        String outputDir();
+
+        Optional<List<ExcludeSection>> excludes();
+
+        /** ソースプラグイン設定。 */
+        interface SourceSection {
+            Optional<String> type();
+
+            Optional<String> target();
+        }
+
+        /** 除外パターン。 */
+        interface ExcludeSection {
+            Optional<String> schema();
+
+            Optional<String> table();
+        }
     }
 }

@@ -12,10 +12,11 @@
 6. [マイグレーションの実行](#マイグレーションの実行)
 7. [ロールバック（down）](#ロールバックdown)
 8. [設定の検証（validate）](#設定の検証validate)
-9. [環境管理](#環境管理)
-10. [高度な機能](#高度な機能)
-11. [Gradleプラグイン](#gradleプラグイン)
-12. [トラブルシューティング](#トラブルシューティング)
+9. [スキーマドキュメント生成（generate）](#スキーマドキュメント生成generate)
+10. [環境管理](#環境管理)
+11. [高度な機能](#高度な機能)
+12. [Gradleプラグイン](#gradleプラグイン)
+13. [トラブルシューティング](#トラブルシューティング)
 
 ## はじめに
 
@@ -44,11 +45,11 @@ Migrapheは、複数の環境にわたる複雑なデータベースマイグレ
 git clone https://github.com/yourusername/migraphe.git
 cd migraphe
 
-# Fat JARをビルド
-./gradlew fatJar
+# CLI をビルド
+./gradlew :migraphe-cli:installDist
 
-# 実行可能JARが以下に作成されます:
-# migraphe-cli/build/libs/migraphe-cli-all.jar
+# CLI が以下に作成されます:
+# migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli
 ```
 
 ### エイリアスの作成（オプション）
@@ -57,7 +58,7 @@ cd migraphe
 
 ```bash
 # ~/.bashrc または ~/.zshrc に追加
-alias migraphe='java -jar /path/to/migraphe-cli-all.jar'
+alias migraphe='/path/to/migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli'
 
 # シェル設定を再読み込み
 source ~/.bashrc  # または source ~/.zshrc
@@ -71,9 +72,41 @@ migraphe up
 
 Migraphe はプラグインアーキテクチャを採用しており、データベースサポートは別のプラグインとして提供されます。
 
-**プラグインの配置:**
+**現在利用可能なプラグイン:**
 
-プラグイン JAR ファイルをプロジェクトの `plugins/` ディレクトリに配置します:
+| プラグイン | タイプ | 説明 |
+|-----------|--------|------|
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート（`postgresql-schema` ソースおよび `postgresql-markdown` アウトプットプラグインを含む） |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート（`mysql-schema` ソースおよび `mysql-markdown` アウトプットプラグインを含む） |
+| `migraphe-plugin-jdbc` | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
+| `migraphe-plugin-generator-json` | `output-json` | JSON 出力ジェネレータプラグイン |
+
+#### 方法1: Maven 座標（推奨）
+
+`migraphe.yaml` に `plugins` セクションを追加し、Maven 座標を記述します。CLI が `~/.m2/repository` および Maven Central から依存を自動解決します:
+
+```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+
+project:
+  name: my-project
+history:
+  target: history
+```
+
+ローカルビルドのプラグインを使用する場合は、事前に公開が必要です:
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+推移的依存（JDBC ドライバ、Jackson 等）は Maven Central から自動的に解決されます。
+
+#### 方法2: plugins/ ディレクトリ（レガシー）
+
+プラグイン JAR ファイルをプロジェクトの `plugins/` ディレクトリに直接配置します:
 
 ```
 my-project/
@@ -84,32 +117,7 @@ my-project/
 └── tasks/
 ```
 
-**現在利用可能なプラグイン:**
-
-| プラグイン | タイプ | 説明 |
-|-----------|--------|------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート |
-| `migraphe-plugin-jdbc` | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
-
-**プラグイン JAR の取得:**
-
-```bash
-# Fat JAR をビルド（JDBC ドライバ込み）
-./gradlew :migraphe-plugin-postgresql:fatJar
-./gradlew :migraphe-plugin-mysql:fatJar
-./gradlew :migraphe-plugin-jdbc:fatJar
-
-# Fat JAR を plugins/ にコピー
-mkdir -p my-project/plugins
-cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
-# MySQL の場合:
-cp migraphe-plugin-mysql/build/libs/migraphe-plugin-mysql-*-all.jar my-project/plugins/
-# 汎用 JDBC の場合:
-cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar my-project/plugins/
-```
-
-**注意:** CLI で使用する場合は `-all.jar`（Fat JAR）を使用してください。通常の JAR は Gradle/Maven 依存関係用です。
+**注意:** 両方の方法を同時に使用できます。Maven で解決されたプラグインが先に読み込まれ、次に `plugins/` ディレクトリが読み込まれます。
 
 ## プロジェクトのセットアップ
 
@@ -150,6 +158,9 @@ my-project/
 ### プロジェクト設定（`migraphe.yaml`）
 
 ```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+
 project:
   name: my-project
 
@@ -158,6 +169,7 @@ history:
 ```
 
 **フィールド:**
+- `plugins`（任意）: CLI プラグイン解決用の Maven 座標リスト（`groupId:artifactId:version`）
 - `project.name`（必須）: プロジェクト識別子
 - `history.target`（必須）: マイグレーション履歴を保存するターゲット名
 
@@ -648,6 +660,181 @@ Validation failed with 5 errors.
 | 0 | 検証成功（エラーなし） |
 | 1 | 検証失敗（1つ以上のエラー） |
 
+## スキーマドキュメント生成（generate）
+
+`generate` コマンドは、各種データソースからドキュメントやデータのエクスポートを生成します。ジェネレータシステムは**ソース/アウトプットプラグインアーキテクチャ**を採用しています。ソースプラグインがデータを抽出し、アウトプットプラグインが希望のフォーマットで出力します。同じデータソースを複数の形式で出力可能です。
+
+### 設定
+
+`migraphe.yaml` に `generators` セクションを追加します:
+
+```yaml
+project:
+  name: my-project
+
+history:
+  target: history
+
+generators:
+  # スキーマドキュメントをMarkdownで出力
+  - name: schema-docs
+    type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"
+      - schema: "public"
+        table: "tmp_.*"
+
+  # マイグレーションツリーをJSONで標準出力に出力
+  - name: tree
+    type: output-json
+    source:
+      type: migration-tree
+    output-dir: docs
+```
+
+**フィールド:**
+- `name`（必須）: ジェネレータの識別子
+- `type`（必須）: アウトプットプラグインのタイプ（例: `jdbc-markdown`、`output-json`）
+- `source`（ソース/アウトプットフローに必須）:
+  - `type`: ソースプラグインのタイプ（例: `jdbc-schema`、`migration-tree`）
+  - `target`（オプション）: データベース接続が必要なソースプラグイン用のターゲット名
+- `output-dir`（オプション、デフォルト: `docs/schema`）: 生成ファイルの出力先ディレクトリ
+- `excludes`（オプション）: 除外フィルタのリスト（正規表現パターン）
+  - `schema`: スキーマ名にマッチする正規表現パターン
+  - `table`: テーブル名にマッチする正規表現パターン（`schema` と組み合わせて使用）
+
+### 利用可能なソースプラグイン
+
+| プラグイン | タイプ | データ | 説明 |
+|-----------|--------|--------|------|
+| `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
+| `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | JDBC基本スキーマ + PostgreSQL固有メタデータ（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）をpg_catalogから抽出 |
+| `migraphe-plugin-mysql` | `mysql-schema` | `MySQLSchemaInfo` | JDBC基本スキーマ + MySQL固有メタデータ（ストレージエンジン、テーブルメタ、トリガー、ルーチン、イベント、パーティション）をinformation_schemaから抽出 |
+| （組み込み） | `migration-tree` | `MigrationGraphView` | マイグレーションDAG構造を提供 |
+
+### 利用可能なアウトプットプラグイン
+
+| プラグイン | タイプ | 説明 |
+|-----------|--------|------|
+| `migraphe-plugin-jdbc` | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
+| `migraphe-plugin-postgresql` | `postgresql-markdown` | PostgreSQL固有オブジェクト（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）を含むMarkdownドキュメントを生成 |
+| `migraphe-plugin-mysql` | `mysql-markdown` | MySQL固有オブジェクト（ストレージエンジン、テーブルメタデータ、トリガー、ルーチン、イベント、パーティション）を含むMarkdownドキュメントを生成 |
+| `migraphe-plugin-generator-json` | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
+
+### 基本的な使い方
+
+```bash
+# 設定済みの全ジェネレータでドキュメントを生成
+java -jar migraphe-cli-all.jar generate
+
+# 特定のジェネレータのみ実行
+java -jar migraphe-cli-all.jar generate --name mydb
+```
+
+### 出力構造（jdbc-markdown）
+
+`jdbc-markdown` ジェネレータは以下のディレクトリ構造を生成します:
+
+```
+docs/schema/
+└── mydb/
+    └── public/
+        ├── index.md              # スキーマ概要（テーブル/ビュー一覧）
+        ├── tables/
+        │   ├── users.md          # テーブル詳細（カラム、キー、インデックス）
+        │   └── posts.md
+        └── views/
+            └── recent_posts.md   # ビュー詳細
+```
+
+各テーブルのドキュメントには以下が含まれます:
+- カラム定義（名前、型、NULL許可、デフォルト値）
+- 主キーとユニーク制約
+- 外部キー参照（参照先テーブルへのクロスリンク付き）
+- インデックス
+
+### PostgreSQL固有ドキュメント
+
+PostgreSQLデータベースの場合、`postgresql-markdown` アウトプットプラグインと `postgresql-schema` ソースプラグインを使用して、PostgreSQL固有オブジェクトを含む包括的なドキュメントを生成できます:
+
+```yaml
+generators:
+  - name: mydb
+    type: postgresql-markdown
+    source:
+      type: postgresql-schema
+      target: db1
+    output-dir: docs/schema
+```
+
+標準的なJDBCスキーマ情報（テーブル、ビュー、カラム、キー、インデックス）に加えて、生成されるドキュメントには以下が含まれます:
+- **拡張機能**（例: `pgcrypto`、`uuid-ossp`） — `Owner` 列付き
+- **列挙型** とその値 — `Owner` 列付き
+- **シーケンス** と現在の値・パラメータ — `Owned By`（`pg_depend` による依存先 table.column）と `Owner`（ロール）の 2 列付き
+- **関数** と引数型・戻り値型 — 個別ファイルに `Owner` プロパティ
+- **トリガー** とタイミング、イベント、関連関数
+- **マテリアライズドビュー** とカラム定義 — 個別ファイルに `Owner` プロパティ
+- **パーティションテーブル** とパーティション戦略・キー
+- **行レベルセキュリティ（RLS）ポリシー** とロール、コマンド、式
+
+テーブル固有のファイルには、各テーブルに関連するトリガー、ポリシー、パーティション情報も含まれます。
+
+**ロール所有者:** Tables/Views 一覧テーブルには `Owner` 列（`pg_get_userbyid(relowner)` から取得した PostgreSQL ロール名）が含まれ、各 `tables/<name>.md` / `views/<name>.md` ファイルのタイトル直下に `Owner: <role>` の行が出力されます。
+
+### MySQL固有ドキュメント
+
+MySQLデータベースの場合、`mysql-markdown` アウトプットプラグインと `mysql-schema` ソースプラグインを使用して、MySQL固有オブジェクトを含む包括的なドキュメントを生成できます:
+
+```yaml
+generators:
+  mysql-docs:
+    source:
+      type: mysql-schema
+      environment: db1
+    output:
+      type: mysql-markdown
+    name: my-database
+```
+
+標準的なJDBCスキーマ情報（テーブル、ビュー、カラム、キー、インデックス）に加えて、生成されるドキュメントには以下が含まれます:
+- **ストレージエンジン** MySQLインスタンスで利用可能なエンジン一覧
+- **テーブルメタデータ** ENGINE、照合順序、行フォーマットを含む
+- **トリガー** とタイミング、イベント、SQL文、`Definer`
+- **ルーチン**（ストアドプロシージャおよび関数）とパラメータ・戻り値型、`Definer`
+- **イベント** とスケジュール、ステータス、SQL本体、`Definer`
+- **パーティションテーブル** とパーティション方式、式、パーティション詳細
+
+テーブル固有のファイルには、各テーブルに関連するトリガーおよびパーティション情報も含まれます。
+
+**`DEFINER` の表示:** Views 一覧テーブルには `Definer` 列（`information_schema.VIEWS.DEFINER` から取得）が含まれ、各 `views/<name>.md` ファイルのタイトル直下に `Definer: <user>` の行が出力されます。Triggers / Routines / Events も同様に各一覧テーブル・個別ファイルで DEFINER を表示します。MySQL のテーブル自体には DEFINER がないため、Tables 一覧は変更されません。
+
+**注意:** MySQL JDBCはデータベースをカタログとして返します（スキーマではありません）。`mysql-schema` ソースプラグインは `connection.getCatalog()` を使用したカタログベースのスキーマ検出を行います。
+
+### 除外フィルタリング
+
+`excludes` を使用して、正規表現パターンにマッチするスキーマやテーブルをスキップします:
+
+```yaml
+generators:
+  - name: mydb
+    type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"     # スキーマ全体を除外
+      - schema: "pg_catalog"             # PostgreSQLシステムスキーマを除外
+      - schema: "public"
+        table: "tmp_.*"                  # publicスキーマの一時テーブルを除外
+      - schema: ".*"
+        table: "flyway_schema_history"   # 全スキーマで特定テーブルを除外
+```
+
 ## 環境管理
 
 ### 開発環境
@@ -834,6 +1021,7 @@ dependencies {
 | `migrapheStatus` | マイグレーション実行状況の表示 |
 | `migrapheUp` | マイグレーション（前進）の実行 |
 | `migrapheDown` | ロールバック（後退）の実行 |
+| `migrapheGenerate` | スキーマドキュメントの生成 |
 
 ### タスクオプション
 
@@ -845,6 +1033,9 @@ dependencies {
 - `--target=<nodeId>` — 特定のノードまでロールバック
 - `--all` — 全実行済みマイグレーションのロールバック
 - `--preview` — 実行せずにプレビュー
+
+**migrapheGenerate**:
+- `--name=<name>` — 特定のジェネレータのみ実行
 
 プロジェクトプロパティ（`-P`）でも指定可能:
 
@@ -863,16 +1054,26 @@ dependencies {
 ```
 No plugin found for type 'postgresql'.
 No plugins are currently loaded.
-
-To use this plugin type:
-  1. Place the plugin JAR file in ./plugins/ directory
-  2. Ensure the JAR contains META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 ```
 
 **解決策:**
-- `plugins/` ディレクトリにプラグイン JAR ファイルを配置
-- プラグイン JAR が正しいバージョンであることを確認
+- `migraphe.yaml` の `plugins` セクションにプラグインの Maven 座標を追加
+- ローカルビルドのプラグインを使用する場合は `./gradlew publishToMavenLocal` を実行
+- または `plugins/` ディレクトリにプラグイン JAR ファイルを配置
 - [プラグインのインストール](#プラグインのインストール) セクションを参照
+
+#### 1b. "Failed to resolve plugin" エラー
+
+**問題:**
+```
+Failed to resolve plugin: io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+```
+
+**解決策:**
+- `./gradlew publishToMavenLocal` を実行済みか確認
+- `migraphe.yaml` の Maven 座標が正しいか確認
+- `~/.m2/repository` にプラグインのアーティファクトが存在するか確認
+- Maven Central へのネットワーク接続を確認（推移的依存の取得に必要）
 
 #### 2. "Target not found" エラー
 

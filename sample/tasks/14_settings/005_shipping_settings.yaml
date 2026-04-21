@@ -1,6 +1,0 @@
-name: Create shipping settings table
-target: main
-dependencies:
-  - 08_shipping/001_carriers
-up: "Create shipping_settings table with carrier_id, key, value, description"
-down: "Drop shipping_settings table"

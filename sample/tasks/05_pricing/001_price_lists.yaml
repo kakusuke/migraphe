@@ -1,6 +1,0 @@
-name: Create price lists table
-target: main
-dependencies:
-  - 01_common/001_currencies
-up: "Create price_lists table with id, name, currency_code, valid_from, valid_to, priority"
-down: "Drop price_lists table"

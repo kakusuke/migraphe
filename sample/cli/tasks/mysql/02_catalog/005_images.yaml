@@ -1,0 +1,16 @@
+name: Create product images table
+target: mysql
+dependencies:
+  - mysql/02_catalog/003_products
+up: |
+  CREATE TABLE product_images (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Image surrogate key',
+    product_id BIGINT NOT NULL COMMENT 'Product the image belongs to',
+    url VARCHAR(512) NOT NULL COMMENT 'Absolute URL of the image asset',
+    alt_text VARCHAR(255) NULL COMMENT 'Alternate text for accessibility',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT 'Display order within the gallery',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp',
+    CONSTRAINT fk_product_images_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Ordered image gallery per product';
+down: |
+  DROP TABLE IF EXISTS product_images;

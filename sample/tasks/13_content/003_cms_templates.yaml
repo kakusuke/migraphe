@@ -1,6 +1,0 @@
-name: Create CMS page templates table
-target: main
-dependencies:
-  - 00_infra/005_grant_permissions
-up: "Create cms_templates table with id, name, layout_json, is_active"
-down: "Drop cms_templates table"

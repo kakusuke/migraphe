@@ -12,10 +12,11 @@
 6. [Running Migrations](#running-migrations)
 7. [Rollback (down)](#rollback-down)
 8. [Configuration Validation (validate)](#configuration-validation-validate)
-9. [Environment Management](#environment-management)
-10. [Advanced Features](#advanced-features)
-11. [Gradle Plugin](#gradle-plugin)
-12. [Troubleshooting](#troubleshooting)
+9. [Schema Documentation Generation (generate)](#schema-documentation-generation-generate)
+10. [Environment Management](#environment-management)
+11. [Advanced Features](#advanced-features)
+12. [Gradle Plugin](#gradle-plugin)
+13. [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -44,11 +45,11 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 git clone https://github.com/yourusername/migraphe.git
 cd migraphe
 
-# Build the Fat JAR
-./gradlew fatJar
+# Build the CLI
+./gradlew :migraphe-cli:installDist
 
-# The executable JAR is created at:
-# migraphe-cli/build/libs/migraphe-cli-all.jar
+# The CLI is created at:
+# migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli
 ```
 
 ### Create an Alias (Optional)
@@ -57,7 +58,7 @@ For convenience, create an alias in your shell:
 
 ```bash
 # Add to ~/.bashrc or ~/.zshrc
-alias migraphe='java -jar /path/to/migraphe-cli-all.jar'
+alias migraphe='/path/to/migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli'
 
 # Reload shell configuration
 source ~/.bashrc  # or source ~/.zshrc
@@ -71,9 +72,41 @@ migraphe up
 
 Migraphe uses a plugin architecture where database support is provided by separate plugins.
 
-**Plugin Placement:**
+**Available Plugins:**
 
-Place plugin JAR files in the `plugins/` directory of your project:
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support (includes `postgresql-schema` source and `postgresql-markdown` output plugins) |
+| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support (includes `mysql-schema` source and `mysql-markdown` output plugins) |
+| `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
+| `migraphe-plugin-generator-json` | `output-json` | JSON output generator plugin |
+
+#### Method 1: Maven Coordinates (Recommended)
+
+Add a `plugins` section to `migraphe.yaml` with Maven coordinates. The CLI automatically resolves dependencies from `~/.m2/repository` and Maven Central:
+
+```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+
+project:
+  name: my-project
+history:
+  target: history
+```
+
+If using locally built plugins, publish them first:
+
+```bash
+./gradlew publishToMavenLocal
+```
+
+Transitive dependencies (e.g., JDBC drivers, Jackson) are resolved automatically from Maven Central.
+
+#### Method 2: plugins/ Directory (Legacy)
+
+Place plugin JAR files directly in the `plugins/` directory of your project:
 
 ```
 my-project/
@@ -84,32 +117,7 @@ my-project/
 └── tasks/
 ```
 
-**Available Plugins:**
-
-| Plugin | Type | Description |
-|--------|------|-------------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support |
-| `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
-
-**Getting Plugin JARs:**
-
-```bash
-# Build fat JAR (includes JDBC driver)
-./gradlew :migraphe-plugin-postgresql:fatJar
-./gradlew :migraphe-plugin-mysql:fatJar
-./gradlew :migraphe-plugin-jdbc:fatJar
-
-# Copy fat JAR to plugins/
-mkdir -p my-project/plugins
-cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar my-project/plugins/
-# Or for MySQL:
-cp migraphe-plugin-mysql/build/libs/migraphe-plugin-mysql-*-all.jar my-project/plugins/
-# Or for generic JDBC:
-cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar my-project/plugins/
-```
-
-**Note:** Use the `-all.jar` (fat JAR) for CLI usage. The thin JAR is for Gradle/Maven dependency management.
+**Note:** Both methods can be used simultaneously. Maven-resolved plugins are loaded first, then `plugins/` directory.
 
 ## Project Setup
 
@@ -150,6 +158,9 @@ At minimum, you need:
 ### Project Configuration (`migraphe.yaml`)
 
 ```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+
 project:
   name: my-project
 
@@ -158,6 +169,7 @@ history:
 ```
 
 **Fields:**
+- `plugins` (optional): List of Maven coordinates (`groupId:artifactId:version`) for CLI plugin resolution
 - `project.name` (required): Project identifier
 - `history.target` (required): Target name where migration history is stored
 
@@ -648,6 +660,181 @@ Validation failed with 5 errors.
 | 0 | Validation successful (no errors) |
 | 1 | Validation failed (one or more errors) |
 
+## Schema Documentation Generation (generate)
+
+The `generate` command generates documentation and data exports from various sources. The generator system uses a **source/output plugin architecture** — source plugins extract data, and output plugins render it in the desired format. The same data source can be output in multiple formats.
+
+### Configuration
+
+Add a `generators` section to `migraphe.yaml`:
+
+```yaml
+project:
+  name: my-project
+
+history:
+  target: history
+
+generators:
+  # Schema documentation as Markdown
+  - name: schema-docs
+    type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"
+      - schema: "public"
+        table: "tmp_.*"
+
+  # Migration tree as JSON to stdout
+  - name: tree
+    type: output-json
+    source:
+      type: migration-tree
+    output-dir: docs
+```
+
+**Fields:**
+- `name` (required): Identifier for this generator
+- `type` (required): Output plugin type (e.g., `jdbc-markdown`, `output-json`)
+- `source` (required for source/output flow):
+  - `type`: Source plugin type (e.g., `jdbc-schema`, `migration-tree`)
+  - `target` (optional): Target name for source plugins that need a database connection
+- `output-dir` (optional, default: `docs/schema`): Directory where generated files are written
+- `excludes` (optional): List of exclusion filters (regex patterns)
+  - `schema`: Regex pattern to match schema names
+  - `table`: Regex pattern to match table names (used with `schema`)
+
+### Available Source Plugins
+
+| Plugin | Type | Data | Description |
+|--------|------|------|-------------|
+| `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | Extracts database schema metadata via JDBC DatabaseMetaData |
+| `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | Extracts JDBC base schema + PostgreSQL-specific metadata (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) from pg_catalog |
+| `migraphe-plugin-mysql` | `mysql-schema` | `MySQLSchemaInfo` | Extracts JDBC base schema + MySQL-specific metadata (storage engines, table meta, triggers, routines, events, partitions) from information_schema |
+| (built-in) | `migration-tree` | `MigrationGraphView` | Provides the migration DAG structure |
+
+### Available Output Plugins
+
+| Plugin | Type | Description |
+|--------|------|-------------|
+| `migraphe-plugin-jdbc` | `jdbc-markdown` | Generates Markdown documentation from `JdbcSchemaInfo` |
+| `migraphe-plugin-postgresql` | `postgresql-markdown` | Generates Markdown documentation with PostgreSQL-specific objects (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) |
+| `migraphe-plugin-mysql` | `mysql-markdown` | Generates Markdown documentation with MySQL-specific objects (storage engines, table metadata, triggers, routines, events, partitions) |
+| `migraphe-plugin-generator-json` | `output-json` | Outputs any data as pretty-printed JSON to stdout |
+
+### Basic Usage
+
+```bash
+# Generate documentation for all configured generators
+java -jar migraphe-cli-all.jar generate
+
+# Generate documentation for a specific generator only
+java -jar migraphe-cli-all.jar generate --name mydb
+```
+
+### Output Structure (jdbc-markdown)
+
+The `jdbc-markdown` generator produces the following directory structure:
+
+```
+docs/schema/
+└── mydb/
+    └── public/
+        ├── index.md              # Schema overview (table/view listing)
+        ├── tables/
+        │   ├── users.md          # Table details (columns, keys, indexes)
+        │   └── posts.md
+        └── views/
+            └── recent_posts.md   # View details
+```
+
+Each table documentation includes:
+- Column definitions (name, type, nullable, default)
+- Primary key and unique constraints
+- Foreign key references with cross-links to referenced tables
+- Indexes
+
+### PostgreSQL-Specific Documentation
+
+For PostgreSQL databases, use the `postgresql-markdown` output plugin with the `postgresql-schema` source plugin to generate comprehensive documentation that includes PostgreSQL-specific objects:
+
+```yaml
+generators:
+  - name: mydb
+    type: postgresql-markdown
+    source:
+      type: postgresql-schema
+      target: db1
+    output-dir: docs/schema
+```
+
+In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
+- **Extensions** (e.g., `pgcrypto`, `uuid-ossp`) — with `Owner` column
+- **Enum types** with their values — with `Owner` column
+- **Sequences** with current values and parameters — with `Owned By` (dependent table.column from `pg_depend`) and `Owner` (role) columns
+- **Functions** with argument types and return types — individual file shows `Owner` property
+- **Triggers** with timing, events, and associated functions
+- **Materialized views** with column definitions — individual file shows `Owner` property
+- **Partitioned tables** with partition strategy and key
+- **Row-Level Security (RLS) policies** with roles, commands, and expressions
+
+Table-specific files also include related triggers, policies, and partition information for each table.
+
+**Role ownership:** The Tables/Views index tables include an `Owner` column (PostgreSQL role name from `pg_get_userbyid(relowner)`), and each `tables/<name>.md` / `views/<name>.md` file prints an `Owner: <role>` line below the title.
+
+### MySQL-Specific Documentation
+
+For MySQL databases, use the `mysql-markdown` output plugin with the `mysql-schema` source plugin to generate comprehensive documentation that includes MySQL-specific objects:
+
+```yaml
+generators:
+  mysql-docs:
+    source:
+      type: mysql-schema
+      environment: db1
+    output:
+      type: mysql-markdown
+    name: my-database
+```
+
+In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
+- **Storage engines** available in the MySQL instance
+- **Table metadata** including ENGINE, collation, and row format
+- **Triggers** with timing, events, SQL statements, and `Definer`
+- **Routines** (stored procedures and functions) with parameters, return types, and `Definer`
+- **Events** with schedule, status, SQL body, and `Definer`
+- **Partitioned tables** with partition method, expression, and partition details
+
+Table-specific files also include related triggers and partition information for each table.
+
+**`DEFINER` attribution:** The Views index table includes a `Definer` column (from `information_schema.VIEWS.DEFINER`), and each `views/<name>.md` file prints a `Definer: <user>` line below the title. Triggers, routines, and events carry their DEFINER through to the index tables / individual files as well. MySQL tables themselves have no DEFINER, so the Tables index is unchanged.
+
+**Note:** MySQL JDBC returns databases as catalogs (not schemas). The `mysql-schema` source plugin uses catalog-based schema discovery via `connection.getCatalog()`.
+
+### Exclude Filtering
+
+Use `excludes` to skip schemas or tables matching regex patterns:
+
+```yaml
+generators:
+  - name: mydb
+    type: jdbc-markdown
+    source:
+      type: jdbc-schema
+      target: db1
+    output-dir: docs/schema
+    excludes:
+      - schema: "information_schema"     # Exclude entire schema
+      - schema: "pg_catalog"             # Exclude PostgreSQL system schema
+      - schema: "public"
+        table: "tmp_.*"                  # Exclude temp tables in public schema
+      - schema: ".*"
+        table: "flyway_schema_history"   # Exclude specific table in all schemas
+```
+
 ## Environment Management
 
 ### Development Environment
@@ -834,6 +1021,7 @@ dependencies {
 | `migrapheStatus` | Show migration execution status |
 | `migrapheUp` | Execute forward (UP) migrations |
 | `migrapheDown` | Execute rollback (DOWN) migrations |
+| `migrapheGenerate` | Generate schema documentation |
 
 ### Task Options
 
@@ -845,6 +1033,9 @@ dependencies {
 - `--target=<nodeId>` — Rollback to a specific node
 - `--all` — Rollback all executed migrations
 - `--preview` — Preview without executing
+
+**migrapheGenerate**:
+- `--name=<name>` — Generate for a specific generator only
 
 Options can also be specified via project properties (`-P`):
 
@@ -863,16 +1054,26 @@ Options can also be specified via project properties (`-P`):
 ```
 No plugin found for type 'postgresql'.
 No plugins are currently loaded.
-
-To use this plugin type:
-  1. Place the plugin JAR file in ./plugins/ directory
-  2. Ensure the JAR contains META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin
 ```
 
 **Solution:**
-- Place plugin JAR file in `plugins/` directory
-- Verify the plugin JAR is the correct version
+- Add the plugin Maven coordinate to the `plugins` section in `migraphe.yaml`
+- Run `./gradlew publishToMavenLocal` if using locally built plugins
+- Alternatively, place plugin JAR file in `plugins/` directory
 - See [Installing Plugins](#installing-plugins) section
+
+#### 1b. "Failed to resolve plugin" Error
+
+**Problem:**
+```
+Failed to resolve plugin: io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+```
+
+**Solution:**
+- Ensure `./gradlew publishToMavenLocal` has been run
+- Check that the Maven coordinate in `migraphe.yaml` is correct
+- Verify `~/.m2/repository` contains the plugin artifacts
+- Check network connectivity for Maven Central (required for transitive dependencies)
 
 #### 2. "Target not found" Error
 

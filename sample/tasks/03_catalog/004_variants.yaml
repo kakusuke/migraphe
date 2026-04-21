@@ -1,6 +1,0 @@
-name: Create product variants table
-target: main
-dependencies:
-  - 03_catalog/003_products
-up: "Create product_variants table with id, product_id, sku, size, color, weight"
-down: "Drop product_variants table"

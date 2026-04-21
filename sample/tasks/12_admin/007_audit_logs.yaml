@@ -1,6 +1,0 @@
-name: Create admin audit logs table
-target: main
-dependencies:
-  - 12_admin/004_users
-up: "Create admin_audit_logs table with id, user_id, action, resource, resource_id, changes_json, created_at"
-down: "Drop admin_audit_logs table"

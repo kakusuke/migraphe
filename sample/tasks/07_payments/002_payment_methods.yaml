@@ -1,7 +1,0 @@
-name: Create payment methods table
-target: main
-dependencies:
-  - 07_payments/001_payment_providers
-  - 02_users/001_users
-up: "Create payment_methods table with id, user_id, provider_id, type, last4, expires_at, is_default"
-down: "Drop payment_methods table"

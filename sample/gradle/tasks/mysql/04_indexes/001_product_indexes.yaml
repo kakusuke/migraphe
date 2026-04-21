@@ -1,0 +1,10 @@
+name: Create product/variant indexes
+target: mysql
+autocommit: true
+dependencies:
+  - mysql/02_catalog/003_products
+  - mysql/02_catalog/004_variants
+up: |
+  CREATE INDEX idx_products_status ON products (status);
+down: |
+  DROP INDEX idx_products_status ON products;

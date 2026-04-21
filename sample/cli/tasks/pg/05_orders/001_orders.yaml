@@ -1,0 +1,34 @@
+name: Create orders table
+target: pg
+dependencies:
+  - pg/02_users/001_users
+  - pg/02_users/003_addresses
+  - mysql/01_common/001_currencies
+up: |
+  CREATE TABLE orders (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id),
+    shipping_address_id BIGINT NULL REFERENCES addresses (id),
+    billing_address_id BIGINT NULL REFERENCES addresses (id),
+    currency_code VARCHAR(3) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+    subtotal_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+    total_amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+    placed_at TIMESTAMPTZ NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  COMMENT ON TABLE orders IS 'Customer orders covering cart checkout through fulfilment';
+  COMMENT ON COLUMN orders.id IS 'Order surrogate key';
+  COMMENT ON COLUMN orders.user_id IS 'Ordering customer';
+  COMMENT ON COLUMN orders.shipping_address_id IS 'Destination address (nullable until chosen)';
+  COMMENT ON COLUMN orders.billing_address_id IS 'Billing address (nullable until chosen)';
+  COMMENT ON COLUMN orders.currency_code IS 'Logical reference to MySQL currencies.code (no FK)';
+  COMMENT ON COLUMN orders.status IS 'Order lifecycle (pending/paid/shipped/cancelled)';
+  COMMENT ON COLUMN orders.subtotal_amount IS 'Sum of line totals before tax and shipping';
+  COMMENT ON COLUMN orders.total_amount IS 'Final amount charged to the customer';
+  COMMENT ON COLUMN orders.placed_at IS 'Timestamp when the order was finalised';
+  COMMENT ON COLUMN orders.created_at IS 'Record creation timestamp';
+  COMMENT ON COLUMN orders.updated_at IS 'Record last-update timestamp';
+down: |
+  DROP TABLE IF EXISTS orders;

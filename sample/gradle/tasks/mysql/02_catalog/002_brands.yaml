@@ -1,0 +1,13 @@
+name: Create brands table
+target: mysql
+up: |
+  CREATE TABLE brands (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Brand surrogate key',
+    slug VARCHAR(128) NOT NULL UNIQUE COMMENT 'URL-safe unique identifier',
+    name VARCHAR(128) NOT NULL COMMENT 'Brand display name',
+    description TEXT NULL COMMENT 'Long-form brand description',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Record last-update timestamp'
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Product brand master';
+down: |
+  DROP TABLE IF EXISTS brands;

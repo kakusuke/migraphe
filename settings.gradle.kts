@@ -76,6 +76,21 @@ dependencyResolutionManagement {
                 )
                 .versionRef("smallrye-config")
 
+            // SLF4J NOP (suppress Maven Resolver SLF4J warnings in CLI)
+            library("slf4j-nop", "org.slf4j", "slf4j-nop").version("1.7.36")
+
+            // Maven Resolver (CLI plugin dependency resolution)
+            version("maven-resolver-provider", "3.9.9")
+            version("maven-resolver", "1.9.22")
+            library("maven-resolver-provider", "org.apache.maven", "maven-resolver-provider")
+                .versionRef("maven-resolver-provider")
+            library("maven-resolver-connector-basic", "org.apache.maven.resolver", "maven-resolver-connector-basic")
+                .versionRef("maven-resolver")
+            library("maven-resolver-transport-file", "org.apache.maven.resolver", "maven-resolver-transport-file")
+                .versionRef("maven-resolver")
+            library("maven-resolver-transport-http", "org.apache.maven.resolver", "maven-resolver-transport-http")
+                .versionRef("maven-resolver")
+
             // Error Prone / NullAway
             library("errorprone-core", "com.google.errorprone", "error_prone_core")
                 .versionRef("errorprone")
@@ -96,3 +111,4 @@ include("migraphe-plugin-postgresql")
 include("migraphe-plugin-mysql")
 include("migraphe-cli")
 include("migraphe-gradle-plugin")
+include("migraphe-plugin-generator-json")

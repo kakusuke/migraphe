@@ -1,6 +1,0 @@
-name: Create application schema
-target: main
-dependencies:
-  - 00_infra/002_create_roles
-up: "Create the app schema"
-down: "Drop the app schema"

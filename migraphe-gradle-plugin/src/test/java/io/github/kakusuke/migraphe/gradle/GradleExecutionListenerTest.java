@@ -271,7 +271,7 @@ class GradleExecutionListenerTest {
         public void trace(Marker marker, String format, Object arg) {}
 
         @Override
-        public void trace(Marker marker, String format, Object arg1, Object arg2) {}
+        public void trace(Marker marker, String format, Object arg2, Object arg3) {}
 
         @Override
         public void trace(Marker marker, String format, Object... argArray) {}
@@ -311,7 +311,7 @@ class GradleExecutionListenerTest {
         public void debug(Marker marker, String format, Object arg) {}
 
         @Override
-        public void debug(Marker marker, String format, Object arg1, Object arg2) {}
+        public void debug(Marker marker, String format, Object arg2, Object arg3) {}
 
         @Override
         public void debug(Marker marker, String format, Object... arguments) {}
@@ -351,7 +351,7 @@ class GradleExecutionListenerTest {
         public void info(Marker marker, String format, Object arg) {}
 
         @Override
-        public void info(Marker marker, String format, Object arg1, Object arg2) {}
+        public void info(Marker marker, String format, Object arg2, Object arg3) {}
 
         @Override
         public void info(Marker marker, String format, Object... arguments) {}
@@ -391,7 +391,7 @@ class GradleExecutionListenerTest {
         public void warn(Marker marker, String format, Object arg) {}
 
         @Override
-        public void warn(Marker marker, String format, Object arg1, Object arg2) {}
+        public void warn(Marker marker, String format, Object arg2, Object arg3) {}
 
         @Override
         public void warn(Marker marker, String format, Object... arguments) {}
@@ -416,7 +416,7 @@ class GradleExecutionListenerTest {
         public void error(Marker marker, String format, Object arg) {}
 
         @Override
-        public void error(Marker marker, String format, Object arg1, Object arg2) {}
+        public void error(Marker marker, String format, Object arg2, Object arg3) {}
 
         @Override
         public void error(Marker marker, String format, Object... arguments) {}

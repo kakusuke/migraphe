@@ -1,7 +1,0 @@
-name: Create tax rates table
-target: main
-dependencies:
-  - 14_settings/003_tax_categories
-  - 01_common/001_currencies
-up: "Create tax_rates table with id, category_id, country_code, region, rate, valid_from, valid_to"
-down: "Drop tax_rates table"

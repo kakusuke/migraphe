@@ -1,8 +1,0 @@
-name: Create user recommendations table
-target: main
-dependencies:
-  - 16_recommendations/001_models
-  - 02_users/001_users
-  - 03_catalog/003_products
-up: "Create user_recommendations table with model_id, user_id, product_id, score, generated_at"
-down: "Drop user_recommendations table"

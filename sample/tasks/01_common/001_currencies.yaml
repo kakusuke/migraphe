@@ -1,6 +1,0 @@
-name: Create currencies table
-target: main
-dependencies:
-  - 00_infra/005_grant_permissions
-up: "Create currencies table with code, name, symbol, decimal_places"
-down: "Drop currencies table"

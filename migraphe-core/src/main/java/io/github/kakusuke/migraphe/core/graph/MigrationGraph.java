@@ -1,12 +1,13 @@
 package io.github.kakusuke.migraphe.core.graph;
 
 import io.github.kakusuke.migraphe.api.common.ValidationResult;
+import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import java.util.*;
 
 /** マイグレーションノードの有向非巡回グラフ（DAG）。 集約ルート - グラフの整合性を保証する。 */
-public final class MigrationGraph {
+public final class MigrationGraph implements MigrationGraphView {
     private final Map<NodeId, MigrationNode> nodes;
     private final Map<NodeId, Set<NodeId>> adjacencyList; // ノード -> 依存先ノード
 
@@ -47,6 +48,7 @@ public final class MigrationGraph {
     }
 
     /** 依存関係のないルートノード（最初に実行できるノード）を取得 */
+    @Override
     public Set<MigrationNode> getRoots() {
         return nodes.values().stream()
                 .filter(MigrationNode::hasNoDependencies)
@@ -54,11 +56,13 @@ public final class MigrationGraph {
     }
 
     /** 指定されたノードの直接の依存先を取得 */
+    @Override
     public Set<NodeId> getDependencies(NodeId nodeId) {
         return Set.copyOf(adjacencyList.getOrDefault(nodeId, Set.of()));
     }
 
     /** 指定されたノードに依存しているノード（依存元）を取得 */
+    @Override
     public Set<NodeId> getDependents(NodeId nodeId) {
         return adjacencyList.entrySet().stream()
                 .filter(entry -> entry.getValue().contains(nodeId))
@@ -97,6 +101,7 @@ public final class MigrationGraph {
     }
 
     /** ノードをIDで取得 */
+    @Override
     public Optional<MigrationNode> getNode(NodeId nodeId) {
         return Optional.ofNullable(nodes.get(nodeId));
     }
@@ -159,11 +164,13 @@ public final class MigrationGraph {
     }
 
     /** グラフ内のノード数 */
+    @Override
     public int size() {
         return nodes.size();
     }
 
     /** 全ノードを取得 */
+    @Override
     public Collection<MigrationNode> allNodes() {
         return List.copyOf(nodes.values());
     }

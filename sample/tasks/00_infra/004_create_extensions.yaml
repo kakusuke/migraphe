@@ -1,6 +1,0 @@
-name: Create PostgreSQL extensions
-target: main
-dependencies:
-  - 00_infra/003_create_schema
-up: "Enable uuid-ossp, pg_trgm, pgcrypto extensions"
-down: "Disable uuid-ossp, pg_trgm, pgcrypto extensions"

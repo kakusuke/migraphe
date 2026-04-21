@@ -1,8 +1,0 @@
-name: Create full-text search indexes
-target: main
-dependencies:
-  - 03_catalog/003_products
-  - 03_catalog/011_search_keywords
-  - 13_content/007_blog_posts
-up: "Create GIN full-text search indexes on products, search_keywords, blog_posts tables"
-down: "Drop GIN full-text search indexes"

@@ -1,9 +1,0 @@
-name: Create product table indexes
-target: main
-dependencies:
-  - 03_catalog/003_products
-  - 03_catalog/004_variants
-  - 03_catalog/006_pricing
-  - 03_catalog/007_tags
-up: "Create indexes on products, product_variants, product_pricing, tags tables"
-down: "Drop indexes on products, product_variants, product_pricing, tags tables"

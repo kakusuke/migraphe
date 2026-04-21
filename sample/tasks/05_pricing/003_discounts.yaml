@@ -1,6 +1,0 @@
-name: Create discounts table
-target: main
-dependencies:
-  - 01_common/001_currencies
-up: "Create discounts table with id, name, type, value, min_order_amount, starts_at, ends_at"
-down: "Drop discounts table"

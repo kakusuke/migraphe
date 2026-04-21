@@ -1,0 +1,15 @@
+name: Create categories table
+target: mysql
+up: |
+  CREATE TABLE categories (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Category surrogate key',
+    slug VARCHAR(128) NOT NULL UNIQUE COMMENT 'URL-safe unique identifier',
+    name VARCHAR(128) NOT NULL COMMENT 'Human-readable category name',
+    parent_id BIGINT NULL COMMENT 'Self-reference to build a category tree (NULL = root)',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT 'Display order within siblings',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Record last-update timestamp',
+    CONSTRAINT fk_categories_parent FOREIGN KEY (parent_id) REFERENCES categories (id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Hierarchical product category tree';
+down: |
+  DROP TABLE IF EXISTS categories;

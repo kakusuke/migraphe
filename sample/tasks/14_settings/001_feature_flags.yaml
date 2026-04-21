@@ -1,6 +1,0 @@
-name: Create feature flags table
-target: main
-dependencies:
-  - 00_infra/005_grant_permissions
-up: "Create feature_flags table with id, key, value, description, is_enabled, updated_at"
-down: "Drop feature_flags table"

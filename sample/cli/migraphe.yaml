@@ -1,0 +1,31 @@
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT
+  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+
+project:
+  name: ecommerce-cli-sample
+
+history:
+  target: pg
+
+generators:
+  - name: pg-schema-docs
+    type: postgresql-markdown
+    source:
+      type: postgresql-schema
+      target: pg
+    output-dir: docs/postgresql
+
+  - name: mysql-schema-docs
+    type: mysql-markdown
+    source:
+      type: mysql-schema
+      target: mysql
+    output-dir: docs/mysql
+
+  - name: migration-tree
+    type: output-json
+    source:
+      type: migration-tree
+    output-dir: docs

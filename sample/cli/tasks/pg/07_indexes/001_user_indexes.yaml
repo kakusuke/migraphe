@@ -1,0 +1,14 @@
+name: Create user/profile indexes
+target: pg
+autocommit: true
+dependencies:
+  - pg/02_users/001_users
+  - pg/02_users/002_profiles
+up: |
+  CREATE INDEX idx_users_status ON users (status);
+  CREATE INDEX idx_users_preferred_currency ON users (preferred_currency);
+  CREATE INDEX idx_profiles_display_name ON profiles (display_name);
+down: |
+  DROP INDEX IF EXISTS idx_profiles_display_name;
+  DROP INDEX IF EXISTS idx_users_preferred_currency;
+  DROP INDEX IF EXISTS idx_users_status;

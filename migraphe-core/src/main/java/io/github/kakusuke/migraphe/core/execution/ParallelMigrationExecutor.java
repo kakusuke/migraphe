@@ -66,6 +66,7 @@ public final class ParallelMigrationExecutor implements Executor {
      * @param targetId 特定のターゲットID（null の場合は全ノード）
      * @return 未実行のノードIDセット
      */
+    @Override
     public Set<NodeId> determineTargetNodes(@Nullable NodeId targetId) {
         Set<NodeId> candidates;
 
@@ -93,6 +94,7 @@ public final class ParallelMigrationExecutor implements Executor {
      * @param targetNodes 実行対象ノード
      * @return 実行結果
      */
+    @Override
     public ExecutionResult execute(Set<NodeId> targetNodes) {
         if (targetNodes.isEmpty()) {
             ExecutionSummary summary = ExecutionSummary.success(ExecutionDirection.UP, 0, 0, 0);

@@ -1,7 +1,0 @@
-name: Create product similarities table
-target: main
-dependencies:
-  - 16_recommendations/001_models
-  - 03_catalog/003_products
-up: "Create product_similarities table with model_id, product_id, similar_product_id, score"
-down: "Drop product_similarities table"

@@ -1,0 +1,11 @@
+name: Create locales table
+target: mysql
+up: |
+  CREATE TABLE locales (
+    code VARCHAR(10) PRIMARY KEY COMMENT 'IETF BCP 47 language tag (e.g., en-US)',
+    name VARCHAR(64) NOT NULL COMMENT 'English locale name',
+    native_name VARCHAR(64) NOT NULL COMMENT 'Locale name in its own language',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp'
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Locale master used for user preferences and content translations';
+down: |
+  DROP TABLE IF EXISTS locales;

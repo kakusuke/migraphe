@@ -1,9 +1,0 @@
-name: Create analytics table indexes
-target: main
-dependencies:
-  - 11_analytics/001_sessions
-  - 11_analytics/002_events
-  - 11_analytics/003_page_views
-  - 11_analytics/004_product_views
-up: "Create indexes on analytics_sessions, analytics_events, page_views, product_views tables"
-down: "Drop indexes on analytics_sessions, analytics_events, page_views, product_views tables"

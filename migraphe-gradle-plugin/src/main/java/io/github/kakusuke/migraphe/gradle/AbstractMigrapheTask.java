@@ -1,5 +1,6 @@
 package io.github.kakusuke.migraphe.gradle;
 
+import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.io.File;
@@ -15,6 +16,7 @@ import org.gradle.api.provider.MapProperty;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputDirectory;
 import org.gradle.api.tasks.InputFiles;
+import org.jspecify.annotations.Nullable;
 
 /** migraphe タスクの共通基底クラス。 */
 public abstract class AbstractMigrapheTask extends DefaultTask {
@@ -31,14 +33,8 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
     @InputFiles
     public abstract ConfigurableFileCollection getPluginClasspath();
 
-    /** PluginRegistry を作成する。 */
-    protected PluginRegistry createPluginRegistry() {
-        PluginRegistry registry = new PluginRegistry();
-
-        // クラスパスからロード（テスト時など）
-        registry.loadFromClasspath();
-
-        // migraphePlugin configuration の JAR からロード
+    /** migraphePlugin configuration の JAR から URLClassLoader を作成する。 */
+    protected @Nullable URLClassLoader createPluginClassLoader() {
         List<URL> urls = new ArrayList<>();
         for (File file : getPluginClasspath().getFiles()) {
             try {
@@ -48,13 +44,23 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
             }
         }
 
-        if (!urls.isEmpty()) {
-            URLClassLoader classLoader =
-                    new URLClassLoader(
-                            urls.toArray(new URL[0]),
-                            io.github.kakusuke.migraphe.api.spi.MigraphePlugin.class
-                                    .getClassLoader());
-            registry.loadFromClassLoader(classLoader);
+        if (urls.isEmpty()) {
+            return null;
+        }
+
+        return new URLClassLoader(urls.toArray(new URL[0]), MigraphePlugin.class.getClassLoader());
+    }
+
+    /** PluginRegistry を作成する。 */
+    protected PluginRegistry createPluginRegistry(@Nullable URLClassLoader pluginClassLoader) {
+        PluginRegistry registry = new PluginRegistry();
+
+        // クラスパスからロード（テスト時など）
+        registry.loadFromClasspath();
+
+        // migraphePlugin configuration の JAR からロード
+        if (pluginClassLoader != null) {
+            registry.loadFromClassLoader(pluginClassLoader);
         }
 
         return registry;
@@ -62,7 +68,12 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
 
     /** ExecutionContext をロードする。 */
     protected ExecutionContext loadExecutionContext() {
-        PluginRegistry registry = createPluginRegistry();
+        return loadExecutionContext(createPluginClassLoader());
+    }
+
+    /** ExecutionContext をロードする（外部から作成した classLoader を共有する場合）。 */
+    protected ExecutionContext loadExecutionContext(@Nullable URLClassLoader pluginClassLoader) {
+        PluginRegistry registry = createPluginRegistry(pluginClassLoader);
         return ExecutionContext.load(
                 getBaseDir().get().getAsFile().toPath(), registry, getVariables().get());
     }

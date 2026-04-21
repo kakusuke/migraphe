@@ -54,6 +54,23 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
 
         project.getTasks()
                 .register(
+                        "migrapheGenerate",
+                        MigrapheGenerateTask.class,
+                        task -> {
+                            task.setDescription("Execute code generators");
+                            task.setGroup("migraphe");
+                            task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
+                            task.getPluginClasspath().from(migraphePluginConfig);
+                            // -P プロパティによるフォールバック (configuration time)
+                            Object nameProp = project.findProperty("migraphe.generate.name");
+                            if (nameProp != null) {
+                                task.getGeneratorName().convention(nameProp.toString());
+                            }
+                        });
+
+        project.getTasks()
+                .register(
                         "migrapheUp",
                         MigrapheUpTask.class,
                         task -> {

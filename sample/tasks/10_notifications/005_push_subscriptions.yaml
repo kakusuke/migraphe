@@ -1,7 +1,0 @@
-name: Create push subscriptions table
-target: main
-dependencies:
-  - 02_users/001_users
-  - 02_users/007_devices
-up: "Create push_subscriptions table with id, user_id, device_id, endpoint, keys_json, is_active"
-down: "Drop push_subscriptions table"

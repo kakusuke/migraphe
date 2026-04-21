@@ -1,7 +1,0 @@
-name: Create email preferences table
-target: main
-dependencies:
-  - 02_users/001_users
-  - 10_notifications/001_categories
-up: "Create email_preferences table with user_id, category_id, is_subscribed"
-down: "Drop email_preferences table"

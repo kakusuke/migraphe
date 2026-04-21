@@ -13,6 +13,15 @@ dependencies {
     // CLI フレームワーク
     implementation(libs.picocli)
 
+    // Maven Resolver（プラグイン依存解決）
+    implementation(libs.maven.resolver.provider)
+    implementation(libs.maven.resolver.connector.basic)
+    implementation(libs.maven.resolver.transport.file)
+    implementation(libs.maven.resolver.transport.http)
+
+    // SLF4J NOP（Maven Resolver の SLF4J 警告を抑制）
+    implementation(libs.slf4j.nop)
+
     // テスト
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

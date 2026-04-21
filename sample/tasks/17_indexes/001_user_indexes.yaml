@@ -1,9 +1,0 @@
-name: Create user table indexes
-target: main
-dependencies:
-  - 02_users/001_users
-  - 02_users/002_profiles
-  - 02_users/003_addresses
-  - 02_users/004_sessions
-up: "Create indexes on users, user_profiles, user_addresses, user_sessions tables"
-down: "Drop indexes on users, user_profiles, user_addresses, user_sessions tables"

@@ -1,7 +1,0 @@
-name: Create review votes table
-target: main
-dependencies:
-  - 09_reviews/001_reviews
-  - 02_users/001_users
-up: "Create review_votes table with review_id, user_id, is_helpful"
-down: "Drop review_votes table"

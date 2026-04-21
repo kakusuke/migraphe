@@ -1,7 +1,0 @@
-name: Create blog comments table
-target: main
-dependencies:
-  - 13_content/007_blog_posts
-  - 02_users/001_users
-up: "Create blog_comments table with id, post_id, user_id, parent_id, body, status, created_at"
-down: "Drop blog_comments table"

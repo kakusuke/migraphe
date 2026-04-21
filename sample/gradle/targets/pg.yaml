@@ -1,0 +1,4 @@
+type: postgresql
+jdbc_url: jdbc:postgresql://localhost:5432/commerce
+username: commerce
+password: ${POSTGRES_PASSWORD:commerce_pass}

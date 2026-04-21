@@ -1,6 +1,0 @@
-name: Create shipping zones table
-target: main
-dependencies:
-  - 08_shipping/001_carriers
-up: "Create shipping_zones table with id, carrier_id, name, countries, regions"
-down: "Drop shipping_zones table"

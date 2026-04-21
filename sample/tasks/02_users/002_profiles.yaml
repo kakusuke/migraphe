@@ -1,6 +1,0 @@
-name: Create user profiles table
-target: main
-dependencies:
-  - 02_users/001_users
-up: "Create user_profiles table with user_id, first_name, last_name, avatar_url, bio"
-down: "Drop user_profiles table"

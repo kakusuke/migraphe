@@ -1,6 +1,0 @@
-name: Create review images table
-target: main
-dependencies:
-  - 09_reviews/001_reviews
-up: "Create review_images table with id, review_id, url, position"
-down: "Drop review_images table"

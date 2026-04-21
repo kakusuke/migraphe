@@ -1,0 +1,20 @@
+name: Create reviews table
+target: mysql
+dependencies:
+  - mysql/02_catalog/003_products
+  - pg/02_users/001_users
+up: |
+  CREATE TABLE reviews (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT 'Review surrogate key',
+    product_id BIGINT NOT NULL COMMENT 'Reviewed product',
+    user_id BIGINT NOT NULL COMMENT 'Logical reference to PostgreSQL users.id (no FK)',
+    rating TINYINT NOT NULL COMMENT 'Star rating between 1 and 5',
+    title VARCHAR(255) NULL COMMENT 'Optional review headline',
+    body TEXT NULL COMMENT 'Free-form review text',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT 'Record creation timestamp',
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'Record last-update timestamp',
+    CONSTRAINT fk_reviews_product FOREIGN KEY (product_id) REFERENCES products (id) ON DELETE CASCADE,
+    CONSTRAINT chk_reviews_rating CHECK (rating BETWEEN 1 AND 5)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='User product reviews with 1-5 star ratings';
+down: |
+  DROP TABLE IF EXISTS reviews;

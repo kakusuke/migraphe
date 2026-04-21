@@ -12,8 +12,13 @@
 - **DAGベースのマイグレーション**: マイグレーションタスク間の複雑な依存関係を定義
 - **マルチ環境サポート**: 開発、ステージング、本番環境のマイグレーションを管理
 - **プラガブルアーキテクチャ**: PostgreSQL、MySQL、および汎用JDBCプラグインによる任意のJDBCデータベースをサポート
+- **プラグイン自動解決**: CLIは`migraphe.yaml`のMaven座標からプラグイン依存を自動解決（Maven Central + ローカルキャッシュ）
 - **Gradleプラグイン**: `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate` タスクでビルドに統合
 - **YAML設定**: シンプルで読みやすい設定ファイル
+- **スキーマドキュメント生成**: `generate` コマンドでデータベーススキーマからMarkdownドキュメントを自動生成
+- **PostgreSQL固有ドキュメント**: 拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシーを含む包括的なMarkdownドキュメントを生成
+- **MySQL固有ドキュメント**: ストレージエンジン、テーブルメタデータ（ENGINE/照合順序/行フォーマット）、トリガー、ルーチン（ストアドプロシージャ/関数）、イベント、パーティションを含む包括的なMarkdownドキュメントを生成
+- **柔軟なジェネレータシステム**: ソース/アウトプットプラグイン分離 — 同じデータソースを複数の形式（Markdown、JSON等）で出力可能
 - **並列実行**: Virtual Threadsベースの並列実行（オプトイン、並列数制限可能）
 - **実行履歴**: マイグレーション実行履歴の追跡とロールバックサポート
 - **型安全**: Java 21で構築、モダンな言語機能を活用
@@ -28,10 +33,10 @@
 ### ビルド
 
 ```bash
-./gradlew fatJar
+./gradlew :migraphe-cli:installDist
 ```
 
-これにより、スタンドアロンのJARファイルが`migraphe-cli/build/libs/migraphe-cli-all.jar`に作成されます。
+これにより、CLIディストリビューションが`migraphe-cli/build/install/migraphe-cli/`に作成されます。
 
 ### プロジェクトの作成
 
@@ -51,6 +56,9 @@ mkdir -p targets tasks/db1
 3. `migraphe.yaml`を作成:
 
 ```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+
 project:
   name: my-project
 
@@ -94,11 +102,17 @@ down: |
 ### マイグレーションの実行
 
 ```bash
+# プラグインをローカルMavenリポジトリに公開（初回のみ）
+./gradlew publishToMavenLocal
+
 # マイグレーションステータスの確認
-java -jar path/to/migraphe-cli-all.jar status
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli status
 
 # マイグレーションの実行
-java -jar path/to/migraphe-cli-all.jar up
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli up
+
+# ドキュメントの生成
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli generate
 ```
 
 ## Gradleプラグイン
@@ -154,6 +168,8 @@ dependencies {
 ./gradlew migrapheUp --target=db1/create_users  # 特定ノードまで実行
 ./gradlew migrapheDown --all        # 全マイグレーションのロールバック
 ./gradlew migrapheDown --target=db1/create_users  # 特定ノードまでロールバック
+./gradlew migrapheGenerate          # スキーマドキュメント生成
+./gradlew migrapheGenerate --name=mydb  # 特定のジェネレータのみ実行
 ```
 
 ## ドキュメント
@@ -231,7 +247,7 @@ cd migraphe
 ./gradlew :migraphe-gradle-plugin:test
 ```
 
-テストカバレッジ: 431テスト、100%合格
+テストカバレッジ: 640テスト、100%合格
 
 ## コントリビューション
 

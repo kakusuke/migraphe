@@ -1,0 +1,24 @@
+name: Create payment_methods table
+target: pg
+dependencies:
+  - pg/02_users/001_users
+up: |
+  CREATE TABLE payment_methods (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    provider VARCHAR(32) NOT NULL,
+    last4 VARCHAR(4) NULL,
+    brand VARCHAR(32) NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  COMMENT ON TABLE payment_methods IS 'Saved payment instruments tied to a user';
+  COMMENT ON COLUMN payment_methods.id IS 'Payment-method surrogate key';
+  COMMENT ON COLUMN payment_methods.user_id IS 'Owning user';
+  COMMENT ON COLUMN payment_methods.provider IS 'PSP handle (e.g., stripe, paypal)';
+  COMMENT ON COLUMN payment_methods.last4 IS 'Last four digits of the card (if applicable)';
+  COMMENT ON COLUMN payment_methods.brand IS 'Card brand (e.g., visa, mastercard)';
+  COMMENT ON COLUMN payment_methods.is_default IS 'Marks the user''s preferred method';
+  COMMENT ON COLUMN payment_methods.created_at IS 'Record creation timestamp';
+down: |
+  DROP TABLE IF EXISTS payment_methods;

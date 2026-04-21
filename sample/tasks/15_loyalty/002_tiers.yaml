@@ -1,6 +1,0 @@
-name: Create loyalty tiers table
-target: main
-dependencies:
-  - 15_loyalty/001_programs
-up: "Create loyalty_tiers table with id, program_id, name, min_points, discount_rate, perks_json"
-down: "Drop loyalty_tiers table"

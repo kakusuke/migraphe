@@ -1,6 +1,0 @@
-name: Create warehouses table
-target: main
-dependencies:
-  - 00_infra/005_grant_permissions
-up: "Create warehouses table with id, name, address, contact_email, is_active"
-down: "Drop warehouses table"

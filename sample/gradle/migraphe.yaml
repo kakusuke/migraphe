@@ -1,0 +1,26 @@
+project:
+  name: ecommerce-gradle-sample
+
+history:
+  target: pg
+
+generators:
+  - name: pg-schema-docs
+    type: postgresql-markdown
+    source:
+      type: postgresql-schema
+      target: pg
+    output-dir: docs/postgresql
+
+  - name: mysql-schema-docs
+    type: mysql-markdown
+    source:
+      type: mysql-schema
+      target: mysql
+    output-dir: docs/mysql
+
+  - name: migration-tree
+    type: output-json
+    source:
+      type: migration-tree
+    output-dir: docs

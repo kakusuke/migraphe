@@ -1,6 +1,0 @@
-name: Create search log table
-target: main
-dependencies:
-  - 11_analytics/001_sessions
-up: "Create search_log table with id, session_id, query, result_count, clicked_product_id, occurred_at"
-down: "Drop search_log table"

@@ -1,6 +1,0 @@
-name: Create brands table
-target: main
-dependencies:
-  - 01_common/002_locales
-up: "Create brands table with id, slug, name, logo_url, description"
-down: "Drop brands table"

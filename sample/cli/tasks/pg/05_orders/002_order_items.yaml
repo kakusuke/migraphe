@@ -1,0 +1,26 @@
+name: Create order_items table
+target: pg
+dependencies:
+  - pg/05_orders/001_orders
+  - mysql/02_catalog/004_variants
+up: |
+  CREATE TABLE order_items (
+    id BIGSERIAL PRIMARY KEY,
+    order_id BIGINT NOT NULL REFERENCES orders (id) ON DELETE CASCADE,
+    variant_id BIGINT NOT NULL,
+    quantity INTEGER NOT NULL,
+    unit_price NUMERIC(12,2) NOT NULL,
+    line_total NUMERIC(12,2) NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CHECK (quantity > 0)
+  );
+  COMMENT ON TABLE order_items IS 'Individual line items that make up an order';
+  COMMENT ON COLUMN order_items.id IS 'Order-item surrogate key';
+  COMMENT ON COLUMN order_items.order_id IS 'Owning order';
+  COMMENT ON COLUMN order_items.variant_id IS 'Logical reference to MySQL variants.id (no FK)';
+  COMMENT ON COLUMN order_items.quantity IS 'Number of units purchased';
+  COMMENT ON COLUMN order_items.unit_price IS 'Unit price captured at purchase time';
+  COMMENT ON COLUMN order_items.line_total IS 'quantity x unit_price (precomputed)';
+  COMMENT ON COLUMN order_items.created_at IS 'Record creation timestamp';
+down: |
+  DROP TABLE IF EXISTS order_items;

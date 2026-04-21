@@ -1,6 +1,0 @@
-name: Create user sessions table
-target: main
-dependencies:
-  - 02_users/001_users
-up: "Create user_sessions table with id, user_id, token, expires_at, ip_address"
-down: "Drop user_sessions table"

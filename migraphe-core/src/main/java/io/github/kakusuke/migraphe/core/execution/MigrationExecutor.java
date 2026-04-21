@@ -43,6 +43,7 @@ public final class MigrationExecutor implements Executor {
      * @param targetId 特定のターゲットID（null の場合は全ノード）
      * @return 未実行のノードIDセット
      */
+    @Override
     public Set<NodeId> determineTargetNodes(@Nullable NodeId targetId) {
         Set<NodeId> candidates;
 
@@ -102,6 +103,7 @@ public final class MigrationExecutor implements Executor {
      * @param targetNodes 実行対象ノード
      * @return 実行結果
      */
+    @Override
     public ExecutionResult execute(Set<NodeId> targetNodes) {
         ExecutionPlan plan = TopologicalSort.createExecutionPlanFor(graph, targetNodes);
 

@@ -12,8 +12,13 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **DAG-based Migration**: Define complex dependencies between migration tasks
 - **Multi-Environment Support**: Manage migrations across development, staging, and production
 - **Pluggable Architecture**: Support for PostgreSQL, MySQL, and any JDBC database via generic plugin
+- **Automatic Plugin Resolution**: CLI resolves plugin dependencies from Maven coordinates in `migraphe.yaml` (Maven Central + local cache)
 - **Gradle Plugin**: Integrate migrations into your Gradle build with `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate`
 - **YAML Configuration**: Simple, readable configuration files
+- **Schema Documentation Generation**: Generate Markdown documentation from database schemas via `generate` command
+- **PostgreSQL-Specific Documentation**: Generate comprehensive Markdown docs including extensions, enums, sequences, functions, triggers, materialized views, partitions, and policies
+- **MySQL-Specific Documentation**: Generate comprehensive Markdown docs including storage engines, table metadata (ENGINE/collation/row format), triggers, routines (stored procedures/functions), events, and partitions
+- **Flexible Generator System**: Source/output plugin separation — same data source can output in multiple formats (Markdown, JSON, etc.)
 - **Parallel Execution**: Opt-in Virtual Threads-based parallel execution with configurable concurrency
 - **Execution History**: Track migration execution history with rollback support
 - **Type-Safe**: Built with Java 21, leveraging modern language features
@@ -28,10 +33,10 @@ A migration orchestration tool that manages database and infrastructure migratio
 ### Build
 
 ```bash
-./gradlew fatJar
+./gradlew :migraphe-cli:installDist
 ```
 
-This creates a standalone JAR file at `migraphe-cli/build/libs/migraphe-cli-all.jar`.
+This creates the CLI distribution at `migraphe-cli/build/install/migraphe-cli/`.
 
 ### Create a Project
 
@@ -51,6 +56,9 @@ mkdir -p targets tasks/db1
 3. Create `migraphe.yaml`:
 
 ```yaml
+plugins:
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+
 project:
   name: my-project
 
@@ -94,11 +102,17 @@ down: |
 ### Run Migrations
 
 ```bash
+# Publish plugins to local Maven repo (first time only)
+./gradlew publishToMavenLocal
+
 # Check migration status
-java -jar path/to/migraphe-cli-all.jar status
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli status
 
 # Execute migrations
-java -jar path/to/migraphe-cli-all.jar up
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli up
+
+# Generate documentation
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli generate
 ```
 
 ## Gradle Plugin
@@ -154,6 +168,8 @@ Available tasks:
 ./gradlew migrapheUp --target=db1/create_users  # Migrate up to specific node
 ./gradlew migrapheDown --all        # Rollback all migrations
 ./gradlew migrapheDown --target=db1/create_users  # Rollback to specific node
+./gradlew migrapheGenerate          # Generate schema documentation
+./gradlew migrapheGenerate --name=mydb  # Generate for specific generator
 ```
 
 ## Documentation
@@ -231,7 +247,7 @@ cd migraphe
 ./gradlew :migraphe-gradle-plugin:test
 ```
 
-Test coverage: 431 tests, 100% passing
+Test coverage: 640 tests, 100% passing
 
 ## Contributing
 

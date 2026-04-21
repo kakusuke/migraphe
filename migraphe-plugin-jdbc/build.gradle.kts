@@ -8,7 +8,7 @@ dependencies {
     // API needed for tests
     testImplementation(project(":migraphe-api"))
 
-    // MicroProfile Config (for @ConfigMapping)
+// MicroProfile Config (for @ConfigMapping)
     implementation(libs.smallrye.config)
 
     // Null safety
