@@ -442,6 +442,30 @@ class JdbcMarkdownGeneratorTest {
     }
 
     @Test
+    void tableExcludeWithSchemaRestrictionDoesNotApplyToOtherSchema(@TempDir Path outputDir) {
+        var excludeOtherSchemaUsers =
+                new JdbcMarkdownDefinition.ExcludePattern() {
+                    @Override
+                    public Optional<String> schema() {
+                        return Optional.of("OTHER");
+                    }
+
+                    @Override
+                    public Optional<String> table() {
+                        return Optional.of("users");
+                    }
+                };
+
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildSchemaInfo(), List.of(excludeOtherSchemaUsers));
+
+        generator.generate(outputDir);
+
+        assertThat(outputDir.resolve("mydb/PUBLIC/tables/users.md")).exists();
+    }
+
+    @Test
     void extraTableIndexHeaderAppearsBetweenNameAndRemarks(@TempDir Path outputDir)
             throws Exception {
         var generator =

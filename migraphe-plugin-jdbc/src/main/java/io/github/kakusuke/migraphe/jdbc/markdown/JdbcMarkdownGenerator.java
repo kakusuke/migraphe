@@ -57,7 +57,7 @@ public class JdbcMarkdownGenerator {
                 List<String> extraHeaders = extraTableIndexHeaders();
                 appendIndexTableHeader(indexBuilder, extraHeaders);
                 for (JdbcTableInfo table : schema.tables()) {
-                    if (isTableExcluded(table.name())) {
+                    if (isTableExcluded(schema.name(), table.name())) {
                         continue;
                     }
                     generateTableFile(outputDir, schema.name(), table);
@@ -110,24 +110,26 @@ public class JdbcMarkdownGenerator {
                     return true;
                 }
             }
-            if (exclude.schema().isPresent() && exclude.table().isPresent()) {
-                Pattern pattern = Pattern.compile(exclude.schema().get(), Pattern.CASE_INSENSITIVE);
-                if (pattern.matcher(schemaName).matches()) {
-                    // Schema+table pattern: schema match checked here, table checked separately
-                    // This excludes the whole schema only if no table pattern
-                }
-            }
         }
         return false;
     }
 
-    protected boolean isTableExcluded(String tableName) {
+    protected boolean isTableExcluded(String schemaName, String tableName) {
         for (JdbcMarkdownDefinition.ExcludePattern exclude : excludes) {
-            if (exclude.table().isPresent()) {
-                Pattern pattern = Pattern.compile(exclude.table().get(), Pattern.CASE_INSENSITIVE);
-                if (pattern.matcher(tableName).matches()) {
-                    return true;
-                }
+            if (exclude.table().isEmpty()) {
+                continue;
+            }
+            Pattern tablePattern = Pattern.compile(exclude.table().get(), Pattern.CASE_INSENSITIVE);
+            if (!tablePattern.matcher(tableName).matches()) {
+                continue;
+            }
+            if (exclude.schema().isEmpty()) {
+                return true;
+            }
+            Pattern schemaPattern =
+                    Pattern.compile(exclude.schema().get(), Pattern.CASE_INSENSITIVE);
+            if (schemaPattern.matcher(schemaName).matches()) {
+                return true;
             }
         }
         return false;

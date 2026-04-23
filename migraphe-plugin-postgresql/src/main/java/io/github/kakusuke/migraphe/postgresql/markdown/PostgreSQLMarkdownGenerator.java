@@ -364,7 +364,7 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                                 .filter(sd -> sd.name().equals(schemaName))
                                 .flatMap(sd -> sd.tables().stream())
                                 .anyMatch(t -> t.name().equals(seq.ownerTable()))
-                        && !isTableExcluded(seq.ownerTable());
+                        && !isTableExcluded(schemaName, seq.ownerTable());
         return tableExists
                 ? "["
                         + seq.ownerTable()
