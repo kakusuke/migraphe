@@ -121,7 +121,7 @@ public class JdbcMarkdownGenerator {
         return false;
     }
 
-    private boolean isTableExcluded(String tableName) {
+    protected boolean isTableExcluded(String tableName) {
         for (JdbcMarkdownDefinition.ExcludePattern exclude : excludes) {
             if (exclude.table().isPresent()) {
                 Pattern pattern = Pattern.compile(exclude.table().get(), Pattern.CASE_INSENSITIVE);
