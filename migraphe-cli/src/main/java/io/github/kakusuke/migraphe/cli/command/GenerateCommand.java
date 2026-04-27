@@ -46,12 +46,10 @@ public class GenerateCommand implements Command {
     @Override
     public int execute() {
         try {
-            // 1. ExecutionContext をロード（設定、環境、グラフを含む）
             ExecutionContext context =
                     ExecutionContext.load(baseDir, pluginRegistry, Collections.emptyMap());
             ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
 
-            // 2. ジェネレーター設定を取得
             List<ProjectConfig.GeneratorSection> generators =
                     projectConfig.generators().orElse(Collections.emptyList());
 
@@ -60,24 +58,23 @@ public class GenerateCommand implements Command {
                 return 0;
             }
 
-            // 3. GeneratorRegistry を初期化
-            GeneratorRegistry generatorRegistry = new GeneratorRegistry();
-            generatorRegistry.loadFromClasspath();
-            if (pluginClassLoader != null) {
-                generatorRegistry.loadFromClassLoader(pluginClassLoader);
-            }
-            generatorRegistry.loadFromDirectory(baseDir.resolve("plugins"));
+            try (GeneratorRegistry generatorRegistry = new GeneratorRegistry()) {
+                generatorRegistry.loadFromClasspath();
+                if (pluginClassLoader != null) {
+                    generatorRegistry.loadFromClassLoader(pluginClassLoader);
+                }
+                generatorRegistry.loadFromDirectory(baseDir.resolve("plugins"));
 
-            // 4. GeneratorExecutor で実行
-            GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
-            executor.executeAll(
-                    generators,
-                    context.environments(),
-                    context.graph(),
-                    context.createHistoryRepository(),
-                    context.config(),
-                    baseDir,
-                    nameFilter);
+                GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
+                executor.executeAll(
+                        generators,
+                        context.environments(),
+                        context.graph(),
+                        context.createHistoryRepository(),
+                        context.config(),
+                        baseDir,
+                        nameFilter);
+            }
 
             printSuccess("Generation complete.");
             return 0;

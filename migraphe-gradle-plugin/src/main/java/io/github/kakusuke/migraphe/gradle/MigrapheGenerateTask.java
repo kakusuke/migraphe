@@ -31,46 +31,47 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
     @TaskAction
     public void generate() {
         URLClassLoader pluginClassLoader = createPluginClassLoader();
-        ExecutionContext context = loadExecutionContext(pluginClassLoader);
+        try (GeneratorRegistry generatorRegistry = new GeneratorRegistry()) {
+            ExecutionContext context = loadExecutionContext(pluginClassLoader);
 
-        // GeneratorRegistry を作成してプラグインをロード
-        GeneratorRegistry generatorRegistry = new GeneratorRegistry();
-        generatorRegistry.loadFromClasspath();
-        if (pluginClassLoader != null) {
-            generatorRegistry.loadFromClassLoader(pluginClassLoader);
-        }
-        generatorRegistry.loadFromDirectory(context.baseDir().resolve("plugins"));
+            generatorRegistry.loadFromClasspath();
+            if (pluginClassLoader != null) {
+                generatorRegistry.loadFromClassLoader(pluginClassLoader);
+            }
+            generatorRegistry.loadFromDirectory(context.baseDir().resolve("plugins"));
 
-        // ProjectConfig からジェネレーター設定を取得
-        ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
-        List<ProjectConfig.GeneratorSection> generators =
-                projectConfig.generators().orElse(Collections.emptyList());
+            ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
+            List<ProjectConfig.GeneratorSection> generators =
+                    projectConfig.generators().orElse(Collections.emptyList());
 
-        @Nullable String nameFilter = getGeneratorName().getOrElse(null);
+            @Nullable String nameFilter = getGeneratorName().getOrElse(null);
 
-        if (generators.isEmpty()) {
-            getLogger().lifecycle("No generators configured.");
-            return;
-        }
+            if (generators.isEmpty()) {
+                getLogger().lifecycle("No generators configured.");
+                return;
+            }
 
-        getLogger().lifecycle("Generate");
-        getLogger().lifecycle("========");
-        getLogger().lifecycle("");
-
-        try {
-            GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
-            executor.executeAll(
-                    generators,
-                    context.environments(),
-                    context.graph(),
-                    context.createHistoryRepository(),
-                    context.config(),
-                    context.baseDir(),
-                    nameFilter);
+            getLogger().lifecycle("Generate");
+            getLogger().lifecycle("========");
             getLogger().lifecycle("");
-            getLogger().lifecycle("Generation completed successfully.");
-        } catch (IllegalArgumentException e) {
-            throw new GradleException(e.getMessage(), e);
+
+            try {
+                GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
+                executor.executeAll(
+                        generators,
+                        context.environments(),
+                        context.graph(),
+                        context.createHistoryRepository(),
+                        context.config(),
+                        context.baseDir(),
+                        nameFilter);
+                getLogger().lifecycle("");
+                getLogger().lifecycle("Generation completed successfully.");
+            } catch (IllegalArgumentException e) {
+                throw new GradleException(e.getMessage(), e);
+            }
+        } finally {
+            closePluginClassLoader(pluginClassLoader);
         }
     }
 

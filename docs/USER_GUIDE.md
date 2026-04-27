@@ -757,6 +757,27 @@ Each table documentation includes:
 - Foreign key references with cross-links to referenced tables
 - Indexes
 
+#### Foreign-Key Rendering: Imported vs. Exported Keys
+
+JDBC distinguishes two perspectives on a foreign-key relationship; the generator renders both for each table:
+
+| Section in `tables/<name>.md` | JDBC source | Meaning | Link target |
+|---|---|---|---|
+| **Foreign Keys** | `DatabaseMetaData.getImportedKeys()` | FK columns *on this table* that reference another table's primary key | The referenced table |
+| **Referenced By** | `DatabaseMetaData.getExportedKeys()` | FK columns *on other tables* that reference this table's primary key | The referencing (child) table |
+
+Each row uses two distinct column lists:
+
+- `columns` — the FK columns local to the table being rendered.
+- `referencedColumns` — the primary-key columns on the linked table.
+
+Concretely, when rendering `tables/users.md`:
+
+- A row in **Foreign Keys** like `manager_id → users(id)` means `users.manager_id` references `users(id)`.
+- A row in **Referenced By** like `posts(user_id) → id` means `posts.user_id` references `users.id`; the link points to `posts.md`, not back to `users.md`.
+
+This distinction was a recent fix — earlier versions of the exported-key rendering pointed the link at the referenced (PK-side) table instead of the referencing (FK-side) table, which made `Referenced By` self-referential and useless.
+
 ### PostgreSQL-Specific Documentation
 
 For PostgreSQL databases, use the `postgresql-markdown` output plugin with the `postgresql-schema` source plugin to generate comprehensive documentation that includes PostgreSQL-specific objects:

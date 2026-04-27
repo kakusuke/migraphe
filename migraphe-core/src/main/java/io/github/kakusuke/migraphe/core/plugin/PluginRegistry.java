@@ -1,12 +1,14 @@
 package io.github.kakusuke.migraphe.core.plugin;
 
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
+import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
@@ -23,10 +25,15 @@ import org.jspecify.annotations.Nullable;
  * </ol>
  *
  * <p>同じ type のプラグインが複数見つかった場合、後から読み込まれたものが優先される。
+ *
+ * <p>{@link #loadFromJar(Path)} / {@link #loadFromDirectory(Path)} で内部生成した {@link URLClassLoader}
+ * は本レジストリの所有物として保持され、{@link #close()} で解放される。 Gradle daemon のような長時間プロセスでは try-with-resources
+ * でラップしてリソースリークを防ぐこと。
  */
-public final class PluginRegistry {
+public final class PluginRegistry implements AutoCloseable {
 
     private final Map<String, MigraphePlugin<?>> plugins = new ConcurrentHashMap<>();
+    private final List<URLClassLoader> ownedClassLoaders = new CopyOnWriteArrayList<>();
 
     /** クラスパスから ServiceLoader を使用してプラグインを読み込む。 */
     @SuppressWarnings("rawtypes")
@@ -69,9 +76,10 @@ public final class PluginRegistry {
             throw new PluginLoadException("Not a JAR file: " + jarPath);
         }
 
+        URLClassLoader classLoader = null;
         try {
             URL jarUrl = jarPath.toUri().toURL();
-            URLClassLoader classLoader =
+            classLoader =
                     new URLClassLoader(new URL[] {jarUrl}, MigraphePlugin.class.getClassLoader());
             ServiceLoader<MigraphePlugin> loader =
                     ServiceLoader.load(MigraphePlugin.class, classLoader);
@@ -83,11 +91,42 @@ public final class PluginRegistry {
             }
 
             if (loadedCount == 0) {
+                try {
+                    classLoader.close();
+                } catch (IOException ignored) {
+                    // 閉じる際の I/O エラーは握りつぶす
+                }
                 throw new PluginLoadException("No plugins found in JAR: " + jarPath);
             }
+            ownedClassLoaders.add(classLoader);
+        } catch (PluginLoadException e) {
+            throw e;
         } catch (Exception e) {
+            if (classLoader != null) {
+                try {
+                    classLoader.close();
+                } catch (IOException ignored) {
+                    // 閉じる際の I/O エラーは握りつぶす
+                }
+            }
             throw new PluginLoadException("Failed to load plugin from JAR: " + jarPath, e);
         }
+    }
+
+    /**
+     * 本レジストリが {@link #loadFromJar(Path)} で生成した {@link URLClassLoader} を全て閉じる。 外部から渡された ClassLoader
+     * は所有していないので閉じない。
+     */
+    @Override
+    public void close() {
+        for (URLClassLoader cl : ownedClassLoaders) {
+            try {
+                cl.close();
+            } catch (IOException ignored) {
+                // 閉じる際の I/O エラーは握りつぶす（既にクラスは JVM に保持されているため）
+            }
+        }
+        ownedClassLoaders.clear();
     }
 
     /**
