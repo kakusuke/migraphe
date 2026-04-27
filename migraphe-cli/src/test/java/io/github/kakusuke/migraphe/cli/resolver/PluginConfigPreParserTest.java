@@ -69,6 +69,22 @@ class PluginConfigPreParserTest {
     }
 
     @Test
+    void shouldIncludeActualValueInErrorWhenPluginsElementIsNotString() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - {group: foo}
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parsePlugins(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("{group=foo}");
+    }
+
+    @Test
     void shouldThrowFriendlyErrorWhenPluginsElementIsNull() throws IOException {
         Path migrapheYaml = tempDir.resolve("migraphe.yaml");
         Files.writeString(
@@ -113,6 +129,21 @@ class PluginConfigPreParserTest {
                 .hasMessageContaining("plugins")
                 .hasMessageContaining("list")
                 .hasMessageContaining("String");
+    }
+
+    @Test
+    void shouldIncludeActualValueInErrorWhenPluginsValueIsStringScalar() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins: "io.example:foo:1.0"
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parsePlugins(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("io.example:foo:1.0");
     }
 
     @Test

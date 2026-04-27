@@ -29,8 +29,8 @@ public final class PluginConfigPreParser {
             }
             if (!(pluginsValue instanceof List<?> raw)) {
                 throw new IllegalArgumentException(
-                        "plugins must be a YAML list of Maven coordinates, got: "
-                                + pluginsValue.getClass().getSimpleName());
+                        "plugins must be a YAML list of Maven coordinates, got: %s value=%s"
+                                .formatted(pluginsValue.getClass().getSimpleName(), pluginsValue));
             }
             List<String> plugins = new ArrayList<>();
             for (int i = 0; i < raw.size(); i++) {
@@ -39,10 +39,11 @@ public final class PluginConfigPreParser {
                     plugins.add(s);
                 } else {
                     throw new IllegalArgumentException(
-                            "plugins["
-                                    + i
-                                    + "] must be a string Maven coordinate, got: "
-                                    + (element == null ? "null" : element.getClass().getName()));
+                            "plugins[%d] must be a string Maven coordinate, got: %s value=%s"
+                                    .formatted(
+                                            i,
+                                            element == null ? "null" : element.getClass().getName(),
+                                            element));
                 }
             }
             return plugins.stream().map(MavenArtifactCoordinate::parse).toList();
