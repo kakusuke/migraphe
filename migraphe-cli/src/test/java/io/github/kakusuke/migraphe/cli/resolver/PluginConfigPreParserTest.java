@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.cli.resolver;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -48,6 +49,23 @@ class PluginConfigPreParserTest {
         List<MavenArtifactCoordinate> result = parser.parsePlugins(migrapheYaml);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldThrowFriendlyErrorWhenPluginsElementIsNotString() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - {group: foo}
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parsePlugins(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plugins[0]")
+                .hasMessageContaining("LinkedHashMap");
     }
 
     @Test
