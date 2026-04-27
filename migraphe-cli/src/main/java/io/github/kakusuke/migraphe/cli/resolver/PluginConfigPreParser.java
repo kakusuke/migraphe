@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -12,7 +13,6 @@ import org.yaml.snakeyaml.Yaml;
 /** migraphe.yaml から plugins セクションのみを事前パースする。 */
 public final class PluginConfigPreParser {
 
-    @SuppressWarnings("unchecked")
     public List<MavenArtifactCoordinate> parsePlugins(Path migrapheYaml) {
         if (!Files.exists(migrapheYaml)) {
             return Collections.emptyList();
@@ -20,10 +20,32 @@ public final class PluginConfigPreParser {
         try (InputStream in = Files.newInputStream(migrapheYaml)) {
             Yaml yaml = new Yaml();
             Map<String, Object> root = yaml.load(in);
-            if (root == null || !root.containsKey("plugins")) {
+            if (root == null) {
                 return Collections.emptyList();
             }
-            List<String> plugins = (List<String>) root.get("plugins");
+            Object pluginsValue = root.get("plugins");
+            if (pluginsValue == null) {
+                return Collections.emptyList();
+            }
+            if (!(pluginsValue instanceof List<?> raw)) {
+                throw new IllegalArgumentException(
+                        "plugins must be a YAML list of Maven coordinates, got: %s value=%s"
+                                .formatted(pluginsValue.getClass().getSimpleName(), pluginsValue));
+            }
+            List<String> plugins = new ArrayList<>();
+            for (int i = 0; i < raw.size(); i++) {
+                Object element = raw.get(i);
+                if (element instanceof String s) {
+                    plugins.add(s);
+                } else {
+                    throw new IllegalArgumentException(
+                            "plugins[%d] must be a string Maven coordinate, got: %s value=%s"
+                                    .formatted(
+                                            i,
+                                            element == null ? "null" : element.getClass().getName(),
+                                            element));
+                }
+            }
             return plugins.stream().map(MavenArtifactCoordinate::parse).toList();
         } catch (IOException e) {
             return Collections.emptyList();

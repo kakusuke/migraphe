@@ -27,6 +27,7 @@ import java.nio.file.Path;
 import java.sql.Types;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -905,5 +906,149 @@ class PostgreSQLMarkdownGeneratorTest {
                 .contains("## Partition Info")
                 .contains("RANGE")
                 .contains("event_date");
+    }
+
+    @Test
+    void sequencesOwnedByIsLinkWhenOwnerTableExistsInSchema(@TempDir Path tempDir)
+            throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(idColumn),
+                        null,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(usersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new PostgreSQLSequenceInfo(
+                                        "public",
+                                        "users_id_seq",
+                                        "bigint",
+                                        1,
+                                        1,
+                                        1,
+                                        9999,
+                                        false,
+                                        "users",
+                                        "id",
+                                        "alice")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of(),
+                        Map.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent)
+                .containsPattern(
+                        "\\| users_id_seq \\| bigint \\| 1 \\| 1 \\| 1 \\| 9999 \\| false \\|"
+                                + " \\[users\\.id\\]\\(testdb/public/tables/users\\.md\\) \\| alice"
+                                + " \\|");
+    }
+
+    @Test
+    void sequencesOwnedByFallsBackToTextWhenOwnerTableExcluded(@TempDir Path tempDir)
+            throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "BIGINT", Types.BIGINT, 19, 0, false, null, false, false, null, 1);
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(idColumn),
+                        null,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(usersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new PostgreSQLSequenceInfo(
+                                        "public",
+                                        "users_id_seq",
+                                        "bigint",
+                                        1,
+                                        1,
+                                        1,
+                                        9999,
+                                        false,
+                                        "users",
+                                        "id",
+                                        "alice")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        Map.of(),
+                        Map.of());
+        var excludePattern =
+                new JdbcMarkdownDefinition.ExcludePattern() {
+                    @Override
+                    public Optional<String> schema() {
+                        return Optional.empty();
+                    }
+
+                    @Override
+                    public Optional<String> table() {
+                        return Optional.of("users");
+                    }
+                };
+
+        var generator =
+                new PostgreSQLMarkdownGenerator("testdb", schemaInfo, List.of(excludePattern));
+
+        generator.generate(tempDir);
+
+        String indexContent = Files.readString(tempDir.resolve("index.md"));
+        assertThat(indexContent)
+                .containsPattern(
+                        "\\| users_id_seq \\| bigint \\| 1 \\| 1 \\| 1 \\| 9999 \\| false \\|"
+                                + " users\\.id \\| alice \\|");
+        assertThat(indexContent)
+                .doesNotContainPattern("\\[users\\.id\\]\\(testdb/public/tables/users\\.md\\)");
     }
 }

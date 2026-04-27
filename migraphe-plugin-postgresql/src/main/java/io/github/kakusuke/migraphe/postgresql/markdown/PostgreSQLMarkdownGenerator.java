@@ -5,6 +5,7 @@ import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownGenerator;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSchemaInfo;
+import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSequenceInfo;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -179,10 +180,7 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                     "| Name | Type | Start | Increment | Min | Max | Cycle | Owned By | Owner |\n");
             sb.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
             for (var seq : sequences) {
-                String ownedBy =
-                        (seq.ownerTable() != null && seq.ownerColumn() != null)
-                                ? seq.ownerTable() + "." + seq.ownerColumn()
-                                : "";
+                String ownedBy = formatOwnedBy(schemaName, seq);
                 sb.append("| ")
                         .append(seq.name())
                         .append(" | ")
@@ -355,5 +353,30 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
             }
             sb.append("\n");
         }
+    }
+
+    private String formatOwnedBy(String schemaName, PostgreSQLSequenceInfo seq) {
+        if (seq.ownerTable() == null || seq.ownerColumn() == null) {
+            return "";
+        }
+        boolean tableExists =
+                pgInfo.schemas().stream()
+                                .filter(sd -> sd.name().equals(schemaName))
+                                .flatMap(sd -> sd.tables().stream())
+                                .anyMatch(t -> t.name().equals(seq.ownerTable()))
+                        && !isTableExcluded(schemaName, seq.ownerTable());
+        return tableExists
+                ? "["
+                        + seq.ownerTable()
+                        + "."
+                        + seq.ownerColumn()
+                        + "]("
+                        + name()
+                        + "/"
+                        + schemaName
+                        + "/tables/"
+                        + seq.ownerTable()
+                        + ".md)"
+                : seq.ownerTable() + "." + seq.ownerColumn();
     }
 }

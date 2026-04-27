@@ -7,21 +7,27 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * GeneratorPlugin レジストリ — ServiceLoader で GeneratorSourcePlugin / GeneratorOutputPlugin を発見・管理する。
  *
  * <p>同じ type のプラグインが複数見つかった場合、後から登録されたものが優先される。
+ *
+ * <p>{@link #loadFromDirectory(Path)} で内部生成した {@link URLClassLoader} は本レジストリの所有物として 保持され、{@link
+ * #close()} で解放される。Gradle daemon のような長時間プロセスでは try-with-resources でラップしてリソースリークを防ぐこと。
  */
-public final class GeneratorRegistry {
+public final class GeneratorRegistry implements AutoCloseable {
 
     private final Map<String, GeneratorSourcePlugin<?>> sourcePlugins = new ConcurrentHashMap<>();
     private final Map<String, GeneratorOutputPlugin> outputPlugins = new ConcurrentHashMap<>();
+    private final List<URLClassLoader> ownedClassLoaders = new CopyOnWriteArrayList<>();
 
     /** クラスパスから ServiceLoader を使用してプラグインを読み込む。 */
     public void loadFromClasspath() {
@@ -68,6 +74,7 @@ public final class GeneratorRegistry {
                                             new URLClassLoader(
                                                     new URL[] {jarUrl},
                                                     GeneratorRegistry.class.getClassLoader());
+                                    ownedClassLoaders.add(classLoader);
                                     loadFromClassLoader(classLoader);
                                 } catch (Exception e) {
                                     throw new IllegalStateException(
@@ -78,6 +85,22 @@ public final class GeneratorRegistry {
             throw new IllegalStateException(
                     "Failed to scan generator plugins directory: " + pluginsDir, e);
         }
+    }
+
+    /**
+     * 本レジストリが {@link #loadFromDirectory(Path)} で生成した {@link URLClassLoader} を全て閉じる。 外部から渡された
+     * ClassLoader は所有していないので閉じない。
+     */
+    @Override
+    public void close() {
+        for (URLClassLoader cl : ownedClassLoaders) {
+            try {
+                cl.close();
+            } catch (IOException ignored) {
+                // 閉じる際の I/O エラーは握りつぶす（既にクラスは JVM に保持されているため）
+            }
+        }
+        ownedClassLoaders.clear();
     }
 
     void registerSource(GeneratorSourcePlugin<?> plugin) {

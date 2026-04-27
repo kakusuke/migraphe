@@ -49,56 +49,53 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
 
     @TaskAction
     public void up() {
-        ExecutionContext context = loadExecutionContext();
+        withExecutionContext(
+                context -> {
+                    NodeId targetId = null;
+                    if (getTarget().isPresent()) {
+                        targetId = NodeId.of(getTarget().get());
+                    }
 
-        NodeId targetId = null;
-        if (getTarget().isPresent()) {
-            targetId = NodeId.of(getTarget().get());
-        }
+                    boolean dryRun = getDryRun().getOrElse(false);
 
-        boolean dryRun = getDryRun().getOrElse(false);
+                    if (targetId != null && context.graph().getNode(targetId).isEmpty()) {
+                        throw new GradleException("Target not found: " + targetId.value());
+                    }
 
-        // ターゲット指定の場合、存在確認
-        if (targetId != null && context.graph().getNode(targetId).isEmpty()) {
-            throw new GradleException("Target not found: " + targetId.value());
-        }
+                    HistoryRepository historyRepo = context.createHistoryRepository();
+                    historyRepo.initialize();
 
-        // HistoryRepository を取得
-        HistoryRepository historyRepo = context.createHistoryRepository();
-        historyRepo.initialize();
+                    GradleExecutionListener listener = new GradleExecutionListener(getLogger());
+                    Executor executor = createExecutor(context, historyRepo, listener);
 
-        // Executor を作成
-        GradleExecutionListener listener = new GradleExecutionListener(getLogger());
-        Executor executor = createExecutor(context, historyRepo, listener);
+                    Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
 
-        // 実行対象ノードを決定
-        Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
+                    if (targetNodes.isEmpty()) {
+                        getLogger()
+                                .lifecycle(
+                                        "No migrations to execute. All migrations are up to date.");
+                        return;
+                    }
 
-        if (targetNodes.isEmpty()) {
-            getLogger().lifecycle("No migrations to execute. All migrations are up to date.");
-            return;
-        }
+                    ExecutionPlan plan =
+                            TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
+                    displayMigrationGraph(context, plan, historyRepo, dryRun);
 
-        // 実行プランを生成してグラフ表示
-        ExecutionPlan plan = TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
-        displayMigrationGraph(context, plan, historyRepo, dryRun);
+                    if (dryRun) {
+                        getLogger().lifecycle("");
+                        getLogger().lifecycle("No changes made (dry run).");
+                        return;
+                    }
 
-        // dry-run の場合はここで終了
-        if (dryRun) {
-            getLogger().lifecycle("");
-            getLogger().lifecycle("No changes made (dry run).");
-            return;
-        }
+                    getLogger().lifecycle("");
+                    getLogger().lifecycle("Executing migrations...");
+                    getLogger().lifecycle("");
 
-        // マイグレーション実行
-        getLogger().lifecycle("");
-        getLogger().lifecycle("Executing migrations...");
-        getLogger().lifecycle("");
-
-        ExecutionResult result = executor.execute(targetNodes);
-        if (!result.success()) {
-            throw new GradleException("Migration failed.");
-        }
+                    ExecutionResult result = executor.execute(targetNodes);
+                    if (!result.success()) {
+                        throw new GradleException("Migration failed.");
+                    }
+                });
     }
 
     /** 副作用のあるタスクはキャッシュしない。 */

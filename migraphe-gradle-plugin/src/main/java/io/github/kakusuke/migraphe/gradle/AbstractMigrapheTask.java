@@ -4,11 +4,13 @@ import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.io.File;
+import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
@@ -76,5 +78,31 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
         PluginRegistry registry = createPluginRegistry(pluginClassLoader);
         return ExecutionContext.load(
                 getBaseDir().get().getAsFile().toPath(), registry, getVariables().get());
+    }
+
+    /**
+     * ExecutionContext をロードし action を実行する。pluginClassLoader は finally で閉じる。 Gradle daemon
+     * でのリソースリークを防ぐためのヘルパー。
+     */
+    protected void withExecutionContext(Consumer<ExecutionContext> action) {
+        URLClassLoader pluginClassLoader = createPluginClassLoader();
+        try {
+            ExecutionContext context = loadExecutionContext(pluginClassLoader);
+            action.accept(context);
+        } finally {
+            closePluginClassLoader(pluginClassLoader);
+        }
+    }
+
+    /** pluginClassLoader を安全に閉じる。null は無視。 */
+    protected void closePluginClassLoader(@Nullable URLClassLoader pluginClassLoader) {
+        if (pluginClassLoader == null) {
+            return;
+        }
+        try {
+            pluginClassLoader.close();
+        } catch (IOException e) {
+            getLogger().warn("Failed to close plugin classloader", e);
+        }
     }
 }

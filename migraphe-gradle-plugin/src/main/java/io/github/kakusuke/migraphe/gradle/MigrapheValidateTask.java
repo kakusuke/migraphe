@@ -17,26 +17,29 @@ public abstract class MigrapheValidateTask extends AbstractMigrapheTask {
         getLogger().lifecycle("");
 
         URLClassLoader pluginClassLoader = createPluginClassLoader();
-        PluginRegistry registry = createPluginRegistry(pluginClassLoader);
-        ConfigValidator validator = new ConfigValidator(registry);
-        ValidationOutput result = validator.validate(getBaseDir().get().getAsFile().toPath());
+        try (PluginRegistry registry = createPluginRegistry(pluginClassLoader)) {
+            ConfigValidator validator = new ConfigValidator(registry);
+            ValidationOutput result = validator.validate(getBaseDir().get().getAsFile().toPath());
 
-        for (String error : result.errors()) {
-            getLogger().error("  × {}", error);
-        }
+            for (String error : result.errors()) {
+                getLogger().error("  × {}", error);
+            }
 
-        if (result.isValid()) {
-            getLogger().lifecycle("");
-            getLogger().lifecycle("Validation successful.");
-        } else {
-            getLogger().lifecycle("");
-            int errorCount = result.errors().size();
-            throw new GradleException(
-                    "Validation failed with "
-                            + errorCount
-                            + " error"
-                            + (errorCount == 1 ? "" : "s")
-                            + ".");
+            if (result.isValid()) {
+                getLogger().lifecycle("");
+                getLogger().lifecycle("Validation successful.");
+            } else {
+                getLogger().lifecycle("");
+                int errorCount = result.errors().size();
+                throw new GradleException(
+                        "Validation failed with "
+                                + errorCount
+                                + " error"
+                                + (errorCount == 1 ? "" : "s")
+                                + ".");
+            }
+        } finally {
+            closePluginClassLoader(pluginClassLoader);
         }
     }
 

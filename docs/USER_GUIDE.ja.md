@@ -757,6 +757,27 @@ docs/schema/
 - 外部キー参照（参照先テーブルへのクロスリンク付き）
 - インデックス
 
+#### 外部キーのレンダリング: Imported / Exported Keys
+
+JDBC では外部キー関係に対して 2 つの視点が定義されており、ジェネレーターは各テーブルに対して両方をレンダリングします:
+
+| `tables/<name>.md` 内のセクション | JDBC ソース | 意味 | リンク先 |
+|---|---|---|---|
+| **Foreign Keys** | `DatabaseMetaData.getImportedKeys()` | *このテーブル上の* FK カラム → 他テーブルの主キー | 参照先テーブル |
+| **Referenced By** | `DatabaseMetaData.getExportedKeys()` | *他テーブル上の* FK カラム → このテーブルの主キー | 参照元（子）テーブル |
+
+各行は 2 つの異なるカラムリストを使用します:
+
+- `columns` — レンダリング対象テーブル側のローカルな FK カラム
+- `referencedColumns` — リンク先テーブル側の主キーカラム
+
+具体例として、`tables/users.md` をレンダリングする場合:
+
+- **Foreign Keys** の `manager_id → users(id)` という行は、`users.manager_id` が `users(id)` を参照していることを意味する。
+- **Referenced By** の `posts(user_id) → id` という行は、`posts.user_id` が `users.id` を参照していることを意味し、リンク先は `posts.md`（`users.md` ではない）。
+
+この区別は最近修正された箇所です。以前のバージョンでは exported key のリンクが PK 側（参照先）テーブルを指していたため、`Referenced By` が自己参照的になり機能していませんでした。
+
 ### PostgreSQL固有ドキュメント
 
 PostgreSQLデータベースの場合、`postgresql-markdown` アウトプットプラグインと `postgresql-schema` ソースプラグインを使用して、PostgreSQL固有オブジェクトを含む包括的なドキュメントを生成できます:

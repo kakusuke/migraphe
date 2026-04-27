@@ -21,11 +21,14 @@ import org.jspecify.annotations.Nullable;
 public class Main {
 
     public static void main(String[] args) {
+        System.exit(run(args));
+    }
+
+    public static int run(String[] args) {
         try {
-            // 引数チェック
             if (args.length == 0) {
                 printUsage();
-                System.exit(1);
+                return 1;
             }
 
             String commandName = args[0];
@@ -43,9 +46,7 @@ public class Main {
             // validate コマンドは ExecutionContext を必要としない（オフライン検証）
             if ("validate".equals(commandName)) {
                 ValidateCommand validateCommand = new ValidateCommand(baseDir, pluginRegistry);
-                int exitCode = validateCommand.execute();
-                System.exit(exitCode);
-                return;
+                return validateCommand.execute();
             }
 
             // generate コマンドは独自に設定をロードする
@@ -53,31 +54,24 @@ public class Main {
                 String nameFilter = parseNameOption(args);
                 GenerateCommand generateCommand =
                         new GenerateCommand(baseDir, pluginRegistry, pluginClassLoader, nameFilter);
-                int exitCode = generateCommand.execute();
-                System.exit(exitCode);
-                return;
+                return generateCommand.execute();
             }
 
             // ExecutionContext をロード
             ExecutionContext context = ExecutionContext.load(baseDir, pluginRegistry);
 
-            // コマンドを実行
             Command command = createCommand(commandName, args, context);
 
             if (command == null) {
                 System.err.println("Unknown command: " + commandName);
                 printUsage();
-                System.exit(1);
-                return; // Unreachable, but helps NullAway understand flow
+                return 1;
             }
 
-            int exitCode = command.execute();
-            System.exit(exitCode);
+            return command.execute();
 
         } catch (Exception e) {
-            System.err.println("Error: " + e.getMessage());
-            e.printStackTrace();
-            System.exit(1);
+            return handleException(e);
         }
     }
 
@@ -168,6 +162,18 @@ public class Main {
             }
         }
         return null;
+    }
+
+    static boolean shouldPrintStackTrace(Exception e) {
+        return !(e instanceof IllegalArgumentException);
+    }
+
+    static int handleException(Exception e) {
+        System.err.println("Error: " + e.getMessage());
+        if (shouldPrintStackTrace(e)) {
+            e.printStackTrace();
+        }
+        return 1;
     }
 
     /** 使用方法を表示する。 */

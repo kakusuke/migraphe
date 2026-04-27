@@ -2,7 +2,6 @@ package io.github.kakusuke.migraphe.gradle;
 
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
 import java.util.List;
@@ -13,60 +12,68 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
 
     @TaskAction
     public void status() {
-        ExecutionContext context = loadExecutionContext();
+        withExecutionContext(
+                context -> {
+                    getLogger().lifecycle("Migration Status");
+                    getLogger().lifecycle("================");
+                    getLogger().lifecycle("");
 
-        getLogger().lifecycle("Migration Status");
-        getLogger().lifecycle("================");
-        getLogger().lifecycle("");
+                    HistoryRepository historyRepo = context.createHistoryRepository();
+                    historyRepo.initialize();
 
-        HistoryRepository historyRepo = context.createHistoryRepository();
-        historyRepo.initialize();
+                    ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
 
-        ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
+                    int[] executedCount = {0};
+                    int[] pendingCount = {0};
 
-        int[] executedCount = {0};
-        int[] pendingCount = {0};
+                    List<String> lines =
+                            graphView.renderLines(
+                                    node -> {
+                                        boolean executed =
+                                                historyRepo.wasExecuted(
+                                                        node.id(), node.environment().id());
+                                        StringBuilder sb = new StringBuilder();
+                                        if (executed) {
+                                            executedCount[0]++;
+                                            sb.append("[✓] ");
+                                        } else {
+                                            pendingCount[0]++;
+                                            sb.append("[ ] ");
+                                        }
+                                        sb.append(node.id().value())
+                                                .append(" - ")
+                                                .append(node.name());
+                                        if (executed) {
+                                            ExecutionRecord record =
+                                                    historyRepo.findLatestRecord(
+                                                            node.id(), node.environment().id());
+                                            if (record != null) {
+                                                sb.append(" (")
+                                                        .append(
+                                                                FormatUtils.formatDuration(
+                                                                        record.durationMs()))
+                                                        .append(", ")
+                                                        .append(
+                                                                FormatUtils.formatDateTime(
+                                                                        record.executedAt()))
+                                                        .append(")");
+                                            }
+                                        }
+                                        return sb.toString();
+                                    });
 
-        List<String> lines =
-                graphView.renderLines(
-                        node -> {
-                            boolean executed =
-                                    historyRepo.wasExecuted(node.id(), node.environment().id());
-                            StringBuilder sb = new StringBuilder();
-                            if (executed) {
-                                executedCount[0]++;
-                                sb.append("[✓] ");
-                            } else {
-                                pendingCount[0]++;
-                                sb.append("[ ] ");
-                            }
-                            sb.append(node.id().value()).append(" - ").append(node.name());
-                            if (executed) {
-                                ExecutionRecord record =
-                                        historyRepo.findLatestRecord(
-                                                node.id(), node.environment().id());
-                                if (record != null) {
-                                    sb.append(" (")
-                                            .append(FormatUtils.formatDuration(record.durationMs()))
-                                            .append(", ")
-                                            .append(FormatUtils.formatDateTime(record.executedAt()))
-                                            .append(")");
-                                }
-                            }
-                            return sb.toString();
-                        });
+                    for (String line : lines) {
+                        getLogger().lifecycle(line);
+                    }
 
-        for (String line : lines) {
-            getLogger().lifecycle(line);
-        }
-
-        getLogger().lifecycle("");
-        getLogger()
-                .lifecycle(
-                        "Summary: Total: {} | Executed: {} | Pending: {}",
-                        executedCount[0] + pendingCount[0],
-                        executedCount[0],
-                        pendingCount[0]);
+                    getLogger().lifecycle("");
+                    getLogger()
+                            .lifecycle(
+                                    "Summary: Total: {} | Executed: {} | Pending: {}",
+                                    executedCount[0] + pendingCount[0],
+                                    executedCount[0],
+                                    pendingCount[0]);
+                });
     }
 
     /** 副作用のあるタスクはキャッシュしない。 */

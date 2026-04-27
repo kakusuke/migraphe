@@ -55,67 +55,64 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
 
     @TaskAction
     public void down() {
-        ExecutionContext context = loadExecutionContext();
+        withExecutionContext(
+                context -> {
+                    NodeId targetVersion = null;
+                    if (getTarget().isPresent()) {
+                        targetVersion = NodeId.of(getTarget().get());
+                    }
 
-        NodeId targetVersion = null;
-        if (getTarget().isPresent()) {
-            targetVersion = NodeId.of(getTarget().get());
-        }
+                    boolean allMigrations = getAll().getOrElse(false);
+                    boolean dryRun = getDryRun().getOrElse(false);
 
-        boolean allMigrations = getAll().getOrElse(false);
+                    if (!allMigrations && targetVersion == null) {
+                        throw new GradleException(
+                                "Either --all or --target must be specified.\n"
+                                        + "Usage:\n"
+                                        + "  ./gradlew migrapheDown --all\n"
+                                        + "  ./gradlew migrapheDown --target=<nodeId>");
+                    }
 
-        boolean dryRun = getDryRun().getOrElse(false);
+                    if (targetVersion != null && context.graph().getNode(targetVersion).isEmpty()) {
+                        throw new GradleException(
+                                "Target version not found: " + targetVersion.value());
+                    }
 
-        // 引数のバリデーション
-        if (!allMigrations && targetVersion == null) {
-            throw new GradleException(
-                    "Either --all or --target must be specified.\n"
-                            + "Usage:\n"
-                            + "  ./gradlew migrapheDown --all\n"
-                            + "  ./gradlew migrapheDown --target=<nodeId>");
-        }
+                    HistoryRepository historyRepo = context.createHistoryRepository();
+                    historyRepo.initialize();
 
-        if (targetVersion != null && context.graph().getNode(targetVersion).isEmpty()) {
-            throw new GradleException("Target version not found: " + targetVersion.value());
-        }
+                    GradleExecutionListener listener = new GradleExecutionListener(getLogger());
+                    RollbackExecutor executor =
+                            new RollbackExecutor(context.graph(), historyRepo, listener);
 
-        // HistoryRepository を取得
-        HistoryRepository historyRepo = context.createHistoryRepository();
-        historyRepo.initialize();
+                    Set<NodeId> targetNodes =
+                            executor.determineRollbackTargets(targetVersion, allMigrations);
 
-        // Executor を作成
-        GradleExecutionListener listener = new GradleExecutionListener(getLogger());
-        RollbackExecutor executor = new RollbackExecutor(context.graph(), historyRepo, listener);
+                    if (targetNodes.isEmpty()) {
+                        getLogger().lifecycle("No migrations to rollback.");
+                        return;
+                    }
 
-        // ロールバック対象ノードを決定
-        Set<NodeId> targetNodes = executor.determineRollbackTargets(targetVersion, allMigrations);
+                    ExecutionPlan plan =
+                            TopologicalSort.createReverseExecutionPlanFor(
+                                    context.graph(), targetNodes);
+                    displayRollbackPlan(context, plan, historyRepo, dryRun);
 
-        if (targetNodes.isEmpty()) {
-            getLogger().lifecycle("No migrations to rollback.");
-            return;
-        }
+                    if (dryRun) {
+                        getLogger().lifecycle("");
+                        getLogger().lifecycle("No changes made (dry run).");
+                        return;
+                    }
 
-        // 逆順実行プラン生成してグラフ表示
-        ExecutionPlan plan =
-                TopologicalSort.createReverseExecutionPlanFor(context.graph(), targetNodes);
-        displayRollbackPlan(context, plan, historyRepo, dryRun);
+                    getLogger().lifecycle("");
+                    getLogger().lifecycle("Executing rollback...");
+                    getLogger().lifecycle("");
 
-        // dry-run の場合はここで終了
-        if (dryRun) {
-            getLogger().lifecycle("");
-            getLogger().lifecycle("No changes made (dry run).");
-            return;
-        }
-
-        // ロールバック実行
-        getLogger().lifecycle("");
-        getLogger().lifecycle("Executing rollback...");
-        getLogger().lifecycle("");
-
-        ExecutionResult result = executor.execute(targetNodes);
-        if (!result.success()) {
-            throw new GradleException("Rollback failed.");
-        }
+                    ExecutionResult result = executor.execute(targetNodes);
+                    if (!result.success()) {
+                        throw new GradleException("Rollback failed.");
+                    }
+                });
     }
 
     /** 副作用のあるタスクはキャッシュしない。 */
