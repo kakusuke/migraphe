@@ -20,10 +20,18 @@ public final class PluginConfigPreParser {
         try (InputStream in = Files.newInputStream(migrapheYaml)) {
             Yaml yaml = new Yaml();
             Map<String, Object> root = yaml.load(in);
-            if (root == null || root.get("plugins") == null) {
+            if (root == null) {
                 return Collections.emptyList();
             }
-            List<?> raw = (List<?>) root.get("plugins");
+            Object pluginsValue = root.get("plugins");
+            if (pluginsValue == null) {
+                return Collections.emptyList();
+            }
+            if (!(pluginsValue instanceof List<?> raw)) {
+                throw new IllegalArgumentException(
+                        "plugins must be a YAML list of Maven coordinates, got: "
+                                + pluginsValue.getClass().getSimpleName());
+            }
             List<String> plugins = new ArrayList<>();
             for (int i = 0; i < raw.size(); i++) {
                 Object element = raw.get(i);

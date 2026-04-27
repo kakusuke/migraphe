@@ -99,6 +99,23 @@ class PluginConfigPreParserTest {
     }
 
     @Test
+    void shouldThrowFriendlyErrorWhenPluginsValueIsStringScalar() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins: "io.example:foo:1.0"
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parsePlugins(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plugins")
+                .hasMessageContaining("list")
+                .hasMessageContaining("String");
+    }
+
+    @Test
     void shouldReturnEmptyListWhenFileDoesNotExist() {
         Path missing = tempDir.resolve("nonexistent.yaml");
         var parser = new PluginConfigPreParser();
