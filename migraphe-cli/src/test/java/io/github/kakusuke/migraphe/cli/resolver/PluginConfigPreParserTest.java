@@ -69,6 +69,36 @@ class PluginConfigPreParserTest {
     }
 
     @Test
+    void shouldThrowFriendlyErrorWhenPluginsElementIsNull() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - ~
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parsePlugins(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plugins[0]")
+                .hasMessageContaining("null");
+    }
+
+    @Test
+    void shouldReturnEmptyListWhenPluginsValueIsNull() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(migrapheYaml, """
+                plugins: ~
+                """);
+        var parser = new PluginConfigPreParser();
+
+        List<MavenArtifactCoordinate> result = parser.parsePlugins(migrapheYaml);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void shouldReturnEmptyListWhenFileDoesNotExist() {
         Path missing = tempDir.resolve("nonexistent.yaml");
         var parser = new PluginConfigPreParser();

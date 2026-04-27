@@ -20,21 +20,22 @@ public final class PluginConfigPreParser {
         try (InputStream in = Files.newInputStream(migrapheYaml)) {
             Yaml yaml = new Yaml();
             Map<String, Object> root = yaml.load(in);
-            if (root == null || !root.containsKey("plugins")) {
+            if (root == null || root.get("plugins") == null) {
                 return Collections.emptyList();
             }
             List<?> raw = (List<?>) root.get("plugins");
             List<String> plugins = new ArrayList<>();
             for (int i = 0; i < raw.size(); i++) {
                 Object element = raw.get(i);
-                if (!(element instanceof String)) {
+                if (element instanceof String s) {
+                    plugins.add(s);
+                } else {
                     throw new IllegalArgumentException(
                             "plugins["
                                     + i
                                     + "] must be a string Maven coordinate, got: "
-                                    + element.getClass().getName());
+                                    + (element == null ? "null" : element.getClass().getName()));
                 }
-                plugins.add((String) element);
             }
             return plugins.stream().map(MavenArtifactCoordinate::parse).toList();
         } catch (IOException e) {
