@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.cli.resolver;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.net.URLClassLoader;
@@ -26,5 +27,23 @@ class PluginResolverTest {
         URLClassLoader result = resolver.resolve(tempDir);
 
         assertThat(result).isNull();
+    }
+
+    @Test
+    void shouldThrowWhenLockfileMissingButPluginsDeclared() throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                plugins:
+                  - io.example:plugin-a:1.0
+                """);
+        var resolver = new PluginResolver();
+
+        assertThatThrownBy(() -> resolver.resolve(tempDir))
+                .isInstanceOf(LockFileNotFoundException.class)
+                .hasMessageContaining("migraphe.lock.yaml")
+                .hasMessageContaining("migraphe pin");
     }
 }

@@ -1,26 +1,44 @@
 package io.github.kakusuke.migraphe.cli.resolver;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 
 /** migraphe.yaml の plugins / repositories セクションを読み取り、URLClassLoader を構築する。 */
 public final class PluginResolver {
 
     private final PluginConfigPreParser preParser;
+    private final LockFileReader lockFileReader;
 
     public PluginResolver() {
         this.preParser = new PluginConfigPreParser();
+        this.lockFileReader = new LockFileReader();
     }
 
     public @Nullable URLClassLoader resolve(Path baseDir) {
         PluginConfigParseResult parsed = preParser.parse(baseDir.resolve("migraphe.yaml"));
         if (parsed.plugins().isEmpty()) {
             return null;
+        }
+        Path lockPath = baseDir.resolve("migraphe.lock.yaml");
+        Optional<LockFile> lock;
+        try {
+            lock = lockFileReader.read(lockPath);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        if (lock.isEmpty()) {
+            throw new LockFileNotFoundException(
+                    "migraphe.lock.yaml not found at "
+                            + lockPath
+                            + ". Run 'migraphe pin' to generate it.");
         }
         RepositoryRegistry registry =
                 RepositoryRegistry.of(withDefaultsPrepended(parsed.repositories()));
