@@ -52,7 +52,7 @@ class PluginConfigPreParserTest {
     }
 
     @Test
-    void shouldThrowFriendlyErrorWhenPluginsElementIsNotString() throws IOException {
+    void shouldThrowFriendlyErrorWhenMapEntryMissesCoordinateKey() throws IOException {
         Path migrapheYaml = tempDir.resolve("migraphe.yaml");
         Files.writeString(
                 migrapheYaml,
@@ -65,23 +65,24 @@ class PluginConfigPreParserTest {
         assertThatThrownBy(() -> parser.parsePlugins(migrapheYaml))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("plugins[0]")
-                .hasMessageContaining("LinkedHashMap");
+                .hasMessageContaining("coordinate");
     }
 
     @Test
-    void shouldIncludeActualValueInErrorWhenPluginsElementIsNotString() throws IOException {
+    void shouldThrowFriendlyErrorWhenPluginsElementIsUnsupportedScalar() throws IOException {
         Path migrapheYaml = tempDir.resolve("migraphe.yaml");
         Files.writeString(
                 migrapheYaml,
                 """
                 plugins:
-                  - {group: foo}
+                  - 42
                 """);
         var parser = new PluginConfigPreParser();
 
         assertThatThrownBy(() -> parser.parsePlugins(migrapheYaml))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("{group=foo}");
+                .hasMessageContaining("plugins[0]")
+                .hasMessageContaining("Integer");
     }
 
     @Test
@@ -154,5 +155,182 @@ class PluginConfigPreParserTest {
         List<MavenArtifactCoordinate> result = parser.parsePlugins(missing);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void parseReturnsCoordinateOnlyPluginsWithEmptyRepositories() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - io.github.kakusuke:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+                """);
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(migrapheYaml);
+
+        assertThat(result.repositories()).isEmpty();
+        assertThat(result.plugins()).hasSize(1);
+        assertThat(result.plugins().get(0).coordinate().artifactId())
+                .isEqualTo("migraphe-plugin-generator-json");
+        assertThat(result.plugins().get(0).repositoryRef()).isEmpty();
+    }
+
+    @Test
+    void parseReturnsEmptyResultWhenFileMissing() {
+        Path missing = tempDir.resolve("nonexistent.yaml");
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(missing);
+
+        assertThat(result.repositories()).isEmpty();
+        assertThat(result.plugins()).isEmpty();
+    }
+
+    @Test
+    void parseAcceptsMapFormPluginEntryWithRepositoryRef() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - coordinate: com.github.alice:migraphe-plugin-foo:v1.2.0
+                    repository: jitpack
+                """);
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(migrapheYaml);
+
+        assertThat(result.plugins()).hasSize(1);
+        PluginDeclaration plugin = result.plugins().get(0);
+        assertThat(plugin.coordinate().groupId()).isEqualTo("com.github.alice");
+        assertThat(plugin.coordinate().artifactId()).isEqualTo("migraphe-plugin-foo");
+        assertThat(plugin.coordinate().version()).isEqualTo("v1.2.0");
+        assertThat(plugin.repositoryRef()).contains("jitpack");
+    }
+
+    @Test
+    void parseAcceptsMixedStringAndMapFormEntries() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - io.example:plain:1.0.0
+                  - coordinate: com.github.alice:migraphe-plugin-foo:v1.2.0
+                    repository: jitpack
+                """);
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(migrapheYaml);
+
+        assertThat(result.plugins()).hasSize(2);
+        assertThat(result.plugins().get(0).coordinate().artifactId()).isEqualTo("plain");
+        assertThat(result.plugins().get(0).repositoryRef()).isEmpty();
+        assertThat(result.plugins().get(1).repositoryRef()).contains("jitpack");
+    }
+
+    @Test
+    void parseRejectsInvalidPluginEntryType() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - 42
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parse(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("plugins[0]");
+    }
+
+    @Test
+    void parseReturnsRepositoriesWhenSectionPresent() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                repositories:
+                  - id: jitpack
+                    url: https://jitpack.io
+                  - id: internal
+                    url: https://nexus.example.com/maven2
+                """);
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(migrapheYaml);
+
+        assertThat(result.repositories()).hasSize(2);
+        assertThat(result.repositories().get(0).id()).isEqualTo("jitpack");
+        assertThat(result.repositories().get(0).url()).isEqualTo("https://jitpack.io");
+        assertThat(result.repositories().get(1).id()).isEqualTo("internal");
+    }
+
+    @Test
+    void parseReturnsEmptyRepositoriesWhenSectionAbsent() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - io.example:plain:1.0.0
+                """);
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(migrapheYaml);
+
+        assertThat(result.repositories()).isEmpty();
+    }
+
+    @Test
+    void parseRejectsRepositoryEntryThatIsNotMap() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                repositories:
+                  - "not-a-map"
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parse(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("repositories[0]");
+    }
+
+    @Test
+    void parseRejectsRepositoryEntryMissingId() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                repositories:
+                  - url: https://example.com
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parse(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("repositories[0]")
+                .hasMessageContaining("id");
+    }
+
+    @Test
+    void parseRejectsRepositoriesValueNotAList() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                repositories: "https://jitpack.io"
+                """);
+        var parser = new PluginConfigPreParser();
+
+        assertThatThrownBy(() -> parser.parse(migrapheYaml))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("repositories")
+                .hasMessageContaining("list");
     }
 }
