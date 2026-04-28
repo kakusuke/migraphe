@@ -29,20 +29,60 @@ public final class MavenPluginResolver {
 
     private final Path localRepoPath;
     private final List<RemoteRepository> remoteRepositories;
+    private final RepositoryRegistry registry;
 
     /** Maven Central を含むデフォルトコンストラクタ。 */
     public MavenPluginResolver() {
-        this(defaultLocalRepo(), defaultRemoteRepositories());
+        this(defaultLocalRepo(), RepositoryRegistry.defaults());
     }
 
-    /** テスト用コンストラクタ。 */
-    public MavenPluginResolver(Path localRepoPath, List<RemoteRepository> remoteRepositories) {
+    /** RepositoryRegistry ベースのコンストラクタ。 */
+    public MavenPluginResolver(Path localRepoPath, RepositoryRegistry registry) {
         this.localRepoPath = localRepoPath;
-        this.remoteRepositories = remoteRepositories;
+        this.registry = registry;
+        this.remoteRepositories = toRemoteRepositories(registry.all());
     }
 
-    /** 単一アーティファクトとその推移的依存を解決する。 */
-    public List<Path> resolve(MavenArtifactCoordinate coordinate) {
+    /**
+     * PluginDeclaration のリストを解決し、ResolvedArtifact のリストを返す。 各宣言の repositoryRef
+     * を考慮して問い合わせ先のリポジトリを絞り込む。
+     */
+    public List<ResolvedArtifact> resolve(List<PluginDeclaration> plugins) {
+        Set<Path> seenJars = new LinkedHashSet<>();
+        List<ResolvedArtifact> resolved = new ArrayList<>();
+        for (PluginDeclaration plugin : plugins) {
+            List<RemoteRepository> repos = repositoriesFor(plugin);
+            for (ArtifactResolution res : resolveOne(plugin.coordinate(), repos)) {
+                if (seenJars.add(res.path)) {
+                    resolved.add(new ResolvedArtifact(res.coordinate, res.path));
+                }
+            }
+        }
+        return resolved;
+    }
+
+    private List<RemoteRepository> repositoriesFor(PluginDeclaration plugin) {
+        if (plugin.repositoryRef().isEmpty()) {
+            return remoteRepositories;
+        }
+        String ref = plugin.repositoryRef().get();
+        RepositoryConfig repo =
+                registry.resolve(ref)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "Plugin '"
+                                                        + plugin.coordinate().groupId()
+                                                        + ":"
+                                                        + plugin.coordinate().artifactId()
+                                                        + "' references unknown repository '"
+                                                        + ref
+                                                        + "'"));
+        return List.of(toRemoteRepository(repo));
+    }
+
+    private List<ArtifactResolution> resolveOne(
+            MavenArtifactCoordinate coordinate, List<RemoteRepository> repositories) {
         RepositorySystem system = newRepositorySystem();
         DefaultRepositorySystemSession session = MavenRepositorySystemUtils.newSession();
         session.setSystemProperties(System.getProperties());
@@ -53,16 +93,26 @@ public final class MavenPluginResolver {
                 new DefaultArtifact(
                         coordinate.groupId(), coordinate.artifactId(), "jar", coordinate.version());
         var dependency = new Dependency(artifact, JavaScopes.RUNTIME);
-        var collectRequest = new CollectRequest(dependency, remoteRepositories);
+        var collectRequest = new CollectRequest(dependency, repositories);
         var dependencyRequest = new DependencyRequest(collectRequest, null);
 
         try {
             DependencyResult result = system.resolveDependencies(session, dependencyRequest);
-            List<Path> jars = new ArrayList<>();
+            List<ArtifactResolution> out = new ArrayList<>();
             result.getArtifactResults().stream()
                     .filter(r -> r.isResolved())
-                    .forEach(r -> jars.add(r.getArtifact().getFile().toPath()));
-            return jars;
+                    .forEach(
+                            r -> {
+                                var a = r.getArtifact();
+                                out.add(
+                                        new ArtifactResolution(
+                                                new MavenArtifactCoordinate(
+                                                        a.getGroupId(),
+                                                        a.getArtifactId(),
+                                                        a.getVersion()),
+                                                a.getFile().toPath()));
+                            });
+            return out;
         } catch (DependencyResolutionException e) {
             throw new IllegalStateException(
                     "Failed to resolve plugin: "
@@ -75,13 +125,18 @@ public final class MavenPluginResolver {
         }
     }
 
-    /** 複数アーティファクトを解決し、重複を除去する。 */
-    public List<Path> resolveAll(List<MavenArtifactCoordinate> coordinates) {
-        Set<Path> allJars = new LinkedHashSet<>();
-        for (MavenArtifactCoordinate coord : coordinates) {
-            allJars.addAll(resolve(coord));
+    private record ArtifactResolution(MavenArtifactCoordinate coordinate, Path path) {}
+
+    private static List<RemoteRepository> toRemoteRepositories(List<RepositoryConfig> configs) {
+        List<RemoteRepository> out = new ArrayList<>();
+        for (RepositoryConfig c : configs) {
+            out.add(toRemoteRepository(c));
         }
-        return new ArrayList<>(allJars);
+        return out;
+    }
+
+    private static RemoteRepository toRemoteRepository(RepositoryConfig config) {
+        return new RemoteRepository.Builder(config.id(), "default", config.url()).build();
     }
 
     @SuppressWarnings("deprecation")
@@ -99,12 +154,5 @@ public final class MavenPluginResolver {
             return Path.of(m2Home);
         }
         return Path.of(System.getProperty("user.home"), ".m2", "repository");
-    }
-
-    private static List<RemoteRepository> defaultRemoteRepositories() {
-        return List.of(
-                new RemoteRepository.Builder(
-                                "central", "default", "https://repo.maven.apache.org/maven2")
-                        .build());
     }
 }
