@@ -46,4 +46,28 @@ class PluginResolverTest {
                 .hasMessageContaining("migraphe.lock.yaml")
                 .hasMessageContaining("migraphe pin");
     }
+
+    @Test
+    void shouldThrowWhenLockfileIsOutOfSyncWithYaml() throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                plugins:
+                  - io.example:plugin-a:1.0
+                """);
+        Files.writeString(
+                tempDir.resolve("migraphe.lock.yaml"),
+                """
+                lockfile-version: 1
+                plugins: []
+                """);
+        var resolver = new PluginResolver();
+
+        assertThatThrownBy(() -> resolver.resolve(tempDir))
+                .isInstanceOf(LockOutOfSyncException.class)
+                .hasMessageContaining("io.example:plugin-a")
+                .hasMessageContaining("migraphe pin");
+    }
 }

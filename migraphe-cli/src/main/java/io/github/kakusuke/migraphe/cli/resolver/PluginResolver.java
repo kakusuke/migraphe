@@ -16,10 +16,12 @@ public final class PluginResolver {
 
     private final PluginConfigPreParser preParser;
     private final LockFileReader lockFileReader;
+    private final LockSyncChecker lockSyncChecker;
 
     public PluginResolver() {
         this.preParser = new PluginConfigPreParser();
         this.lockFileReader = new LockFileReader();
+        this.lockSyncChecker = new LockSyncChecker();
     }
 
     public @Nullable URLClassLoader resolve(Path baseDir) {
@@ -40,6 +42,7 @@ public final class PluginResolver {
                             + lockPath
                             + ". Run 'migraphe pin' to generate it.");
         }
+        lockSyncChecker.check(parsed, lock.get());
         RepositoryRegistry registry =
                 RepositoryRegistry.of(withDefaultsPrepended(parsed.repositories()));
         MavenPluginResolver resolver = new MavenPluginResolver(defaultLocalRepo(), registry);
