@@ -4,38 +4,58 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
-/** migraphe.yaml の plugins: セクションを読み取り、URLClassLoader を構築する。 */
+/** migraphe.yaml の plugins / repositories セクションを読み取り、URLClassLoader を構築する。 */
 public final class PluginResolver {
 
     private final PluginConfigPreParser preParser;
-    private final MavenPluginResolver mavenResolver;
 
     public PluginResolver() {
         this.preParser = new PluginConfigPreParser();
-        this.mavenResolver = new MavenPluginResolver();
     }
 
     public @Nullable URLClassLoader resolve(Path baseDir) {
-        List<MavenArtifactCoordinate> coords =
-                preParser.parsePlugins(baseDir.resolve("migraphe.yaml"));
-        if (coords.isEmpty()) {
+        PluginConfigParseResult parsed = preParser.parse(baseDir.resolve("migraphe.yaml"));
+        if (parsed.plugins().isEmpty()) {
             return null;
         }
-        List<Path> jars = mavenResolver.resolveAll(coords);
+        RepositoryRegistry registry =
+                RepositoryRegistry.of(withDefaultsPrepended(parsed.repositories()));
+        MavenPluginResolver resolver = new MavenPluginResolver(defaultLocalRepo(), registry);
+        List<ResolvedArtifact> artifacts = resolver.resolve(parsed.plugins());
         URL[] urls =
-                jars.stream()
+                artifacts.stream()
                         .map(
-                                p -> {
+                                a -> {
                                     try {
-                                        return p.toUri().toURL();
+                                        return a.jarPath().toUri().toURL();
                                     } catch (MalformedURLException e) {
                                         throw new IllegalStateException(e);
                                     }
                                 })
                         .toArray(URL[]::new);
         return new URLClassLoader(urls, Thread.currentThread().getContextClassLoader());
+    }
+
+    private static List<RepositoryConfig> withDefaultsPrepended(List<RepositoryConfig> extras) {
+        List<RepositoryConfig> all = new ArrayList<>();
+        all.add(RepositoryConfig.mavenCentral());
+        for (RepositoryConfig r : extras) {
+            if (!"maven-central".equals(r.id())) {
+                all.add(r);
+            }
+        }
+        return all;
+    }
+
+    private static Path defaultLocalRepo() {
+        String m2Home = System.getProperty("maven.repo.local");
+        if (m2Home != null) {
+            return Path.of(m2Home);
+        }
+        return Path.of(System.getProperty("user.home"), ".m2", "repository");
     }
 }
