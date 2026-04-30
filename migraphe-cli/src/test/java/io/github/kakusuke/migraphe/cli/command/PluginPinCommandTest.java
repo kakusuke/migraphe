@@ -19,8 +19,7 @@ class PluginPinCommandTest {
 
     @TempDir Path tempDir;
 
-    @Test
-    void writesLockfileWithSha256ForResolvedPlugin() throws IOException {
+    private Path setupRepo() throws IOException {
         Path repoDir = tempDir.resolve("repo");
         Path artifactDir = repoDir.resolve("com/example/test-plugin/1.0");
         Files.createDirectories(artifactDir);
@@ -34,9 +33,12 @@ class PluginPinCommandTest {
                   <version>1.0</version>
                 </project>
                 """);
-        Path jarPath = artifactDir.resolve("test-plugin-1.0.jar");
-        Files.write(jarPath, new byte[] {0x50, 0x4B, 0x03, 0x04});
+        Files.write(
+                artifactDir.resolve("test-plugin-1.0.jar"), new byte[] {0x50, 0x4B, 0x03, 0x04});
+        return repoDir;
+    }
 
+    private Path setupProjectYaml() throws IOException {
         Path projectDir = tempDir.resolve("project");
         Files.createDirectories(projectDir);
         Files.writeString(
@@ -47,9 +49,17 @@ class PluginPinCommandTest {
                 plugins:
                   - com.example:test-plugin:1.0
                 """);
+        return projectDir;
+    }
+
+    @Test
+    void writesLockfileWithSha256ForResolvedPlugin() throws IOException {
+        Path repoDir = setupRepo();
+        Path projectDir = setupProjectYaml();
+        Path jarPath = repoDir.resolve("com/example/test-plugin/1.0/test-plugin-1.0.jar");
 
         var resolver = new MavenPluginResolver(repoDir, RepositoryRegistry.of(List.of()));
-        var command = new PluginPinCommand(projectDir, resolver);
+        var command = new PluginPinCommand(projectDir, resolver, false);
 
         int exit = command.execute();
 
@@ -64,5 +74,56 @@ class PluginPinCommandTest {
         assertThat(lock.plugins().get(0).coordinate().artifactId()).isEqualTo("test-plugin");
         assertThat(lock.plugins().get(0).repositoryId()).isEqualTo("maven-central");
         assertThat(lock.plugins().get(0).sha256()).isEqualTo(Sha256Calculator.hash(jarPath));
+    }
+
+    @Test
+    void checkModeFailsWhenLockfileMissing() throws IOException {
+        Path repoDir = setupRepo();
+        Path projectDir = setupProjectYaml();
+
+        var resolver = new MavenPluginResolver(repoDir, RepositoryRegistry.of(List.of()));
+        var command = new PluginPinCommand(projectDir, resolver, true);
+
+        int exit = command.execute();
+
+        assertThat(exit).isNotZero();
+        assertThat(projectDir.resolve("migraphe.lock.yaml")).doesNotExist();
+    }
+
+    @Test
+    void checkModeFailsWhenLockfileDiffersFromCurrentResolution() throws IOException {
+        Path repoDir = setupRepo();
+        Path projectDir = setupProjectYaml();
+        Files.writeString(
+                projectDir.resolve("migraphe.lock.yaml"),
+                """
+                lockfile-version: 1
+                plugins:
+                  - coordinate: com.example:test-plugin:1.0
+                    repository: maven-central
+                    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+                    dependencies: []
+                """);
+
+        var resolver = new MavenPluginResolver(repoDir, RepositoryRegistry.of(List.of()));
+        var command = new PluginPinCommand(projectDir, resolver, true);
+
+        int exit = command.execute();
+
+        assertThat(exit).isNotZero();
+    }
+
+    @Test
+    void checkModeSucceedsWhenLockfileIsUpToDate() throws IOException {
+        Path repoDir = setupRepo();
+        Path projectDir = setupProjectYaml();
+
+        var resolver = new MavenPluginResolver(repoDir, RepositoryRegistry.of(List.of()));
+        new PluginPinCommand(projectDir, resolver, false).execute();
+        var checkCommand = new PluginPinCommand(projectDir, resolver, true);
+
+        int exit = checkCommand.execute();
+
+        assertThat(exit).isEqualTo(0);
     }
 }
