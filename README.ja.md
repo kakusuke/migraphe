@@ -12,7 +12,8 @@
 - **DAGベースのマイグレーション**: マイグレーションタスク間の複雑な依存関係を定義
 - **マルチ環境サポート**: 開発、ステージング、本番環境のマイグレーションを管理
 - **プラガブルアーキテクチャ**: PostgreSQL、MySQL、および汎用JDBCプラグインによる任意のJDBCデータベースをサポート
-- **プラグイン自動解決**: CLIは`migraphe.yaml`のMaven座標からプラグイン依存を自動解決（Maven Central + ローカルキャッシュ）
+- **プラグイン自動解決**: CLIは`migraphe.yaml`のMaven座標からプラグイン依存を自動解決（Maven Central、JitPack、または任意のHTTPS Mavenリポジトリ）
+- **再現可能なビルド**: SHA-256ロックファイル（`migraphe.lock.yaml`）が全プラグインと推移的依存JARをピン留め。`migraphe pin` で生成、`migraphe pin --check` および `migraphe validate` で検証
 - **Gradleプラグイン**: `migrapheUp`, `migrapheDown`, `migrapheStatus`, `migrapheValidate` タスクでビルドに統合
 - **YAML設定**: シンプルで読みやすい設定ファイル
 - **スキーマドキュメント生成**: `generate` コマンドでデータベーススキーマからMarkdownドキュメントを自動生成
