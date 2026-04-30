@@ -45,6 +45,14 @@ class RepositoryConfigTest {
     }
 
     @Test
+    void testOnlyFactoryAllowsFileUrl() {
+        RepositoryConfig config = RepositoryConfig.testOnly("local", "file:///tmp/repo");
+
+        assertThat(config.id()).isEqualTo("local");
+        assertThat(config.url()).isEqualTo("file:///tmp/repo");
+    }
+
+    @Test
     void rejectsNullUrl() {
         assertThatThrownBy(() -> new RepositoryConfig("repo", null))
                 .isInstanceOf(IllegalArgumentException.class)
