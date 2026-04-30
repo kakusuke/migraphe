@@ -17,11 +17,13 @@ public final class PluginResolver {
     private final PluginConfigPreParser preParser;
     private final LockFileReader lockFileReader;
     private final LockSyncChecker lockSyncChecker;
+    private final PluginIntegrityVerifier integrityVerifier;
 
     public PluginResolver() {
         this.preParser = new PluginConfigPreParser();
         this.lockFileReader = new LockFileReader();
         this.lockSyncChecker = new LockSyncChecker();
+        this.integrityVerifier = new PluginIntegrityVerifier();
     }
 
     public @Nullable URLClassLoader resolve(Path baseDir) {
@@ -47,6 +49,7 @@ public final class PluginResolver {
                 RepositoryRegistry.of(withDefaultsPrepended(parsed.repositories()));
         MavenPluginResolver resolver = new MavenPluginResolver(defaultLocalRepo(), registry);
         List<ResolvedArtifact> artifacts = resolver.resolve(parsed.plugins());
+        integrityVerifier.verify(artifacts, lock.get());
         URL[] urls =
                 artifacts.stream()
                         .map(
