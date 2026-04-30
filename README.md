@@ -128,6 +128,9 @@ down: |
 # Publish plugins to local Maven repo (first time only — for source builds with SNAPSHOT plugins)
 ./gradlew publishToMavenLocal
 
+# Generate the lockfile (required whenever plugins: changes in migraphe.yaml)
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli pin
+
 # Check migration status
 migraphe status
 
