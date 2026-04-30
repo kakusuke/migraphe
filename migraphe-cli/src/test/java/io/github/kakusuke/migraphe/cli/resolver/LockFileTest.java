@@ -13,7 +13,7 @@ class LockFileTest {
     @Test
     void exposesVersionAndPlugins() {
         MavenArtifactCoordinate coord = MavenArtifactCoordinate.parse("io.example:plugin:1.0");
-        LockedPlugin plugin = new LockedPlugin(coord, "maven-central", SHA, List.of());
+        LockedPlugin plugin = new LockedPlugin(coord, SHA, List.of());
 
         LockFile lockFile = new LockFile(1, List.of(plugin));
 

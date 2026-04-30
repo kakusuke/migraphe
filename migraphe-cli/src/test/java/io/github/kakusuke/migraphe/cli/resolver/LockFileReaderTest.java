@@ -37,7 +37,6 @@ class LockFileReaderTest {
                 lockfile-version: 1
                 plugins:
                   - coordinate: io.example:plugin-a:1.0
-                    repository: maven-central
                     sha256: %s
                     dependencies:
                       - coordinate: org.example:lib:2.3
@@ -51,11 +50,31 @@ class LockFileReaderTest {
         assertThat(result.plugins()).hasSize(1);
         LockedPlugin plugin = result.plugins().get(0);
         assertThat(plugin.coordinate().artifactId()).isEqualTo("plugin-a");
-        assertThat(plugin.repositoryId()).isEqualTo("maven-central");
         assertThat(plugin.sha256()).isEqualTo(SHA1);
         assertThat(plugin.dependencies()).hasSize(1);
         assertThat(plugin.dependencies().get(0).coordinate().artifactId()).isEqualTo("lib");
         assertThat(plugin.dependencies().get(0).sha256()).isEqualTo(SHA2);
+    }
+
+    @Test
+    void ignoresLegacyRepositoryKeyForBackwardCompatibility() throws IOException {
+        Path lock = tempDir.resolve("migraphe.lock.yaml");
+        Files.writeString(
+                lock,
+                """
+                lockfile-version: 1
+                plugins:
+                  - coordinate: io.example:plugin-a:1.0
+                    repository: maven-central
+                    sha256: %s
+                    dependencies: []
+                """
+                        .formatted(SHA1));
+
+        LockFile result = new LockFileReader().read(lock).orElseThrow();
+
+        assertThat(result.plugins()).hasSize(1);
+        assertThat(result.plugins().get(0).sha256()).isEqualTo(SHA1);
     }
 
     @Test
@@ -93,8 +112,7 @@ class LockFileReaderTest {
                 """
                 lockfile-version: 1
                 plugins:
-                  - repository: maven-central
-                    sha256: %s
+                  - sha256: %s
                 """
                         .formatted(SHA1));
 

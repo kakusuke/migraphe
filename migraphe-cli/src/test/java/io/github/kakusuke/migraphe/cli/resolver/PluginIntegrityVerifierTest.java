@@ -36,7 +36,6 @@ class PluginIntegrityVerifierTest {
                         List.of(
                                 new LockedPlugin(
                                         pluginCoord,
-                                        "maven-central",
                                         pluginSha,
                                         List.of(new LockedDependency(depCoord, depSha)))));
         List<ResolvedArtifact> resolved =
@@ -55,10 +54,7 @@ class PluginIntegrityVerifierTest {
         Files.writeString(pluginJar, "tampered");
         MavenArtifactCoordinate coord = MavenArtifactCoordinate.parse("io.example:plugin-a:1.0");
 
-        LockFile lock =
-                new LockFile(
-                        1,
-                        List.of(new LockedPlugin(coord, "maven-central", correctSha, List.of())));
+        LockFile lock = new LockFile(1, List.of(new LockedPlugin(coord, correctSha, List.of())));
         List<ResolvedArtifact> resolved = List.of(new ResolvedArtifact(coord, pluginJar));
 
         assertThatThrownBy(() -> new PluginIntegrityVerifier().verify(resolved, lock))
@@ -79,11 +75,7 @@ class PluginIntegrityVerifierTest {
                 MavenArtifactCoordinate.parse("org.example:unexpected:9.9");
 
         LockFile lock =
-                new LockFile(
-                        1,
-                        List.of(
-                                new LockedPlugin(
-                                        pluginCoord, "maven-central", pluginSha, List.of())));
+                new LockFile(1, List.of(new LockedPlugin(pluginCoord, pluginSha, List.of())));
         List<ResolvedArtifact> resolved =
                 List.of(
                         new ResolvedArtifact(pluginCoord, pluginJar),
@@ -103,9 +95,7 @@ class PluginIntegrityVerifierTest {
         MavenArtifactCoordinate coordV1 = MavenArtifactCoordinate.parse("io.example:plugin:1.0");
         MavenArtifactCoordinate coordV2 = MavenArtifactCoordinate.parse("io.example:plugin:2.0");
 
-        LockFile lock =
-                new LockFile(
-                        1, List.of(new LockedPlugin(coordV1, "maven-central", shaV1, List.of())));
+        LockFile lock = new LockFile(1, List.of(new LockedPlugin(coordV1, shaV1, List.of())));
         // resolved version 2.0 instead, lock only knows 1.0 → must error as missing pin
         List<ResolvedArtifact> resolved = List.of(new ResolvedArtifact(coordV2, jarV2));
 

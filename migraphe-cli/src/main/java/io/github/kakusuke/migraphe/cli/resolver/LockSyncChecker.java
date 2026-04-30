@@ -8,7 +8,6 @@ import java.util.Map;
 /** Verifies that {@code migraphe.lock.yaml} is in sync with {@code migraphe.yaml}. */
 public final class LockSyncChecker {
 
-    private static final String DEFAULT_REPO_ID = "maven-central";
     private static final String FIX_HINT = " Run 'migraphe pin' to update.";
 
     public void check(PluginConfigParseResult yaml, LockFile lock) {
@@ -34,16 +33,6 @@ public final class LockSyncChecker {
                                 + yamlPlugin.coordinate().version()
                                 + " but lock="
                                 + locked.coordinate().version());
-            }
-            String yamlRepo = yamlPlugin.repositoryRef().orElse(DEFAULT_REPO_ID);
-            if (!yamlRepo.equals(locked.repositoryId())) {
-                issues.add(
-                        "repository changed for "
-                                + ga
-                                + ": migraphe.yaml="
-                                + yamlRepo
-                                + " but lock="
-                                + locked.repositoryId());
             }
         }
         for (String ga : lockByGa.keySet()) {

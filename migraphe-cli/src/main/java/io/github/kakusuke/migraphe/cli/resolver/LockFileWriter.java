@@ -42,7 +42,6 @@ public final class LockFileWriter {
         for (LockedPlugin plugin : plugins) {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("coordinate", formatCoordinate(plugin.coordinate()));
-            entry.put("repository", plugin.repositoryId());
             entry.put("sha256", plugin.sha256());
             entry.put("dependencies", toDepList(plugin.dependencies()));
             result.add(entry);

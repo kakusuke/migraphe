@@ -4,19 +4,13 @@ import java.util.List;
 import java.util.regex.Pattern;
 
 public record LockedPlugin(
-        MavenArtifactCoordinate coordinate,
-        String repositoryId,
-        String sha256,
-        List<LockedDependency> dependencies) {
+        MavenArtifactCoordinate coordinate, String sha256, List<LockedDependency> dependencies) {
 
     private static final Pattern HEX_64 = Pattern.compile("[0-9a-f]{64}");
 
     public LockedPlugin {
         if (coordinate == null) {
             throw new IllegalArgumentException("coordinate must not be null");
-        }
-        if (repositoryId == null || repositoryId.isBlank()) {
-            throw new IllegalArgumentException("repositoryId must not be blank");
         }
         if (sha256 == null || sha256.length() != 64 || !HEX_64.matcher(sha256).matches()) {
             throw new IllegalArgumentException(
