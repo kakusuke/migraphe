@@ -104,6 +104,45 @@ history:
 
 推移的依存（JDBC ドライバ、Jackson 等）は Maven Central から自動的に解決されます。
 
+##### カスタムリポジトリ（JitPack 等）
+
+`repositories:` ブロックで HTTPS のリポジトリを追加し、プラグインから map 形式で参照できます:
+
+```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
+plugins:
+  - coordinate: com.github.user:custom-plugin:v1.2.3
+    repository: jitpack
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+```
+
+`maven-central` は常に暗黙的に利用可能なので再宣言は不要です。
+
+##### ロックファイル（`migraphe.lock.yaml`）
+
+Migraphe は全プラグインと推移的依存 JAR を SHA-256 でロックファイルに固定します。**`plugins:` を宣言する場合は必ずロックファイルが必要** で、無いと CLI は起動を拒否します。
+
+`plugins:` を編集したら次のコマンドでロックファイルを生成または更新します:
+
+```bash
+migraphe pin
+```
+
+各プラグインを設定済みリポジトリから解決し、全 JAR の SHA-256 を計算して `migraphe.lock.yaml` に書き出します。`migraphe.yaml` と一緒にバージョン管理してください。
+
+CI ではロックファイルが最新かを書き込みなしで検証する `--check` を使います:
+
+```bash
+migraphe pin --check
+```
+
+ロックファイルが無い、または再解決した結果と差異がある場合は非ゼロ終了します。`migraphe validate` もオフラインで lock 整合チェックを実施します。
+
+ピン留め後に JAR が改ざんされた場合（例: ローカルキャッシュの破損）、起動時に対応座標を含む checksum mismatch エラーで失敗します。
+
 #### 方法2: plugins/ ディレクトリ（レガシー）
 
 プラグイン JAR ファイルをプロジェクトの `plugins/` ディレクトリに直接配置します:

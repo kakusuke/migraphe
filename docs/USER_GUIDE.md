@@ -104,6 +104,45 @@ If using locally built plugins, publish them first:
 
 Transitive dependencies (e.g., JDBC drivers, Jackson) are resolved automatically from Maven Central.
 
+##### Custom Repositories (e.g., JitPack)
+
+Add a `repositories:` block with extra entries (HTTPS only) and reference them per plugin via the map form:
+
+```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
+plugins:
+  - coordinate: com.github.user:custom-plugin:v1.2.3
+    repository: jitpack
+  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+```
+
+`maven-central` is always available implicitly; you do not need to redeclare it.
+
+##### Lockfile (`migraphe.lock.yaml`)
+
+Migraphe pins every plugin and transitive JAR by SHA-256 in a lockfile. **A lockfile is required whenever `plugins:` is declared** — the CLI refuses to start otherwise.
+
+Generate or refresh the lockfile after editing `plugins:`:
+
+```bash
+migraphe pin
+```
+
+This resolves each plugin from the configured repositories, computes SHA-256 hashes for all resolved JARs, and writes `migraphe.lock.yaml`. Commit this file to source control alongside `migraphe.yaml`.
+
+For CI, use `--check` to verify the committed lockfile is up to date without writing:
+
+```bash
+migraphe pin --check
+```
+
+Exit code is non-zero when the lockfile is missing or differs from what re-resolution would produce. `migraphe validate` performs an offline lock-sync check as well.
+
+If a JAR is tampered with after pinning (for example, a corrupted local cache), startup fails with a checksum mismatch error pointing to the affected coordinate.
+
 #### Method 2: plugins/ Directory (Legacy)
 
 Place plugin JAR files directly in the `plugins/` directory of your project:
