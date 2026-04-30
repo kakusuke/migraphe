@@ -69,6 +69,11 @@ public final class PluginConfigPreParser {
                 throw new IllegalArgumentException(
                         "repositories[%d] is missing required string key 'url'".formatted(i));
             }
+            if (!url.startsWith("https://")) {
+                throw new IllegalArgumentException(
+                        "repositories[%d].url must start with 'https://' but was: %s"
+                                .formatted(i, url));
+            }
             try {
                 repositories.add(new RepositoryConfig(id, url));
             } catch (IllegalArgumentException e) {
