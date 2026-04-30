@@ -140,6 +140,30 @@ class ValidateCommandTest {
     }
 
     @Test
+    void shouldFailWhenPluginsDeclaredButLockfileMissing() throws IOException {
+        createValidProject(tempDir);
+        // 既存 migraphe.yaml に plugins: 追加 (lock は配置しない)
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                plugins:
+                  - io.example:plugin-a:1.0
+                """);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+
+        int exitCode = command.execute();
+
+        assertThat(exitCode).isEqualTo(1);
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(output).contains("FAIL");
+        assertThat(output).contains("migraphe.lock.yaml");
+    }
+
+    @Test
     void shouldDisplayCheckingSteps() throws IOException {
         // Given: 正しい設定ファイル
         createValidProject(tempDir);
