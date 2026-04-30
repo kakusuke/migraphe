@@ -4,11 +4,17 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
+import io.github.kakusuke.migraphe.cli.command.PluginPinCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
 import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
+import io.github.kakusuke.migraphe.cli.resolver.MavenPluginResolver;
+import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
+import io.github.kakusuke.migraphe.cli.resolver.PluginConfigPreParser;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolver;
+import io.github.kakusuke.migraphe.cli.resolver.RepositoryConfig;
+import io.github.kakusuke.migraphe.cli.resolver.RepositoryRegistry;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.net.URLClassLoader;
@@ -36,6 +42,13 @@ public class Main {
 
             // プロジェクトディレクトリの決定（カレントディレクトリ）
             Path baseDir = Paths.get(System.getProperty("user.dir"));
+
+            // pin コマンドはプラグイン解決前に実行（lock 生成用）
+            if ("pin".equals(commandName)) {
+                boolean checkOnly = Arrays.asList(args).contains("--check");
+                return new PluginPinCommand(baseDir, defaultMavenResolver(baseDir), checkOnly)
+                        .execute();
+            }
 
             // Maven Resolver でプラグイン依存を解決
             PluginResolver pluginResolver = new PluginResolver();
@@ -169,6 +182,28 @@ public class Main {
         return !(e instanceof IllegalArgumentException || e instanceof PluginResolutionException);
     }
 
+    private static MavenPluginResolver defaultMavenResolver(Path baseDir) {
+        PluginConfigParseResult parsed =
+                new PluginConfigPreParser().parse(baseDir.resolve("migraphe.yaml"));
+        java.util.List<RepositoryConfig> all = new java.util.ArrayList<>();
+        all.add(RepositoryConfig.mavenCentral());
+        for (RepositoryConfig r : parsed.repositories()) {
+            if (!"maven-central".equals(r.id())) {
+                all.add(r);
+            }
+        }
+        Path localRepo = defaultLocalRepo();
+        return new MavenPluginResolver(localRepo, RepositoryRegistry.of(all));
+    }
+
+    private static Path defaultLocalRepo() {
+        String m2Home = System.getProperty("maven.repo.local");
+        if (m2Home != null) {
+            return Path.of(m2Home);
+        }
+        return Path.of(System.getProperty("user.home"), ".m2", "repository");
+    }
+
     static int handleException(Exception e) {
         System.err.println("Error: " + e.getMessage());
         if (shouldPrintStackTrace(e)) {
@@ -190,6 +225,8 @@ public class Main {
         System.out.println(
                 "  validate                            Validate configuration (offline)");
         System.out.println("  generate [--name <name>]            Run generators");
+        System.out.println(
+                "  pin [--check]                       Generate or verify migraphe.lock.yaml");
         System.out.println();
         System.out.println("Up options:");
         System.out.println("  <id>        Execute migrations up to and including <id>");

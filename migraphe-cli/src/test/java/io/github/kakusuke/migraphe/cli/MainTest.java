@@ -52,4 +52,19 @@ class MainTest {
         assertThat(Main.shouldPrintStackTrace(new LockFileNotFoundException("missing lock")))
                 .isFalse();
     }
+
+    @Test
+    void usageOutputMentionsPinCommand() {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PrintStream original = System.out;
+        System.setOut(new PrintStream(baos));
+        try {
+            Main.run(new String[0]);
+            String stdout = baos.toString(StandardCharsets.UTF_8);
+            assertThat(stdout).contains("pin");
+            assertThat(stdout).contains("--check");
+        } finally {
+            System.setOut(original);
+        }
+    }
 }
