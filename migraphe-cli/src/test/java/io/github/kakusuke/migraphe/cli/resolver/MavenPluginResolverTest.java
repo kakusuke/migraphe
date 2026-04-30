@@ -104,6 +104,36 @@ class MavenPluginResolverTest {
     }
 
     @Test
+    void resolveGroupsReturnsRootArtifactWithoutDependenciesForLeafPlugin() throws IOException {
+        Path repoDir = tempDir.resolve("repo");
+        Path artifactDir = repoDir.resolve("com/example/test-plugin/1.0");
+        Files.createDirectories(artifactDir);
+        Files.writeString(
+                artifactDir.resolve("test-plugin-1.0.pom"),
+                """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>test-plugin</artifactId>
+                  <version>1.0</version>
+                </project>
+                """);
+        Files.write(
+                artifactDir.resolve("test-plugin-1.0.jar"), new byte[] {0x50, 0x4B, 0x03, 0x04});
+
+        var resolver = new MavenPluginResolver(repoDir, RepositoryRegistry.of(List.of()));
+        PluginDeclaration plugin = PluginDeclaration.fromString("com.example:test-plugin:1.0");
+
+        List<ResolvedPluginGroup> groups = resolver.resolveGroups(List.of(plugin));
+
+        assertThat(groups).hasSize(1);
+        ResolvedPluginGroup group = groups.get(0);
+        assertThat(group.plugin()).isEqualTo(plugin);
+        assertThat(group.root().coordinate().artifactId()).isEqualTo("test-plugin");
+        assertThat(group.dependencies()).isEmpty();
+    }
+
+    @Test
     void shouldResolveAllDeduplicatesResults() throws IOException {
         Path repoDir = tempDir.resolve("repo");
         Path artifactDirA = repoDir.resolve("com/example/plugin-a/1.0");

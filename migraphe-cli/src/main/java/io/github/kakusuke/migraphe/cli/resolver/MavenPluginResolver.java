@@ -61,6 +61,39 @@ public final class MavenPluginResolver {
         return resolved;
     }
 
+    /**
+     * Resolves each plugin separately and groups its root artifact and transitive dependencies into
+     * a {@link ResolvedPluginGroup}.
+     */
+    public List<ResolvedPluginGroup> resolveGroups(List<PluginDeclaration> plugins) {
+        List<ResolvedPluginGroup> groups = new ArrayList<>();
+        for (PluginDeclaration plugin : plugins) {
+            List<RemoteRepository> repos = repositoriesFor(plugin);
+            List<ArtifactResolution> all = resolveOne(plugin.coordinate(), repos);
+            ResolvedArtifact root = null;
+            List<ResolvedArtifact> deps = new ArrayList<>();
+            for (ArtifactResolution res : all) {
+                ResolvedArtifact artifact = new ResolvedArtifact(res.coordinate, res.path);
+                if (root == null && res.coordinate.equals(plugin.coordinate())) {
+                    root = artifact;
+                } else {
+                    deps.add(artifact);
+                }
+            }
+            if (root == null) {
+                throw new IllegalStateException(
+                        "Maven did not return the requested artifact for "
+                                + plugin.coordinate().groupId()
+                                + ":"
+                                + plugin.coordinate().artifactId()
+                                + ":"
+                                + plugin.coordinate().version());
+            }
+            groups.add(new ResolvedPluginGroup(plugin, root, deps));
+        }
+        return groups;
+    }
+
     private List<RemoteRepository> repositoriesFor(PluginDeclaration plugin) {
         if (plugin.repositoryRef().isEmpty()) {
             return remoteRepositories;
