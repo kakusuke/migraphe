@@ -72,10 +72,9 @@ public final class LockFileReader {
     private static LockedPlugin readPlugin(Map<?, ?> map) {
         MavenArtifactCoordinate coordinate =
                 MavenArtifactCoordinate.parse(requireString(map, "coordinate"));
-        String repository = requireString(map, "repository");
         String sha256 = requireString(map, "sha256");
         List<LockedDependency> deps = readDependencies(map.get("dependencies"));
-        return new LockedPlugin(coordinate, repository, sha256, deps);
+        return new LockedPlugin(coordinate, sha256, deps);
     }
 
     private static List<LockedDependency> readDependencies(@Nullable Object value) {

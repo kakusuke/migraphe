@@ -17,28 +17,18 @@ class LockedPluginTest {
         MavenArtifactCoordinate depCoord = MavenArtifactCoordinate.parse("org.example:lib:1.0");
         LockedDependency dep = new LockedDependency(depCoord, SHA2);
 
-        LockedPlugin plugin = new LockedPlugin(coord, "maven-central", SHA, List.of(dep));
+        LockedPlugin plugin = new LockedPlugin(coord, SHA, List.of(dep));
 
         assertThat(plugin.coordinate()).isEqualTo(coord);
-        assertThat(plugin.repositoryId()).isEqualTo("maven-central");
         assertThat(plugin.sha256()).isEqualTo(SHA);
         assertThat(plugin.dependencies()).containsExactly(dep);
-    }
-
-    @Test
-    void rejectsBlankRepositoryId() {
-        MavenArtifactCoordinate coord = MavenArtifactCoordinate.parse("io.example:plugin:1.0");
-
-        assertThatThrownBy(() -> new LockedPlugin(coord, "", SHA, List.of()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("repositoryId");
     }
 
     @Test
     void rejectsInvalidSha256() {
         MavenArtifactCoordinate coord = MavenArtifactCoordinate.parse("io.example:plugin:1.0");
 
-        assertThatThrownBy(() -> new LockedPlugin(coord, "maven-central", "abc", List.of()))
+        assertThatThrownBy(() -> new LockedPlugin(coord, "abc", List.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("sha256");
     }

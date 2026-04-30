@@ -26,7 +26,6 @@ class LockFileWriterTest {
         LockedPlugin plugin =
                 new LockedPlugin(
                         MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                        "maven-central",
                         SHA1,
                         List.of(dep));
         LockFile lockFile = new LockFile(1, List.of(plugin));
@@ -38,10 +37,10 @@ class LockFileWriterTest {
         assertThat(content).contains("DO NOT EDIT");
         assertThat(content).contains("lockfile-version: 1");
         assertThat(content).contains("io.example:plugin-a:1.0");
-        assertThat(content).contains("maven-central");
         assertThat(content).contains(SHA1);
         assertThat(content).contains("org.example:lib:2.3");
         assertThat(content).contains(SHA2);
+        assertThat(content).doesNotContain("repository");
     }
 
     @Test
@@ -52,7 +51,6 @@ class LockFileWriterTest {
         LockedPlugin plugin =
                 new LockedPlugin(
                         MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                        "maven-central",
                         SHA1,
                         List.of(dep));
         LockFile original = new LockFile(1, List.of(plugin));

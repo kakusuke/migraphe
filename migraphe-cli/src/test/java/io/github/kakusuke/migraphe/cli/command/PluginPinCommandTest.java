@@ -72,7 +72,6 @@ class PluginPinCommandTest {
         assertThat(lock.version()).isEqualTo(1);
         assertThat(lock.plugins()).hasSize(1);
         assertThat(lock.plugins().get(0).coordinate().artifactId()).isEqualTo("test-plugin");
-        assertThat(lock.plugins().get(0).repositoryId()).isEqualTo("maven-central");
         assertThat(lock.plugins().get(0).sha256()).isEqualTo(Sha256Calculator.hash(jarPath));
     }
 
@@ -100,7 +99,6 @@ class PluginPinCommandTest {
                 lockfile-version: 1
                 plugins:
                   - coordinate: com.example:test-plugin:1.0
-                    repository: maven-central
                     sha256: "0000000000000000000000000000000000000000000000000000000000000000"
                     dependencies: []
                 """);

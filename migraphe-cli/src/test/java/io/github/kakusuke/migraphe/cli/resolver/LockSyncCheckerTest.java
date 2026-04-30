@@ -1,10 +1,8 @@
 package io.github.kakusuke.migraphe.cli.resolver;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class LockSyncCheckerTest {
@@ -24,7 +22,6 @@ class LockSyncCheckerTest {
                         List.of(
                                 new LockedPlugin(
                                         MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                                        "maven-central",
                                         SHA1,
                                         List.of())));
 
@@ -46,7 +43,6 @@ class LockSyncCheckerTest {
                         List.of(
                                 new LockedPlugin(
                                         MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                                        "maven-central",
                                         SHA1,
                                         List.of())));
 
@@ -68,12 +64,10 @@ class LockSyncCheckerTest {
                         List.of(
                                 new LockedPlugin(
                                         MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                                        "maven-central",
                                         SHA1,
                                         List.of()),
                                 new LockedPlugin(
                                         MavenArtifactCoordinate.parse("io.example:plugin-b:2.0"),
-                                        "maven-central",
                                         SHA2,
                                         List.of())));
 
@@ -95,7 +89,6 @@ class LockSyncCheckerTest {
                         List.of(
                                 new LockedPlugin(
                                         MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                                        "maven-central",
                                         SHA1,
                                         List.of())));
 
@@ -105,50 +98,5 @@ class LockSyncCheckerTest {
                 .hasMessageContaining("1.5")
                 .hasMessageContaining("1.0")
                 .hasMessageContaining("migraphe pin");
-    }
-
-    @Test
-    void failsWhenRepositoryRefDiffers() {
-        PluginDeclaration yamlPlugin =
-                new PluginDeclaration(
-                        MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                        Optional.of("jitpack"));
-        PluginConfigParseResult yaml = new PluginConfigParseResult(List.of(), List.of(yamlPlugin));
-        LockFile lock =
-                new LockFile(
-                        1,
-                        List.of(
-                                new LockedPlugin(
-                                        MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                                        "maven-central",
-                                        SHA1,
-                                        List.of())));
-
-        assertThatThrownBy(() -> new LockSyncChecker().check(yaml, lock))
-                .isInstanceOf(LockOutOfSyncException.class)
-                .hasMessageContaining("jitpack")
-                .hasMessageContaining("maven-central")
-                .hasMessageContaining("migraphe pin");
-    }
-
-    @Test
-    void treatsMissingRepositoryRefAsMavenCentral() {
-        PluginConfigParseResult yaml =
-                new PluginConfigParseResult(
-                        List.of(),
-                        List.of(PluginDeclaration.fromString("io.example:plugin-a:1.0")));
-        LockFile lock =
-                new LockFile(
-                        1,
-                        List.of(
-                                new LockedPlugin(
-                                        MavenArtifactCoordinate.parse("io.example:plugin-a:1.0"),
-                                        "maven-central",
-                                        SHA1,
-                                        List.of())));
-
-        // does not throw — empty repositoryRef means default repository (maven-central)
-        new LockSyncChecker().check(yaml, lock);
-        assertThat(true).isTrue();
     }
 }
