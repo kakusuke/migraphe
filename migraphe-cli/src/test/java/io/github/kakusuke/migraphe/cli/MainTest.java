@@ -2,6 +2,8 @@ package io.github.kakusuke.migraphe.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
+import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -41,5 +43,13 @@ class MainTest {
         } finally {
             System.setErr(original);
         }
+    }
+
+    @Test
+    void shouldNotPrintStackTraceForPluginResolutionException() {
+        assertThat(Main.shouldPrintStackTrace(new PluginResolutionException("missing lock")))
+                .isFalse();
+        assertThat(Main.shouldPrintStackTrace(new LockFileNotFoundException("missing lock")))
+                .isFalse();
     }
 }
