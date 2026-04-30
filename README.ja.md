@@ -106,6 +106,9 @@ down: |
 # プラグインをローカルMavenリポジトリに公開（初回のみ）
 ./gradlew publishToMavenLocal
 
+# ロックファイルの生成（migraphe.yaml の plugins: を変更したら毎回必要）
+migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli pin
+
 # マイグレーションステータスの確認
 migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli status
 
