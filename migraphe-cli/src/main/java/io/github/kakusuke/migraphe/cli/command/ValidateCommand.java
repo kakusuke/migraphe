@@ -1,13 +1,22 @@
 package io.github.kakusuke.migraphe.cli.command;
 
+import io.github.kakusuke.migraphe.cli.resolver.LockFile;
+import io.github.kakusuke.migraphe.cli.resolver.LockFileReader;
+import io.github.kakusuke.migraphe.cli.resolver.LockOutOfSyncException;
+import io.github.kakusuke.migraphe.cli.resolver.LockSyncChecker;
+import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
+import io.github.kakusuke.migraphe.cli.resolver.PluginConfigPreParser;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
 import io.github.kakusuke.migraphe.core.config.ConfigValidator;
 import io.github.kakusuke.migraphe.core.config.ConfigValidator.ValidationOutput;
 import io.github.kakusuke.migraphe.core.config.YamlFileScanner;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** 設定ファイルをオフラインで検証するコマンド。 DB接続なしで全エラーを蓄積して一括表示。 */
 public class ValidateCommand implements Command {
@@ -37,14 +46,19 @@ public class ValidateCommand implements Command {
         // 各チェックステップを表示
         displayCheckResults(result);
 
+        // 6. Plugin lockfile (declared plugins only)
+        List<String> lockErrors = checkLockfile();
+        printCheckResult("Checking plugin lockfile...", lockErrors.isEmpty(), lockErrors);
+
         // サマリーを表示
-        if (result.isValid()) {
+        boolean valid = result.isValid() && lockErrors.isEmpty();
+        if (valid) {
             System.out.println();
             printSuccess("Validation successful.");
             return 0;
         } else {
             System.out.println();
-            int errorCount = result.errors().size();
+            int errorCount = result.errors().size() + lockErrors.size();
             printError(
                     "Validation failed with "
                             + errorCount
@@ -52,6 +66,33 @@ public class ValidateCommand implements Command {
                             + (errorCount == 1 ? "" : "s")
                             + ".");
             return 1;
+        }
+    }
+
+    private List<String> checkLockfile() {
+        Path yamlPath = baseDir.resolve("migraphe.yaml");
+        if (!java.nio.file.Files.exists(yamlPath)) {
+            return List.of();
+        }
+        PluginConfigParseResult parsed = new PluginConfigPreParser().parse(yamlPath);
+        if (parsed.plugins().isEmpty()) {
+            return List.of();
+        }
+        Path lockPath = baseDir.resolve("migraphe.lock.yaml");
+        Optional<LockFile> lock;
+        try {
+            lock = new LockFileReader().read(lockPath);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        if (lock.isEmpty()) {
+            return List.of("migraphe.lock.yaml is missing. Run 'migraphe pin' to generate it.");
+        }
+        try {
+            new LockSyncChecker().check(parsed, lock.get());
+            return List.of();
+        } catch (LockOutOfSyncException e) {
+            return List.of(e.getMessage());
         }
     }
 
