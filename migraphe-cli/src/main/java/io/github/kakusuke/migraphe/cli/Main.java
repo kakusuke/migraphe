@@ -7,6 +7,7 @@ import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
 import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
+import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolver;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
@@ -165,7 +166,7 @@ public class Main {
     }
 
     static boolean shouldPrintStackTrace(Exception e) {
-        return !(e instanceof IllegalArgumentException);
+        return !(e instanceof IllegalArgumentException || e instanceof PluginResolutionException);
     }
 
     static int handleException(Exception e) {
