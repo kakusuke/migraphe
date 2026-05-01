@@ -7,7 +7,9 @@ plugins {
 }
 
 allprojects {
-    group = "io.github.kakusuke.migraphe"
+    // デフォルト: io.github.kakusuke.migraphe (Maven Central 互換、ローカル開発用)
+    // JitPack ビルド時のみ -PpublishGroup=com.github.kakusuke.migraphe で上書き
+    group = providers.gradleProperty("publishGroup").getOrElse("io.github.kakusuke.migraphe")
     // version は gradle.properties で管理
 
     repositories {

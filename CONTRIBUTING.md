@@ -122,6 +122,67 @@ We use [Spotless](https://github.com/diffplug/spotless) with Google Java Format.
 - Provide steps to reproduce
 - Include environment details (Java version, OS)
 
+## Pre-release builds via JitPack (beta channel)
+
+> ⚠️ **Beta channel — temporary distribution**
+>
+> JitPack 経由の配布は Maven Central 対応までの暫定措置です。
+> 将来座標は `io.github.kakusuke.migraphe:<module>:X.Y.Z`（Maven Central）に
+> 置き換わります。現時点の `com.github.kakusuke.migraphe:<module>:main-SNAPSHOT`
+> 座標を **本番運用に組み込まないでください**。
+>
+> このセクションは Migraphe 本体コントリビューターおよびプラグイン開発者が、
+> push されたばかりの `main` を `git clone` なしで動作確認するための手順です。
+
+### CLI から利用する場合
+
+任意のディレクトリに以下の `migraphe.yaml` を配置（座標は将来の Maven Central 移行で変わります）:
+
+```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
+plugins:
+  - { coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT, repository: jitpack }
+  - { coordinate: com.github.kakusuke.migraphe:migraphe-plugin-mysql:main-SNAPSHOT, repository: jitpack }
+  - { coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:main-SNAPSHOT, repository: jitpack }
+
+# ... project / history / generators / targets / tasks は通常どおり
+```
+
+> ℹ️ Maven Central 対応後は `io.github.kakusuke.migraphe:<module>:X.Y.Z` 座標 + `repositories` ブロック削除（mavenCentral 自動）に書き換えてください。
+
+その後 `migraphe pin` で `migraphe.lock.yaml` を生成、`migraphe validate` でロックファイル整合を確認、`migraphe status` で動作検証します。
+
+### Gradle から利用する場合
+
+```kotlin
+plugins {
+    id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven("https://jitpack.io")
+}
+
+dependencies {
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:main-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-generator-json:main-SNAPSHOT")
+}
+```
+
+> ℹ️ Maven Central 対応後は `migraphePlugin("io.github.kakusuke.migraphe:<module>:X.Y.Z")` + JitPack リポジトリ削除に書き換えてください。
+
+### 注意事項
+
+- **`main-SNAPSHOT` の SHA は不安定**: JitPack は `main` ブランチへのコミット毎に再ビルドを行い、その都度 JAR の SHA-256 が変わります。`migraphe pin` で記録したロック値が `ChecksumMismatchException` を起こした場合は、`migraphe pin` を再実行してコミットし直してください。
+- **JitPack ビルドキャッシュのリフレッシュ**: 古いビルドが返る場合は <https://jitpack.io/#kakusuke/migraphe> で対象バージョンを "Look up" → "Get it" して再ビルドを促せます。
+- **ローカルの maven-publish との切り替え**: デフォルトの `./gradlew publishToMavenLocal` は `io.github.kakusuke.migraphe` 配下に発行されます。JitPack 互換 artefact（`com.github.kakusuke.migraphe`）をローカルに置きたい場合は `./gradlew -PpublishGroup=com.github.kakusuke.migraphe publishToMavenLocal` を使ってください。両 groupId は `~/.m2/` で共存します。
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the Apache License 2.0.

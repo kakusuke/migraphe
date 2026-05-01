@@ -1242,6 +1242,18 @@ WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
    LIMIT 10;
    ```
 
+## 配布チャネルロードマップ
+
+Migraphe アーティファクトは以下のチャネルで提供されます:
+
+| チャネル | 状態 | groupId | 対象 |
+|----------|------|---------|------|
+| GitHub Releases (fat JAR) | ✅ 提供中 | — | CLI バイナリ |
+| JitPack | 🚧 contributor 向けベータ — [CONTRIBUTING.md](../CONTRIBUTING.md#pre-release-builds-via-jitpack-beta-channel) 参照 | `com.github.*` | プラグイン JAR（pre-release 検証用のみ） |
+| Maven Central | 📅 公開予定 | `io.github.kakusuke.migraphe` | プラグイン JAR（本番用） |
+
+エンドユーザーは Maven Central 公開をお待ちください。JitPack チャネルは Migraphe 本体のコントリビューターおよびプラグイン開発者が最新の `main` ブランチを動作確認するためのもので、現時点の座標 (`com.github.kakusuke.migraphe:*:main-SNAPSHOT`) は **暫定** です。Maven Central 公開後はサポートされません。
+
 ## 次のステップ
 
 - 設計の詳細については[アーキテクチャドキュメント](../CLAUDE.md)を参照

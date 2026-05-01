@@ -1242,6 +1242,18 @@ WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
    LIMIT 10;
    ```
 
+## Distribution Roadmap
+
+Migraphe artefacts are available through the following channels:
+
+| Channel | Status | groupId | Scope |
+|---------|--------|---------|-------|
+| GitHub Releases (fat JAR) | ✅ Available | — | CLI binary |
+| JitPack | 🚧 Contributor beta — see [CONTRIBUTING.md](../CONTRIBUTING.md#pre-release-builds-via-jitpack-beta-channel) | `com.github.*` | Plugin JARs (pre-release verification only) |
+| Maven Central | 📅 Planned | `io.github.kakusuke.migraphe` | Plugin JARs (production) |
+
+End users should wait for the Maven Central release. The JitPack channel is intended for Migraphe core contributors and plugin developers who need to verify against the latest `main` branch — its coordinates (`com.github.kakusuke.migraphe:*:main-SNAPSHOT`) are temporary and will not be supported once Maven Central distribution is live.
+
 ## Next Steps
 
 - Explore the [Architecture Documentation](../CLAUDE.md) for design details
