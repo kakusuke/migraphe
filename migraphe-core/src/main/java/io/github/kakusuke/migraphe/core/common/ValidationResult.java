@@ -1,4 +1,4 @@
-package io.github.kakusuke.migraphe.api.common;
+package io.github.kakusuke.migraphe.core.common;
 
 import java.util.List;
 import java.util.Objects;

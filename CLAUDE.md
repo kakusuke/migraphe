@@ -45,11 +45,12 @@ io.github.kakusuke.migraphe.api/
 ├── history/        # HistoryRepository (interface), ExecutionRecord, ExecutionStatus
 ├── execution/      # ExecutionListener, ExecutionPlanInfo, ExecutionSummary
 ├── schema/         # SchemaInfoProvider<T>
-├── common/         # Result, ValidationResult
+├── common/         # Result
 ├── generator/      # GeneratorSourcePlugin<T>, GeneratorOutputPlugin, GeneratorDefinition, SourceContext, OutputContext
 └── spi/            # MigraphePlugin, EnvironmentProvider, MigrationNodeProvider, HistoryRepositoryProvider, TaskDefinition, EnvironmentDefinition
 
 io.github.kakusuke.migraphe.core/
+├── common/         # ValidationResult (internal — not part of plugin SPI)
 ├── graph/          # MigrationGraph, ExecutionPlan, ExecutionLevel, TopologicalSort, FormatUtils
 │   └── layout/     # ExecutionGraphView, LayoutSort, LayoutOrder, LayoutTree, LayoutStream, NonTreeEdge, Cell, GridCanvas, NodeLineInfo, GraphVisualizer
 ├── execution/      # MigrationExecutor, RollbackExecutor, StatusService, ExecutionResult, ExecutionContext
@@ -251,6 +252,15 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-05-01 (Session 48)
+- **`migraphe-api` を「プラグイン契約専用」モジュールに引き締め: `ValidationResult` を core へ移動**
+  - **Motivation**: CLAUDE.md は `migraphe-api` を "Lightweight interfaces ... for plugin developers" と位置付けてきたが、棚卸しの結果 `ValidationResult` だけは唯一プラグイン契約のシグネチャに登場しない型だった (本番コードでは `migraphe-core/.../graph/MigrationGraph.validate()` が唯一の利用箇所、しかも対応する `ValidationResultTest` はすでに `migraphe-core/src/test/java/.../core/common/` に置かれており、所有者と置き場所がチグハグ)。これを是正して、API モジュールが record / enum / sealed `Result` を含めても "プラグインが触る型しか入っていない" という性質を文字どおりに成立させる。
+  - **Move**: `migraphe-api/src/main/java/io/github/kakusuke/migraphe/api/common/ValidationResult.java` → `migraphe-core/src/main/java/io/github/kakusuke/migraphe/core/common/ValidationResult.java`. パッケージ宣言のみ書き換え (`api.common` → `core.common`)、レコード本体・compact constructor・`valid()` / `invalid(...)` ファクトリは全くの無変更。
+  - **Import 張り替え (3 ファイル)**: `MigrationGraph.java` (本番)、`MigrationGraphTest.java`、`ValidationResultTest.java`。後者は移動先と同一パッケージになったため Spotless が冗長 import を自動除去した。
+  - **Scope discipline**: `Result<T,E>` (sealed interface, `Task.execute()` の戻り値型) と 8 record / 2 enum はすべてプラグイン契約のシグネチャに登場するため API に残す。SPI シグネチャと外部プラグイン契約は一切変更なし。
+  - **Doc**: 上の "Package Structure" セクションで、`api/common` を `Result` のみに、`core/common` を新規エントリ (`ValidationResult (internal — not part of plugin SPI)`) として追加した。
+  - Tests: 796 total, 100% passing. `./gradlew clean build --warning-mode all` で警告ゼロ・Spotless / ErrorProne クリーン。
+
 ### 2026-04-30 (Session 47)
 - **Phase 22: JitPack beta channel for Migraphe itself (contributor-only distribution)**
   - **Goal & positioning**: Provide a network-only verification path for Migraphe core contributors and plugin developers, without requiring a `git clone` + `./gradlew publishToMavenLocal` round-trip. JitPack is **explicitly not** the end-user channel — Maven Central remains the official future destination. JitPack coordinates (`com.github.kakusuke.migraphe:*:main-SNAPSHOT`) are temporary; every advertised code block carries a "until Maven Central — coordinate will change" notice.
@@ -294,5 +304,5 @@ Update when code changes:
 
 ---
 
-**Last Updated**: 2026-04-30
-**Current Work**: Phase 22 complete — JitPack beta channel for Migraphe itself, contributor-only. `build.gradle.kts:9-16` switches `allprojects.group` to a property-driven default; JitPack ビルド時のみ `-PpublishGroup=com.github.kakusuke.migraphe` で `com.github.*` 配下に発行。`jitpack.yml` (new) drives Java 21 + JitPack publish. Java packages remain `io.github.kakusuke.migraphe.*`. `CONTRIBUTING.md` carries the only contributor-facing JitPack instructions, with mandatory "until Maven Central — coordinate will change" notices on every code block. `README*.md` and `sample/*` deliberately keep `0.1.0-SNAPSHOT` + `mavenLocal()`; they get rewritten only when Maven Central lands.
+**Last Updated**: 2026-05-01
+**Current Work**: `migraphe-api` の「プラグイン契約専用」性を文字どおりに整える小規模整理が完了。`ValidationResult` を `migraphe-api/api/common` から `migraphe-core/core/common` へ移し、SPI シグネチャ・プラグイン契約は一切変更なし。これで API 配下 (29 型) は 18 interface + 8 record + 2 enum + sealed `Result` という構成となり、すべての非インターフェース型がプラグイン契約のシグネチャに登場することが棚卸し済み。Phase 22 (JitPack beta channel) は引き続きアクティブで、`README*.md` / `sample/*` は Maven Central 着地時にまとめて書き換える方針も維持。
