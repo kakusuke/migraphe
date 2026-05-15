@@ -29,10 +29,10 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build fat JAR
+      - name: Build distribution artifacts
         env:
           VERSION: ${{ steps.version.outputs.VERSION }}
-        run: ./gradlew :migraphe-cli:fatJar -Pversion="$VERSION"
+        run: ./gradlew :migraphe-cli:distZip :migraphe-cli:distTar :migraphe-cli:fatJar -Pversion="$VERSION"
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
@@ -42,4 +42,6 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             migraphe-cli/build/libs/migraphe-cli-${{ steps.version.outputs.VERSION }}-all.jar
+            migraphe-cli/build/distributions/migraphe-cli-${{ steps.version.outputs.VERSION }}.zip
+            migraphe-cli/build/distributions/migraphe-cli-${{ steps.version.outputs.VERSION }}.tar.gz
           generate_release_notes: true

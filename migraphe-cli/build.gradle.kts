@@ -37,6 +37,11 @@ application {
     mainClass.set("io.github.kakusuke.migraphe.cli.Main")
 }
 
+tasks.distTar {
+    compression = Compression.GZIP
+    archiveExtension.set("tar.gz")
+}
+
 tasks.test {
     useJUnitPlatform()
 }
