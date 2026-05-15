@@ -30,13 +30,35 @@ A migration orchestration tool that manages database and infrastructure migratio
 - Java 21 or later
 - A supported database (PostgreSQL, MySQL 8.0+, or any JDBC-compatible database)
 
-### Build
+### Install
+
+Pick one of the following.
+
+**Download a release** (recommended):
+
+```bash
+# Tarball (.tar.gz) — Linux / macOS
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0.tar.gz | tar xz
+export PATH="$PWD/migraphe-cli-0.1.0/bin:$PATH"
+
+# Zip — Windows or platforms without `tar`
+curl -L -o migraphe-cli.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0.zip
+unzip migraphe-cli.zip
+export PATH="$PWD/migraphe-cli-0.1.0/bin:$PATH"
+
+# Fat JAR — single-file alternative for CI / scripting
+curl -L -o migraphe-cli.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0-all.jar
+java -jar migraphe-cli.jar --help
+```
+
+**Build from source** (for contributors):
 
 ```bash
 ./gradlew :migraphe-cli:installDist
+export PATH="$PWD/migraphe-cli/build/install/migraphe-cli/bin:$PATH"
 ```
 
-This creates the CLI distribution at `migraphe-cli/build/install/migraphe-cli/`.
+Either way, `migraphe-cli --help` should now work. The remaining examples in this guide assume `migraphe-cli` is on your `PATH` (or substitute the full path / `java -jar migraphe-cli.jar` as needed).
 
 ### Create a Project
 
@@ -102,17 +124,17 @@ down: |
 ### Run Migrations
 
 ```bash
-# Publish plugins to local Maven repo (first time only)
+# Publish plugins to local Maven repo (first time only — for source builds with SNAPSHOT plugins)
 ./gradlew publishToMavenLocal
 
 # Check migration status
-migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli status
+migraphe-cli status
 
 # Execute migrations
-migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli up
+migraphe-cli up
 
 # Generate documentation
-migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli generate
+migraphe-cli generate
 ```
 
 ## Gradle Plugin
