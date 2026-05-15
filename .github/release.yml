@@ -1,0 +1,23 @@
+changelog:
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+    - title: Bug Fixes
+      labels:
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Refactoring
+      labels:
+        - refactor
+    - title: Tests
+      labels:
+        - test
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Other Changes
+      labels:
+        - "*"
