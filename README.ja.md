@@ -38,27 +38,27 @@
 
 ```bash
 # tar.gz — Linux / macOS
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0.tar.gz | tar xz
-export PATH="$PWD/migraphe-cli-0.1.0/bin:$PATH"
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.tar.gz | tar xz
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
 
 # zip — Windows または tar がない環境
-curl -L -o migraphe-cli.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0.zip
-unzip migraphe-cli.zip
-export PATH="$PWD/migraphe-cli-0.1.0/bin:$PATH"
+curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.zip
+unzip migraphe.zip
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
 
 # fat JAR — CI / スクリプト向けの単一ファイル
-curl -L -o migraphe-cli.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0-all.jar
-java -jar migraphe-cli.jar --help
+curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0-all.jar
+java -jar migraphe.jar --help
 ```
 
 **ソースからビルド**（コントリビュータ向け）:
 
 ```bash
 ./gradlew :migraphe-cli:installDist
-export PATH="$PWD/migraphe-cli/build/install/migraphe-cli/bin:$PATH"
+export PATH="$PWD/migraphe-cli/build/install/migraphe/bin:$PATH"
 ```
 
-どちらの方法でも、`migraphe-cli --help` が実行できる状態になります。以降の例は `migraphe-cli` が `PATH` 上にある前提です（必要に応じてフルパスや `java -jar migraphe-cli.jar` に読み替えてください）。
+どちらの方法でも、`migraphe --help` が実行できる状態になります。以降の例は `migraphe` が `PATH` 上にある前提です（必要に応じてフルパスや `java -jar migraphe.jar` に読み替えてください）。
 
 ### プロジェクトの作成
 
@@ -128,13 +128,13 @@ down: |
 ./gradlew publishToMavenLocal
 
 # マイグレーションステータスの確認
-migraphe-cli status
+migraphe status
 
 # マイグレーションの実行
-migraphe-cli up
+migraphe up
 
 # ドキュメントの生成
-migraphe-cli generate
+migraphe generate
 ```
 
 ## Gradleプラグイン
