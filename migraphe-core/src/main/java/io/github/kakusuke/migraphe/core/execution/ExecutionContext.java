@@ -7,6 +7,7 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.core.common.ValidationResult;
 import io.github.kakusuke.migraphe.core.config.ConfigLoader;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.factory.EnvironmentFactory;
@@ -105,10 +106,14 @@ public record ExecutionContext(
         List<MigrationNode> nodes = nodeFactory.createNodes(taskDefinitions, environments);
 
         // 5. MigrationGraph を構築（依存関係順にノードを追加）
-        MigrationGraph graph = MigrationGraph.create();
         List<MigrationNode> sortedNodes = sortNodesByDependencies(nodes);
-        for (MigrationNode node : sortedNodes) {
-            graph.addNode(node);
+        MigrationGraph graph = MigrationGraph.fromNodesUp(sortedNodes);
+
+        // 6. グラフ整合性検証 (サイクル / 存在しない依存)
+        ValidationResult validation = graph.validate();
+        if (!validation.isValid()) {
+            throw new IllegalStateException(
+                    "Migration graph is invalid: " + String.join("; ", validation.errors()));
         }
 
         return new ExecutionContext(

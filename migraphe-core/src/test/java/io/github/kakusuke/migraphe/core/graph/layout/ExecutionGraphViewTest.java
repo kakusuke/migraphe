@@ -131,6 +131,22 @@ class ExecutionGraphViewTest {
     }
 
     @Nested
+    @DisplayName("reversed list constructor")
+    class ReversedListConstructorTest {
+
+        @Test
+        @DisplayName("リスト外の依存を持つノードを reversed=true で渡しても例外にならず B を含む行を返す")
+        void listConstructorReversed_singleNodeWithOutOfListDependency_doesNotThrow() {
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeB), true);
+
+            List<String> lines = view.renderLines(n -> n.id().value() + ":" + n.name());
+
+            assertThat(lines).anyMatch(line -> line.contains("b:Node B"));
+        }
+    }
+
+    @Nested
     @DisplayName("lines()")
     class LinesTest {
 

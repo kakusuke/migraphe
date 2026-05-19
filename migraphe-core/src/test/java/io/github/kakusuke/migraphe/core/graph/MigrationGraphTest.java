@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.core.common.ValidationResult;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -106,19 +107,14 @@ class MigrationGraphTest {
         NodeId id2 = NodeId.of("node-2");
         NodeId id3 = NodeId.of("node-3");
 
-        // Add nodes without dependencies first
-        MigrationNode node1 = node("node-1").build();
-        MigrationNode node2 = node("node-2").build();
-        MigrationNode node3 = node("node-3").build();
+        // Create a cycle: node1 -> node2 -> node3 -> node1
+        MigrationNode node1 = node("node-1").dependencies(id2).build();
+        MigrationNode node2 = node("node-2").dependencies(id3).build();
+        MigrationNode node3 = node("node-3").dependencies(id1).build();
 
         graph.addNode(node1);
         graph.addNode(node2);
         graph.addNode(node3);
-
-        // Create a cycle: node1 -> node2 -> node3 -> node1
-        graph.addDependency(id1, id2);
-        graph.addDependency(id2, id3);
-        graph.addDependency(id3, id1);
 
         // when & then
         assertThat(graph.hasCycle()).isTrue();
@@ -156,20 +152,12 @@ class MigrationGraphTest {
 
     @Test
     void shouldFailValidationWhenGraphHasCycle() {
-        // given
+        // given: cycle node1 -> node2 -> node1
         MigrationGraph graph = MigrationGraph.create();
-        NodeId id1 = NodeId.of("node-1");
-        NodeId id2 = NodeId.of("node-2");
-
-        MigrationNode node1 = node("node-1").build();
-        MigrationNode node2 = node("node-2").build();
-
+        MigrationNode node1 = node("node-1").dependencies(NodeId.of("node-2")).build();
+        MigrationNode node2 = node("node-2").dependencies(NodeId.of("node-1")).build();
         graph.addNode(node1);
         graph.addNode(node2);
-
-        // Create a cycle
-        graph.addDependency(id1, id2);
-        graph.addDependency(id2, id1);
 
         // when
         ValidationResult result = graph.validate();
@@ -195,16 +183,43 @@ class MigrationGraphTest {
     }
 
     @Test
-    void shouldThrowExceptionWhenDependencyDoesNotExist() {
-        // given
+    void shouldDetectDanglingDependencyViaValidate() {
+        // given: addNode no longer validates dependency existence; validate() catches it instead
         MigrationGraph graph = MigrationGraph.create();
         NodeId nonExistent = NodeId.of("non-existent");
         MigrationNode node = node("node-1").dependencies(nonExistent).build();
 
-        // when & then
-        assertThatThrownBy(() -> graph.addNode(node))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Dependency node does not exist");
+        // when
+        graph.addNode(node); // no longer throws
+
+        // then
+        ValidationResult result = graph.validate();
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("depends on non-existent node"));
+    }
+
+    @Test
+    void fromNodesUpWithDanglingDependency_doesNotThrow() {
+        // given
+        MigrationNode node = node("node-1").dependencies(NodeId.of("missing")).build();
+
+        // when & then: fromNodesUp must not throw on dangling deps (validate() handles it)
+        MigrationGraph graph = MigrationGraph.fromNodesUp(List.of(node));
+        assertThat(graph.size()).isEqualTo(1);
+        assertThat(graph.validate().isValid()).isFalse();
+    }
+
+    @Test
+    void fromNodesUp_withOutOfListDependency_filtersAdjacency() {
+        // given: node B depends on A, only B is in the list (A already-executed style)
+        MigrationNode nodeB = node("b").dependencies(NodeId.of("a")).build();
+
+        // when
+        MigrationGraph graph = MigrationGraph.fromNodesUp(List.of(nodeB));
+
+        // then: adjacency must be closed to in-list IDs only (mirror fromNodesDown behavior)
+        // so LayoutSort's inDegree calculation doesn't get stuck on dangling refs.
+        assertThat(graph.getDependencies(NodeId.of("b"))).isEmpty();
     }
 
     @Test
@@ -218,26 +233,6 @@ class MigrationGraphTest {
         // when & then
         assertThat(graph.getNode(id)).hasValue(node);
         assertThat(graph.getNode(NodeId.of("non-existent"))).isEmpty();
-    }
-
-    @Test
-    void shouldAddDependencyBetweenExistingNodes() {
-        // given
-        MigrationGraph graph = MigrationGraph.create();
-        NodeId id1 = NodeId.of("node-1");
-        NodeId id2 = NodeId.of("node-2");
-
-        MigrationNode node1 = node("node-1").build();
-        MigrationNode node2 = node("node-2").build();
-
-        graph.addNode(node1);
-        graph.addNode(node2);
-
-        // when
-        graph.addDependency(id2, id1);
-
-        // then
-        assertThat(graph.getDependencies(id2)).contains(id1);
     }
 
     @Test
@@ -393,6 +388,59 @@ class MigrationGraphTest {
 
         // then
         assertThat(allDependencies).isEmpty();
+    }
+
+    @Test
+    void fromNodesDown_twoNodesWithDependency_reversesAdjacency() {
+        // given: B depends on A
+        MigrationNode nodeA = node("node-a").build();
+        MigrationNode nodeB = node("node-b").dependencies(NodeId.of("node-a")).build();
+
+        // when
+        MigrationGraph graph = MigrationGraph.fromNodesDown(List.of(nodeA, nodeB));
+
+        // then: reversed adjacency — A's deps contain B, B's deps are empty
+        assertThat(graph.getDependencies(NodeId.of("node-a"))).containsExactly(NodeId.of("node-b"));
+        assertThat(graph.getDependencies(NodeId.of("node-b"))).isEmpty();
+    }
+
+    @Test
+    void fromNodesDown_singleNodeWithoutDependencies_returnsGraphWithSizeOne() {
+        // given
+        MigrationNode node = node("node-1").build();
+
+        // when
+        MigrationGraph graph = MigrationGraph.fromNodesDown(List.of(node));
+
+        // then
+        assertThat(graph.size()).isEqualTo(1);
+        assertThat(graph.allNodes()).containsExactly(node);
+    }
+
+    @Test
+    void fromNodesUp_singleNodeWithoutDependencies_returnsGraphWithSizeOne() {
+        // given
+        MigrationNode node = node("node-1").build();
+
+        // when
+        MigrationGraph graph = MigrationGraph.fromNodesUp(List.of(node));
+
+        // then
+        assertThat(graph.size()).isEqualTo(1);
+        assertThat(graph.allNodes()).containsExactly(node);
+    }
+
+    @Test
+    void fromNodesDown_getRoots_returnsLeafOfOriginalGraph() {
+        // given: B depends on A (A is root, B is leaf in UP graph)
+        MigrationNode nodeA = node("node-a").build();
+        MigrationNode nodeB = node("node-b").dependencies(NodeId.of("node-a")).build();
+
+        // when: DOWN graph reverses edges — A's adjacency = {B}, B's adjacency = {}
+        MigrationGraph graph = MigrationGraph.fromNodesDown(List.of(nodeA, nodeB));
+
+        // then: getRoots() should reflect adjacency (B has empty adjacency = root of DOWN graph)
+        assertThat(graph.getRoots()).containsExactlyInAnyOrder(nodeB);
     }
 
     @Test

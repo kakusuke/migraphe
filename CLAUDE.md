@@ -252,6 +252,22 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-05-19 (Session 49)
+- **DOWN コマンド単独ノード指定時のクラッシュ修正 + `MigrationGraph` の方向別サブグラフ構築 API 整理**
+  - **Bug**: `migraphe down mysql/02_catalog/003_products` のように依存先 (parents) を持つノードを単独ロールバック指定すると、`DownCommand.displayRollbackPlan` (line 147) → `new ExecutionGraphView(sortedNodes)` → 内部の `MigrationGraph.create() + addNode` で「`Dependency node does not exist: 001_categories (required by 003_products)`」と IllegalArgumentException。`RollbackExecutor.determineRollbackTargets` は `target ∪ getDependents(target)` の閉包 (= 依存"元" の集合) を返すため、依存"先" (parents) は sortedNodes に含まれず eager 検査で破綻していた。`UpCommand` 側は実行プランが依存先を必ず含むので発症しない。
+  - **Root cause framing**: `MigrationGraph.addNode` の eager 検査が **UP 方向の不変条件 (「各ノードの依存先 parents がサブグラフ内に存在する」)** のみを表現しており、ロールバックの DOWN 方向 (「各ノードの依存元 dependents がサブグラフ内に存在する」) と非対称だった。さらに `addNode` の検査は挿入順序依存 (UP 順) を呼び出し側に強要する負債でもあった。
+  - **Fix — 方向別サブグラフ構築 API**: `MigrationGraph` に静的ファクトリ 2 つを新設。
+    - `fromNodesUp(List<MigrationNode>)`: 現在の `create() + addNode` ループと等価 (UP 方向)。
+    - `fromNodesDown(List<MigrationNode>)`: **reversed adjacency** + **リスト外フィルタ**。各ノードの `dependencies()` (= parents) を子方向に反転 (`adjacencyList[parent].add(child)`) し、リスト外を指す参照は `parentAdjacency == null` 経路で自然に除外。これにより DOWN サブグラフは adjacency がリスト内に閉じ、`LayoutSort` の inDegree 計算が正しく機能する (旧実装では dangling adjacency により inDegree がズレ、layout から該当ノードが消える silent failure になっていた)。
+  - **`ExecutionGraphView(List, boolean reversed)` 追加**: 既存 `(List)` コンストラクタは `(List, false)` への委譲に整理。reversed=true で `fromNodesDown`、false で `fromNodesUp` を選ぶ。`DownCommand` / `MigrapheDownTask` の呼び出し箇所を `(sortedNodes, true)` に切替。`UpCommand` / `MigrapheUpTask` は false のまま (= 既存挙動)。
+  - **`MigrationGraph.getRoots()` の整合性修正**: 旧実装は `MigrationNode::hasNoDependencies` (= 元の `node.dependencies()` が空か) を直接見ていたため、DOWN グラフ (reversed adjacency) で「DOWN 視点の起点」を取れなかった。`adjacencyList.getOrDefault(id, Set.of()).isEmpty()` ベースに変更し、adjacency に追従するようにした。consumer は `GraphVisualizer` のみで現バグ経路には載らないが、将来の地雷を予防。
+  - **後片付け (Sessions 8-10)**: 設計合意に基づき以下も整理。
+    - **`addNode` の eager 検査削除**: `validate()` と完全に重複していた dangling-dep チェックを削除。代わりに `ExecutionContext.create` で `graph.validate()` を呼んで safety net 化 (cycle / dangling を `IllegalStateException` で surface)。`MigrationGraph.validate()` は dead 寸前だったが **production safety net として復活**。
+    - **`addDependency` 削除**: production 0 caller の dead public API。test 側 4 箇所 (`TopologicalSortTest`, `MigrationGraphTest` ×3, `MigrationTreeSourcePluginTest` ×2) は `node().dependencies(...)` を使った宣言的な cycle 構築に書き換えた。
+    - **`create()` / `addNode()` は保持**: `addNode` は `fromNodesUp` 内部 + テストの低レベル builder として、`create()` はテスト用 builder として多数の利用箇所があるため、API としては残す判断。
+  - **Sample 動作確認**: `migraphe down mysql/02_catalog/003_products --dry-run` で例外なく 5 ノード (003 + dependents の 004, 005, product_indexes, reviews) が DOWN 順で正しく可視化されること、葉ノード単独 (`mysql/04_indexes/001_product_indexes`) の単独 down も例外なく動くこと、`down --all --dry-run` で全 19 ノードが正しい DOWN レイアウトで出ることを実 CLI で確認。
+  - Tests: 798 total, 100% passing. `./gradlew clean build --warning-mode all` で警告ゼロ・Spotless / ErrorProne クリーン。10 micro TDD cycle (cycle 1-7 + 8 + 8.5 + 10) で進めた。
+
 ### 2026-05-01 (Session 48)
 - **`migraphe-api` を「プラグイン契約専用」モジュールに引き締め: `ValidationResult` を core へ移動**
   - **Motivation**: CLAUDE.md は `migraphe-api` を "Lightweight interfaces ... for plugin developers" と位置付けてきたが、棚卸しの結果 `ValidationResult` だけは唯一プラグイン契約のシグネチャに登場しない型だった (本番コードでは `migraphe-core/.../graph/MigrationGraph.validate()` が唯一の利用箇所、しかも対応する `ValidationResultTest` はすでに `migraphe-core/src/test/java/.../core/common/` に置かれており、所有者と置き場所がチグハグ)。これを是正して、API モジュールが record / enum / sealed `Result` を含めても "プラグインが触る型しか入っていない" という性質を文字どおりに成立させる。
@@ -272,37 +288,7 @@ Update when code changes:
   - **Sample files deliberately untouched**: `sample/cli/migraphe.yaml` (`0.1.0-SNAPSHOT` + `mavenLocal()`), `sample/gradle/build.gradle.kts` (same), and `sample/cli/migraphe.lock.yaml` are kept as-is. They will be rewritten in one shot when Maven Central distribution lands (Phase E), avoiding any temporary JitPack coordinates leaking into end-user-facing examples.
   - Tests: 796 total, 100% passing (default group unchanged, no fixture impact). Spotless + ErrorProne clean.
 
-### 2026-04-30 (Session 46)
-- **Lockfile schema simplified: per-plugin `repository:` removed** (post-Phase 21 cleanup)
-  - **Motivation**: The `repository:` field in each `LockedPlugin` was a sync-check-only mirror of the user's declaration — never consulted at resolution time, never used by SHA verification. It also created a misleading provenance: when Aether's local cache (`~/.m2`) already held the JAR (e.g., another project had fetched it via JitPack), `migraphe pin` would copy the declared `repository:` value into the lockfile without ever contacting a remote, recording a "source" that didn't reflect the true origin. SHA-256 is the actual integrity guarantee; the repository slot was redundant theatre.
-  - **Schema change**: `LockedPlugin` is now `(coordinate, sha256, dependencies)` — `repositoryId` field deleted along with its blank-check. `LockFileWriter` no longer emits `repository:` keys; `LockFileReader` silently accepts (and discards) the legacy key for backward compat with lockfiles produced by the original Phase 21 build.
-  - **Code touched**: `LockedPlugin.java`, `LockFileWriter.java`, `LockFileReader.java`, `LockFileBuilder.java` (constant `DEFAULT_REPOSITORY_ID` removed), `LockSyncChecker.java` (repository-comparison branch deleted; only coordinate GA presence + version drift are now checked).
-  - **Tests**: `LockedPluginTest.rejectsBlankRepositoryId`, `LockFileBuilderTest.usesRepositoryRefWhenPresent`, `LockSyncCheckerTest.failsWhenRepositoryRefDiffers` / `treatsMissingRepositoryRefAsMavenCentral` removed (4 tests deleted). New `LockFileReaderTest.ignoresLegacyRepositoryKeyForBackwardCompatibility` confirms old lockfiles still load. All other test fixtures dropped the `"maven-central"` constructor argument and the legacy `repository: maven-central` YAML line. Net delta: −4 + 1 = −3 tests.
-  - **What `migraphe.yaml` keeps**: The `repositories: [{id, url}]` block and `plugins:` map form `{coordinate, repository: <id>}` are unchanged — repository selection at fetch time is still configurable. Only the lockfile lost its mirror copy.
-  - Tests: 793 total, 100% passing. Spotless + ErrorProne clean.
-
-### 2026-04-30 (Session 45)
-- **Phase 21: JitPack + SHA-256 lockfile pinning (`migraphe pin`)**
-  - **Configuration shape**: `migraphe.yaml` gains optional `repositories: [{id, url}]` (HTTPS-only at user-input boundary in `PluginConfigPreParser`); `plugins:` accepts both string `"g:a:v"` and map `{coordinate, repository}` form. `RepositoryConfig` / `RepositoryRegistry` (with implicit `maven-central`); `RepositoryConfig.testOnly` allows `file://` for IT only. `PluginDeclaration(coord, Optional<repositoryRef>)` is the new value object passed to `MavenPluginResolver.resolve` / `resolveGroups`.
-  - **Lockfile model & I/O**: `LockFile(version=1, plugins)` → `LockedPlugin(coord, repositoryId, sha256, deps)` → `LockedDependency(coord, sha256)`. SHA-256 is enforced 64-char lowercase hex via record compact constructor. `LockFileReader` / `LockFileWriter` use SnakeYAML BLOCK with header comment `# This file is auto-generated by 'migraphe pin'. DO NOT EDIT.`. `Sha256Calculator` uses streaming 8 KiB digest.
-  - **Pipeline**: `PluginResolver.resolve(baseDir)` now does `parse → LockFileReader.read → LockSyncChecker.check → MavenPluginResolver.resolve → PluginIntegrityVerifier.verify → URLClassLoader`. Lockfile is **mandatory** when `plugins:` is non-empty (`LockFileNotFoundException`); drift fails (`LockOutOfSyncException`); tampered JARs fail (`ChecksumMismatchException`); resolved-but-not-pinned artifacts fail (`MissingChecksumPinException`). All four are `extends PluginResolutionException`, which `Main.handleException` recognises to suppress stack traces and print only the message.
-  - **`migraphe pin` command**: Generates `migraphe.lock.yaml` by orchestrating `MavenPluginResolver.resolveGroups` → `LockFileBuilder.build` → `LockFileWriter.write`. `--check` mode re-resolves and compares without writing; non-zero exit on missing/divergent lockfile (CI-friendly). `Main` switch dispatches `pin` before plugin resolution; `printUsage` lists it. `ValidateCommand` runs `LockSyncChecker` as a 6th step (`Checking plugin lockfile...`) when `plugins:` is non-empty.
-  - **Integration test**: `PluginResolverIntegrationTest` mimics JitPack via `@TempDir` `file://` Maven repo. Covers: lockfile match (success), missing lock (`LockFileNotFoundException`), yaml ↔ lock divergence (`LockOutOfSyncException`), and JAR tampering after pin (`ChecksumMismatchException`). Uses `maven.repo.local` system property to point Maven Resolver at the temp repo.
-  - **Docs**: `docs/USER_GUIDE.md` / `.ja.md` add a "Lockfile" subsection covering `migraphe pin`, `--check`, custom repositories block, and the `plugins:` map form. `docs/PHASE_21_PLAN.md` (created at session start) drove the 12-step TDD sequence.
-  - Tests: 796 total, 100% passing. Spotless + ErrorProne clean. 17 commits across the phase, one per micro-cycle.
-
-### 2026-04-20 (Session 43)
-- **Table/View `remarks` rendering in JDBC Markdown generator**
-  - Gap: `JdbcTableInfo.remarks()` / `JdbcViewInfo.remarks()` were populated from `DatabaseMetaData.getTables()` REMARKS but never written to Markdown output. `COMMENT ON TABLE` (PostgreSQL) and `COMMENT='...'` (MySQL) therefore vanished from docs.
-  - Render sites added in `JdbcMarkdownGenerator`:
-    - `tables/<name>.md` and `views/<name>.md`: remarks appear as a paragraph directly under the H1 title (empty/blank → omitted entirely, no blank line).
-    - `index.md` Tables/Views list: link followed by `\u2014` (em-dash) and collapsed remarks (newlines → spaces) so the bullet stays single-line.
-  - Extracted two private static helpers (`appendRemarksParagraph`, `appendIndexRemarks`) to avoid 4-way duplication. Subclasses (`PostgreSQLMarkdownGenerator`, `MySQLMarkdownGenerator`) inherit the behaviour automatically — no override needed.
-  - Sample YAML DDL updated: 15 unique tables across `sample/cli/tasks/` and `sample/gradle/tasks/` (8 MySQL + 7 PostgreSQL) gained `COMMENT ON TABLE` / `COMMENT='...'` and per-column comments. CLI/Gradle sample trees remain bitwise-identical.
-  - Tests: 4 new `JdbcMarkdownGeneratorTest` cases covering table/view file paragraph and index link suffix in both ASCII and Japanese. Empty-remarks negative case covered implicitly by existing fixtures (all fixture tables have blank remarks).
-  - Tests: 680 total, 100% passing. Spotless + ErrorProne clean.
-
 ---
 
-**Last Updated**: 2026-05-01
-**Current Work**: `migraphe-api` の「プラグイン契約専用」性を文字どおりに整える小規模整理が完了。`ValidationResult` を `migraphe-api/api/common` から `migraphe-core/core/common` へ移し、SPI シグネチャ・プラグイン契約は一切変更なし。これで API 配下 (29 型) は 18 interface + 8 record + 2 enum + sealed `Result` という構成となり、すべての非インターフェース型がプラグイン契約のシグネチャに登場することが棚卸し済み。Phase 22 (JitPack beta channel) は引き続きアクティブで、`README*.md` / `sample/*` は Maven Central 着地時にまとめて書き換える方針も維持。
+**Last Updated**: 2026-05-19
+**Current Work**: DOWN コマンドの単独ノード指定クラッシュバグ修正と、`MigrationGraph` の方向別サブグラフ構築 API (`fromNodesUp` / `fromNodesDown`) 整備が完了。後片付けとして `addNode` の eager 検査を削除し `validate()` を `ExecutionContext.create` の safety net として一本化、dead public API だった `addDependency` を削除。`create()` / `addNode()` は test 利用が多いため公開のまま保持。Phase 22 (JitPack beta channel) は引き続きアクティブで、`README*.md` / `sample/*` は Maven Central 着地時にまとめて書き換える方針も維持。

@@ -16,7 +16,7 @@ public final class MigrationGraph implements MigrationGraphView {
         this.adjacencyList = new HashMap<>();
     }
 
-    /** ノードをグラフに追加する。 */
+    /** ノードをグラフに追加する。依存関係の存在は validate() で検査する。 */
     public void addNode(MigrationNode node) {
         if (nodes.containsKey(node.id())) {
             throw new IllegalArgumentException("Node already exists: " + node.id());
@@ -24,34 +24,13 @@ public final class MigrationGraph implements MigrationGraphView {
 
         nodes.put(node.id(), node);
         adjacencyList.put(node.id(), new HashSet<>(node.dependencies()));
-
-        // 依存先ノードの存在を検証
-        for (NodeId depId : node.dependencies()) {
-            if (!nodes.containsKey(depId)) {
-                throw new IllegalArgumentException(
-                        "Dependency node does not exist: "
-                                + depId
-                                + " (required by "
-                                + node.id()
-                                + ")");
-            }
-        }
-    }
-
-    /** 依存関係を追加する: fromノードはtoノードに依存する（toが先に実行される必要がある） */
-    public void addDependency(NodeId from, NodeId to) {
-        if (!nodes.containsKey(from) || !nodes.containsKey(to)) {
-            throw new IllegalArgumentException("Both nodes must exist in the graph");
-        }
-
-        adjacencyList.computeIfAbsent(from, k -> new HashSet<>()).add(to);
     }
 
     /** 依存関係のないルートノード（最初に実行できるノード）を取得 */
     @Override
     public Set<MigrationNode> getRoots() {
         return nodes.values().stream()
-                .filter(MigrationNode::hasNoDependencies)
+                .filter(node -> adjacencyList.getOrDefault(node.id(), Set.of()).isEmpty())
                 .collect(java.util.stream.Collectors.toSet());
     }
 
@@ -150,12 +129,12 @@ public final class MigrationGraph implements MigrationGraphView {
             errors.add("Graph contains a cycle (circular dependency)");
         }
 
-        // 全ての依存先ノードが存在するかチェック
-        for (var entry : adjacencyList.entrySet()) {
-            for (NodeId depId : entry.getValue()) {
+        // 全ての依存先ノードが存在するかチェック (node.dependencies() を直接参照: adjacency は
+        // fromNodesUp/Down でリスト内に絞り込まれている場合があるため、ソース・オブ・トゥルースを使う)
+        for (MigrationNode node : nodes.values()) {
+            for (NodeId depId : node.dependencies()) {
                 if (!nodes.containsKey(depId)) {
-                    errors.add(
-                            "Node " + entry.getKey() + " depends on non-existent node: " + depId);
+                    errors.add("Node " + node.id() + " depends on non-existent node: " + depId);
                 }
             }
         }
@@ -177,5 +156,41 @@ public final class MigrationGraph implements MigrationGraphView {
 
     public static MigrationGraph create() {
         return new MigrationGraph();
+    }
+
+    public static MigrationGraph fromNodesUp(List<MigrationNode> nodes) {
+        MigrationGraph graph = new MigrationGraph();
+        Set<NodeId> nodeIds = new HashSet<>();
+        for (MigrationNode node : nodes) {
+            nodeIds.add(node.id());
+        }
+        for (MigrationNode node : nodes) {
+            graph.nodes.put(node.id(), node);
+            Set<NodeId> filteredDeps = new HashSet<>();
+            for (NodeId depId : node.dependencies()) {
+                if (nodeIds.contains(depId)) {
+                    filteredDeps.add(depId);
+                }
+            }
+            graph.adjacencyList.put(node.id(), filteredDeps);
+        }
+        return graph;
+    }
+
+    public static MigrationGraph fromNodesDown(List<MigrationNode> nodes) {
+        MigrationGraph graph = new MigrationGraph();
+        for (MigrationNode node : nodes) {
+            graph.nodes.put(node.id(), node);
+            graph.adjacencyList.put(node.id(), new HashSet<>());
+        }
+        for (MigrationNode node : nodes) {
+            for (NodeId parentId : node.dependencies()) {
+                Set<NodeId> parentAdjacency = graph.adjacencyList.get(parentId);
+                if (parentAdjacency != null) {
+                    parentAdjacency.add(node.id());
+                }
+            }
+        }
+        return graph;
     }
 }

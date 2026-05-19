@@ -435,6 +435,28 @@ class DownCommandTest {
         }
     }
 
+    @Test
+    void shouldNotThrowWhenDowningLeafNodeWithDependencies() throws IOException {
+        // Given: 001_create_users <- 002_add_index の依存関係で両方 UP 済み
+        createTestProject(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+
+        UpCommand upCommand = new UpCommand(context, null, true, false);
+        upCommand.execute();
+
+        outputStream.reset();
+
+        // When: 002_add_index (依存を持つ葉ノード) を単独 down
+        // sortedNodes = [002] で ExecutionGraphView が構築される際、
+        // 001 がリスト外のため IllegalArgumentException が出るバグを再現
+        DownCommand downCommand =
+                new DownCommand(context, NodeId.of("test-db/002_add_index"), false, true, false);
+
+        // Then: IllegalArgumentException が投げられず、正常終了 (exit code 0) する
+        assertThatCode(() -> downCommand.execute()).doesNotThrowAnyException();
+        assertThat(downCommand.execute()).isEqualTo(0);
+    }
+
     /** テスト用のプロジェクト構造を作成する。 */
     private void createTestProject(Path baseDir) throws IOException {
         String projectYaml =
