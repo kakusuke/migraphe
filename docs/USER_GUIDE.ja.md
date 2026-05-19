@@ -38,35 +38,39 @@ Migrapheは、複数の環境にわたる複雑なデータベースマイグレ
 - Java 21以降
 - サポート対象のデータベース（PostgreSQL、MySQL 8.0+、または任意のJDBC対応データベース）
 
+### リリース成果物のダウンロード（推奨）
+
+```bash
+# tar.gz — Linux / macOS
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.tar.gz | tar xz
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
+
+# zip — Windows
+curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.zip
+unzip migraphe.zip
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
+
+# fat JAR — 単一ファイル
+curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0-all.jar
+alias migraphe="java -jar $PWD/migraphe.jar"
+```
+
 ### ソースからビルド
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/yourusername/migraphe.git
+git clone https://github.com/kakusuke/migraphe.git
 cd migraphe
 
 # CLI をビルド
 ./gradlew :migraphe-cli:installDist
 
 # CLI が以下に作成されます:
-# migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli
+# migraphe-cli/build/install/migraphe/bin/migraphe
+export PATH="$PWD/migraphe-cli/build/install/migraphe/bin:$PATH"
 ```
 
-### エイリアスの作成（オプション）
-
-便利のため、シェルにエイリアスを作成します:
-
-```bash
-# ~/.bashrc または ~/.zshrc に追加
-alias migraphe='/path/to/migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli'
-
-# シェル設定を再読み込み
-source ~/.bashrc  # または source ~/.zshrc
-
-# これで以下のように使用できます:
-migraphe status
-migraphe up
-```
+以降の例はすべて `migraphe` コマンドが `PATH` 上にある前提です。
 
 ### プラグインのインストール
 
@@ -374,7 +378,7 @@ down: |
 ### マイグレーションステータスの確認
 
 ```bash
-java -jar migraphe-cli-all.jar status
+migraphe status
 ```
 
 **出力:**
@@ -395,19 +399,19 @@ Summary: Total: 3 | Executed: 1 | Pending: 2
 
 ```bash
 # 全ての保留中のマイグレーションを実行
-java -jar migraphe-cli-all.jar up
+migraphe up
 
 # 確認プロンプトをスキップ
-java -jar migraphe-cli-all.jar up -y
+migraphe up -y
 
 # 実行計画のみ表示（実際には実行しない）
-java -jar migraphe-cli-all.jar up --preview
+migraphe up --preview
 
 # 特定のマイグレーションまで実行（指定IDとその依存先のみ）
-java -jar migraphe-cli-all.jar up <id>
+migraphe up <id>
 
 # オプションの組み合わせ
-java -jar migraphe-cli-all.jar up -y --preview db1/002_create_posts
+migraphe up -y --preview db1/002_create_posts
 ```
 
 **出力例:**
@@ -474,10 +478,10 @@ Error:
 
 ```bash
 # 本番環境のオーバーライドを読み込む
-java -jar migraphe-cli-all.jar up --env production
+migraphe up --env production
 
 # 開発環境のオーバーライドを読み込む
-java -jar migraphe-cli-all.jar up --env development
+migraphe up --env development
 ```
 
 ## ロールバック（down）
@@ -488,18 +492,18 @@ java -jar migraphe-cli-all.jar up --env development
 
 ```bash
 # 指定バージョンに依存するマイグレーションをロールバック
-java -jar migraphe-cli-all.jar down <version>
+migraphe down <version>
 
 # 全てのマイグレーションをロールバック
-java -jar migraphe-cli-all.jar down --all
+migraphe down --all
 
 # 確認プロンプトをスキップ
-java -jar migraphe-cli-all.jar down -y <version>
-java -jar migraphe-cli-all.jar down -y --all
+migraphe down -y <version>
+migraphe down -y --all
 
 # 実行計画のみ表示（実際には実行しない）
-java -jar migraphe-cli-all.jar down --preview <version>
-java -jar migraphe-cli-all.jar down --preview --all
+migraphe down --preview <version>
+migraphe down --preview --all
 ```
 
 ### 動作の仕組み
@@ -528,7 +532,7 @@ migraphe down V002 実行:
 
 **例:**
 ```bash
-$ java -jar migraphe-cli-all.jar down --all
+$ migraphe down --all
 
 The following migrations will be rolled back:
   - db1/003_create_comments: Create comments table
@@ -550,7 +554,7 @@ Rollback complete. 3 migrations rolled back.
 ### 実行フロー
 
 ```bash
-$ java -jar migraphe-cli-all.jar down db1/001_create_users
+$ migraphe down db1/001_create_users
 
 The following migrations will be rolled back:
   - db1/003_create_comments: Create comments table
@@ -574,7 +578,7 @@ Rollback complete. 3 migrations rolled back.
 実際にロールバックせずに、何が実行されるかを確認できます:
 
 ```bash
-$ java -jar migraphe-cli-all.jar down --preview db1/001_create_users
+$ migraphe down --preview db1/001_create_users
 
 [DRY RUN] The following migrations would be rolled back:
   - db1/003_create_comments: Create comments table
@@ -600,7 +604,7 @@ No changes made (dry run).
 ### 基本的な使い方
 
 ```bash
-java -jar migraphe-cli-all.jar validate
+migraphe validate
 ```
 
 ### 検証項目
@@ -729,10 +733,10 @@ generators:
 
 ```bash
 # 設定済みの全ジェネレータでドキュメントを生成
-java -jar migraphe-cli-all.jar generate
+migraphe generate
 
 # 特定のジェネレータのみ実行
-java -jar migraphe-cli-all.jar generate --name mydb
+migraphe generate --name mydb
 ```
 
 ### 出力構造（jdbc-markdown）
@@ -897,7 +901,7 @@ target:
 export PROD_DB_PASSWORD=secretpassword
 export PROD_HISTORY_PASSWORD=historypassword
 
-java -jar migraphe-cli-all.jar up --env production
+migraphe up --env production
 ```
 
 ## 高度な機能
@@ -1177,7 +1181,7 @@ WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
 1. **設定の読み込みを確認:**
    ```bash
    # 詳細ログ追加（将来の機能）
-   java -jar migraphe-cli-all.jar status --verbose
+   migraphe status --verbose
    ```
 
 2. **YAML構文を検証:**

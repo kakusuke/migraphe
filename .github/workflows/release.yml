@@ -41,7 +41,7 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            migraphe-cli/build/libs/migraphe-cli-${{ steps.version.outputs.VERSION }}-all.jar
-            migraphe-cli/build/distributions/migraphe-cli-${{ steps.version.outputs.VERSION }}.zip
-            migraphe-cli/build/distributions/migraphe-cli-${{ steps.version.outputs.VERSION }}.tar.gz
+            migraphe-cli/build/libs/migraphe-${{ steps.version.outputs.VERSION }}-all.jar
+            migraphe-cli/build/distributions/migraphe-${{ steps.version.outputs.VERSION }}.zip
+            migraphe-cli/build/distributions/migraphe-${{ steps.version.outputs.VERSION }}.tar.gz
           generate_release_notes: true

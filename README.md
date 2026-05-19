@@ -38,27 +38,27 @@ Pick one of the following.
 
 ```bash
 # Tarball (.tar.gz) — Linux / macOS
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0.tar.gz | tar xz
-export PATH="$PWD/migraphe-cli-0.1.0/bin:$PATH"
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.tar.gz | tar xz
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
 
 # Zip — Windows or platforms without `tar`
-curl -L -o migraphe-cli.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0.zip
-unzip migraphe-cli.zip
-export PATH="$PWD/migraphe-cli-0.1.0/bin:$PATH"
+curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.zip
+unzip migraphe.zip
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
 
 # Fat JAR — single-file alternative for CI / scripting
-curl -L -o migraphe-cli.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-cli-0.1.0-all.jar
-java -jar migraphe-cli.jar --help
+curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0-all.jar
+java -jar migraphe.jar --help
 ```
 
 **Build from source** (for contributors):
 
 ```bash
 ./gradlew :migraphe-cli:installDist
-export PATH="$PWD/migraphe-cli/build/install/migraphe-cli/bin:$PATH"
+export PATH="$PWD/migraphe-cli/build/install/migraphe/bin:$PATH"
 ```
 
-Either way, `migraphe-cli --help` should now work. The remaining examples in this guide assume `migraphe-cli` is on your `PATH` (or substitute the full path / `java -jar migraphe-cli.jar` as needed).
+Either way, `migraphe --help` should now work. The remaining examples in this guide assume `migraphe` is on your `PATH` (or substitute the full path / `java -jar migraphe.jar` as needed).
 
 ### Create a Project
 
@@ -128,13 +128,13 @@ down: |
 ./gradlew publishToMavenLocal
 
 # Check migration status
-migraphe-cli status
+migraphe status
 
 # Execute migrations
-migraphe-cli up
+migraphe up
 
 # Generate documentation
-migraphe-cli generate
+migraphe generate
 ```
 
 ## Gradle Plugin

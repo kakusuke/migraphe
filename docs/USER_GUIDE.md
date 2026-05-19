@@ -38,35 +38,39 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 - Java 21 or later
 - A supported database (PostgreSQL, MySQL 8.0+, or any JDBC-compatible database)
 
+### Download a Release (Recommended)
+
+```bash
+# Tarball — Linux / macOS
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.tar.gz | tar xz
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
+
+# Zip — Windows
+curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.zip
+unzip migraphe.zip
+export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
+
+# Fat JAR — single file
+curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0-all.jar
+alias migraphe="java -jar $PWD/migraphe.jar"
+```
+
 ### Build from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/migraphe.git
+git clone https://github.com/kakusuke/migraphe.git
 cd migraphe
 
 # Build the CLI
 ./gradlew :migraphe-cli:installDist
 
 # The CLI is created at:
-# migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli
+# migraphe-cli/build/install/migraphe/bin/migraphe
+export PATH="$PWD/migraphe-cli/build/install/migraphe/bin:$PATH"
 ```
 
-### Create an Alias (Optional)
-
-For convenience, create an alias in your shell:
-
-```bash
-# Add to ~/.bashrc or ~/.zshrc
-alias migraphe='/path/to/migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli'
-
-# Reload shell configuration
-source ~/.bashrc  # or source ~/.zshrc
-
-# Now you can use:
-migraphe status
-migraphe up
-```
+The rest of this guide assumes `migraphe` is on your `PATH`.
 
 ### Installing Plugins
 
@@ -374,7 +378,7 @@ down: |
 ### Check Migration Status
 
 ```bash
-java -jar migraphe-cli-all.jar status
+migraphe status
 ```
 
 **Output:**
@@ -395,19 +399,19 @@ Summary: Total: 3 | Executed: 1 | Pending: 2
 
 ```bash
 # Execute all pending migrations
-java -jar migraphe-cli-all.jar up
+migraphe up
 
 # Skip confirmation prompt
-java -jar migraphe-cli-all.jar up -y
+migraphe up -y
 
 # Show execution plan only (don't actually execute)
-java -jar migraphe-cli-all.jar up --preview
+migraphe up --preview
 
 # Execute up to a specific migration (only the specified ID and its dependencies)
-java -jar migraphe-cli-all.jar up <id>
+migraphe up <id>
 
 # Combine options
-java -jar migraphe-cli-all.jar up -y --preview db1/002_create_posts
+migraphe up -y --preview db1/002_create_posts
 ```
 
 **Example Output:**
@@ -474,10 +478,10 @@ Error:
 
 ```bash
 # Load production environment overrides
-java -jar migraphe-cli-all.jar up --env production
+migraphe up --env production
 
 # Load development environment overrides
-java -jar migraphe-cli-all.jar up --env development
+migraphe up --env development
 ```
 
 ## Rollback (down)
@@ -488,18 +492,18 @@ The `down` command rolls back migrations to a specified version.
 
 ```bash
 # Rollback migrations that depend on the specified version
-java -jar migraphe-cli-all.jar down <version>
+migraphe down <version>
 
 # Rollback all migrations
-java -jar migraphe-cli-all.jar down --all
+migraphe down --all
 
 # Skip confirmation prompt
-java -jar migraphe-cli-all.jar down -y <version>
-java -jar migraphe-cli-all.jar down -y --all
+migraphe down -y <version>
+migraphe down -y --all
 
 # Show execution plan only (don't actually execute)
-java -jar migraphe-cli-all.jar down --preview <version>
-java -jar migraphe-cli-all.jar down --preview --all
+migraphe down --preview <version>
+migraphe down --preview --all
 ```
 
 ### How It Works
@@ -528,7 +532,7 @@ The `down --all` command rolls back **all** executed migrations. They are execut
 
 **Example:**
 ```bash
-$ java -jar migraphe-cli-all.jar down --all
+$ migraphe down --all
 
 The following migrations will be rolled back:
   - db1/003_create_comments: Create comments table
@@ -550,7 +554,7 @@ Rollback complete. 3 migrations rolled back.
 ### Execution Flow
 
 ```bash
-$ java -jar migraphe-cli-all.jar down db1/001_create_users
+$ migraphe down db1/001_create_users
 
 The following migrations will be rolled back:
   - db1/003_create_comments: Create comments table
@@ -574,7 +578,7 @@ Rollback complete. 3 migrations rolled back.
 Preview what would be rolled back without actually executing:
 
 ```bash
-$ java -jar migraphe-cli-all.jar down --preview db1/001_create_users
+$ migraphe down --preview db1/001_create_users
 
 [DRY RUN] The following migrations would be rolled back:
   - db1/003_create_comments: Create comments table
@@ -600,7 +604,7 @@ The `validate` command validates configuration files offline. It checks all file
 ### Basic Usage
 
 ```bash
-java -jar migraphe-cli-all.jar validate
+migraphe validate
 ```
 
 ### What Gets Validated
@@ -729,10 +733,10 @@ generators:
 
 ```bash
 # Generate documentation for all configured generators
-java -jar migraphe-cli-all.jar generate
+migraphe generate
 
 # Generate documentation for a specific generator only
-java -jar migraphe-cli-all.jar generate --name mydb
+migraphe generate --name mydb
 ```
 
 ### Output Structure (jdbc-markdown)
@@ -897,7 +901,7 @@ Set environment variables before running:
 export PROD_DB_PASSWORD=secretpassword
 export PROD_HISTORY_PASSWORD=historypassword
 
-java -jar migraphe-cli-all.jar up --env production
+migraphe up --env production
 ```
 
 ## Advanced Features
@@ -1177,7 +1181,7 @@ WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
 1. **Check configuration loading:**
    ```bash
    # Add verbose logging (future feature)
-   java -jar migraphe-cli-all.jar status --verbose
+   migraphe status --verbose
    ```
 
 2. **Validate YAML syntax:**

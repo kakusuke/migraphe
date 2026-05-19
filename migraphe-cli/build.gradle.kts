@@ -35,6 +35,7 @@ dependencies {
 
 application {
     mainClass.set("io.github.kakusuke.migraphe.cli.Main")
+    applicationName = "migraphe"
 }
 
 tasks.distTar {
@@ -48,6 +49,7 @@ tasks.test {
 
 // Fat JAR タスク（配布用）
 tasks.register<Jar>("fatJar") {
+    archiveBaseName.set("migraphe")
     archiveClassifier.set("all")
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
