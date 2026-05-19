@@ -40,6 +40,11 @@ public class Main {
 
             String commandName = args[0];
 
+            if ("-v".equals(commandName) || "--version".equals(commandName)) {
+                System.out.println(VersionInfo.load(Main.class.getClassLoader()).format());
+                return 0;
+            }
+
             // プロジェクトディレクトリの決定（カレントディレクトリ）
             Path baseDir = Paths.get(System.getProperty("user.dir"));
 
@@ -217,6 +222,7 @@ public class Main {
         System.out.println("Migraphe - Database Migration Tool");
         System.out.println();
         System.out.println("Usage: migraphe <command> [options]");
+        System.out.println("       migraphe -v | --version");
         System.out.println();
         System.out.println("Commands:");
         System.out.println("  up [-y] [--dry-run] [<id>]          Execute migrations");
