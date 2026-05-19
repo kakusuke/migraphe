@@ -129,7 +129,7 @@ down: |
 ./gradlew publishToMavenLocal
 
 # Generate the lockfile (required whenever plugins: changes in migraphe.yaml)
-migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli pin
+migraphe pin
 
 # Check migration status
 migraphe status
