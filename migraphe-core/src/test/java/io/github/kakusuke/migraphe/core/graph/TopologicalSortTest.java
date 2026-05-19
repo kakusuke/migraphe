@@ -104,20 +104,12 @@ class TopologicalSortTest {
 
     @Test
     void shouldThrowExceptionForGraphWithCycle() {
-        // given
+        // given: node-1 depends on node-2, node-2 depends on node-1 (cycle)
         MigrationGraph graph = MigrationGraph.create();
-        NodeId id1 = NodeId.of("node-1");
-        NodeId id2 = NodeId.of("node-2");
-
-        MigrationNode node1 = node("node-1").build();
-        MigrationNode node2 = node("node-2").build();
-
+        MigrationNode node1 = node("node-1").dependencies(NodeId.of("node-2")).build();
+        MigrationNode node2 = node("node-2").dependencies(NodeId.of("node-1")).build();
         graph.addNode(node1);
         graph.addNode(node2);
-
-        // Create a cycle
-        graph.addDependency(id1, id2);
-        graph.addDependency(id2, id1);
 
         // when & then
         assertThatThrownBy(() -> TopologicalSort.createExecutionPlan(graph))

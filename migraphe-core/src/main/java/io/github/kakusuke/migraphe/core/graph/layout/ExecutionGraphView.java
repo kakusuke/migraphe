@@ -32,15 +32,25 @@ public final class ExecutionGraphView {
     }
 
     /**
-     * ソート済みノードリストから構築するコンストラクタ（フィルタ済みサブセット用）。
+     * ソート済みノードリストから構築するコンストラクタ（フィルタ済みサブセット用、UP 方向）。
      *
      * @param sortedNodes ソート済みノードリスト
      */
     public ExecutionGraphView(List<MigrationNode> sortedNodes) {
-        MigrationGraph subGraph = MigrationGraph.create();
-        for (MigrationNode node : sortedNodes) {
-            subGraph.addNode(node);
-        }
+        this(sortedNodes, false);
+    }
+
+    /**
+     * ソート済みノードリストから構築するコンストラクタ（方向指定版）。
+     *
+     * @param sortedNodes ソート済みノードリスト
+     * @param reversed true の場合、DOWN 方向（reversed adjacency + リスト外フィルタ）でサブグラフを構築
+     */
+    public ExecutionGraphView(List<MigrationNode> sortedNodes, boolean reversed) {
+        MigrationGraph subGraph =
+                reversed
+                        ? MigrationGraph.fromNodesDown(sortedNodes)
+                        : MigrationGraph.fromNodesUp(sortedNodes);
         LayoutSort.LayoutOrder order = LayoutSort.sort(subGraph);
         LayoutTree tree = LayoutTree.build(subGraph, order);
         this.canvas = new GridCanvas();

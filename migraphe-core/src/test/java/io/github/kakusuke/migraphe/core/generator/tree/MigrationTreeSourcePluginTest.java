@@ -47,10 +47,10 @@ class MigrationTreeSourcePluginTest {
                         .name("b")
                         .environment(env)
                         .upTask(SimpleTask.of("b"))
+                        .dependencies(NodeId.of("a"))
                         .build();
         graph.addNode(nodeA);
         graph.addNode(nodeB);
-        graph.addDependency(NodeId.of("b"), NodeId.of("a"));
 
         SourceContext context = new SourceContext(null, graph);
         MigrationTreeData result = plugin.extract(context);
@@ -99,10 +99,10 @@ class MigrationTreeSourcePluginTest {
                         .name("b")
                         .environment(env)
                         .upTask(SimpleTask.of("b"))
+                        .dependencies(NodeId.of("a"))
                         .build();
         graph.addNode(nodeA);
         graph.addNode(nodeB);
-        graph.addDependency(NodeId.of("b"), NodeId.of("a"));
 
         var historyRepository = new InMemoryHistoryRepository();
         historyRepository.record(
