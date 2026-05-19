@@ -129,12 +129,12 @@ public final class MigrationGraph implements MigrationGraphView {
             errors.add("Graph contains a cycle (circular dependency)");
         }
 
-        // 全ての依存先ノードが存在するかチェック
-        for (var entry : adjacencyList.entrySet()) {
-            for (NodeId depId : entry.getValue()) {
+        // 全ての依存先ノードが存在するかチェック (node.dependencies() を直接参照: adjacency は
+        // fromNodesUp/Down でリスト内に絞り込まれている場合があるため、ソース・オブ・トゥルースを使う)
+        for (MigrationNode node : nodes.values()) {
+            for (NodeId depId : node.dependencies()) {
                 if (!nodes.containsKey(depId)) {
-                    errors.add(
-                            "Node " + entry.getKey() + " depends on non-existent node: " + depId);
+                    errors.add("Node " + node.id() + " depends on non-existent node: " + depId);
                 }
             }
         }
@@ -160,8 +160,19 @@ public final class MigrationGraph implements MigrationGraphView {
 
     public static MigrationGraph fromNodesUp(List<MigrationNode> nodes) {
         MigrationGraph graph = new MigrationGraph();
+        Set<NodeId> nodeIds = new HashSet<>();
         for (MigrationNode node : nodes) {
-            graph.addNode(node);
+            nodeIds.add(node.id());
+        }
+        for (MigrationNode node : nodes) {
+            graph.nodes.put(node.id(), node);
+            Set<NodeId> filteredDeps = new HashSet<>();
+            for (NodeId depId : node.dependencies()) {
+                if (nodeIds.contains(depId)) {
+                    filteredDeps.add(depId);
+                }
+            }
+            graph.adjacencyList.put(node.id(), filteredDeps);
         }
         return graph;
     }

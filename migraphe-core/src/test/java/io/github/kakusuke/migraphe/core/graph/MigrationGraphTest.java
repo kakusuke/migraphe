@@ -210,6 +210,19 @@ class MigrationGraphTest {
     }
 
     @Test
+    void fromNodesUp_withOutOfListDependency_filtersAdjacency() {
+        // given: node B depends on A, only B is in the list (A already-executed style)
+        MigrationNode nodeB = node("b").dependencies(NodeId.of("a")).build();
+
+        // when
+        MigrationGraph graph = MigrationGraph.fromNodesUp(List.of(nodeB));
+
+        // then: adjacency must be closed to in-list IDs only (mirror fromNodesDown behavior)
+        // so LayoutSort's inDegree calculation doesn't get stuck on dangling refs.
+        assertThat(graph.getDependencies(NodeId.of("b"))).isEmpty();
+    }
+
+    @Test
     void shouldGetNodeById() {
         // given
         MigrationGraph graph = MigrationGraph.create();
