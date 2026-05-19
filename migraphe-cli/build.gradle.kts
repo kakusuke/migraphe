@@ -41,6 +41,15 @@ application {
 tasks.distTar {
     compression = Compression.GZIP
     archiveExtension.set("tar.gz")
+    archiveFileName.set("migraphe-${project.version}.tar.gz")
+    eachFile { path = path.replaceFirst(Regex("^migraphe-[^/]+"), "migraphe") }
+    includeEmptyDirs = false
+}
+
+tasks.distZip {
+    archiveFileName.set("migraphe-${project.version}.zip")
+    eachFile { path = path.replaceFirst(Regex("^migraphe-[^/]+"), "migraphe") }
+    includeEmptyDirs = false
 }
 
 tasks.test {
