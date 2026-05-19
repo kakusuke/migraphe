@@ -32,13 +32,13 @@ cd ../../                # リポジトリルートへ
 ./gradlew :migraphe-cli:installDist
 ```
 
-`migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli` が生成されます。
+`migraphe-cli/build/install/migraphe/bin/migraphe` が生成されます。
 
 ### 4. エイリアス設定（任意だが推奨）
 
 ```bash
 cd sample/cli
-export MIGRAPHE=../../migraphe-cli/build/install/migraphe-cli/bin/migraphe-cli
+export MIGRAPHE=../../migraphe-cli/build/install/migraphe/bin/migraphe
 alias migraphe="$MIGRAPHE"
 ```
 
