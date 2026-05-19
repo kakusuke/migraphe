@@ -8,6 +8,7 @@ import java.util.Set;
 import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.artifact.Artifact;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
 import org.eclipse.aether.connector.basic.BasicRepositoryConnectorFactory;
@@ -74,7 +75,7 @@ public final class MavenPluginResolver {
             List<ResolvedArtifact> deps = new ArrayList<>();
             for (ArtifactResolution res : all) {
                 ResolvedArtifact artifact = new ResolvedArtifact(res.coordinate, res.path);
-                if (root == null && res.coordinate.equals(plugin.coordinate())) {
+                if (root == null && res.isRoot()) {
                     root = artifact;
                 } else {
                     deps.add(artifact);
@@ -131,6 +132,7 @@ public final class MavenPluginResolver {
 
         try {
             DependencyResult result = system.resolveDependencies(session, dependencyRequest);
+            Artifact rootArtifact = result.getRoot().getArtifact();
             List<ArtifactResolution> out = new ArrayList<>();
             result.getArtifactResults().stream()
                     .filter(r -> r.isResolved())
@@ -143,7 +145,8 @@ public final class MavenPluginResolver {
                                                         a.getGroupId(),
                                                         a.getArtifactId(),
                                                         a.getVersion()),
-                                                a.getFile().toPath()));
+                                                a.getFile().toPath(),
+                                                a.equals(rootArtifact)));
                             });
             return out;
         } catch (DependencyResolutionException e) {
@@ -158,7 +161,8 @@ public final class MavenPluginResolver {
         }
     }
 
-    private record ArtifactResolution(MavenArtifactCoordinate coordinate, Path path) {}
+    private record ArtifactResolution(
+            MavenArtifactCoordinate coordinate, Path path, boolean isRoot) {}
 
     private static List<RemoteRepository> toRemoteRepositories(List<RepositoryConfig> configs) {
         List<RemoteRepository> out = new ArrayList<>();

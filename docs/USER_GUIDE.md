@@ -43,12 +43,12 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 ```bash
 # Tarball — Linux / macOS
 curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.tar.gz | tar xz
-export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
+export PATH="$PWD/migraphe/bin:$PATH"
 
 # Zip — Windows
 curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.zip
 unzip migraphe.zip
-export PATH="$PWD/migraphe-0.1.0/bin:$PATH"
+export PATH="$PWD/migraphe/bin:$PATH"
 
 # Fat JAR — single file
 curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0-all.jar

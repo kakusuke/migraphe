@@ -134,6 +134,122 @@ class MavenPluginResolverTest {
     }
 
     @Test
+    void resolveGroupsIdentifiesRootWhenSnapshotVersionIsRemappedToConcrete() throws IOException {
+        Path repoDir = tempDir.resolve("repo");
+        Path snapshotDir = repoDir.resolve("com/example/snap-plugin/1.0-SNAPSHOT");
+        Files.createDirectories(snapshotDir);
+
+        Files.writeString(
+                snapshotDir.resolve("maven-metadata.xml"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <metadata>
+                  <groupId>com.example</groupId>
+                  <artifactId>snap-plugin</artifactId>
+                  <version>1.0-SNAPSHOT</version>
+                  <versioning>
+                    <snapshot>
+                      <timestamp>20240101.000000</timestamp>
+                      <buildNumber>1</buildNumber>
+                    </snapshot>
+                    <lastUpdated>20240101000000</lastUpdated>
+                    <snapshotVersions>
+                      <snapshotVersion>
+                        <extension>jar</extension>
+                        <value>1.0-20240101.000000-1</value>
+                        <updated>20240101000000</updated>
+                      </snapshotVersion>
+                      <snapshotVersion>
+                        <extension>pom</extension>
+                        <value>1.0-20240101.000000-1</value>
+                        <updated>20240101000000</updated>
+                      </snapshotVersion>
+                    </snapshotVersions>
+                  </versioning>
+                </metadata>
+                """);
+
+        Files.writeString(
+                snapshotDir.resolve("snap-plugin-1.0-20240101.000000-1.pom"),
+                """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>snap-plugin</artifactId>
+                  <version>1.0-SNAPSHOT</version>
+                </project>
+                """);
+
+        Files.write(
+                snapshotDir.resolve("snap-plugin-1.0-20240101.000000-1.jar"),
+                new byte[] {0x50, 0x4B, 0x03, 0x04});
+
+        RepositoryConfig fileRepo =
+                RepositoryConfig.testOnly("test-repo", "file://" + repoDir.toAbsolutePath());
+        var resolver =
+                new MavenPluginResolver(
+                        tempDir.resolve("local"), RepositoryRegistry.of(List.of(fileRepo)));
+        PluginDeclaration plugin =
+                PluginDeclaration.fromString("com.example:snap-plugin:1.0-SNAPSHOT");
+
+        List<ResolvedPluginGroup> groups = resolver.resolveGroups(List.of(plugin));
+
+        assertThat(groups).hasSize(1);
+        assertThat(groups.get(0).root().coordinate().artifactId()).isEqualTo("snap-plugin");
+    }
+
+    @Test
+    void resolveGroupsIdentifiesRootEvenWhenTransitiveDependenciesArePresent() throws IOException {
+        Path repoDir = tempDir.resolve("repo");
+
+        Path libDir = repoDir.resolve("com/example/lib-b/2.0");
+        Files.createDirectories(libDir);
+        Files.writeString(
+                libDir.resolve("lib-b-2.0.pom"),
+                """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>lib-b</artifactId>
+                  <version>2.0</version>
+                </project>
+                """);
+        Files.write(libDir.resolve("lib-b-2.0.jar"), new byte[] {0x50, 0x4B, 0x03, 0x04});
+
+        Path pluginDir = repoDir.resolve("com/example/plugin-a/1.0");
+        Files.createDirectories(pluginDir);
+        Files.writeString(
+                pluginDir.resolve("plugin-a-1.0.pom"),
+                """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>plugin-a</artifactId>
+                  <version>1.0</version>
+                  <dependencies>
+                    <dependency>
+                      <groupId>com.example</groupId>
+                      <artifactId>lib-b</artifactId>
+                      <version>2.0</version>
+                    </dependency>
+                  </dependencies>
+                </project>
+                """);
+        Files.write(pluginDir.resolve("plugin-a-1.0.jar"), new byte[] {0x50, 0x4B, 0x03, 0x04});
+
+        var resolver = new MavenPluginResolver(repoDir, RepositoryRegistry.of(List.of()));
+        PluginDeclaration plugin = PluginDeclaration.fromString("com.example:plugin-a:1.0");
+
+        List<ResolvedPluginGroup> groups = resolver.resolveGroups(List.of(plugin));
+
+        assertThat(groups).hasSize(1);
+        ResolvedPluginGroup group = groups.get(0);
+        assertThat(group.root().coordinate().artifactId()).isEqualTo("plugin-a");
+        assertThat(group.dependencies()).hasSize(1);
+        assertThat(group.dependencies().get(0).coordinate().artifactId()).isEqualTo("lib-b");
+    }
+
+    @Test
     void shouldResolveAllDeduplicatesResults() throws IOException {
         Path repoDir = tempDir.resolve("repo");
         Path artifactDirA = repoDir.resolve("com/example/plugin-a/1.0");
