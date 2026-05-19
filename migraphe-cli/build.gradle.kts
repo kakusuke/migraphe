@@ -52,6 +52,23 @@ tasks.distZip {
     includeEmptyDirs = false
 }
 
+tasks.processResources {
+    val gitCommit = providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim() }.orElse("unknown")
+
+    inputs.property("version", project.version.toString())
+    inputs.property("commit", gitCommit)
+
+    filesMatching("migraphe-version.properties") {
+        expand(
+            "version" to project.version.toString(),
+            "commit" to gitCommit.get()
+        )
+    }
+}
+
 tasks.test {
     useJUnitPlatform()
 }
