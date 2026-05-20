@@ -13,12 +13,22 @@ Migraphe は Java の ServiceLoader メカニズムに基づいたプラグイ�
 
 ### 1. 依存関係の追加
 
-プラグインプロジェクトに `migraphe-api` モジュールを追加します：
+プラグインプロジェクトに `migraphe-api` モジュールを追加します。Migraphe のアーティファクトは現在 JitPack 経由で配布されています：
+
+```kotlin
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven("https://jitpack.io")
+    }
+}
+```
 
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.kakusuke.migraphe:migraphe-api:0.1.0")
+    implementation("com.github.kakusuke.migraphe:migraphe-api:main-SNAPSHOT")
 }
 ```
 

@@ -13,12 +13,22 @@ Migraphe uses a plugin system based on Java's ServiceLoader mechanism. Plugins c
 
 ### 1. Add Dependency
 
-Add the `migraphe-api` module to your plugin project:
+Add the `migraphe-api` module to your plugin project. Migraphe artefacts are currently distributed via JitPack:
+
+```kotlin
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven("https://jitpack.io")
+    }
+}
+```
 
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("io.github.kakusuke.migraphe:migraphe-api:0.1.0")
+    implementation("com.github.kakusuke.migraphe:migraphe-api:main-SNAPSHOT")
 }
 ```
 

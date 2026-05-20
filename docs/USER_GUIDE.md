@@ -87,30 +87,7 @@ Migraphe uses a plugin architecture where database support is provided by separa
 
 #### Method 1: Maven Coordinates (Recommended)
 
-Add a `plugins` section to `migraphe.yaml` with Maven coordinates. The CLI automatically resolves dependencies from `~/.m2/repository` and Maven Central:
-
-```yaml
-plugins:
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
-  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
-
-project:
-  name: my-project
-history:
-  target: history
-```
-
-If using locally built plugins, publish them first:
-
-```bash
-./gradlew publishToMavenLocal
-```
-
-Transitive dependencies (e.g., JDBC drivers, Jackson) are resolved automatically from Maven Central.
-
-##### Custom Repositories (e.g., JitPack)
-
-Add a `repositories:` block with extra entries (HTTPS only) and reference them per plugin via the map form:
+Add a `plugins` section to `migraphe.yaml` with Maven coordinates. Migraphe plugins are distributed via JitPack — declare the JitPack repository and reference each plugin via the map form:
 
 ```yaml
 repositories:
@@ -118,12 +95,36 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.user:custom-plugin:v1.2.3
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
     repository: jitpack
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:main-SNAPSHOT
+    repository: jitpack
+
+project:
+  name: my-project
+history:
+  target: history
 ```
 
-`maven-central` is always available implicitly; you do not need to redeclare it.
+`maven-central` is always available implicitly; you do not need to redeclare it. Transitive dependencies (e.g., JDBC drivers, Jackson) are resolved automatically from Maven Central.
+
+##### Additional Repositories
+
+You can add other HTTPS Maven repositories the same way and select them per plugin entry:
+
+```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+  - id: my-internal
+    url: https://maven.internal.example.com/releases
+
+plugins:
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+    repository: jitpack
+  - coordinate: com.example:internal-plugin:1.0.0
+    repository: my-internal
+```
 
 ##### Lockfile (`migraphe.lock.yaml`)
 
@@ -201,8 +202,13 @@ At minimum, you need:
 ### Project Configuration (`migraphe.yaml`)
 
 ```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
 plugins:
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+    repository: jitpack
 
 project:
   name: my-project
@@ -1034,21 +1040,30 @@ WHERE node_id = 'db1/001_create_users';
 
 Migraphe provides a Gradle plugin for integrating migrations into your build process.
 
-> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. Use `./gradlew publishToMavenLocal` in the migraphe repository to install it locally.
-
 ### Setup
 
-Add the plugin repository and version to your `settings.gradle.kts`:
+Configure plugin resolution in `settings.gradle.kts`:
 
 ```kotlin
 pluginManagement {
     repositories {
-        mavenLocal()
         gradlePluginPortal()
         mavenCentral()
+        maven("https://jitpack.io")
     }
-    plugins {
-        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "io.github.kakusuke.migraphe") {
+                useModule("com.github.kakusuke.migraphe:migraphe-gradle-plugin:${requested.version}")
+            }
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven("https://jitpack.io")
     }
 }
 ```
@@ -1057,12 +1072,7 @@ Add to your `build.gradle.kts`:
 
 ```kotlin
 plugins {
-    id("io.github.kakusuke.migraphe")
-}
-
-repositories {
-    mavenLocal()
-    mavenCentral()
+    id("io.github.kakusuke.migraphe") version "main-SNAPSHOT"
 }
 
 migraphe {
@@ -1071,9 +1081,9 @@ migraphe {
 
 dependencies {
     // Choose the plugin(s) for your database:
-    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
-    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
-    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-jdbc:0.1.0-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:main-SNAPSHOT")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:main-SNAPSHOT")
 }
 ```
 
@@ -1122,7 +1132,7 @@ No plugins are currently loaded.
 
 **Solution:**
 - Add the plugin Maven coordinate to the `plugins` section in `migraphe.yaml`
-- Run `./gradlew publishToMavenLocal` if using locally built plugins
+- Run `migraphe pin` to (re)generate the lockfile
 - Alternatively, place plugin JAR file in `plugins/` directory
 - See [Installing Plugins](#installing-plugins) section
 
@@ -1130,14 +1140,14 @@ No plugins are currently loaded.
 
 **Problem:**
 ```
-Failed to resolve plugin: io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
 ```
 
 **Solution:**
-- Ensure `./gradlew publishToMavenLocal` has been run
-- Check that the Maven coordinate in `migraphe.yaml` is correct
-- Verify `~/.m2/repository` contains the plugin artifacts
-- Check network connectivity for Maven Central (required for transitive dependencies)
+- Check that the Maven coordinate and `repository:` reference in `migraphe.yaml` are correct
+- Confirm the JitPack build of `main-SNAPSHOT` finished successfully at <https://jitpack.io/#kakusuke/migraphe>
+- Verify network connectivity to JitPack and Maven Central
+- Re-run `migraphe pin` to refresh the lockfile
 
 #### 2. "Target not found" Error
 
@@ -1249,10 +1259,10 @@ Migraphe artefacts are available through the following channels:
 | Channel | Status | groupId | Scope |
 |---------|--------|---------|-------|
 | GitHub Releases (fat JAR) | ✅ Available | — | CLI binary |
-| JitPack | 🚧 Contributor beta — see [CONTRIBUTING.md](../CONTRIBUTING.md#pre-release-builds-via-jitpack-beta-channel) | `com.github.*` | Plugin JARs (pre-release verification only) |
-| Maven Central | 📅 Planned | `io.github.kakusuke.migraphe` | Plugin JARs (production) |
+| JitPack | ✅ Available | `com.github.kakusuke.migraphe` | Plugin JARs + Gradle plugin |
+| Maven Central | 📅 Planned | `io.github.kakusuke.migraphe` | Plugin JARs + Gradle plugin |
 
-End users should wait for the Maven Central release. The JitPack channel is intended for Migraphe core contributors and plugin developers who need to verify against the latest `main` branch — its coordinates (`com.github.kakusuke.migraphe:*:main-SNAPSHOT`) are temporary and will not be supported once Maven Central distribution is live.
+Plugin JARs and the Gradle plugin are currently distributed via JitPack at `com.github.kakusuke.migraphe:<module>:main-SNAPSHOT`. Maven Central publication is planned; the groupId will switch to `io.github.kakusuke.migraphe` at that point.
 
 ## Next Steps
 

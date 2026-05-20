@@ -87,30 +87,7 @@ Migraphe はプラグインアーキテクチャを採用しており、デー�
 
 #### 方法1: Maven 座標（推奨）
 
-`migraphe.yaml` に `plugins` セクションを追加し、Maven 座標を記述します。CLI が `~/.m2/repository` および Maven Central から依存を自動解決します:
-
-```yaml
-plugins:
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
-  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
-
-project:
-  name: my-project
-history:
-  target: history
-```
-
-ローカルビルドのプラグインを使用する場合は、事前に公開が必要です:
-
-```bash
-./gradlew publishToMavenLocal
-```
-
-推移的依存（JDBC ドライバ、Jackson 等）は Maven Central から自動的に解決されます。
-
-##### カスタムリポジトリ（JitPack 等）
-
-`repositories:` ブロックで HTTPS のリポジトリを追加し、プラグインから map 形式で参照できます:
+`migraphe.yaml` に `plugins` セクションを追加し、Maven 座標を記述します。Migraphe のプラグインは JitPack 経由で配布されているため、JitPack リポジトリを宣言したうえで map 形式で参照します:
 
 ```yaml
 repositories:
@@ -118,12 +95,36 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.user:custom-plugin:v1.2.3
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
     repository: jitpack
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:main-SNAPSHOT
+    repository: jitpack
+
+project:
+  name: my-project
+history:
+  target: history
 ```
 
-`maven-central` は常に暗黙的に利用可能なので再宣言は不要です。
+`maven-central` は常に暗黙的に利用可能なので再宣言は不要です。推移的依存（JDBC ドライバ、Jackson 等）は Maven Central から自動的に解決されます。
+
+##### 追加のリポジトリ
+
+他の HTTPS Maven リポジトリも同じ書き方で追加でき、プラグインごとに参照先を選択できます:
+
+```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+  - id: my-internal
+    url: https://maven.internal.example.com/releases
+
+plugins:
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+    repository: jitpack
+  - coordinate: com.example:internal-plugin:1.0.0
+    repository: my-internal
+```
 
 ##### ロックファイル（`migraphe.lock.yaml`）
 
@@ -201,8 +202,13 @@ my-project/
 ### プロジェクト設定（`migraphe.yaml`）
 
 ```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
 plugins:
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+    repository: jitpack
 
 project:
   name: my-project
@@ -1034,21 +1040,30 @@ WHERE node_id = 'db1/001_create_users';
 
 Migrapheはマイグレーションをビルドプロセスに統合するためのGradleプラグインを提供します。
 
-> **注意:** プラグインはまだMaven Central / Gradle Plugin Portalに公開されていません。migrapheリポジトリで `./gradlew publishToMavenLocal` を実行してローカルインストールしてください。
-
 ### セットアップ
 
-`settings.gradle.kts` にプラグインリポジトリとバージョンを追加:
+`settings.gradle.kts` にプラグイン解決の設定を追加:
 
 ```kotlin
 pluginManagement {
     repositories {
-        mavenLocal()
         gradlePluginPortal()
         mavenCentral()
+        maven("https://jitpack.io")
     }
-    plugins {
-        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "io.github.kakusuke.migraphe") {
+                useModule("com.github.kakusuke.migraphe:migraphe-gradle-plugin:${requested.version}")
+            }
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven("https://jitpack.io")
     }
 }
 ```
@@ -1057,12 +1072,7 @@ pluginManagement {
 
 ```kotlin
 plugins {
-    id("io.github.kakusuke.migraphe")
-}
-
-repositories {
-    mavenLocal()
-    mavenCentral()
+    id("io.github.kakusuke.migraphe") version "main-SNAPSHOT"
 }
 
 migraphe {
@@ -1071,9 +1081,9 @@ migraphe {
 
 dependencies {
     // 使用するデータベースに応じてプラグインを選択:
-    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
-    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
-    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-jdbc:0.1.0-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:main-SNAPSHOT")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:main-SNAPSHOT")
 }
 ```
 
@@ -1122,7 +1132,7 @@ No plugins are currently loaded.
 
 **解決策:**
 - `migraphe.yaml` の `plugins` セクションにプラグインの Maven 座標を追加
-- ローカルビルドのプラグインを使用する場合は `./gradlew publishToMavenLocal` を実行
+- `migraphe pin` でロックファイルを (再) 生成
 - または `plugins/` ディレクトリにプラグイン JAR ファイルを配置
 - [プラグインのインストール](#プラグインのインストール) セクションを参照
 
@@ -1130,14 +1140,14 @@ No plugins are currently loaded.
 
 **問題:**
 ```
-Failed to resolve plugin: io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
 ```
 
 **解決策:**
-- `./gradlew publishToMavenLocal` を実行済みか確認
-- `migraphe.yaml` の Maven 座標が正しいか確認
-- `~/.m2/repository` にプラグインのアーティファクトが存在するか確認
-- Maven Central へのネットワーク接続を確認（推移的依存の取得に必要）
+- `migraphe.yaml` の Maven 座標と `repository:` 指定が正しいか確認
+- JitPack 側で `main-SNAPSHOT` のビルドが成功しているかを <https://jitpack.io/#kakusuke/migraphe> で確認
+- JitPack および Maven Central へのネットワーク接続を確認
+- `migraphe pin` でロックファイルを再生成
 
 #### 2. "Target not found" エラー
 
@@ -1249,10 +1259,10 @@ Migraphe アーティファクトは以下のチャネルで提供されます:
 | チャネル | 状態 | groupId | 対象 |
 |----------|------|---------|------|
 | GitHub Releases (fat JAR) | ✅ 提供中 | — | CLI バイナリ |
-| JitPack | 🚧 contributor 向けベータ — [CONTRIBUTING.md](../CONTRIBUTING.md#pre-release-builds-via-jitpack-beta-channel) 参照 | `com.github.*` | プラグイン JAR（pre-release 検証用のみ） |
-| Maven Central | 📅 公開予定 | `io.github.kakusuke.migraphe` | プラグイン JAR（本番用） |
+| JitPack | ✅ 提供中 | `com.github.kakusuke.migraphe` | プラグイン JAR + Gradle プラグイン |
+| Maven Central | 📅 公開予定 | `io.github.kakusuke.migraphe` | プラグイン JAR + Gradle プラグイン |
 
-エンドユーザーは Maven Central 公開をお待ちください。JitPack チャネルは Migraphe 本体のコントリビューターおよびプラグイン開発者が最新の `main` ブランチを動作確認するためのもので、現時点の座標 (`com.github.kakusuke.migraphe:*:main-SNAPSHOT`) は **暫定** です。Maven Central 公開後はサポートされません。
+プラグイン JAR および Gradle プラグインは現在 JitPack 経由で `com.github.kakusuke.migraphe:<module>:main-SNAPSHOT` として配布されています。Maven Central への公開は予定中で、その際に groupId が `io.github.kakusuke.migraphe` に切り替わります。
 
 ## 次のステップ
 
