@@ -6,27 +6,18 @@ migraphe Gradle プラグイン (`io.github.kakusuke.migraphe`) で PostgreSQL (
 
 - Java 21
 - Docker / Docker Compose
-- リポジトリのルート（このサンプルの親の親）が migraphe のソースツリーであること
+- ネットワーク接続（プラグインを JitPack から解決します）
 
 ## セットアップ
 
-### 1. データベース起動
+### データベース起動
 
 ```bash
 cd ..                    # sample/ へ
 docker compose up -d
 ```
 
-### 2. プラグインをローカル Maven に公開
-
-このサンプルは `mavenLocal()` から Gradle プラグイン本体と DB プラグインを解決します。リポジトリルートで一度だけ実行:
-
-```bash
-cd ../../                # リポジトリルートへ
-./gradlew publishToMavenLocal
-```
-
-これ以降、このサンプルは完全にスタンドアロンに動作します（親プロジェクトの変更を取り込むには再実行が必要）。
+Gradle プラグイン本体と DB プラグインは JitPack (`https://jitpack.io`) から自動的に解決されます。`settings.gradle.kts` および `build.gradle.kts` を参照してください。
 
 ## 実行例
 
@@ -82,7 +73,7 @@ PG と MySQL のタスクが単一の DAG として並び、依存順で表示�
 
 ```
 gradle/
-├── settings.gradle.kts    # mavenLocal() からプラグイン解決
+├── settings.gradle.kts    # JitPack からプラグイン解決 (pluginManagement + resolutionStrategy)
 ├── build.gradle.kts       # id("io.github.kakusuke.migraphe") 適用 + migraphePlugin 依存
 ├── gradlew, gradlew.bat, gradle/wrapper/   # Gradle wrapper
 ├── migraphe.yaml          # project.name, history.target, generators
@@ -101,7 +92,7 @@ CLI サンプル (`sample/cli/`) とタスク内容は同一です。適用方�
 | | CLI | Gradle Plugin |
 |---|-----|--------------|
 | プラグイン宣言 | `migraphe.yaml` の `plugins:` セクション | `build.gradle.kts` の `migraphePlugin(...)` |
-| 解決元 | `~/.m2` + Maven Central | `~/.m2` (Maven Local) |
+| 解決元 | JitPack (+ `~/.m2` キャッシュ) | JitPack (+ `~/.m2` キャッシュ) |
 | 実行コマンド | `migraphe <cmd>` | `./gradlew migraphe<Cmd>` |
 | 既存Gradleビルドへの統合 | 別プロセス | 同一ビルド内タスク |
 
@@ -118,6 +109,6 @@ docker compose down -v
 
 ## トラブルシューティング
 
-- **`Plugin [id: 'io.github.kakusuke.migraphe'] was not found`**: ルートで `./gradlew publishToMavenLocal` を実行していない。
+- **`Plugin [id: 'io.github.kakusuke.migraphe'] was not found`**: JitPack 側で `v0.2.0` のビルドが未完了。<https://jitpack.io/#kakusuke/migraphe> で Build Log を確認してください。
 - **接続エラー**: `docker compose ps` で両 DB が `healthy` になっているか確認。
-- **プラグイン変更が反映されない**: `~/.m2/repository/io/github/kakusuke/migraphe/` を削除 → ルートで `./gradlew publishToMavenLocal` を再実行。
+- **プラグイン変更が反映されない**: `~/.m2/repository/com/github/kakusuke/migraphe/` を削除 → `./gradlew --refresh-dependencies migrapheValidate` で再取得。

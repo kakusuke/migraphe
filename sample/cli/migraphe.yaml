@@ -1,7 +1,14 @@
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
 plugins:
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
-  - io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT
-  - io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0
+    repository: jitpack
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.2.0
+    repository: jitpack
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.2.0
+    repository: jitpack
 
 project:
   name: ecommerce-cli-sample

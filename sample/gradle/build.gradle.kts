@@ -1,14 +1,14 @@
 plugins {
-    id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    id("io.github.kakusuke.migraphe") version "v0.2.0"
 }
 
 repositories {
-    mavenLocal()
     mavenCentral()
+    maven("https://jitpack.io")
 }
 
 dependencies {
-    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
-    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
-    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-generator-json:0.1.0-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.2.0")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.2.0")
 }

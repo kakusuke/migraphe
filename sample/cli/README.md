@@ -17,30 +17,32 @@ cd ..                    # sample/ へ
 docker compose up -d
 ```
 
-### 2. プラグインをローカル Maven に公開
-
-migraphe.yaml の `plugins:` セクションが参照する Maven 座標をローカルに用意します。
+### 2. CLI 実行スクリプトを生成
 
 ```bash
 cd ../../                # リポジトリルートへ
-./gradlew publishToMavenLocal
-```
-
-### 3. CLI 実行スクリプトを生成
-
-```bash
 ./gradlew :migraphe-cli:installDist
 ```
 
 `migraphe-cli/build/install/migraphe/bin/migraphe` が生成されます。
 
-### 4. エイリアス設定（任意だが推奨）
+### 3. エイリアス設定（任意だが推奨）
 
 ```bash
 cd sample/cli
 export MIGRAPHE=../../migraphe-cli/build/install/migraphe/bin/migraphe
 alias migraphe="$MIGRAPHE"
 ```
+
+### 4. プラグインを JitPack から解決してロックファイルを生成
+
+`migraphe.yaml` の `plugins:` は JitPack から解決します。初回のみロックファイルを生成してください。
+
+```bash
+migraphe pin
+```
+
+`migraphe.lock.yaml` が生成され、以降の `migraphe validate` / `migraphe up` / `migraphe down` でプラグインの SHA-256 が照合されます。
 
 ## 実行例
 
@@ -144,6 +146,6 @@ docker compose down -v
 
 ## トラブルシューティング
 
-- **`Plugin not found` エラー**: `./gradlew publishToMavenLocal` を実行していない、もしくは `~/.m2/repository/io/github/kakusuke/migraphe/` の中身がない。
+- **`Plugin not found` エラー**: `migraphe pin` を実行していない、または JitPack 側でビルドが未完了（<https://jitpack.io/#kakusuke/migraphe> で `v0.2.0` の Build Log を確認）。
 - **接続エラー**: `docker compose ps` で両 DB が `healthy` になっているか確認。
 - **ポート競合**: ローカルに PostgreSQL/MySQL が動いている場合は停止するか、`docker-compose.yml` のポートを変更。

@@ -79,8 +79,13 @@ mkdir -p targets tasks/db1
 3. Create `migraphe.yaml`:
 
 ```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
 plugins:
-  - io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0
+    repository: jitpack
 
 project:
   name: my-project
@@ -125,9 +130,6 @@ down: |
 ### Run Migrations
 
 ```bash
-# Publish plugins to local Maven repo (first time only — for source builds with SNAPSHOT plugins)
-./gradlew publishToMavenLocal
-
 # Generate the lockfile (required whenever plugins: changes in migraphe.yaml)
 migraphe pin
 
@@ -143,19 +145,28 @@ migraphe generate
 
 ## Gradle Plugin
 
-> **Note:** The plugin is not yet published to Maven Central / Gradle Plugin Portal. Use `./gradlew publishToMavenLocal` in the migraphe repository to install it locally.
-
-Add the plugin repository and version to your `settings.gradle.kts`:
+Configure plugin resolution in `settings.gradle.kts`:
 
 ```kotlin
 pluginManagement {
     repositories {
-        mavenLocal()
         gradlePluginPortal()
         mavenCentral()
+        maven("https://jitpack.io")
     }
-    plugins {
-        id("io.github.kakusuke.migraphe") version "0.1.0-SNAPSHOT"
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "io.github.kakusuke.migraphe") {
+                useModule("com.github.kakusuke.migraphe:migraphe-gradle-plugin:${requested.version}")
+            }
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+        maven("https://jitpack.io")
     }
 }
 ```
@@ -164,12 +175,7 @@ Add the plugin to your `build.gradle.kts`:
 
 ```kotlin
 plugins {
-    id("io.github.kakusuke.migraphe")
-}
-
-repositories {
-    mavenLocal()
-    mavenCentral()
+    id("io.github.kakusuke.migraphe") version "v0.2.0"
 }
 
 migraphe {
@@ -178,9 +184,9 @@ migraphe {
 
 dependencies {
     // Choose the plugin(s) for your database:
-    migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-postgresql:0.1.0-SNAPSHOT")
-    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-mysql:0.1.0-SNAPSHOT")
-    // migraphePlugin("io.github.kakusuke.migraphe:migraphe-plugin-jdbc:0.1.0-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.2.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.2.0")
 }
 ```
 
