@@ -84,7 +84,7 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0
     repository: jitpack
 
 project:
@@ -175,7 +175,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 plugins {
-    id("io.github.kakusuke.migraphe") version "main-SNAPSHOT"
+    id("io.github.kakusuke.migraphe") version "v0.2.0"
 }
 
 migraphe {
@@ -184,9 +184,9 @@ migraphe {
 
 dependencies {
     // 使用するデータベースに応じてプラグインを選択:
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:main-SNAPSHOT")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:main-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.2.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.2.0")
 }
 ```
 

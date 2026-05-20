@@ -109,6 +109,6 @@ docker compose down -v
 
 ## トラブルシューティング
 
-- **`Plugin [id: 'io.github.kakusuke.migraphe'] was not found`**: JitPack 側で `main-SNAPSHOT` のビルドが未完了。<https://jitpack.io/#kakusuke/migraphe> で Build Log を確認してください。
+- **`Plugin [id: 'io.github.kakusuke.migraphe'] was not found`**: JitPack 側で `v0.2.0` のビルドが未完了。<https://jitpack.io/#kakusuke/migraphe> で Build Log を確認してください。
 - **接続エラー**: `docker compose ps` で両 DB が `healthy` になっているか確認。
 - **プラグイン変更が反映されない**: `~/.m2/repository/com/github/kakusuke/migraphe/` を削除 → `./gradlew --refresh-dependencies migrapheValidate` で再取得。

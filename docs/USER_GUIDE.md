@@ -95,9 +95,9 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0
     repository: jitpack
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:main-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.2.0
     repository: jitpack
 
 project:
@@ -120,7 +120,7 @@ repositories:
     url: https://maven.internal.example.com/releases
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0
     repository: jitpack
   - coordinate: com.example:internal-plugin:1.0.0
     repository: my-internal
@@ -207,7 +207,7 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0
     repository: jitpack
 
 project:
@@ -1072,7 +1072,7 @@ Add to your `build.gradle.kts`:
 
 ```kotlin
 plugins {
-    id("io.github.kakusuke.migraphe") version "main-SNAPSHOT"
+    id("io.github.kakusuke.migraphe") version "v0.2.0"
 }
 
 migraphe {
@@ -1081,9 +1081,9 @@ migraphe {
 
 dependencies {
     // Choose the plugin(s) for your database:
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:main-SNAPSHOT")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:main-SNAPSHOT")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.2.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.2.0")
 }
 ```
 
@@ -1140,12 +1140,12 @@ No plugins are currently loaded.
 
 **Problem:**
 ```
-Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:main-SNAPSHOT
+Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.2.0
 ```
 
 **Solution:**
 - Check that the Maven coordinate and `repository:` reference in `migraphe.yaml` are correct
-- Confirm the JitPack build of `main-SNAPSHOT` finished successfully at <https://jitpack.io/#kakusuke/migraphe>
+- Confirm the JitPack build of `v0.2.0` finished successfully at <https://jitpack.io/#kakusuke/migraphe>
 - Verify network connectivity to JitPack and Maven Central
 - Re-run `migraphe pin` to refresh the lockfile
 
@@ -1262,7 +1262,7 @@ Migraphe artefacts are available through the following channels:
 | JitPack | ✅ Available | `com.github.kakusuke.migraphe` | Plugin JARs + Gradle plugin |
 | Maven Central | 📅 Planned | `io.github.kakusuke.migraphe` | Plugin JARs + Gradle plugin |
 
-Plugin JARs and the Gradle plugin are currently distributed via JitPack at `com.github.kakusuke.migraphe:<module>:main-SNAPSHOT`. Maven Central publication is planned; the groupId will switch to `io.github.kakusuke.migraphe` at that point.
+Plugin JARs and the Gradle plugin are currently distributed via JitPack at `com.github.kakusuke.migraphe:<module>:v0.2.0`. Maven Central publication is planned; the groupId will switch to `io.github.kakusuke.migraphe` at that point.
 
 ## Next Steps
 
