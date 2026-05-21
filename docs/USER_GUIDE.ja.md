@@ -42,16 +42,16 @@ Migrapheは、複数の環境にわたる複雑なデータベースマイグレ
 
 ```bash
 # tar.gz — Linux / macOS
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.tar.gz | tar xz
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.0/migraphe-0.2.0.tar.gz | tar xz
 export PATH="$PWD/migraphe/bin:$PATH"
 
 # zip — Windows
-curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0.zip
+curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.2.0/migraphe-0.2.0.zip
 unzip migraphe.zip
 export PATH="$PWD/migraphe/bin:$PATH"
 
 # fat JAR — 単一ファイル
-curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.1.0/migraphe-0.1.0-all.jar
+curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.2.0/migraphe-0.2.0-all.jar
 alias migraphe="java -jar $PWD/migraphe.jar"
 ```
 
