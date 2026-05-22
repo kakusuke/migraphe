@@ -22,7 +22,7 @@
 ## インストール
 
 ```bash
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.0/migraphe-0.2.0.tar.gz | tar xz
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz
 export PATH="$PWD/migraphe/bin:$PATH"
 migraphe --help
 ```
