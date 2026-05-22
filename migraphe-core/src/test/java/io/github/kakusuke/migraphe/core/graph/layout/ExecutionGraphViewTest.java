@@ -130,6 +130,79 @@ class ExecutionGraphViewTest {
             assertThat(text).contains("┐");
             assertThat(text).contains("┘");
         }
+
+        @Test
+        @DisplayName("List ベースのコンストラクタでもダイヤモンド DAG の非ツリーエッジが描画される")
+        void shouldRenderNonTreeEdgesInDiamondDagViaListConstructor() {
+            MigrationNode nodeA = node("a").name("Node A").build();
+            MigrationNode nodeB = node("b").name("Node B").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeC = node("c").name("Node C").dependencies(NodeId.of("a")).build();
+            MigrationNode nodeD =
+                    node("d").name("Node D").dependencies(NodeId.of("b"), NodeId.of("c")).build();
+            ExecutionGraphView view = new ExecutionGraphView(List.of(nodeA, nodeB, nodeC, nodeD));
+
+            String text = view.toString();
+
+            assertThat(text).contains("┐");
+            assertThat(text).contains("┘");
+        }
+
+        @Test
+        @DisplayName("List ベースのコンストラクタが MigrationGraph ベースと同一の描画を返す")
+        void listConstructorRendersSameAsGraphConstructorForUpDirection() {
+            // sample/cli の `up mysql/04_indexes/002_review_indexes` 8 ノード upstream 閉包
+            MigrationNode mCurrencies = node("mysql/01_common/001_currencies").build();
+            MigrationNode mLocales = node("mysql/01_common/002_locales").build();
+            MigrationNode mCategories = node("mysql/02_catalog/001_categories").build();
+            MigrationNode mBrands = node("mysql/02_catalog/002_brands").build();
+            MigrationNode mProducts =
+                    node("mysql/02_catalog/003_products")
+                            .dependencies(
+                                    NodeId.of("mysql/02_catalog/001_categories"),
+                                    NodeId.of("mysql/02_catalog/002_brands"))
+                            .build();
+            MigrationNode pUsers =
+                    node("pg/02_users/001_users")
+                            .dependencies(
+                                    NodeId.of("mysql/01_common/001_currencies"),
+                                    NodeId.of("mysql/01_common/002_locales"))
+                            .build();
+            MigrationNode mReviews =
+                    node("mysql/03_reviews/001_reviews")
+                            .dependencies(
+                                    NodeId.of("mysql/02_catalog/003_products"),
+                                    NodeId.of("pg/02_users/001_users"))
+                            .build();
+            MigrationNode mReviewIndexes =
+                    node("mysql/04_indexes/002_review_indexes")
+                            .dependencies(NodeId.of("mysql/03_reviews/001_reviews"))
+                            .build();
+
+            List<MigrationNode> nodes =
+                    List.of(
+                            mCurrencies,
+                            mLocales,
+                            mCategories,
+                            mBrands,
+                            mProducts,
+                            pUsers,
+                            mReviews,
+                            mReviewIndexes);
+
+            MigrationGraph graph = MigrationGraph.create();
+            for (MigrationNode n : nodes) {
+                graph.addNode(n);
+            }
+
+            String fromGraph = new ExecutionGraphView(graph, false).toString();
+            String fromList = new ExecutionGraphView(nodes).toString();
+
+            assertThat(fromList).isEqualTo(fromGraph);
+            // 非ツリーエッジ ((categories, products), (currencies, users), (users, reviews))
+            // 由来の横エッジ文字が必ず含まれる
+            assertThat(fromList).contains("┐");
+            assertThat(fromList).contains("┘");
+        }
     }
 
     @Nested
