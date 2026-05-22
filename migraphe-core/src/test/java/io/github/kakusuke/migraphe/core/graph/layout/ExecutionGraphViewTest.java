@@ -26,7 +26,7 @@ class ExecutionGraphViewTest {
             MigrationNode nodeA = node("a").name("Create users table").build();
             MigrationGraph graph = MigrationGraph.create();
             graph.addNode(nodeA);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             String text = view.toString();
 
@@ -43,7 +43,7 @@ class ExecutionGraphViewTest {
             graph.addNode(nodeA);
             graph.addNode(nodeB);
             graph.addNode(nodeC);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             String text = view.toString();
 
@@ -64,7 +64,7 @@ class ExecutionGraphViewTest {
             MigrationNode nodeA = node("migration-001").name("Create users table").build();
             MigrationGraph graph = MigrationGraph.create();
             graph.addNode(nodeA);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             String text = view.toString();
 
@@ -85,7 +85,7 @@ class ExecutionGraphViewTest {
             MigrationGraph graph = MigrationGraph.create();
             graph.addNode(nodeA);
             graph.addNode(nodeB);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             List<String> lines = view.renderLines(n -> n.id().value() + ":" + n.name());
 
@@ -98,7 +98,7 @@ class ExecutionGraphViewTest {
             MigrationNode nodeA = node("x").name("X Node").build();
             MigrationGraph graph = MigrationGraph.create();
             graph.addNode(nodeA);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             List<String> lines = view.renderLines(n -> n.name());
 
@@ -123,7 +123,7 @@ class ExecutionGraphViewTest {
             graph.addNode(nodeB);
             graph.addNode(nodeC);
             graph.addNode(nodeD);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             String text = view.toString();
 
@@ -194,7 +194,7 @@ class ExecutionGraphViewTest {
                 graph.addNode(n);
             }
 
-            String fromGraph = new ExecutionGraphView(graph, false).toString();
+            String fromGraph = new ExecutionGraphView(graph).toString();
             String fromList = new ExecutionGraphView(nodes).toString();
 
             assertThat(fromList).isEqualTo(fromGraph);
@@ -271,7 +271,7 @@ class ExecutionGraphViewTest {
             graph.addNode(nodeB);
             graph.addNode(nodeC);
 
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             assertAllDependencyEdgesPointDownward(view, graph);
         }
@@ -298,7 +298,7 @@ class ExecutionGraphViewTest {
             graph.addNode(nodeD);
             graph.addNode(nodeE);
 
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             assertAllDependencyEdgesPointDownward(view, graph);
         }
@@ -429,7 +429,7 @@ class ExecutionGraphViewTest {
                 graph.addNode(n);
             }
 
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             // 1. 出力を System.out にダンプ（テスト結果ログで確認できる）
             String rendered = view.toString();
@@ -470,7 +470,7 @@ class ExecutionGraphViewTest {
             MigrationGraph graph = MigrationGraph.create();
             graph.addNode(nodeA);
             graph.addNode(nodeB);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             List<NodeLineInfo> lines = view.lines();
 
@@ -491,7 +491,7 @@ class ExecutionGraphViewTest {
             graph.addNode(nodeA);
             graph.addNode(nodeB);
             graph.addNode(nodeC);
-            ExecutionGraphView view = new ExecutionGraphView(graph, false);
+            ExecutionGraphView view = new ExecutionGraphView(graph);
 
             List<NodeLineInfo> lines = view.lines();
 

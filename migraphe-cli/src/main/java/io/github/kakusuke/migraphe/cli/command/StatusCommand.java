@@ -28,7 +28,7 @@ public class StatusCommand implements Command {
             historyRepo.initialize();
 
             // グラフをレンダリング
-            ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
+            ExecutionGraphView graphView = new ExecutionGraphView(context.graph());
 
             int[] executedCount = {0};
             int[] pendingCount = {0};
