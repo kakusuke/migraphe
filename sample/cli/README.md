@@ -146,6 +146,6 @@ docker compose down -v
 
 ## トラブルシューティング
 
-- **`Plugin not found` エラー**: `migraphe pin` を実行していない、または JitPack 側でビルドが未完了（<https://jitpack.io/#kakusuke/migraphe> で `v0.2.0` の Build Log を確認）。
+- **`Plugin not found` エラー**: `migraphe pin` を実行していない、または JitPack 側でビルドが未完了（<https://jitpack.io/#kakusuke/migraphe> で `v0.2.1` の Build Log を確認）。
 - **接続エラー**: `docker compose ps` で両 DB が `healthy` になっているか確認。
 - **ポート競合**: ローカルに PostgreSQL/MySQL が動いている場合は停止するか、`docker-compose.yml` のポートを変更。
