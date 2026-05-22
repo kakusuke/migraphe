@@ -18,6 +18,7 @@ import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -84,6 +85,150 @@ class RollbackExecutorTest {
 
             // Then
             assertThat(targets).isEmpty();
+        }
+
+        @Test
+        @DisplayName("ターゲット指定時、2-hop 先の推移的 dependent も含む (A → B → C で A 指定 → {A,B,C})")
+        void shouldIncludeTransitiveDependentsForTargetedRollback() {
+            // Given: A -> B -> C (chain)
+            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            graph.addNode(nodeC);
+
+            // 全て実行済み
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "Node B", null, 100L));
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("c"), testEnv.id(), "Node C", null, 100L));
+
+            executor = new RollbackExecutor(graph, historyRepo, listener);
+
+            // When: A を指定
+            Set<NodeId> targets = executor.determineRollbackTargets(NodeId.of("a"), false);
+
+            // Then: A, B, C すべてを含む (C は B 経由の推移依存)
+            assertThat(targets)
+                    .containsExactlyInAnyOrder(NodeId.of("a"), NodeId.of("b"), NodeId.of("c"));
+        }
+    }
+
+    @Nested
+    @DisplayName("sample/cli DAG ロールバック対象決定 (推移的 dependents)")
+    class SampleCliRollbackTargets {
+
+        @BeforeEach
+        void buildSampleCliGraph() {
+            graph = MigrationGraph.create();
+            historyRepo = new InMemoryHistoryRepository();
+            listener = new MockExecutionListener();
+
+            addSampleNode("mysql/01_common/001_currencies");
+            addSampleNode("mysql/01_common/002_locales");
+            addSampleNode("mysql/02_catalog/001_categories");
+            addSampleNode("mysql/02_catalog/002_brands");
+            addSampleNode(
+                    "mysql/02_catalog/003_products",
+                    "mysql/02_catalog/001_categories",
+                    "mysql/02_catalog/002_brands");
+            addSampleNode(
+                    "mysql/02_catalog/004_variants",
+                    "mysql/02_catalog/003_products",
+                    "mysql/01_common/001_currencies");
+            addSampleNode("mysql/02_catalog/005_images", "mysql/02_catalog/003_products");
+            addSampleNode(
+                    "pg/02_users/001_users",
+                    "mysql/01_common/001_currencies",
+                    "mysql/01_common/002_locales");
+            addSampleNode(
+                    "mysql/03_reviews/001_reviews",
+                    "mysql/02_catalog/003_products",
+                    "pg/02_users/001_users");
+            addSampleNode(
+                    "mysql/04_indexes/001_product_indexes",
+                    "mysql/02_catalog/003_products",
+                    "mysql/02_catalog/004_variants");
+            addSampleNode("mysql/04_indexes/002_review_indexes", "mysql/03_reviews/001_reviews");
+            addSampleNode("pg/02_users/002_profiles", "pg/02_users/001_users");
+            addSampleNode("pg/02_users/003_addresses", "pg/02_users/001_users");
+            addSampleNode(
+                    "pg/05_orders/001_orders",
+                    "pg/02_users/001_users",
+                    "pg/02_users/003_addresses",
+                    "mysql/01_common/001_currencies");
+            addSampleNode(
+                    "pg/05_orders/002_order_items",
+                    "pg/05_orders/001_orders",
+                    "mysql/02_catalog/004_variants");
+            addSampleNode("pg/06_payments/001_payment_methods", "pg/02_users/001_users");
+            addSampleNode(
+                    "pg/06_payments/002_payments",
+                    "pg/05_orders/001_orders",
+                    "pg/06_payments/001_payment_methods");
+            addSampleNode(
+                    "pg/07_indexes/001_user_indexes",
+                    "pg/02_users/001_users",
+                    "pg/02_users/002_profiles");
+            addSampleNode(
+                    "pg/07_indexes/002_order_indexes",
+                    "pg/05_orders/001_orders",
+                    "pg/05_orders/002_order_items",
+                    "pg/06_payments/002_payments");
+
+            for (MigrationNode node : graph.allNodes()) {
+                historyRepo.record(
+                        ExecutionRecord.upSuccess(
+                                node.id(), node.environment().id(), node.name(), null, 100L));
+            }
+
+            executor = new RollbackExecutor(graph, historyRepo, listener);
+        }
+
+        private void addSampleNode(String id, String... deps) {
+            Set<NodeId> depSet = new HashSet<>();
+            for (String d : deps) {
+                depSet.add(NodeId.of(d));
+            }
+            graph.addNode(createNode(id, id, depSet));
+        }
+
+        @Test
+        @DisplayName("変種 (mysql/02_catalog/004_variants) を指定: pg/07_indexes/002_order_indexes も含む")
+        void shouldIncludeTransitiveDependentsForVariantsTarget() {
+            Set<NodeId> rollback =
+                    executor.determineRollbackTargets(
+                            NodeId.of("mysql/02_catalog/004_variants"), false);
+
+            assertThat(rollback)
+                    .containsExactlyInAnyOrder(
+                            NodeId.of("mysql/02_catalog/004_variants"),
+                            NodeId.of("mysql/04_indexes/001_product_indexes"),
+                            NodeId.of("pg/05_orders/002_order_items"),
+                            NodeId.of("pg/07_indexes/002_order_indexes"));
+        }
+
+        @Test
+        @DisplayName("各ノードを target に指定すると {target} ∪ getAllDependents(target) が返る")
+        void shouldIncludeAllTransitiveDependentsForEveryNode() {
+            for (MigrationNode node : graph.allNodes()) {
+                NodeId target = node.id();
+                Set<NodeId> expected = new HashSet<>();
+                expected.add(target);
+                expected.addAll(graph.getAllDependents(target));
+
+                Set<NodeId> actual = executor.determineRollbackTargets(target, false);
+
+                assertThat(actual)
+                        .as(
+                                "rollback set for %s must contain itself + all transitive"
+                                        + " dependents",
+                                target.value())
+                        .containsExactlyInAnyOrderElementsOf(expected);
+            }
         }
     }
 
