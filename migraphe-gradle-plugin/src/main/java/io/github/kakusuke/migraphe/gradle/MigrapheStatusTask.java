@@ -21,7 +21,7 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                     HistoryRepository historyRepo = context.createHistoryRepository();
                     historyRepo.initialize();
 
-                    ExecutionGraphView graphView = new ExecutionGraphView(context.graph(), false);
+                    ExecutionGraphView graphView = new ExecutionGraphView(context.graph());
 
                     int[] executedCount = {0};
                     int[] pendingCount = {0};

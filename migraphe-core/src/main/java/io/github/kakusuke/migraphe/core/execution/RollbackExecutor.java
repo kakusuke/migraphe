@@ -61,8 +61,10 @@ public final class RollbackExecutor {
             // 特定ノードとその依存元（このノードに依存しているノード）を対象
             Set<NodeId> targets = new HashSet<>();
             targets.add(targetVersion);
-            // 依存元（dependents）を取得
-            targets.addAll(graph.getDependents(targetVersion));
+            // 推移的な依存元（直接 + 間接）を全て取得。直接版 `getDependents` だと 2-hop 以降の
+            // dependent が漏れて、たとえば mysql/02_catalog/004_variants を target にしたとき
+            // pg/07_indexes/002_order_indexes (pg/05_orders/002_order_items 経由) が落ちない。
+            targets.addAll(graph.getAllDependents(targetVersion));
 
             // 実行済みのもののみフィルタ
             return targets.stream()

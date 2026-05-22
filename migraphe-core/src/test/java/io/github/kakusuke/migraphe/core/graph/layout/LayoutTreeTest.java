@@ -73,18 +73,19 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        // VR の子ストリーム = 実ルートストリーム [A, C, D]（最大ランク continuation）
+        // フォワード構築で B(rank 1) は A を extend し、C(rank 2) は A から fork、
+        // D(rank 3) は DFS 上もっとも後ろの親 B を extend するので realRoot=[A,B,D] + 子=[C]
         LayoutStream realRoot = tree.rootStream().childStreams().get(0);
         LayoutStream childStream = realRoot.childStreams().get(0);
 
         assertThat(tree.streamOf(NodeId.of("a"))).isSameAs(realRoot);
-        assertThat(tree.streamOf(NodeId.of("c"))).isSameAs(realRoot);
+        assertThat(tree.streamOf(NodeId.of("b"))).isSameAs(realRoot);
         assertThat(tree.streamOf(NodeId.of("d"))).isSameAs(realRoot);
-        assertThat(tree.streamOf(NodeId.of("b"))).isSameAs(childStream);
+        assertThat(tree.streamOf(NodeId.of("c"))).isSameAs(childStream);
     }
 
     @Test
-    @DisplayName("ダイヤモンドグラフで VR → 実ルート [A,C,D] → 子 [B]、nonTreeEdges に (B→D)")
+    @DisplayName("ダイヤモンドグラフで VR → 実ルート [A,B,D] → 子 [C]、nonTreeEdges に (C→D)")
     void shouldBuildDiamondGraphWithForkStreamAndNonTreeEdge() {
         MigrationGraph graph = MigrationGraph.create();
         MigrationNode nodeA = node("a").build();
@@ -99,20 +100,21 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        // VR の子ストリーム（最大ランク continuation で [A, C, D]）
+        // フォワード構築: B(rank 1)→A extend、C(rank 2)→A fork、D(rank 3) は DFS で
+        // 後ろの親 B を extend して [A,B,D] になる
         assertThat(tree.rootStream().childStreams()).hasSize(1);
         LayoutStream realRoot = tree.rootStream().childStreams().get(0);
-        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeC, nodeD);
+        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeB, nodeD);
         assertThat(realRoot.childStreams()).hasSize(1);
 
         LayoutStream childStream = realRoot.childStreams().get(0);
         assertThat(childStream.forkNode()).isEqualTo(NodeId.of("a"));
-        assertThat(childStream.nodes()).containsExactly(nodeB);
+        assertThat(childStream.nodes()).containsExactly(nodeC);
         assertThat(childStream.childStreams()).isEmpty();
 
         assertThat(tree.nonTreeEdges()).hasSize(1);
         assertThat(tree.nonTreeEdges().get(0))
-                .isEqualTo(new NonTreeEdge(NodeId.of("b"), NodeId.of("d")));
+                .isEqualTo(new NonTreeEdge(NodeId.of("c"), NodeId.of("d")));
     }
 
     @Test
@@ -129,18 +131,14 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        // 最大ランク continuation で [A, C]、子ストリームに [B]
+        // フォワード構築: B→A extend、C は親 A,B のうち DFS で後ろの B を extend するので [A,B,C]
         LayoutStream realRoot = tree.rootStream().childStreams().get(0);
-        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeC);
-        assertThat(realRoot.childStreams()).hasSize(1);
-
-        LayoutStream childStream = realRoot.childStreams().get(0);
-        assertThat(childStream.forkNode()).isEqualTo(NodeId.of("a"));
-        assertThat(childStream.nodes()).containsExactly(nodeB);
+        assertThat(realRoot.nodes()).containsExactly(nodeA, nodeB, nodeC);
+        assertThat(realRoot.childStreams()).isEmpty();
 
         assertThat(tree.nonTreeEdges()).hasSize(1);
         assertThat(tree.nonTreeEdges().get(0))
-                .isEqualTo(new NonTreeEdge(NodeId.of("b"), NodeId.of("c")));
+                .isEqualTo(new NonTreeEdge(NodeId.of("a"), NodeId.of("c")));
 
         // 末尾フォークが発生しないことを確認（VR は除外）
         assertNoEndFork(realRoot);
@@ -226,11 +224,12 @@ class LayoutTreeTest {
         LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
         LayoutTree tree = LayoutTree.build(graph, order);
 
-        // 非ツリー辺: B→F (距離4), D→F (距離2) — 距離降順でソートされるべき
+        // フォワード構築: F の親 D,E,B のうち DFS で後ろの D を extend する。
+        // 残りの (B→F, E→F) が非ツリー辺。距離降順 B→F(4) > E→F(1)。
         assertThat(tree.nonTreeEdges()).hasSize(2);
         assertThat(tree.nonTreeEdges().get(0).source()).isEqualTo(NodeId.of("b"));
         assertThat(tree.nonTreeEdges().get(0).target()).isEqualTo(NodeId.of("f"));
-        assertThat(tree.nonTreeEdges().get(1).source()).isEqualTo(NodeId.of("d"));
+        assertThat(tree.nonTreeEdges().get(1).source()).isEqualTo(NodeId.of("e"));
         assertThat(tree.nonTreeEdges().get(1).target()).isEqualTo(NodeId.of("f"));
     }
 

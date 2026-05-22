@@ -18,17 +18,9 @@ public final class ExecutionGraphView {
      * MigrationGraph からパイプラインを構築するコンストラクタ。
      *
      * @param graph マイグレーショングラフ
-     * @param reversed true の場合、逆順モード（DOWN用）
      */
-    public ExecutionGraphView(MigrationGraph graph, boolean reversed) {
-        LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
-        LayoutTree tree = LayoutTree.build(graph, order);
-        this.canvas = new GridCanvas();
-        this.canvas.addStream(tree.rootStream());
-        for (NonTreeEdge edge : tree.nonTreeEdges()) {
-            canvas.addNonTreeEdge(edge.source(), edge.target());
-        }
-        this.canvas.removeRedundantRows();
+    public ExecutionGraphView(MigrationGraph graph) {
+        this.canvas = buildCanvas(graph);
     }
 
     /**
@@ -51,11 +43,20 @@ public final class ExecutionGraphView {
                 reversed
                         ? MigrationGraph.fromNodesDown(sortedNodes)
                         : MigrationGraph.fromNodesUp(sortedNodes);
-        LayoutSort.LayoutOrder order = LayoutSort.sort(subGraph);
-        LayoutTree tree = LayoutTree.build(subGraph, order);
-        this.canvas = new GridCanvas();
-        this.canvas.addStream(tree.rootStream());
-        this.canvas.removeRedundantRows();
+        this.canvas = buildCanvas(subGraph);
+    }
+
+    /** LayoutSort → LayoutTree → GridCanvas パイプラインを実行して描画用 canvas を組み立てる。 */
+    private static GridCanvas buildCanvas(MigrationGraph graph) {
+        LayoutSort.LayoutOrder order = LayoutSort.sort(graph);
+        LayoutTree tree = LayoutTree.build(graph, order);
+        GridCanvas canvas = new GridCanvas();
+        canvas.addStream(tree.rootStream());
+        for (NonTreeEdge edge : tree.nonTreeEdges()) {
+            canvas.addNonTreeEdge(edge.source(), edge.target());
+        }
+        canvas.removeRedundantRows();
+        return canvas;
     }
 
     /** 各ノードの行情報リストを取得する（VirtualNode を除外、column を -1 調整）。 */

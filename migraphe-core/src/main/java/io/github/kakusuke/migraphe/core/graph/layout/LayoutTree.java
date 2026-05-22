@@ -7,12 +7,11 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
@@ -23,12 +22,13 @@ public final class LayoutTree {
     private final List<NonTreeEdge> nonTreeEdges;
     private final Map<NodeId, LayoutStream> nodeToStream;
 
-    private LayoutTree(LayoutStream rootStream, List<NonTreeEdge> nonTreeEdges) {
+    private LayoutTree(
+            LayoutStream rootStream,
+            List<NonTreeEdge> nonTreeEdges,
+            Map<NodeId, LayoutStream> nodeToStream) {
         this.rootStream = rootStream;
         this.nonTreeEdges = List.copyOf(nonTreeEdges);
-        Map<NodeId, LayoutStream> map = new HashMap<>();
-        populateNodeToStream(rootStream, map);
-        this.nodeToStream = Map.copyOf(map);
+        this.nodeToStream = Map.copyOf(nodeToStream);
     }
 
     public LayoutStream rootStream() {
@@ -47,189 +47,149 @@ public final class LayoutTree {
         return stream;
     }
 
-    private static void populateNodeToStream(LayoutStream stream, Map<NodeId, LayoutStream> map) {
-        for (MigrationNode node : stream.nodes()) {
-            map.put(node.id(), stream);
-        }
-        for (LayoutStream child : stream.childStreams()) {
-            populateNodeToStream(child, map);
-        }
-    }
-
     /**
-     * グラフとレイアウト順序からストリームツリーを再帰的に構築する。
+     * トポロジカル順に走査してストリームツリーをフォワード構築する。
      *
-     * <p>Virtual Root (VR) を導入し、全実ルートを VR の子ストリームとして統一的に処理する。 トランク優先:
-     * ルートからチェーンを最大限延長し、分岐は子ストリームとして再帰的に構築する。
+     * <p>各ノードを順に処理し、(1) 親なしなら VR 直下に新規ルートストリーム、(2) 親 stream の末尾なら trunk extension、(3) そうでなければ親
+     * stream の child stream として fork、を選ぶ。残った親エッジは非ツリーエッジ。
+     *
+     * <p>不変条件: 全ての依存 parent → child について、最終的な描画上で row(parent) &lt; row(child) を満たす。これにより {@code
+     * GridCanvas.addNonTreeEdge} の上向きスキップガードに引っかかるエッジが構造的に発生しない。
      *
      * @param graph マイグレーショングラフ
      * @param order レイアウト用トポロジカルソート結果
      * @return LayoutTree
      */
     public static LayoutTree build(MigrationGraph graph, LayoutSort.LayoutOrder order) {
-        if (order.nodes().isEmpty()) {
-            return new LayoutTree(new LayoutStream(null, List.of(), List.of()), List.of());
-        }
-
-        // bucket = まだ割り当てられていないノード集合
-        Set<NodeId> bucket = new HashSet<>();
-        for (MigrationNode node : order.nodes()) {
-            bucket.add(node.id());
-        }
-
-        // Virtual root 作成
         MigrationNode virtualRoot = new VirtualNode();
-
-        // 全ルート（依存元なし）を VR の子ストリームとして構築
-        List<LayoutStream> rootChildren = new ArrayList<>();
-        for (MigrationNode node : order.nodes()) {
-            if (graph.getDependencies(node.id()).isEmpty() && bucket.contains(node.id())) {
-                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, bucket));
-            }
+        if (order.nodes().isEmpty()) {
+            return new LayoutTree(
+                    new LayoutStream(null, List.of(virtualRoot), List.of()), List.of(), Map.of());
         }
 
-        // 非ルートだが未割り当てのノード（孤立ノード等）も処理
-        for (MigrationNode node : order.nodes()) {
-            if (bucket.contains(node.id())) {
-                rootChildren.add(buildStream(node, virtualRoot.id(), graph, order, bucket));
-            }
-        }
-
-        LayoutStream vrStream = new LayoutStream(null, List.of(virtualRoot), rootChildren);
-        List<NonTreeEdge> nonTreeEdges = collectNonTreeEdges(graph, vrStream, order.rankMap());
-
-        return new LayoutTree(vrStream, nonTreeEdges);
-    }
-
-    /**
-     * バケット方式でストリームを構築する。トランクを先に全構築し、子ストリームを後ろから構築する。
-     *
-     * @param startNode ストリームの先頭ノード
-     * @param forkNode 分岐元ノードID（ルートストリームでは null）
-     * @param graph マイグレーショングラフ
-     * @param order レイアウト順序
-     * @param bucket 未割り当てノードの集合（副作用で更新される）
-     * @return 構築されたストリーム
-     */
-    private static LayoutStream buildStream(
-            MigrationNode startNode,
-            @Nullable NodeId forkNode,
-            MigrationGraph graph,
-            LayoutSort.LayoutOrder order,
-            Set<NodeId> bucket) {
-
-        // Phase 1: トランク構築（最大ランク continuation を選択）
-        List<MigrationNode> trunk = new ArrayList<>();
-        trunk.add(startNode);
-        bucket.remove(startNode.id());
-
-        MigrationNode current = startNode;
-        while (true) {
-            List<NodeId> dependents =
-                    graph.getDependents(current.id()).stream()
-                            .filter(bucket::contains)
-                            .sorted(Comparator.comparingInt(order::rank))
-                            .toList();
-
-            if (dependents.isEmpty()) {
-                break;
-            }
-
-            // 最大ランク = 最も下流のノードを continuation として選択
-            NodeId continuationId = dependents.getLast();
-            MigrationNode continuationNode = graph.getNode(continuationId).orElse(null);
-            if (continuationNode == null) {
-                break;
-            }
-
-            trunk.add(continuationNode);
-            bucket.remove(continuationId);
-            current = continuationNode;
-        }
-
-        // Phase 2: 子ストリーム構築をトランクの後ろから
-        List<LayoutStream> childStreams = new ArrayList<>();
-        for (int i = trunk.size() - 1; i >= 0; i--) {
-            MigrationNode trunkNode = trunk.get(i);
-            List<NodeId> children =
-                    graph.getDependents(trunkNode.id()).stream()
-                            .filter(bucket::contains)
-                            .sorted(Comparator.comparingInt(order::rank).reversed())
-                            .toList();
-
-            for (NodeId childId : children) {
-                if (!bucket.contains(childId)) {
-                    continue; // 他のストリームが先に取った
-                }
-                MigrationNode childNode = graph.getNode(childId).orElse(null);
-                if (childNode == null) {
-                    continue;
-                }
-                childStreams.add(buildStream(childNode, trunkNode.id(), graph, order, bucket));
-            }
-        }
-        Collections.reverse(childStreams);
-
-        return new LayoutStream(forkNode, trunk, childStreams);
-    }
-
-    /**
-     * ツリー構築後にグラフの全エッジをスキャンし、ツリーエッジでないものを非ツリーエッジとして収集する。
-     *
-     * <p>ツリーエッジとは: (1) ストリーム内の連続ノード間のエッジ、(2) forkNode から子ストリーム先頭ノードへのエッジ。
-     */
-    private static List<NonTreeEdge> collectNonTreeEdges(
-            MigrationGraph graph, LayoutStream rootStream, Map<NodeId, Integer> rankMap) {
-        Set<String> treeEdges = new HashSet<>();
-        collectTreeEdges(rootStream, treeEdges);
-
+        Map<NodeId, MutableStream> nodeToMutable = new HashMap<>();
+        List<MutableStream> rootChildren = new ArrayList<>();
         List<NonTreeEdge> nonTreeEdges = new ArrayList<>();
-        collectNonTreeEdgesFromStream(rootStream, graph, treeEdges, nonTreeEdges);
+
+        for (MigrationNode node : order.nodes()) {
+            Set<NodeId> parents = graph.getDependencies(node.id());
+
+            if (parents.isEmpty()) {
+                MutableStream s = new MutableStream(virtualRoot.id());
+                s.appendTrunk(node);
+                rootChildren.add(s);
+                nodeToMutable.put(node.id(), s);
+                continue;
+            }
+
+            // 現時点のツリーで DFS 順位置を計算し、もっとも後ろの親を attach 先に選ぶ。
+            // これにより node は最後の親より後ろに描画され、残りの親は上向きにならない。
+            Map<NodeId, Integer> dfsPos = computeDfsPositions(rootChildren);
+            NodeId chosenParent =
+                    parents.stream()
+                            .max(Comparator.comparingInt(p -> dfsPos.getOrDefault(p, -1)))
+                            .orElseThrow();
+
+            MutableStream chosenStream =
+                    Objects.requireNonNull(
+                            nodeToMutable.get(chosenParent),
+                            "parent stream missing for attach target");
+
+            if (chosenStream.tail().equals(chosenParent)) {
+                // 親が stream の末尾なら trunk 拡張
+                chosenStream.appendTrunk(node);
+                nodeToMutable.put(node.id(), chosenStream);
+            } else {
+                // 親が末尾でなければ、親で新規 child stream を fork
+                MutableStream newStream = new MutableStream(chosenParent);
+                newStream.appendTrunk(node);
+                chosenStream.children.add(newStream);
+                nodeToMutable.put(node.id(), newStream);
+            }
+
+            for (NodeId p : parents) {
+                if (!p.equals(chosenParent)) {
+                    nonTreeEdges.add(new NonTreeEdge(p, node.id()));
+                }
+            }
+        }
+
+        Map<NodeId, LayoutStream> nodeToStream = new HashMap<>();
+        List<LayoutStream> frozenRootChildren = new ArrayList<>();
+        for (MutableStream m : rootChildren) {
+            frozenRootChildren.add(m.freeze(nodeToStream));
+        }
+
+        LayoutStream vrStream = new LayoutStream(null, List.of(virtualRoot), frozenRootChildren);
+
         nonTreeEdges.sort(
                 Comparator.<NonTreeEdge>comparingInt(
                                 e ->
-                                        rankMap.getOrDefault(e.source(), 0)
-                                                - rankMap.getOrDefault(e.target(), 0))
-                        .thenComparingInt(e -> -rankMap.getOrDefault(e.source(), 0)));
-        return nonTreeEdges;
+                                        order.rankMap().getOrDefault(e.source(), 0)
+                                                - order.rankMap().getOrDefault(e.target(), 0))
+                        .thenComparingInt(e -> -order.rankMap().getOrDefault(e.source(), 0)));
+
+        return new LayoutTree(vrStream, nonTreeEdges, nodeToStream);
     }
 
-    /** ツリーエッジを収集する。 */
-    private static void collectTreeEdges(LayoutStream stream, Set<String> treeEdges) {
-        List<MigrationNode> nodes = stream.nodes();
-        // ストリーム内の連続ノード間エッジ
-        for (int i = 0; i < nodes.size() - 1; i++) {
-            treeEdges.add(edgeKey(nodes.get(i).id(), nodes.get(i + 1).id()));
+    /**
+     * 現時点のツリーを DFS 走査して各ノードの描画順位置を返す。{@link GridCanvas} の drawStream と同じ traversal: trunk 内の
+     * ノードを順番に出し、各ノードの直後にその fork-children を順に再帰展開する。
+     */
+    private static Map<NodeId, Integer> computeDfsPositions(List<MutableStream> rootChildren) {
+        Map<NodeId, Integer> pos = new HashMap<>();
+        int[] counter = {0};
+        for (MutableStream s : rootChildren) {
+            traverseDfs(s, pos, counter);
         }
-        // forkNode → 子ストリーム先頭ノードのエッジ
-        for (LayoutStream child : stream.childStreams()) {
-            if (child.forkNode() != null && !child.nodes().isEmpty()) {
-                treeEdges.add(edgeKey(child.forkNode(), child.nodes().get(0).id()));
-            }
-            collectTreeEdges(child, treeEdges);
-        }
+        return pos;
     }
 
-    /** 各ノードの親エッジをスキャンし、ツリーエッジでないものを非ツリーエッジとして追加する。 */
-    private static void collectNonTreeEdgesFromStream(
-            LayoutStream stream,
-            MigrationGraph graph,
-            Set<String> treeEdges,
-            List<NonTreeEdge> nonTreeEdges) {
-        for (MigrationNode node : stream.nodes()) {
-            for (NodeId parentId : graph.getDependencies(node.id())) {
-                if (!treeEdges.contains(edgeKey(parentId, node.id()))) {
-                    nonTreeEdges.add(new NonTreeEdge(parentId, node.id()));
+    private static void traverseDfs(MutableStream s, Map<NodeId, Integer> pos, int[] counter) {
+        Map<NodeId, List<MutableStream>> childByFork = new HashMap<>();
+        for (MutableStream c : s.children) {
+            childByFork.computeIfAbsent(c.forkNode, k -> new ArrayList<>()).add(c);
+        }
+        for (MigrationNode n : s.trunk) {
+            pos.put(n.id(), counter[0]++);
+            List<MutableStream> kids = childByFork.get(n.id());
+            if (kids != null) {
+                for (MutableStream k : kids) {
+                    traverseDfs(k, pos, counter);
                 }
             }
         }
-        for (LayoutStream child : stream.childStreams()) {
-            collectNonTreeEdgesFromStream(child, graph, treeEdges, nonTreeEdges);
-        }
     }
 
-    private static String edgeKey(NodeId from, NodeId to) {
-        return from.value() + "->" + to.value();
+    /** 構築中の可変ストリーム表現。{@link #freeze} で {@link LayoutStream} に変換される。 */
+    private static final class MutableStream {
+        final @Nullable NodeId forkNode;
+        final List<MigrationNode> trunk = new ArrayList<>();
+        final List<MutableStream> children = new ArrayList<>();
+
+        MutableStream(@Nullable NodeId forkNode) {
+            this.forkNode = forkNode;
+        }
+
+        void appendTrunk(MigrationNode node) {
+            trunk.add(node);
+        }
+
+        NodeId tail() {
+            return trunk.get(trunk.size() - 1).id();
+        }
+
+        LayoutStream freeze(Map<NodeId, LayoutStream> nodeToStream) {
+            List<LayoutStream> frozenChildren = new ArrayList<>();
+            for (MutableStream child : children) {
+                frozenChildren.add(child.freeze(nodeToStream));
+            }
+            LayoutStream frozen = new LayoutStream(forkNode, trunk, frozenChildren);
+            for (MigrationNode n : trunk) {
+                nodeToStream.put(n.id(), frozen);
+            }
+            return frozen;
+        }
     }
 
     /** Virtual Root ノード。レイアウトツリーの内部でのみ使用する。 */
