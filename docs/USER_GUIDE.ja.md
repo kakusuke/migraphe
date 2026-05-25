@@ -38,17 +38,26 @@ Migrapheは、複数の環境にわたる複雑なデータベースマイグレ
 - Java 21以降
 - サポート対象のデータベース（PostgreSQL、MySQL 8.0+、または任意のJDBC対応データベース）
 
-### リリース成果物のダウンロード（推奨）
+### mise でインストール（推奨）
+
+リリース tarball は `bin/` と `lib/` をルート直下に同梱しているため、mise の GitHub バックエンドが追加オプション無しで取り込めます:
 
 ```bash
-# tar.gz — Linux / macOS
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz
-export PATH="$PWD/migraphe/bin:$PATH"
+mise use github:kakusuke/migraphe
+```
+
+### リリース成果物のダウンロード
+
+```bash
+# tar.gz — Linux / macOS（bin/ と lib/ を展開先ディレクトリに展開）
+mkdir -p ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz -C ~/.local/migraphe
+export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # zip — Windows
 curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.zip
-unzip migraphe.zip
-export PATH="$PWD/migraphe/bin:$PATH"
+unzip migraphe.zip -d ~/.local/migraphe
+export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # fat JAR — 単一ファイル
 curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1-all.jar

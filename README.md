@@ -22,8 +22,13 @@ A migration orchestration tool that manages database and infrastructure migratio
 ## Install
 
 ```bash
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz
-export PATH="$PWD/migraphe/bin:$PATH"
+# mise (recommended) — the release tarball ships bin/ and lib/ at its root
+mise use github:kakusuke/migraphe
+
+# Or manual install
+mkdir -p ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz -C ~/.local/migraphe
+export PATH="$HOME/.local/migraphe/bin:$PATH"
 migraphe --help
 ```
 

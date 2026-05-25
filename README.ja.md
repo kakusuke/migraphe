@@ -22,8 +22,13 @@
 ## インストール
 
 ```bash
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz
-export PATH="$PWD/migraphe/bin:$PATH"
+# mise（推奨）— リリース tarball は bin/ と lib/ をルート直下に同梱
+mise use github:kakusuke/migraphe
+
+# または手動インストール
+mkdir -p ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz -C ~/.local/migraphe
+export PATH="$HOME/.local/migraphe/bin:$PATH"
 migraphe --help
 ```
 
