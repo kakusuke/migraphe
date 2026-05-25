@@ -38,17 +38,26 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 - Java 21 or later
 - A supported database (PostgreSQL, MySQL 8.0+, or any JDBC-compatible database)
 
-### Download a Release (Recommended)
+### Install with mise (Recommended)
+
+The release tarball ships `bin/` and `lib/` at its root, so mise's GitHub backend can pick it up with no extra options:
 
 ```bash
-# Tarball — Linux / macOS
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz
-export PATH="$PWD/migraphe/bin:$PATH"
+mise use github:kakusuke/migraphe
+```
+
+### Download a Release
+
+```bash
+# Tarball — Linux / macOS (extracts bin/ and lib/ into the target directory)
+mkdir -p ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.tar.gz | tar xz -C ~/.local/migraphe
+export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # Zip — Windows
 curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1.zip
-unzip migraphe.zip
-export PATH="$PWD/migraphe/bin:$PATH"
+unzip migraphe.zip -d ~/.local/migraphe
+export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # Fat JAR — single file
 curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.2.1/migraphe-0.2.1-all.jar

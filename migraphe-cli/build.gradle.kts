@@ -38,17 +38,19 @@ application {
     applicationName = "migraphe"
 }
 
+// mise の github バックエンド等が直下の bin/ をそのまま使えるよう、
+// 配布アーカイブのトップ階層 (migraphe-<version>/) を除去して bin/ lib/ をルートに置く。
 tasks.distTar {
     compression = Compression.GZIP
     archiveExtension.set("tar.gz")
     archiveFileName.set("migraphe-${project.version}.tar.gz")
-    eachFile { path = path.replaceFirst(Regex("^migraphe-[^/]+"), "migraphe") }
+    eachFile { path = path.replaceFirst(Regex("^migraphe-[^/]+/"), "") }
     includeEmptyDirs = false
 }
 
 tasks.distZip {
     archiveFileName.set("migraphe-${project.version}.zip")
-    eachFile { path = path.replaceFirst(Regex("^migraphe-[^/]+"), "migraphe") }
+    eachFile { path = path.replaceFirst(Regex("^migraphe-[^/]+/"), "") }
     includeEmptyDirs = false
 }
 
