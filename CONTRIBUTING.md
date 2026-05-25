@@ -44,7 +44,16 @@ We follow [Semantic Versioning 2.0.0](https://semver.org/):
 - **MINOR** (0.X.0): New features (backward compatible)
 - **PATCH** (0.0.X): Bug fixes (backward compatible)
 
-Version is managed in `gradle.properties`.
+While the project is in `0.x`, the leftmost non-zero segment acts as the compatibility boundary (per the Cargo/npm `^` convention): a breaking change bumps the **MINOR** (`0.2.x` → `0.3.0`), not the MAJOR. SemVer 2.0.0 §4 permits "anything MAY change" in `0.x`, so this is a convention, not a spec requirement.
+
+### Release procedure
+
+A `vX.Y.Z` tag push triggers `.github/workflows/release.yml`, which builds and publishes the release. Before tagging, bump the version in **all** of these together:
+
+1. **`gradle.properties`** — the canonical `version`. **Easy to forget**: every other reference below is cosmetic, but this is the one that actually changes the built artifacts. Always bump it alongside the doc/sample edits.
+2. **Docs & samples** — version references in `README*.md`, `docs/USER_GUIDE*.md`, `docs/PLUGIN_DEVELOPMENT*.md`, `CONTRIBUTING.md`, `sample/cli/*`, `sample/gradle/*` (release download URLs + JitPack `vX.Y.Z` coordinate tags). A blanket `0.2.1` → `0.3.0` replace covers both bare and `v`-prefixed forms.
+3. **`CLAUDE.md`** — current-state references (do not rewrite historical changelog entries).
+4. Tag `vX.Y.Z` and push.
 
 ## Development Setup
 
@@ -124,11 +133,11 @@ We use [Spotless](https://github.com/diffplug/spotless) with Google Java Format.
 
 ## Distribution & JitPack operational notes
 
-エンドユーザー向けの導入手順は [README](README.md) と [USER_GUIDE](docs/USER_GUIDE.md) を参照してください。Migraphe のプラグイン JAR と Gradle プラグインは現在 JitPack (`com.github.kakusuke.migraphe:<module>:<git-tag>`、現行は `v0.2.1`) 経由で配布されています。Maven Central 公開後は groupId が `io.github.kakusuke.migraphe` に切り替わる予定です。
+エンドユーザー向けの導入手順は [README](README.md) と [USER_GUIDE](docs/USER_GUIDE.md) を参照してください。Migraphe のプラグイン JAR と Gradle プラグインは現在 JitPack (`com.github.kakusuke.migraphe:<module>:<git-tag>`、現行は `v0.3.0`) 経由で配布されています。Maven Central 公開後は groupId が `io.github.kakusuke.migraphe` に切り替わる予定です。
 
 コントリビューター向けの運用上の留意点:
 
-- **タグ vs `main-SNAPSHOT`**: エンドユーザー向けドキュメントは安定 Git タグ (`v0.2.1` 等) を案内しています。最新 `main` を動作確認したい場合は `main-SNAPSHOT` を使えますが、JitPack は `main-SNAPSHOT` を `main-<tag>-<commit>-<n>` のような具体バージョンに解決するため、現状の `LockSyncChecker` は yaml と lock のバージョン文字列ミスマッチで失敗します（既知の不具合）。`main-SNAPSHOT` を試すときは、毎回 `migraphe.lock.yaml` を削除して `migraphe pin` で再生成する運用が必要です。
+- **タグ vs `main-SNAPSHOT`**: エンドユーザー向けドキュメントは安定 Git タグ (`v0.3.0` 等) を案内しています。最新 `main` を動作確認したい場合は `main-SNAPSHOT` を使えますが、JitPack は `main-SNAPSHOT` を `main-<tag>-<commit>-<n>` のような具体バージョンに解決するため、現状の `LockSyncChecker` は yaml と lock のバージョン文字列ミスマッチで失敗します（既知の不具合）。`main-SNAPSHOT` を試すときは、毎回 `migraphe.lock.yaml` を削除して `migraphe pin` で再生成する運用が必要です。
 - **`main-SNAPSHOT` の SHA は不安定**: JitPack は `main` ブランチへのコミット毎に再ビルドを行い、その都度 JAR の SHA-256 が変わります。`migraphe pin` で記録したロック値が `ChecksumMismatchException` を起こした場合は、`migraphe pin` を再実行してコミットし直してください。
 - **JitPack ビルドキャッシュのリフレッシュ**: 古いビルドが返る場合は <https://jitpack.io/#kakusuke/migraphe> で対象バージョンを "Look up" → "Get it" して再ビルドを促せます。
 - **ローカル publish の groupId 切り替え**: デフォルトの `./gradlew publishToMavenLocal` は `io.github.kakusuke.migraphe` 配下に発行されます。JitPack 互換 artefact（`com.github.kakusuke.migraphe`）をローカルに置きたい場合は `./gradlew -PpublishGroup=com.github.kakusuke.migraphe publishToMavenLocal` を使ってください。両 groupId は `~/.m2/` で共存します。
