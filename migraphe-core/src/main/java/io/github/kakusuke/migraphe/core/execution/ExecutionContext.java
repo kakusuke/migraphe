@@ -31,6 +31,7 @@ import java.util.Set;
  * <p>プロジェクトの設定、環境、マイグレーションノード、グラフ、プラグインレジストリを保持する。
  *
  * @param baseDir プロジェクトのベースディレクトリ
+ * @param scanRoot スキャンルートディレクトリ（project.scan-root を解決済み）
  * @param config MicroProfile Config
  * @param pluginRegistry プラグインレジストリ
  * @param environments ターゲットID → Environment のマップ
@@ -39,6 +40,7 @@ import java.util.Set;
  */
 public record ExecutionContext(
         Path baseDir,
+        Path scanRoot,
         SmallRyeConfig config,
         PluginRegistry pluginRegistry,
         Map<String, Environment> environments,
@@ -88,6 +90,7 @@ public record ExecutionContext(
             Path baseDir, PluginRegistry pluginRegistry, Map<String, String> variables) {
         // 1. ConfigLoader でYAML設定を読み込み
         ConfigLoader configLoader = new ConfigLoader();
+        Path scanRoot = configLoader.resolveScanRoot(baseDir);
         SmallRyeConfig config = configLoader.load(baseDir, variables);
 
         // 2. EnvironmentDefinition を読み込み、EnvironmentFactory で全Environment生成
@@ -117,7 +120,7 @@ public record ExecutionContext(
         }
 
         return new ExecutionContext(
-                baseDir, config, pluginRegistry, environments, sortedNodes, graph);
+                baseDir, scanRoot, config, pluginRegistry, environments, sortedNodes, graph);
     }
 
     /**

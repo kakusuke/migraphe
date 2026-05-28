@@ -184,6 +184,32 @@ class MigrapheValidateTaskFunctionalTest {
         assertThat(result.getOutput()).contains("Validation successful");
     }
 
+    @Test
+    void shouldValidateWithScanRoot() throws IOException {
+        // scan-root でタスクディレクトリをサブディレクトリに変更した場合も成功すること
+        Files.writeString(
+                testProjectDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                  scan-root: subdir
+                history:
+                  target: test-db
+                """);
+        Path subTargets = testProjectDir.resolve("subdir/targets");
+        Files.createDirectories(subTargets);
+        Files.writeString(subTargets.resolve("test-db.yaml"), "type: noop\n");
+
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("migrapheValidate")
+                        .build();
+
+        assertThat(result.getOutput()).contains("Validation successful");
+    }
+
     private void createProjectWithTargets(Path baseDir) throws IOException {
         String projectYaml =
                 """

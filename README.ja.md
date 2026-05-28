@@ -17,6 +17,7 @@
 - **Gradle プラグイン**: `migrapheUp`/`Down`/`Status`/`Validate`/`Generate` タスクを提供
 - **スキーマドキュメント生成**: JDBC／PostgreSQL／MySQL から Markdown／JSON を出力
 - **並列実行**: Virtual Threads による並列実行（オプトイン）
+- **レイアウト切替**: `project.scan-root` で `tasks/`／`targets/`／`environments/`／`plugins/` の探索起点をサブディレクトリに切替（CLI／Gradle 共通）
 - **型安全**: Java 21 + jspecify + NullAway で構築
 
 ## インストール

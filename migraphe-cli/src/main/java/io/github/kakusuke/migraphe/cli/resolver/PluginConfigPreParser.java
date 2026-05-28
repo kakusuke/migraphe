@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.Yaml;
 
@@ -16,20 +17,29 @@ public final class PluginConfigPreParser {
 
     public PluginConfigParseResult parse(Path migrapheYaml) {
         if (!Files.exists(migrapheYaml)) {
-            return new PluginConfigParseResult(List.of(), List.of());
+            return new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
         }
         try (InputStream in = Files.newInputStream(migrapheYaml)) {
             Yaml yaml = new Yaml();
             Map<String, Object> root = yaml.load(in);
             if (root == null) {
-                return new PluginConfigParseResult(List.of(), List.of());
+                return new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
             }
             List<RepositoryConfig> repositories = parseRepositoryEntries(root.get("repositories"));
             List<PluginDeclaration> plugins = parsePluginEntries(root.get("plugins"));
-            return new PluginConfigParseResult(repositories, plugins);
+            Optional<String> scanRoot = parseScanRoot(root.get("project"));
+            return new PluginConfigParseResult(repositories, plugins, scanRoot);
         } catch (IOException e) {
-            return new PluginConfigParseResult(List.of(), List.of());
+            return new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
         }
+    }
+
+    private static Optional<String> parseScanRoot(@Nullable Object projectValue) {
+        if (!(projectValue instanceof Map<?, ?> m)) {
+            return Optional.empty();
+        }
+        Object v = m.get("scan-root");
+        return v instanceof String s ? Optional.of(s) : Optional.empty();
     }
 
     public List<MavenArtifactCoordinate> parsePlugins(Path migrapheYaml) {

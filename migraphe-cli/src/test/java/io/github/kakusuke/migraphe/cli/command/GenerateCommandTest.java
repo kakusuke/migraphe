@@ -48,7 +48,9 @@ class GenerateCommandTest {
     void shouldReturnSuccessWhenNoGeneratorsConfigured() throws IOException {
         // Given: generators セクションがない設定
         createProjectWithoutGenerators(tempDir);
-        GenerateCommand command = new GenerateCommand(tempDir, pluginRegistry, null, null, false);
+        GenerateCommand command =
+                new GenerateCommand(
+                        tempDir, pluginRegistry, null, null, tempDir.resolve("plugins"), false);
 
         // When
         int exitCode = command.execute();
@@ -63,7 +65,9 @@ class GenerateCommandTest {
     void shouldReturnFailureWhenGeneratorPluginNotFound() throws IOException {
         // Given: 存在しない generator type を指定
         createProjectWithUnknownGeneratorType(tempDir);
-        GenerateCommand command = new GenerateCommand(tempDir, pluginRegistry, null, null, false);
+        GenerateCommand command =
+                new GenerateCommand(
+                        tempDir, pluginRegistry, null, null, tempDir.resolve("plugins"), false);
 
         // When
         int exitCode = command.execute();
@@ -79,7 +83,13 @@ class GenerateCommandTest {
         // Given: 2つの generator 設定があり、1つだけ名前フィルターで指定
         createProjectWithTwoGenerators(tempDir);
         GenerateCommand command =
-                new GenerateCommand(tempDir, pluginRegistry, null, "non-existent-name", false);
+                new GenerateCommand(
+                        tempDir,
+                        pluginRegistry,
+                        null,
+                        "non-existent-name",
+                        tempDir.resolve("plugins"),
+                        false);
 
         // When: 存在しない名前でフィルターすると、何も実行されない（プラグインエラーにならない）
         int exitCode = command.execute();
@@ -92,7 +102,9 @@ class GenerateCommandTest {
     void shouldReturnFailureWhenEnvironmentNotFound() throws IOException {
         // Given: generator の target が存在しない
         createProjectWithMissingTarget(tempDir);
-        GenerateCommand command = new GenerateCommand(tempDir, pluginRegistry, null, null, false);
+        GenerateCommand command =
+                new GenerateCommand(
+                        tempDir, pluginRegistry, null, null, tempDir.resolve("plugins"), false);
 
         // When
         int exitCode = command.execute();

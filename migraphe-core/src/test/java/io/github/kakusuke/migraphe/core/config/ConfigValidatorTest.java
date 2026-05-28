@@ -133,6 +133,37 @@ class ConfigValidatorTest {
         assertThat(result.errors()).hasSizeGreaterThanOrEqualTo(2);
     }
 
+    @Test
+    void shouldValidateUsingScanRootForTargetsAndTasks() throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                  scan-root: subdir
+                history:
+                  target: db1
+                """);
+        Path subTargets = tempDir.resolve("subdir/targets");
+        Files.createDirectories(subTargets);
+        Files.writeString(subTargets.resolve("db1.yaml"), "type: noop\n");
+
+        Path subTasks = tempDir.resolve("subdir/tasks/db1");
+        Files.createDirectories(subTasks);
+        Files.writeString(
+                subTasks.resolve("create.yaml"),
+                """
+                name: Create
+                target: db1
+                up: "Create table"
+                """);
+
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.isValid()).isTrue();
+    }
+
     // Helper methods to create test projects
 
     private void createValidProject(Path baseDir) throws IOException {

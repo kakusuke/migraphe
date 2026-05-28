@@ -56,11 +56,14 @@ public class Main {
             }
 
             // Maven Resolver でプラグイン依存を解決
+            PluginConfigParseResult parsed =
+                    new PluginConfigPreParser().parse(baseDir.resolve("migraphe.yaml"));
             PluginResolver pluginResolver = new PluginResolver();
             URLClassLoader pluginClassLoader = pluginResolver.resolve(baseDir);
 
             // PluginRegistry を初期化
-            PluginRegistry pluginRegistry = initializePluginRegistry(baseDir, pluginClassLoader);
+            PluginRegistry pluginRegistry =
+                    initializePluginRegistry(baseDir, parsed, pluginClassLoader);
 
             // validate コマンドは ExecutionContext を必要としない（オフライン検証）
             if ("validate".equals(commandName)) {
@@ -71,8 +74,10 @@ public class Main {
             // generate コマンドは独自に設定をロードする
             if ("generate".equals(commandName)) {
                 String nameFilter = parseNameOption(args);
+                Path pluginsDir = resolvePluginsDir(baseDir, parsed);
                 GenerateCommand generateCommand =
-                        new GenerateCommand(baseDir, pluginRegistry, pluginClassLoader, nameFilter);
+                        new GenerateCommand(
+                                baseDir, pluginRegistry, pluginClassLoader, nameFilter, pluginsDir);
                 return generateCommand.execute();
             }
 
@@ -96,7 +101,9 @@ public class Main {
 
     /** PluginRegistry を初期化する。 */
     private static PluginRegistry initializePluginRegistry(
-            Path baseDir, @Nullable URLClassLoader pluginClassLoader) {
+            Path baseDir,
+            PluginConfigParseResult parsed,
+            @Nullable URLClassLoader pluginClassLoader) {
         PluginRegistry registry = new PluginRegistry();
 
         // 1. クラスパスからプラグインをロード
@@ -108,7 +115,7 @@ public class Main {
         }
 
         // 3. plugins/ ディレクトリからプラグインをロード（後方互換）
-        Path pluginsDir = baseDir.resolve("plugins");
+        Path pluginsDir = resolvePluginsDir(baseDir, parsed);
         registry.loadFromDirectory(pluginsDir);
 
         return registry;
@@ -181,6 +188,11 @@ public class Main {
             }
         }
         return null;
+    }
+
+    static Path resolvePluginsDir(Path baseDir, PluginConfigParseResult parsed) {
+        Path scanRoot = parsed.scanRoot().map(baseDir::resolve).orElse(baseDir);
+        return scanRoot.resolve("plugins");
     }
 
     static boolean shouldPrintStackTrace(Exception e) {

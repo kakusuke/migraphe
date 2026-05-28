@@ -3,10 +3,14 @@ package io.github.kakusuke.migraphe.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
+import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class MainTest {
@@ -51,6 +55,28 @@ class MainTest {
                 .isFalse();
         assertThat(Main.shouldPrintStackTrace(new LockFileNotFoundException("missing lock")))
                 .isFalse();
+    }
+
+    @Test
+    void shouldResolvePluginsDirRelativeToScanRoot() {
+        Path baseDir = Path.of("/tmp/proj");
+        PluginConfigParseResult parsed =
+                new PluginConfigParseResult(List.of(), List.of(), Optional.of("subdir"));
+
+        Path result = Main.resolvePluginsDir(baseDir, parsed);
+
+        assertThat(result).isEqualTo(Path.of("/tmp/proj/subdir/plugins"));
+    }
+
+    @Test
+    void shouldResolvePluginsDirToBaseDirWhenScanRootIsAbsent() {
+        Path baseDir = Path.of("/tmp/proj");
+        PluginConfigParseResult parsed =
+                new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
+
+        Path result = Main.resolvePluginsDir(baseDir, parsed);
+
+        assertThat(result).isEqualTo(Path.of("/tmp/proj/plugins"));
     }
 
     @Test

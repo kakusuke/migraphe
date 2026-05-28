@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -186,6 +187,136 @@ class ConfigLoaderTest {
         // Then: ${DB_HOST} が variables から解決される
         assertThat(config.getValue("target.db1.jdbc_url", String.class))
                 .isEqualTo("jdbc:postgresql://variables-host:5432/mydb");
+    }
+
+    @Test
+    void shouldReturnEmptyScanRootWhenNotConfigured(@TempDir Path tempDir) throws IOException {
+        createProjectStructure(tempDir);
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getConfigMapping(ProjectConfig.class).project().scanRoot())
+                .isEqualTo(Optional.empty());
+    }
+
+    @Test
+    void shouldScanTargetsUnderScanRoot(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                  scan-root: subdir
+                history:
+                  target: h1
+                """);
+        Path subTargets = tempDir.resolve("subdir/targets");
+        Files.createDirectories(subTargets);
+        Files.writeString(
+                subTargets.resolve("db1.yaml"), """
+                type: noop
+                """);
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getValue("target.db1.type", String.class)).isEqualTo("noop");
+    }
+
+    @Test
+    void shouldScanTasksUnderScanRoot(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                  scan-root: subdir
+                history:
+                  target: db1
+                """);
+        Path subTasksDir = tempDir.resolve("subdir/tasks/db1");
+        Files.createDirectories(subTasksDir);
+        Files.writeString(
+                subTasksDir.resolve("create.yaml"),
+                """
+                name: Create
+                target: db1
+                up:
+                  sql: CREATE TABLE t1
+                """);
+        Path subTargetsDir = tempDir.resolve("subdir/targets");
+        Files.createDirectories(subTargetsDir);
+        Files.writeString(subTargetsDir.resolve("db1.yaml"), "type: noop\n");
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getValue("task.\"db1/create\".up.sql", String.class))
+                .isEqualTo("CREATE TABLE t1");
+    }
+
+    @Test
+    void shouldScanWithAbsoluteScanRoot(@TempDir Path tempDir, @TempDir Path externalDir)
+            throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                  scan-root: %s
+                history:
+                  target: db1
+                """
+                        .formatted(externalDir.toAbsolutePath()));
+
+        Path externalTargets = externalDir.resolve("targets");
+        Files.createDirectories(externalTargets);
+        Files.writeString(externalTargets.resolve("db1.yaml"), "type: noop\n");
+
+        Path externalTasks = externalDir.resolve("tasks/db1");
+        Files.createDirectories(externalTasks);
+        Files.writeString(
+                externalTasks.resolve("create.yaml"),
+                """
+                name: Create
+                target: db1
+                up:
+                  sql: CREATE TABLE ext1
+                """);
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getValue("target.db1.type", String.class)).isEqualTo("noop");
+        assertThat(config.getValue("task.\"db1/create\".up.sql", String.class))
+                .isEqualTo("CREATE TABLE ext1");
+    }
+
+    @Test
+    void shouldLoadEnvironmentFileUnderScanRoot(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                  scan-root: subdir
+                history:
+                  target: db1
+                """);
+
+        Path subTargets = tempDir.resolve("subdir/targets");
+        Files.createDirectories(subTargets);
+        Files.writeString(subTargets.resolve("db1.yaml"), "type: noop\n");
+
+        Path subEnvDir = tempDir.resolve("subdir/environments");
+        Files.createDirectories(subEnvDir);
+        Files.writeString(subEnvDir.resolve("dev.yaml"), "DB_HOST: subdir-host\n");
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, "dev");
+
+        assertThat(config.getValue("DB_HOST", String.class)).isEqualTo("subdir-host");
     }
 
     /** テスト用のプロジェクト構造を作成する。 */
