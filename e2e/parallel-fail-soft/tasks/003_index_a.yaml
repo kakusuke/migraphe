@@ -1,0 +1,9 @@
+name: Create index on table_a (intentionally broken; depends on 001)
+target: h2
+autocommit: true
+dependencies:
+  - 001_table_a
+up: |
+  CREATE INDEX idx_a_oops ON table_a (NONEXISTENT_COLUMN);
+down: |
+  DROP INDEX IF EXISTS idx_a_oops;

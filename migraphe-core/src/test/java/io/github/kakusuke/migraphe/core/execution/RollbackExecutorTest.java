@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.core.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
@@ -12,14 +13,17 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
+import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
@@ -288,6 +292,65 @@ class RollbackExecutorTest {
         }
 
         @Test
+        @DisplayName("fail-soft — DOWN 失敗時に独立した実行済みノードは引き続き DOWN 実行される")
+        void shouldContinueIndependentNodesAfterDownFailure() {
+            // Given: A, B 独立 (UP では兄弟)。両方とも実行済み。B の DOWN が失敗。
+            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationNode nodeB = createNodeWithFailingDown("b", "Node B", "boom");
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "Node B", null, 100L));
+
+            executor = new RollbackExecutor(graph, historyRepo, listener);
+
+            // When
+            ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
+
+            // Then: failure result。B 失敗。A は DOWN 完走。
+            assertThat(result.success()).isFalse();
+            assertThat(listener.failedNodes).containsExactly(NodeId.of("b"));
+            assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"));
+        }
+
+        @Test
+        @DisplayName("fail-soft — DOWN 失敗時に upstream (UP の親) は dep failed reason でスキップされる")
+        void shouldSkipUpstreamOnDownFailure() {
+            // Given: A -> B -> C (UP では C → B → A の順)、全て実行済み。
+            // DOWN 順は C, B, A。B の DOWN が失敗 → A は skip (B の DOWN を待っていたため)。
+            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationNode nodeB =
+                    createNodeWithFailingDown("b", "Node B", "boom", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            graph.addNode(nodeC);
+
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "Node B", null, 100L));
+            historyRepo.record(
+                    ExecutionRecord.upSuccess(NodeId.of("c"), testEnv.id(), "Node C", null, 100L));
+
+            executor = new RollbackExecutor(graph, historyRepo, listener);
+
+            // When
+            ExecutionResult result =
+                    executor.execute(Set.of(NodeId.of("a"), NodeId.of("b"), NodeId.of("c")));
+
+            // Then
+            assertThat(result.success()).isFalse();
+            assertThat(listener.succeededNodes).containsExactly(NodeId.of("c"));
+            assertThat(listener.failedNodes).containsExactly(NodeId.of("b"));
+            assertThat(listener.skippedNodes).containsExactly(NodeId.of("a"));
+            assertThat(listener.skipReasons.get(NodeId.of("a"))).isEqualTo("dependency failed: b");
+        }
+
+        @Test
         @DisplayName("リスナーに通知される")
         void shouldNotifyListener() {
             // Given
@@ -327,11 +390,41 @@ class RollbackExecutorTest {
                 .build();
     }
 
+    private MigrationNode createNodeWithFailingDown(String id, String name, String error) {
+        return createNodeWithFailingDown(id, name, error, Set.of());
+    }
+
+    private MigrationNode createNodeWithFailingDown(
+            String id, String name, String error, Set<NodeId> dependencies) {
+        Task upTask = SimpleTask.of("UP: " + name);
+        Task downTask =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        return Result.err(error);
+                    }
+
+                    @Override
+                    public String description() {
+                        return "FAIL DOWN: " + name;
+                    }
+                };
+        return SimpleMigrationNode.builder()
+                .id(NodeId.of(id))
+                .name(name)
+                .environment(testEnv)
+                .dependencies(dependencies)
+                .upTask(upTask)
+                .downTask(downTask)
+                .build();
+    }
+
     /** テスト用の ExecutionListener 実装 */
     static class MockExecutionListener implements ExecutionListener {
         final List<NodeId> startedNodes = new ArrayList<>();
         final List<NodeId> succeededNodes = new ArrayList<>();
         final List<NodeId> skippedNodes = new ArrayList<>();
+        final Map<NodeId, String> skipReasons = new HashMap<>();
         final List<NodeId> failedNodes = new ArrayList<>();
         boolean completedCalled = false;
 
@@ -352,6 +445,7 @@ class RollbackExecutorTest {
         @Override
         public void onNodeSkipped(MigrationNode node, ExecutionDirection direction, String reason) {
             skippedNodes.add(node.id());
+            skipReasons.put(node.id(), reason);
         }
 
         @Override

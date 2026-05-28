@@ -996,7 +996,11 @@ execution:
 
 **How it works:**
 
-Nodes at the same dependency level execute in parallel using Virtual Threads. A ready-based approach ensures that as soon as all dependencies of a node are satisfied, it becomes eligible for execution. If any task fails, fail-fast behavior stops new task submission immediately.
+Nodes at the same dependency level execute in parallel using Virtual Threads. A ready-based approach ensures that as soon as all dependencies of a node are satisfied, it becomes eligible for execution.
+
+**Failure handling (fail-soft):** When a task fails, tasks that do not (transitively) depend on the failed node continue to execute. Tasks that do depend on the failed node are surfaced via the listener as skipped with reason `dependency failed: <id>`. After every runnable task has finished, the overall result is reported as `failure` if any node failed. The same behaviour applies to UP / DOWN and to sequential / parallel execution alike.
+
+This design keeps reruns idempotent: the set of tasks that runs across "first attempt fails + rerun completes" is the same as the set that runs in "single successful attempt".
 
 ```
 Level 0 (executed in parallel):

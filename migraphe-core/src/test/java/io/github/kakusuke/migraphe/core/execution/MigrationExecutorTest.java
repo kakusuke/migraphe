@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.core.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
@@ -12,13 +13,16 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
+import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
@@ -190,6 +194,51 @@ class MigrationExecutorTest {
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"));
             assertThat(listener.completedCalled).isTrue();
         }
+
+        @Test
+        @DisplayName("fail-soft — 失敗ノードの推移的依存ノードは dependency failed reason でスキップされる")
+        void shouldSkipTransitiveDependentsWithReasonOnFailure() {
+            // Given: A -> B -> C, A が失敗
+            MigrationNode nodeA = createFailingNode("a", "Node A", "boom");
+            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            graph.addNode(nodeC);
+            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            // When
+            ExecutionResult result =
+                    executor.execute(Set.of(NodeId.of("a"), NodeId.of("b"), NodeId.of("c")));
+
+            // Then: B と C は "dependency failed: ..." reason でスキップ
+            assertThat(result.success()).isFalse();
+            assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
+            assertThat(listener.succeededNodes).isEmpty();
+            assertThat(listener.skippedNodes).containsExactly(NodeId.of("b"), NodeId.of("c"));
+            assertThat(listener.skipReasons.get(NodeId.of("b"))).isEqualTo("dependency failed: a");
+            assertThat(listener.skipReasons.get(NodeId.of("c"))).isEqualTo("dependency failed: b");
+        }
+
+        @Test
+        @DisplayName("fail-soft — 失敗ノードと依存圏外の独立ノードは引き続き実行される")
+        void shouldContinueExecutingIndependentNodesAfterFailure() {
+            // Given: A (failing) と B (independent, no deps)
+            MigrationNode nodeA = createFailingNode("a", "Node A", "boom");
+            MigrationNode nodeB = createNode("b", "Node B");
+            graph.addNode(nodeA);
+            graph.addNode(nodeB);
+            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            // When
+            ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
+
+            // Then: failure result だが B は完走する
+            assertThat(result.success()).isFalse();
+            assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
+            assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
+            assertThat(historyRepo.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+        }
     }
 
     private MigrationNode createNode(String id, String name) {
@@ -209,11 +258,40 @@ class MigrationExecutorTest {
                 .build();
     }
 
+    private MigrationNode createFailingNode(String id, String name, String error) {
+        return createFailingNode(id, name, error, Set.of());
+    }
+
+    private MigrationNode createFailingNode(
+            String id, String name, String error, Set<NodeId> dependencies) {
+        Task upTask =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        return Result.err(error);
+                    }
+
+                    @Override
+                    public String description() {
+                        return "FAIL: " + name;
+                    }
+                };
+        return SimpleMigrationNode.builder()
+                .id(NodeId.of(id))
+                .name(name)
+                .environment(testEnv)
+                .dependencies(dependencies)
+                .upTask(upTask)
+                .downTask(SimpleTask.of("DOWN: " + name))
+                .build();
+    }
+
     /** テスト用の ExecutionListener 実装 */
     static class MockExecutionListener implements ExecutionListener {
         final List<NodeId> startedNodes = new ArrayList<>();
         final List<NodeId> succeededNodes = new ArrayList<>();
         final List<NodeId> skippedNodes = new ArrayList<>();
+        final Map<NodeId, String> skipReasons = new HashMap<>();
         final List<NodeId> failedNodes = new ArrayList<>();
         boolean completedCalled = false;
 
@@ -234,6 +312,7 @@ class MigrationExecutorTest {
         @Override
         public void onNodeSkipped(MigrationNode node, ExecutionDirection direction, String reason) {
             skippedNodes.add(node.id());
+            skipReasons.put(node.id(), reason);
         }
 
         @Override

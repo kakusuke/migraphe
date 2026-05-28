@@ -1,0 +1,9 @@
+project:
+  name: e2e-parallel-fail-soft
+
+history:
+  target: h2
+
+execution:
+  parallel: true
+  max-parallelism: 4
