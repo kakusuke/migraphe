@@ -19,7 +19,7 @@ public record ExecutionSummary(
 
     /** 失敗サマリーを作成する。 */
     public static ExecutionSummary failure(
-            ExecutionDirection direction, int total, int executed, int skipped) {
-        return new ExecutionSummary(direction, total, executed, skipped, 1, false);
+            ExecutionDirection direction, int total, int executed, int skipped, int failed) {
+        return new ExecutionSummary(direction, total, executed, skipped, failed, false);
     }
 }

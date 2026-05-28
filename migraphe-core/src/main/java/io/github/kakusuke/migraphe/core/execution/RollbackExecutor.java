@@ -123,6 +123,7 @@ public final class RollbackExecutor {
         int totalNodes = plan.totalNodes();
         int executedCount = 0;
         int skippedCount = 0;
+        int failureCount = 0;
         Set<NodeId> failedNodes = new HashSet<>();
 
         for (ExecutionLevel level : plan.levels()) {
@@ -199,15 +200,20 @@ public final class RollbackExecutor {
                     historyRepository.record(failureRecord);
 
                     failedNodes.add(node.id());
+                    failureCount++;
                     // fail-soft: 失敗しても残りのノードを処理し続ける
                 }
             }
         }
 
-        if (!failedNodes.isEmpty()) {
+        if (failureCount > 0) {
             ExecutionSummary summary =
                     ExecutionSummary.failure(
-                            ExecutionDirection.DOWN, totalNodes, executedCount, skippedCount);
+                            ExecutionDirection.DOWN,
+                            totalNodes,
+                            executedCount,
+                            skippedCount,
+                            failureCount);
             listener.onCompleted(summary);
             return ExecutionResult.failure(summary);
         }

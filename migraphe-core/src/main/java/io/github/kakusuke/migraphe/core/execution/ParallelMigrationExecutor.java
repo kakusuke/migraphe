@@ -131,6 +131,7 @@ public final class ParallelMigrationExecutor implements Executor {
         Set<NodeId> failedNodes = ConcurrentHashMap.newKeySet();
         AtomicInteger executedCount = new AtomicInteger(0);
         AtomicInteger skippedCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
         @Nullable Semaphore semaphore = maxParallelism > 0 ? new Semaphore(maxParallelism) : null;
 
         try {
@@ -170,6 +171,7 @@ public final class ParallelMigrationExecutor implements Executor {
                                         failedNodes,
                                         executedCount,
                                         skippedCount,
+                                        failureCount,
                                         tracker,
                                         readyQueue,
                                         latch,
@@ -191,18 +193,20 @@ public final class ParallelMigrationExecutor implements Executor {
                             ExecutionDirection.UP,
                             totalNodes,
                             executedCount.get(),
-                            skippedCount.get());
+                            skippedCount.get(),
+                            Math.max(1, failureCount.get()));
             listener.onCompleted(summary);
             return ExecutionResult.failure(summary);
         }
 
-        if (!failedNodes.isEmpty()) {
+        if (failureCount.get() > 0) {
             ExecutionSummary summary =
                     ExecutionSummary.failure(
                             ExecutionDirection.UP,
                             totalNodes,
                             executedCount.get(),
-                            skippedCount.get());
+                            skippedCount.get(),
+                            failureCount.get());
             listener.onCompleted(summary);
             return ExecutionResult.failure(summary);
         }
@@ -219,6 +223,7 @@ public final class ParallelMigrationExecutor implements Executor {
             Set<NodeId> failedNodes,
             AtomicInteger executedCount,
             AtomicInteger skippedCount,
+            AtomicInteger failureCount,
             ReadyNodeTracker tracker,
             PriorityBlockingQueue<MigrationNode> readyQueue,
             CountDownLatch latch,
@@ -268,6 +273,7 @@ public final class ParallelMigrationExecutor implements Executor {
             historyRepository.record(failureRecord);
 
             failedNodes.add(node.id());
+            failureCount.incrementAndGet();
             propagateFailure(node.id(), failedNodes, targetNodes, skippedCount, latch);
         }
     }
