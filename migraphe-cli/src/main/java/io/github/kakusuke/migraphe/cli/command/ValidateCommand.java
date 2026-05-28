@@ -7,6 +7,7 @@ import io.github.kakusuke.migraphe.cli.resolver.LockSyncChecker;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigPreParser;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
+import io.github.kakusuke.migraphe.core.config.ConfigLoader;
 import io.github.kakusuke.migraphe.core.config.ConfigValidator;
 import io.github.kakusuke.migraphe.core.config.ConfigValidator.ValidationOutput;
 import io.github.kakusuke.migraphe.core.config.YamlFileScanner;
@@ -104,6 +105,7 @@ public class ValidateCommand implements Command {
 
     private void displayCheckResults(ValidationOutput result) {
         YamlFileScanner scanner = new YamlFileScanner();
+        Path scanRoot = new ConfigLoader().resolveScanRoot(baseDir);
         List<String> errors = result.errors();
 
         // 1. Project configuration
@@ -117,7 +119,7 @@ public class ValidateCommand implements Command {
         }
 
         // 2. Targets
-        int targetCount = scanner.scanTargetFiles(baseDir).size();
+        int targetCount = scanner.scanTargetFiles(scanRoot).size();
         List<String> targetErrors = filterErrors(errors, "targets/");
         String targetLabel =
                 "Checking targets ("
@@ -128,7 +130,7 @@ public class ValidateCommand implements Command {
         printCheckResult(targetLabel, targetErrors.isEmpty(), targetErrors);
 
         // 3. Tasks
-        int taskCount = scanner.scanTaskFiles(baseDir).size();
+        int taskCount = scanner.scanTaskFiles(scanRoot).size();
         List<String> taskFileErrors = filterTaskFileErrors(errors);
         String taskLabel =
                 "Checking tasks (" + taskCount + " file" + (taskCount == 1 ? "" : "s") + ")...";

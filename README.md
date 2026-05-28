@@ -17,6 +17,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **Gradle plugin** with `migrapheUp`/`Down`/`Status`/`Validate`/`Generate` tasks
 - **Schema documentation generation** (Markdown / JSON) for JDBC, PostgreSQL, and MySQL
 - **Parallel execution** via Virtual Threads (opt-in)
+- **Configurable layout** via `project.scan-root` to relocate `tasks/`, `targets/`, `environments/`, and `plugins/` under a subdirectory (CLI / Gradle share the same field)
 - **Type-safe**: built with Java 21, jspecify + NullAway
 
 ## Install

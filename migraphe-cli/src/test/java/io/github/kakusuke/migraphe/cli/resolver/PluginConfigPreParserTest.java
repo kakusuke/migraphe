@@ -333,4 +333,20 @@ class PluginConfigPreParserTest {
                 .hasMessageContaining("repositories")
                 .hasMessageContaining("list");
     }
+
+    @Test
+    void parseScanRootFromProjectSection() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                project:
+                  scan-root: custom/path
+                """);
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(migrapheYaml);
+
+        assertThat(result.scanRoot()).contains("custom/path");
+    }
 }

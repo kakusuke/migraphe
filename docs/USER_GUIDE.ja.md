@@ -229,7 +229,20 @@ history:
 **フィールド:**
 - `plugins`（任意）: CLI プラグイン解決用の Maven 座標リスト（`groupId:artifactId:version`）
 - `project.name`（必須）: プロジェクト識別子
+- `project.scan-root`（任意）: `tasks/`、`targets/`、`environments/`、`plugins/` を探索する起点ディレクトリ。`migraphe.yaml` の親ディレクトリ起点の相対パス、または絶対パスを指定できます。未指定の場合は `migraphe.yaml` の親ディレクトリと同じ（既定値）。CLI と Gradle プラグインのどちらでも同じフィールドを参照するため挙動が一致します。
 - `history.target`（必須）: マイグレーション履歴を保存するターゲット名
+
+**例: `scan-root` でマイグレーション資材をサブディレクトリにまとめる**
+
+```yaml
+project:
+  name: my-app
+  scan-root: config
+history:
+  target: main
+```
+
+この設定では、Migraphe は `migraphe.yaml` の親ディレクトリを基準として `config/tasks/` からタスクを、`config/targets/` からターゲットを、`config/environments/` から環境設定を、レガシーの `plugins/` ディレクトリも `config/plugins/` から読み込みます。
 
 ### ターゲット設定
 

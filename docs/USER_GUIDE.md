@@ -229,7 +229,20 @@ history:
 **Fields:**
 - `plugins` (optional): List of Maven coordinates (`groupId:artifactId:version`) for CLI plugin resolution
 - `project.name` (required): Project identifier
+- `project.scan-root` (optional): Base directory for locating `tasks/`, `targets/`, `environments/`, and `plugins/`. Accepts a relative path (resolved against the directory containing `migraphe.yaml`) or an absolute path. Defaults to the directory containing `migraphe.yaml`. The same setting is honored by both the CLI and the Gradle plugin.
 - `history.target` (required): Target name where migration history is stored
+
+**Example: `scan-root` to keep migration assets under a subdirectory**
+
+```yaml
+project:
+  name: my-app
+  scan-root: config
+history:
+  target: main
+```
+
+With this configuration, Migraphe reads tasks from `config/tasks/`, targets from `config/targets/`, environments from `config/environments/`, and the legacy plugin directory from `config/plugins/` — all relative to the directory containing `migraphe.yaml`.
 
 ### Target Configuration
 

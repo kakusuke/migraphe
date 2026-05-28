@@ -254,6 +254,29 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-05-28 (Session 52)
+- **`project.scan-root`: tasks/targets/environments/plugins の親ディレクトリを `migraphe.yaml` 直下から切り離せるように**
+  - **Motivation**: ユーザーから「`migraphe.yaml` 本体は repo ルートに置きつつ、`tasks/`, `targets/`, `environments/`, `plugins/` をサブディレクトリにまとめたい」という要望。これまでは `migraphe.yaml` の親 (`baseDir`) 直下に全部置く前提だった。
+  - **設計**: `migraphe.yaml` の `project.scan-root` (Optional<String>) を 1 つ追加すれば、その値が tasks/targets/environments/plugins の探索起点を一括で切り替える。値は `migraphe.yaml` の親ディレクトリ起点の相対パス、もしくは絶対パス。未指定なら従来通り `baseDir` と同じ (= 完全な後方互換)。**命名は TypeScript の `rootDir` 由来ではなく Liquibase の `searchPath` 系の "scan の起点" を直接表現する `scan-root` を採用** — ユーザーが `config-dir` / `root-dir` 両案にしっくり来ず、Liquibase / Flyway / Cargo の慣習を見直した上で再選択した経緯あり。
+  - **CLI と Gradle で挙動を完全一致させる**: 両方とも同じ `migraphe.yaml` フィールド経由でのみ指定 (Gradle DSL に新規プロパティは追加しない)。`MigrapheExtension.baseDir` は引き続き `migraphe.yaml` の親、`ConfigLoader` 内部で `scan-root` を解決する。
+  - **実装**:
+    - `ProjectConfig.ProjectSection.scanRoot()` (Optional<String>) を追加
+    - `ConfigLoader.resolveScanRoot(baseDir, projectConfigFile)` を private helper として導入し、`loadConfig` 内で `scanRoot` を解決。targets/tasks/environments の `YamlFileScanner` 呼出 + `TaskIdGenerator.generateTaskId` の baseDir を全て scanRoot に統一
+    - `ConfigLoader.resolveScanRoot(baseDir)` を public ラッパーとして公開 (Gradle plugin / `ExecutionContext` で再利用するため)
+    - `ExecutionContext` record に `Path scanRoot` を追加し、`load()` factory で計算
+    - `PluginConfigPreParser` (SnakeYAML 直読み) でも `project.scan-root` を pre-parse し、`PluginConfigParseResult.scanRoot()` で取り出せるように
+    - CLI `Main.resolvePluginsDir(baseDir, parsed)` を新設し、`initializePluginRegistry` と `GenerateCommand` の plugins ディレクトリ参照を `scanRoot.resolve("plugins")` に統一
+    - Gradle plugin `MigrapheGenerateTask` の `context.baseDir().resolve("plugins")` を `context.scanRoot().resolve("plugins")` に差し替え
+  - **`migraphe.yaml` の二重 parse は許容**: scan-root を取り出すために `ConfigLoader.loadConfig` 内で projectConfig 限定の SmallRyeConfig を組む。`ExecutionContext.load` でも `resolveScanRoot` を再度呼ぶ。性能影響軽微で、`scan-root` キーに `${VAR}` を含める用途は想定しない (= 変数展開なしで取り出す現方式で十分)。
+  - **適用対象外**: `migraphe.yaml` 本体, `migraphe.lock.yaml`, `plugins:` / `repositories:` セクション (これらは `migraphe.yaml` 内のキーなので scan-root の影響を受けない)。`generators` の `outputDir` も現状 baseDir 相対のままで scope out (将来必要なら別途設計)。
+  - **テスト**: `ConfigLoaderTest` に 4 件 (scanRoot 未指定 / `scan-root: subdir` の targets / tasks / environments / 絶対パス)、`PluginConfigPreParserTest` に 1 件、`MainTest` に 2 件 (Optional あり/なし)、`ExecutionContextTest` に 1 件 (`shouldResolveScanRootFromProjectConfig`)、`MigrapheValidateTaskFunctionalTest` に 1 件 (Gradle TestKit + scan-root レイアウト) を追加。`MigrapheGenerateTaskFunctionalTest` で `subdir/plugins/` 経由でプラグインを発見できるかを直接検証する案は、Jackson 等の transitive 依存を手動コピーする必要があり TestKit では現実的でないため断念 → 代わりに `ExecutionContext.scanRoot()` の core unit test で保証する形に整理した。
+  - **`PluginConfigParseResult` のシグネチャ変更**: record に第 3 コンポーネント `Optional<String> scanRoot` を追加し、既存テスト 6 箇所のコンストラクタ呼出を `, Optional.empty()` 追記で更新。compact constructor で null guard あり。
+  - **E2E で発見した bug 2 件 (修正済み)**:
+    - `ConfigValidator.validate(baseDir)` が `scanner.scanTargetFiles(baseDir)` / `scanner.scanTaskFiles(baseDir)` をハードコードしていたため、`migraphe validate` (CLI) / `migrapheValidate` (Gradle) で `scan-root` 配下の tasks/targets を 0 件と認識していた。`new ConfigLoader().resolveScanRoot(baseDir)` で解決した scanRoot を渡すよう修正。`ConfigValidatorTest.shouldValidateUsingScanRootForTargetsAndTasks` で回帰ガード。
+    - CLI の `ValidateCommand.displayCheckResults` で「Checking targets (X files)」の件数表示が `scanner.scanTargetFiles(baseDir)` を使っており、ConfigValidator が修正されても表示だけが 0 のままだった。同じく scanRoot 経由に修正。
+  - **Sample プロジェクトでの E2E 確認 (実施済み)**: `sample/cli` と `sample/gradle` を `/tmp` にコピーして `scan-root: config` レイアウトに移行し、`migraphe validate` と `./gradlew migrapheValidate` 両方で `targets 2 / tasks 19 / Validation successful.` を確認。Sample 本体は無変更。
+  - Tests: 全モジュール 100% passing. `./gradlew clean build --warning-mode all` で警告ゼロ、Spotless / ErrorProne クリーン。10+ micro TDD cycles で進めた。
+
 ### 2026-05-25 (Session 51)
 - **リリースアーカイブをフラット化 (PR #29) + バージョン 0.3.0 への bump + リリース手順の明文化**
   - **Archive flatten**: `migraphe-cli/build.gradle.kts` の `distTar` / `distZip` の `eachFile` を「トップ階層を `migraphe` に置換」から「トップ階層 (`migraphe-<version>/`) を丸ごと除去」に変更 (`replaceFirst(Regex("^migraphe-[^/]+/"), "")`)。結果アーカイブは `bin/` `lib/` がルート直下に並ぶ。これで mise の github バックエンドが追加オプション無しで `mise use github:kakusuke/migraphe` で取り込める (github バックエンドは展開ルート直下の `bin/` を優先探索し、起動スクリプトの `../lib` 参照も同ルートで解決)。実ビルド + 展開 + `bin/migraphe --version` で動作確認済み。
@@ -300,5 +323,5 @@ Update when code changes:
 
 ---
 
-**Last Updated**: 2026-05-25
-**Current Work**: リリースアーカイブをフラット化し (PR #29、`distTar`/`distZip` がトップ階層を除去して `bin/` `lib/` をルート直下に配置)、`mise use github:kakusuke/migraphe` でオプション無し導入を可能にした。あわせてバージョンを 0.3.0 に bump (0.x の破壊的変更 = MINOR up の慣習に従う)。`gradle.properties` + 全 docs/sample の `v0.2.1` → `v0.3.0` を一括置換。`CONTRIBUTING.md` に "Release procedure" セクションを新設し、bump 時に `gradle.properties` を忘れない手順を明文化 (CLAUDE.md の Session End Procedure からも参照)。次の `v0.3.0` タグ push で `release.yml` がリリース生成。
+**Last Updated**: 2026-05-28
+**Current Work**: `project.scan-root` の追加 (Session 52)。tasks/targets/environments/plugins の探索起点を `migraphe.yaml` 直下から `migraphe.yaml` の親ディレクトリ起点の相対パス (or 絶対パス) に切替可能にした。CLI/Gradle 両方で同一 `migraphe.yaml` フィールド経由でのみ指定。未指定時は完全な後方互換。実装は `ConfigLoader.resolveScanRoot` + `ExecutionContext.scanRoot()` accessor + `PluginConfigPreParser` 拡張 + `Main.resolvePluginsDir`。直前の Session 51 ではリリースアーカイブをフラット化 (`bin/` `lib/` をルート直下に配置) + バージョン 0.3.0 への bump を実施済み。

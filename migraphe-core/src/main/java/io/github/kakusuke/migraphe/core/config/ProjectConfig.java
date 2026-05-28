@@ -49,6 +49,16 @@ public interface ProjectConfig {
          * @return プロジェクト名
          */
         String name();
+
+        /**
+         * tasks/targets/environments/plugins を探す起点ディレクトリ。
+         *
+         * <p>{@code migraphe.yaml} の親ディレクトリ起点の相対パス、または絶対パス。 未指定の場合は {@code migraphe.yaml}
+         * の親ディレクトリと同じ。
+         *
+         * @return scan-root のパス文字列 (未指定の場合は empty)
+         */
+        Optional<String> scanRoot();
     }
 
     /** 履歴管理設定。 */

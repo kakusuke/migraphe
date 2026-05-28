@@ -50,8 +50,12 @@ public class ConfigValidator {
             return new ValidationOutput(errors);
         }
 
+        // scan-root を解決 (project.scan-root が指定されていれば baseDir/scan-root、
+        // 未指定なら baseDir そのまま)
+        Path scanRoot = new ConfigLoader().resolveScanRoot(baseDir);
+
         // 2. targets/*.yaml を個別ロード
-        List<Path> targetFiles = scanner.scanTargetFiles(baseDir);
+        List<Path> targetFiles = scanner.scanTargetFiles(scanRoot);
         Set<String> validTargetIds = new HashSet<>();
         Map<String, String> targetTypes = new HashMap<>();
 
@@ -71,11 +75,11 @@ public class ConfigValidator {
         }
 
         // 3. tasks/**/*.yaml を個別ロード
-        List<Path> taskFiles = scanner.scanTaskFiles(baseDir);
+        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
         Map<NodeId, TaskInfo> validTasks = new HashMap<>();
 
         for (Path taskFile : taskFiles) {
-            NodeId taskId = idGenerator.generateTaskId(baseDir, taskFile);
+            NodeId taskId = idGenerator.generateTaskId(scanRoot, taskFile);
             List<String> taskErrors =
                     validateTaskFile(taskFile, taskId, validTargetIds, targetTypes);
             if (taskErrors.isEmpty()) {

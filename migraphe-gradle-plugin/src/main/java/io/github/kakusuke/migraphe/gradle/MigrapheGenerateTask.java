@@ -38,7 +38,7 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
             if (pluginClassLoader != null) {
                 generatorRegistry.loadFromClassLoader(pluginClassLoader);
             }
-            generatorRegistry.loadFromDirectory(context.baseDir().resolve("plugins"));
+            generatorRegistry.loadFromDirectory(context.scanRoot().resolve("plugins"));
 
             ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
             List<ProjectConfig.GeneratorSection> generators =

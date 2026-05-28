@@ -80,14 +80,15 @@ public class ConfigLoader {
                     "Project config file not found: " + baseDir.resolve("migraphe.yaml"));
         }
 
-        // 2. ターゲットファイル (targets/*.yaml) をスキャン
-        List<Path> targetFiles = scanner.scanTargetFiles(baseDir);
+        // 2. scan-root を解決し、ターゲットファイル (targets/*.yaml) をスキャン
+        Path scanRoot = resolveScanRoot(baseDir, projectConfigFile);
+        List<Path> targetFiles = scanner.scanTargetFiles(scanRoot);
 
         // 3. タスクファイル (tasks/**/*.yaml) をスキャンして Task ID を生成
-        List<Path> taskFilePaths = scanner.scanTaskFiles(baseDir);
+        List<Path> taskFilePaths = scanner.scanTaskFiles(scanRoot);
         Map<NodeId, Path> taskFiles = new HashMap<>();
         for (Path taskFile : taskFilePaths) {
-            NodeId taskId = idGenerator.generateTaskId(baseDir, taskFile);
+            NodeId taskId = idGenerator.generateTaskId(scanRoot, taskFile);
             taskFiles.put(taskId, taskFile);
         }
 
@@ -102,7 +103,7 @@ public class ConfigLoader {
         SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().addDefaultInterceptors();
 
         // 6. 環境ファイルがあればロード (最優先 - ordinal 500)
-        Path envFile = envName != null ? scanner.findEnvironmentFile(baseDir, envName) : null;
+        Path envFile = envName != null ? scanner.findEnvironmentFile(scanRoot, envName) : null;
 
         if (envFile != null) {
             try {
@@ -133,7 +134,7 @@ public class ConfigLoader {
      *
      * <p>各タスクファイルの target フィールドからプラグインを特定し、 プラグイン固有の TaskDefinition サブタイプにマッピングする。
      *
-     * @param baseDir プロジェクトのベースディレクトリ
+     * @param baseDir プロジェクトのベースディレクトリ（内部で {@code project.scan-root} を解決し、実際のスキャン対象ディレクトリを決定する）
      * @param mainConfig メイン設定（ターゲット情報を含む）
      * @param pluginRegistry プラグインレジストリ
      * @return NodeId → TaskDefinition のマップ
@@ -147,10 +148,13 @@ public class ConfigLoader {
         Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
         // tasks/ ディレクトリ配下の全YAMLファイルをスキャン
-        List<Path> taskFiles = scanner.scanTaskFiles(baseDir);
+        Path projectConfigFile = scanner.findProjectConfig(baseDir);
+        Path scanRoot =
+                projectConfigFile != null ? resolveScanRoot(baseDir, projectConfigFile) : baseDir;
+        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
 
         for (Path taskFile : taskFiles) {
-            NodeId nodeId = idGenerator.generateTaskId(baseDir, taskFile);
+            NodeId nodeId = idGenerator.generateTaskId(scanRoot, taskFile);
             TaskDefinition<?> taskDef = loadTaskDefinition(taskFile, mainConfig, pluginRegistry);
             taskDefinitions.put(nodeId, taskDef);
         }
@@ -218,6 +222,50 @@ public class ConfigLoader {
                         .build();
 
         return envConfig.getConfigMapping(plugin.environmentDefinitionClass());
+    }
+
+    /**
+     * migraphe.yaml の project.scan-root を解決する。
+     *
+     * <p>scan-root が指定されていれば baseDir からの相対パス、指定されていなければ baseDir を返す。
+     *
+     * @param baseDir プロジェクトルートディレクトリ
+     * @return scan-root の絶対パス
+     */
+    public Path resolveScanRoot(Path baseDir) {
+        YamlFileScanner scanner = new YamlFileScanner();
+        Path projectConfigFile = scanner.findProjectConfig(baseDir);
+        if (projectConfigFile == null) {
+            return baseDir;
+        }
+        return resolveScanRoot(baseDir, projectConfigFile);
+    }
+
+    /**
+     * migraphe.yaml の project.scan-root を解決する。
+     *
+     * <p>scan-root が指定されていれば baseDir からの相対パス、指定されていなければ baseDir を返す。
+     *
+     * @param baseDir プロジェクトルートディレクトリ
+     * @param projectConfigFile migraphe.yaml のパス
+     * @return scan-root の絶対パス
+     */
+    private Path resolveScanRoot(Path baseDir, Path projectConfigFile) {
+        SmallRyeConfig projectOnlyConfig =
+                new SmallRyeConfigBuilder()
+                        .addDefaultInterceptors()
+                        .withSources(
+                                new MultiFileYamlConfigSource(
+                                        projectConfigFile, List.of(), Map.of()))
+                        .withMapping(ProjectConfig.class)
+                        .withValidateUnknown(false)
+                        .build();
+        return projectOnlyConfig
+                .getConfigMapping(ProjectConfig.class)
+                .project()
+                .scanRoot()
+                .map(baseDir::resolve)
+                .orElse(baseDir);
     }
 
     /**

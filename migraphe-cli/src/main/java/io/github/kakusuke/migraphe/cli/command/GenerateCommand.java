@@ -19,14 +19,22 @@ public class GenerateCommand implements Command {
     private final PluginRegistry pluginRegistry;
     private final @Nullable URLClassLoader pluginClassLoader;
     private final @Nullable String nameFilter;
+    private final Path pluginsDir;
     private final boolean colorEnabled;
 
     public GenerateCommand(
             Path baseDir,
             PluginRegistry pluginRegistry,
             @Nullable URLClassLoader pluginClassLoader,
-            @Nullable String nameFilter) {
-        this(baseDir, pluginRegistry, pluginClassLoader, nameFilter, AnsiColor.isColorEnabled());
+            @Nullable String nameFilter,
+            Path pluginsDir) {
+        this(
+                baseDir,
+                pluginRegistry,
+                pluginClassLoader,
+                nameFilter,
+                pluginsDir,
+                AnsiColor.isColorEnabled());
     }
 
     /** テスト用コンストラクタ。 */
@@ -35,11 +43,13 @@ public class GenerateCommand implements Command {
             PluginRegistry pluginRegistry,
             @Nullable URLClassLoader pluginClassLoader,
             @Nullable String nameFilter,
+            Path pluginsDir,
             boolean colorEnabled) {
         this.baseDir = baseDir;
         this.pluginRegistry = pluginRegistry;
         this.pluginClassLoader = pluginClassLoader;
         this.nameFilter = nameFilter;
+        this.pluginsDir = pluginsDir;
         this.colorEnabled = colorEnabled;
     }
 
@@ -63,7 +73,7 @@ public class GenerateCommand implements Command {
                 if (pluginClassLoader != null) {
                     generatorRegistry.loadFromClassLoader(pluginClassLoader);
                 }
-                generatorRegistry.loadFromDirectory(baseDir.resolve("plugins"));
+                generatorRegistry.loadFromDirectory(pluginsDir);
 
                 GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
                 executor.executeAll(

@@ -111,6 +111,29 @@ class ExecutionContextTest {
     }
 
     @Test
+    void shouldResolveScanRootFromProjectConfig() throws IOException {
+        // Given: scan-root: subdir が指定されたプロジェクト (noop プラグインを使用)
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                  scan-root: subdir
+                history:
+                  target: noop-db
+                """);
+        Path subTargets = tempDir.resolve("subdir/targets");
+        Files.createDirectories(subTargets);
+        Files.writeString(subTargets.resolve("noop-db.yaml"), "type: noop\n");
+
+        // When: ExecutionContext をロード
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+
+        // Then: scanRoot が baseDir.resolve("subdir") を返す
+        assertThat(context.scanRoot()).isEqualTo(tempDir.resolve("subdir"));
+    }
+
+    @Test
     void shouldFallbackToInMemoryHistoryRepository() throws IOException {
         // Given: history.target が存在しない環境を指すプロジェクト
         createTestProjectWithMissingHistoryTarget(tempDir);
