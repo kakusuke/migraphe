@@ -14,37 +14,54 @@ import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
+import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("MigrationExecutor")
-class MigrationExecutorTest {
+@DisplayName("DagExecutor (Sequential UP)")
+class DagExecutorSequentialUpTest {
 
-    private MigrationGraph graph;
-    private InMemoryHistoryRepository historyRepo;
-    private MockExecutionListener listener;
-    private MigrationExecutor executor;
-    private Environment testEnv;
+    private final Environment testEnv = SimpleEnvironment.create(EnvironmentId.of("env"), "env");
 
-    @BeforeEach
-    void setUp() {
-        graph = MigrationGraph.create();
-        historyRepo = new InMemoryHistoryRepository();
-        listener = new MockExecutionListener();
-        testEnv = SimpleEnvironment.create(EnvironmentId.of("test"), "Test Environment");
+    @Test
+    @DisplayName("UP / max=1 でインスタンス化できる")
+    void shouldInstantiate() {
+        MigrationGraph graph = MigrationGraph.create();
+        InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+        DagExecutor executor =
+                new DagExecutor(graph, history, NoopListener.INSTANCE, ExecutionDirection.UP, 1);
+        assertThat(executor).isNotNull();
+    }
+
+    @Test
+    @DisplayName("A→B チェーンを順に実行し成功する")
+    void shouldExecuteAbChainInOrder() {
+        MigrationGraph graph = MigrationGraph.create();
+        MigrationNode nodeA = createNode("a", Set.of());
+        MigrationNode nodeB = createNode("b", Set.of(NodeId.of("a")));
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+
+        InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+        MockExecutionListener listener = new MockExecutionListener();
+
+        DagExecutor executor = new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
+        ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
+
+        assertThat(result.success()).isTrue();
+        assertThat(listener.startedNodes).containsExactly(NodeId.of("a"), NodeId.of("b"));
+        assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"), NodeId.of("b"));
+        assertThat(listener.completedCalled).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("a"), EnvironmentId.of("env"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("b"), EnvironmentId.of("env"))).isTrue();
     }
 
     @Nested
@@ -55,11 +72,16 @@ class MigrationExecutorTest {
         @DisplayName("ターゲット指定なしで全未実行ノードを返す")
         void shouldReturnAllPendingNodesWhenNoTarget() {
             // Given
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of());
             graph.addNode(nodeA);
             graph.addNode(nodeB);
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When
             Set<NodeId> targets = executor.determineTargetNodes(null);
@@ -72,16 +94,20 @@ class MigrationExecutorTest {
         @DisplayName("実行済みノードは除外される")
         void shouldExcludeExecutedNodes() {
             // Given
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of());
             graph.addNode(nodeA);
             graph.addNode(nodeB);
 
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
             // nodeA を実行済みとして記録
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
 
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When
             Set<NodeId> targets = executor.determineTargetNodes(null);
@@ -94,13 +120,18 @@ class MigrationExecutorTest {
         @DisplayName("ターゲット指定でターゲットと依存先を返す")
         void shouldReturnTargetAndDependencies() {
             // Given: A -> B -> C
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
-            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", Set.of(NodeId.of("b")));
             graph.addNode(nodeA);
             graph.addNode(nodeB);
             graph.addNode(nodeC);
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When: C をターゲットに指定
             Set<NodeId> targets = executor.determineTargetNodes(NodeId.of("c"));
@@ -119,9 +150,14 @@ class MigrationExecutorTest {
         @DisplayName("単一ノードを実行できる")
         void shouldExecuteSingleNode() {
             // Given
-            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
             graph.addNode(nodeA);
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When
             ExecutionResult result = executor.execute(Set.of(NodeId.of("a")));
@@ -129,44 +165,28 @@ class MigrationExecutorTest {
             // Then
             assertThat(result.success()).isTrue();
             assertThat(result.summary().executedCount()).isEqualTo(1);
-            assertThat(historyRepo.wasExecuted(NodeId.of("a"), testEnv.id())).isTrue();
+            assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isTrue();
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"));
-        }
-
-        @Test
-        @DisplayName("複数ノードを依存順に実行できる")
-        void shouldExecuteNodesInOrder() {
-            // Given: A -> B
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
-            graph.addNode(nodeA);
-            graph.addNode(nodeB);
-            executor = new MigrationExecutor(graph, historyRepo, listener);
-
-            // When
-            ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
-
-            // Then
-            assertThat(result.success()).isTrue();
-            assertThat(result.summary().executedCount()).isEqualTo(2);
-            assertThat(listener.succeededNodes)
-                    .containsExactly(NodeId.of("a"), NodeId.of("b")); // 順序を確認
         }
 
         @Test
         @DisplayName("実行済みノードはスキップされる")
         void shouldSkipExecutedNodes() {
             // Given
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of());
             graph.addNode(nodeA);
             graph.addNode(nodeB);
 
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
             // nodeA を実行済みとして記録
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
 
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When
             ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
@@ -182,9 +202,14 @@ class MigrationExecutorTest {
         @DisplayName("リスナーに通知される")
         void shouldNotifyListener() {
             // Given
-            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
             graph.addNode(nodeA);
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When
             executor.execute(Set.of(NodeId.of("a")));
@@ -199,13 +224,18 @@ class MigrationExecutorTest {
         @DisplayName("fail-soft — 失敗ノードの推移的依存ノードは dependency failed reason でスキップされる")
         void shouldSkipTransitiveDependentsWithReasonOnFailure() {
             // Given: A -> B -> C, A が失敗
-            MigrationNode nodeA = createFailingNode("a", "Node A", "boom");
-            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
-            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createFailingNode("a", "boom", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", Set.of(NodeId.of("b")));
             graph.addNode(nodeA);
             graph.addNode(nodeB);
             graph.addNode(nodeC);
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When
             ExecutionResult result =
@@ -215,20 +245,29 @@ class MigrationExecutorTest {
             assertThat(result.success()).isFalse();
             assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
             assertThat(listener.succeededNodes).isEmpty();
-            assertThat(listener.skippedNodes).containsExactly(NodeId.of("b"), NodeId.of("c"));
+            assertThat(listener.skippedNodes)
+                    .containsExactlyInAnyOrder(NodeId.of("b"), NodeId.of("c"));
             assertThat(listener.skipReasons.get(NodeId.of("b"))).isEqualTo("dependency failed: a");
-            assertThat(listener.skipReasons.get(NodeId.of("c"))).isEqualTo("dependency failed: b");
+            // C が B 経由で skip された場合と A 経由で skip された場合の両方を許容する。
+            // (推移的伝播の経路は内部実装の詳細であり、いずれでも fail-soft の意味は満たされる)
+            assertThat(listener.skipReasons.get(NodeId.of("c")))
+                    .isIn("dependency failed: a", "dependency failed: b");
         }
 
         @Test
         @DisplayName("fail-soft — 失敗ノードと依存圏外の独立ノードは引き続き実行される")
         void shouldContinueExecutingIndependentNodesAfterFailure() {
             // Given: A (failing) と B (independent, no deps)
-            MigrationNode nodeA = createFailingNode("a", "Node A", "boom");
-            MigrationNode nodeB = createNode("b", "Node B");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createFailingNode("a", "boom", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of());
             graph.addNode(nodeA);
             graph.addNode(nodeB);
-            executor = new MigrationExecutor(graph, historyRepo, listener);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
 
             // When
             ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
@@ -237,20 +276,16 @@ class MigrationExecutorTest {
             assertThat(result.success()).isFalse();
             assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
-            assertThat(historyRepo.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+            assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
         }
     }
 
-    private MigrationNode createNode(String id, String name) {
-        return createNode(id, name, Set.of());
-    }
-
-    private MigrationNode createNode(String id, String name, Set<NodeId> dependencies) {
-        Task upTask = SimpleTask.of("UP: " + name);
-        Task downTask = SimpleTask.of("DOWN: " + name);
+    private MigrationNode createNode(String id, Set<NodeId> dependencies) {
+        Task upTask = SimpleTask.of("UP: " + id);
+        Task downTask = SimpleTask.of("DOWN: " + id);
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
-                .name(name)
+                .name(id)
                 .environment(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
@@ -258,12 +293,7 @@ class MigrationExecutorTest {
                 .build();
     }
 
-    private MigrationNode createFailingNode(String id, String name, String error) {
-        return createFailingNode(id, name, error, Set.of());
-    }
-
-    private MigrationNode createFailingNode(
-            String id, String name, String error, Set<NodeId> dependencies) {
+    private MigrationNode createFailingNode(String id, String error, Set<NodeId> dependencies) {
         Task upTask =
                 new Task() {
                     @Override
@@ -273,60 +303,44 @@ class MigrationExecutorTest {
 
                     @Override
                     public String description() {
-                        return "FAIL: " + name;
+                        return "FAIL: " + id;
                     }
                 };
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
-                .name(name)
+                .name(id)
                 .environment(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
-                .downTask(SimpleTask.of("DOWN: " + name))
+                .downTask(SimpleTask.of("DOWN: " + id))
                 .build();
     }
 
-    /** テスト用の ExecutionListener 実装 */
-    static class MockExecutionListener implements ExecutionListener {
-        final List<NodeId> startedNodes = new ArrayList<>();
-        final List<NodeId> succeededNodes = new ArrayList<>();
-        final List<NodeId> skippedNodes = new ArrayList<>();
-        final Map<NodeId, String> skipReasons = new HashMap<>();
-        final List<NodeId> failedNodes = new ArrayList<>();
-        boolean completedCalled = false;
+    private enum NoopListener implements ExecutionListener {
+        INSTANCE;
 
         @Override
         public void onPlanCreated(ExecutionPlanInfo plan) {}
 
         @Override
-        public void onNodeStarted(MigrationNode node, ExecutionDirection direction) {
-            startedNodes.add(node.id());
-        }
+        public void onNodeStarted(MigrationNode node, ExecutionDirection direction) {}
 
         @Override
         public void onNodeSucceeded(
-                MigrationNode node, ExecutionDirection direction, long durationMs) {
-            succeededNodes.add(node.id());
-        }
+                MigrationNode node, ExecutionDirection direction, long durationMs) {}
 
         @Override
-        public void onNodeSkipped(MigrationNode node, ExecutionDirection direction, String reason) {
-            skippedNodes.add(node.id());
-            skipReasons.put(node.id(), reason);
-        }
+        public void onNodeSkipped(
+                MigrationNode node, ExecutionDirection direction, String reason) {}
 
         @Override
         public void onNodeFailed(
                 MigrationNode node,
                 ExecutionDirection direction,
                 @Nullable String sqlContent,
-                String errorMessage) {
-            failedNodes.add(node.id());
-        }
+                String errorMessage) {}
 
         @Override
-        public void onCompleted(ExecutionSummary summary) {
-            completedCalled = true;
-        }
+        public void onCompleted(ExecutionSummary summary) {}
     }
 }

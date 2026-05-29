@@ -3,11 +3,12 @@ package io.github.kakusuke.migraphe.cli.command;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.cli.listener.ConsoleExecutionListener;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
+import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
-import io.github.kakusuke.migraphe.core.execution.RollbackExecutor;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
@@ -85,8 +86,9 @@ public class DownCommand implements Command {
 
             // 3. Executor と Listener を作成
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
-            RollbackExecutor executor =
-                    new RollbackExecutor(context.graph(), historyRepo, listener);
+            DagExecutor executor =
+                    new DagExecutor(
+                            context.graph(), historyRepo, listener, ExecutionDirection.DOWN, 1);
 
             // 4. ロールバック対象ノードを決定
             Set<NodeId> targetNodes =

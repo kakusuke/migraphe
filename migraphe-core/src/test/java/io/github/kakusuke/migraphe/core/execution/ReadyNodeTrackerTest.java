@@ -6,6 +6,7 @@ import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
@@ -72,6 +73,34 @@ class ReadyNodeTrackerTest {
                 .containsExactlyInAnyOrder(NodeId.of("a"), NodeId.of("b"));
         assertThat(tracker.markCompleted(NodeId.of("a"))).isEmpty();
         assertThat(tracker.markCompleted(NodeId.of("b"))).containsExactly(NodeId.of("c"));
+    }
+
+    @Test
+    @DisplayName("DOWN方向ではA→BチェーンのinitialReadyNodesにBだけが含まれる")
+    void downDirectionInitialReadyNodesContainsLeafNodeOnly() {
+        MigrationNode nodeA = createNode("a", "Node A", Set.of());
+        MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        Set<NodeId> targets = Set.of(NodeId.of("a"), NodeId.of("b"));
+
+        ReadyNodeTracker tracker = new ReadyNodeTracker(graph, targets, ExecutionDirection.DOWN);
+
+        assertThat(tracker.initialReadyNodes()).containsExactly(NodeId.of("b"));
+    }
+
+    @Test
+    @DisplayName("DOWN方向ではmarkCompleted(B)がAをreadyにする")
+    void downDirectionMarkCompletedMakesParentReady() {
+        MigrationNode nodeA = createNode("a", "Node A", Set.of());
+        MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        Set<NodeId> targets = Set.of(NodeId.of("a"), NodeId.of("b"));
+
+        ReadyNodeTracker tracker = new ReadyNodeTracker(graph, targets, ExecutionDirection.DOWN);
+
+        assertThat(tracker.markCompleted(NodeId.of("b"))).containsExactly(NodeId.of("a"));
     }
 
     private MigrationNode createNode(String id, String name, Set<NodeId> dependencies) {

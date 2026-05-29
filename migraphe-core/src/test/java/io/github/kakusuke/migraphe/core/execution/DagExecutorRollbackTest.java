@@ -5,47 +5,54 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
-import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
-import io.github.kakusuke.migraphe.api.execution.ExecutionPlanInfo;
-import io.github.kakusuke.migraphe.api.execution.ExecutionSummary;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
+import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
-@DisplayName("RollbackExecutor")
-class RollbackExecutorTest {
+@DisplayName("DagExecutor (DOWN / maxParallelism=1)")
+class DagExecutorRollbackTest {
 
-    private MigrationGraph graph;
-    private InMemoryHistoryRepository historyRepo;
-    private MockExecutionListener listener;
-    private RollbackExecutor executor;
-    private Environment testEnv;
+    private final Environment testEnv = SimpleEnvironment.create(EnvironmentId.of("env"), "env");
 
-    @BeforeEach
-    void setUp() {
-        graph = MigrationGraph.create();
-        historyRepo = new InMemoryHistoryRepository();
-        listener = new MockExecutionListener();
-        testEnv = SimpleEnvironment.create(EnvironmentId.of("test"), "Test Environment");
+    @Test
+    @DisplayName("A→B チェーンを逆順 (B→A) にロールバックし成功する")
+    void shouldRollbackAbChainInReverseOrder() {
+        MigrationGraph graph = MigrationGraph.create();
+        MigrationNode nodeA = createNode("a", Set.of());
+        MigrationNode nodeB = createNode("b", Set.of(NodeId.of("a")));
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+
+        InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+        history.record(ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
+        history.record(ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "b", null, 100L));
+
+        MockExecutionListener listener = new MockExecutionListener();
+
+        DagExecutor executor =
+                new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
+        ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
+
+        assertThat(result.success()).isTrue();
+        assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"), NodeId.of("a"));
+        assertThat(listener.completedCalled).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isFalse();
+        assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isFalse();
     }
 
     @Nested
@@ -54,76 +61,83 @@ class RollbackExecutorTest {
 
         @Test
         @DisplayName("全ロールバック時は実行済みノードを返す")
-        void shouldReturnAllExecutedNodesForAllRollback() {
-            // Given
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B");
+        void shouldReturnAllExecutedNodesWhenAllMigrationsIsTrue() {
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of(NodeId.of("a")));
             graph.addNode(nodeA);
             graph.addNode(nodeB);
 
-            // nodeA のみ実行済み
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
 
-            executor = new RollbackExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
 
-            // When
             Set<NodeId> targets = executor.determineRollbackTargets(null, true);
 
-            // Then
             assertThat(targets).containsExactly(NodeId.of("a"));
         }
 
         @Test
-        @DisplayName("未実行ノードは返さない")
-        void shouldNotReturnPendingNodes() {
-            // Given
-            MigrationNode nodeA = createNode("a", "Node A");
-            graph.addNode(nodeA);
-            // 実行履歴なし
-
-            executor = new RollbackExecutor(graph, historyRepo, listener);
-
-            // When
-            Set<NodeId> targets = executor.determineRollbackTargets(null, true);
-
-            // Then
-            assertThat(targets).isEmpty();
-        }
-
-        @Test
-        @DisplayName("ターゲット指定時、2-hop 先の推移的 dependent も含む (A → B → C で A 指定 → {A,B,C})")
-        void shouldIncludeTransitiveDependentsForTargetedRollback() {
-            // Given: A -> B -> C (chain)
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
-            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+        @DisplayName("ターゲット指定時、B + B の推移的依存元のうち実行済みのみ返す")
+        void shouldReturnTargetAndExecutedTransitiveDependentsWhenTargetVersionSpecified() {
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNode("b", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", Set.of(NodeId.of("b")));
             graph.addNode(nodeA);
             graph.addNode(nodeB);
             graph.addNode(nodeC);
 
-            // 全て実行済み
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "Node B", null, 100L));
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("c"), testEnv.id(), "Node C", null, 100L));
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "b", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("c"), testEnv.id(), "c", null, 100L));
 
-            executor = new RollbackExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
 
-            // When: A を指定
-            Set<NodeId> targets = executor.determineRollbackTargets(NodeId.of("a"), false);
+            Set<NodeId> targets = executor.determineRollbackTargets(NodeId.of("b"), false);
 
-            // Then: A, B, C すべてを含む (C は B 経由の推移依存)
-            assertThat(targets)
-                    .containsExactlyInAnyOrder(NodeId.of("a"), NodeId.of("b"), NodeId.of("c"));
+            assertThat(targets).containsExactlyInAnyOrder(NodeId.of("b"), NodeId.of("c"));
+        }
+
+        @Test
+        @DisplayName("targetVersion=null, allMigrations=false のとき空セットを返す")
+        void shouldReturnEmptySetWhenTargetVersionIsNullAndAllMigrationsIsFalse() {
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            graph.addNode(nodeA);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
+
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
+
+            Set<NodeId> targets = executor.determineRollbackTargets(null, false);
+
+            assertThat(targets).isEmpty();
         }
     }
 
     @Nested
     @DisplayName("sample/cli DAG ロールバック対象決定 (推移的 dependents)")
     class SampleCliRollbackTargets {
+
+        private MigrationGraph graph;
+        private InMemoryHistoryRepository historyRepo;
+        private MockExecutionListener listener;
+        private DagExecutor executor;
 
         @BeforeEach
         void buildSampleCliGraph() {
@@ -189,7 +203,7 @@ class RollbackExecutorTest {
                                 node.id(), node.environment().id(), node.name(), null, 100L));
             }
 
-            executor = new RollbackExecutor(graph, historyRepo, listener);
+            executor = new DagExecutor(graph, historyRepo, listener, ExecutionDirection.DOWN, 1);
         }
 
         private void addSampleNode(String id, String... deps) {
@@ -197,7 +211,7 @@ class RollbackExecutorTest {
             for (String d : deps) {
                 depSet.add(NodeId.of(d));
             }
-            graph.addNode(createNode(id, id, depSet));
+            graph.addNode(createNode(id, depSet));
         }
 
         @Test
@@ -244,15 +258,19 @@ class RollbackExecutorTest {
         @DisplayName("単一ノードをロールバックできる")
         void shouldRollbackSingleNode() {
             // Given
-            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
             graph.addNode(nodeA);
 
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
             // 実行済みとして記録
-            historyRepo.record(
+            history.record(
                     ExecutionRecord.upSuccess(
-                            NodeId.of("a"), testEnv.id(), "Node A", "DROP TABLE;", 100L));
+                            NodeId.of("a"), testEnv.id(), "a", "DROP TABLE;", 100L));
 
-            executor = new RollbackExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
 
             // When
             ExecutionResult result = executor.execute(Set.of(NodeId.of("a")));
@@ -264,48 +282,24 @@ class RollbackExecutorTest {
         }
 
         @Test
-        @DisplayName("依存順（逆順）でロールバックされる")
-        void shouldRollbackInReverseOrder() {
-            // Given: A -> B (ロールバックは B -> A の順)
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
-            graph.addNode(nodeA);
-            graph.addNode(nodeB);
-
-            // 両方実行済み
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(
-                            NodeId.of("a"), testEnv.id(), "Node A", "DROP A;", 100L));
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(
-                            NodeId.of("b"), testEnv.id(), "Node B", "DROP B;", 100L));
-
-            executor = new RollbackExecutor(graph, historyRepo, listener);
-
-            // When
-            ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
-
-            // Then
-            assertThat(result.success()).isTrue();
-            // B が先にロールバックされる（逆順）
-            assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"), NodeId.of("a"));
-        }
-
-        @Test
         @DisplayName("fail-soft — DOWN 失敗時に独立した実行済みノードは引き続き DOWN 実行される")
         void shouldContinueIndependentNodesAfterDownFailure() {
             // Given: A, B 独立 (UP では兄弟)。両方とも実行済み。B の DOWN が失敗。
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB = createNodeWithFailingDown("b", "Node B", "boom");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNodeWithFailingDown("b", "boom", Set.of());
             graph.addNode(nodeA);
             graph.addNode(nodeB);
 
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "Node B", null, 100L));
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "b", null, 100L));
 
-            executor = new RollbackExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
 
             // When
             ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
@@ -321,22 +315,25 @@ class RollbackExecutorTest {
         void shouldSkipUpstreamOnDownFailure() {
             // Given: A -> B -> C (UP では C → B → A の順)、全て実行済み。
             // DOWN 順は C, B, A。B の DOWN が失敗 → A は skip (B の DOWN を待っていたため)。
-            MigrationNode nodeA = createNode("a", "Node A");
-            MigrationNode nodeB =
-                    createNodeWithFailingDown("b", "Node B", "boom", Set.of(NodeId.of("a")));
-            MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("b")));
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
+            MigrationNode nodeB = createNodeWithFailingDown("b", "boom", Set.of(NodeId.of("a")));
+            MigrationNode nodeC = createNode("c", Set.of(NodeId.of("b")));
             graph.addNode(nodeA);
             graph.addNode(nodeB);
             graph.addNode(nodeC);
 
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "Node B", null, 100L));
-            historyRepo.record(
-                    ExecutionRecord.upSuccess(NodeId.of("c"), testEnv.id(), "Node C", null, 100L));
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "b", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("c"), testEnv.id(), "c", null, 100L));
 
-            executor = new RollbackExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
 
             // When
             ExecutionResult result =
@@ -354,14 +351,18 @@ class RollbackExecutorTest {
         @DisplayName("リスナーに通知される")
         void shouldNotifyListener() {
             // Given
-            MigrationNode nodeA = createNode("a", "Node A");
+            MigrationGraph graph = MigrationGraph.create();
+            MigrationNode nodeA = createNode("a", Set.of());
             graph.addNode(nodeA);
 
-            historyRepo.record(
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            history.record(
                     ExecutionRecord.upSuccess(
-                            NodeId.of("a"), testEnv.id(), "Node A", "DROP TABLE;", 100L));
+                            NodeId.of("a"), testEnv.id(), "a", "DROP TABLE;", 100L));
 
-            executor = new RollbackExecutor(graph, historyRepo, listener);
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(graph, history, listener, ExecutionDirection.DOWN, 1);
 
             // When
             executor.execute(Set.of(NodeId.of("a")));
@@ -373,16 +374,12 @@ class RollbackExecutorTest {
         }
     }
 
-    private MigrationNode createNode(String id, String name) {
-        return createNode(id, name, Set.of());
-    }
-
-    private MigrationNode createNode(String id, String name, Set<NodeId> dependencies) {
-        Task upTask = SimpleTask.of("UP: " + name);
-        Task downTask = SimpleTask.of("DOWN: " + name);
+    private MigrationNode createNode(String id, Set<NodeId> dependencies) {
+        Task upTask = SimpleTask.of("UP: " + id);
+        Task downTask = SimpleTask.of("DOWN: " + id);
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
-                .name(name)
+                .name(id)
                 .environment(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
@@ -390,13 +387,9 @@ class RollbackExecutorTest {
                 .build();
     }
 
-    private MigrationNode createNodeWithFailingDown(String id, String name, String error) {
-        return createNodeWithFailingDown(id, name, error, Set.of());
-    }
-
     private MigrationNode createNodeWithFailingDown(
-            String id, String name, String error, Set<NodeId> dependencies) {
-        Task upTask = SimpleTask.of("UP: " + name);
+            String id, String error, Set<NodeId> dependencies) {
+        Task upTask = SimpleTask.of("UP: " + id);
         Task downTask =
                 new Task() {
                     @Override
@@ -406,60 +399,16 @@ class RollbackExecutorTest {
 
                     @Override
                     public String description() {
-                        return "FAIL DOWN: " + name;
+                        return "FAIL DOWN: " + id;
                     }
                 };
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
-                .name(name)
+                .name(id)
                 .environment(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(downTask)
                 .build();
-    }
-
-    /** テスト用の ExecutionListener 実装 */
-    static class MockExecutionListener implements ExecutionListener {
-        final List<NodeId> startedNodes = new ArrayList<>();
-        final List<NodeId> succeededNodes = new ArrayList<>();
-        final List<NodeId> skippedNodes = new ArrayList<>();
-        final Map<NodeId, String> skipReasons = new HashMap<>();
-        final List<NodeId> failedNodes = new ArrayList<>();
-        boolean completedCalled = false;
-
-        @Override
-        public void onPlanCreated(ExecutionPlanInfo plan) {}
-
-        @Override
-        public void onNodeStarted(MigrationNode node, ExecutionDirection direction) {
-            startedNodes.add(node.id());
-        }
-
-        @Override
-        public void onNodeSucceeded(
-                MigrationNode node, ExecutionDirection direction, long durationMs) {
-            succeededNodes.add(node.id());
-        }
-
-        @Override
-        public void onNodeSkipped(MigrationNode node, ExecutionDirection direction, String reason) {
-            skippedNodes.add(node.id());
-            skipReasons.put(node.id(), reason);
-        }
-
-        @Override
-        public void onNodeFailed(
-                MigrationNode node,
-                ExecutionDirection direction,
-                @Nullable String sqlContent,
-                String errorMessage) {
-            failedNodes.add(node.id());
-        }
-
-        @Override
-        public void onCompleted(ExecutionSummary summary) {
-            completedCalled = true;
-        }
     }
 }
