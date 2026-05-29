@@ -3,9 +3,10 @@ package io.github.kakusuke.migraphe.gradle;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
+import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
-import io.github.kakusuke.migraphe.core.execution.RollbackExecutor;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
@@ -82,8 +83,13 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                     historyRepo.initialize();
 
                     GradleExecutionListener listener = new GradleExecutionListener(getLogger());
-                    RollbackExecutor executor =
-                            new RollbackExecutor(context.graph(), historyRepo, listener);
+                    DagExecutor executor =
+                            new DagExecutor(
+                                    context.graph(),
+                                    historyRepo,
+                                    listener,
+                                    ExecutionDirection.DOWN,
+                                    1);
 
                     Set<NodeId> targetNodes =
                             executor.determineRollbackTargets(targetVersion, allMigrations);

@@ -1,20 +1,17 @@
 package io.github.kakusuke.migraphe.gradle;
 
-import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
+import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.Executor;
-import io.github.kakusuke.migraphe.core.execution.MigrationExecutor;
-import io.github.kakusuke.migraphe.core.execution.ParallelMigrationExecutor;
-import io.github.kakusuke.migraphe.core.execution.SynchronizedExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
-import io.github.kakusuke.migraphe.core.history.SynchronizedHistoryRepository;
 import java.util.List;
 import java.util.Set;
 import org.gradle.api.GradleException;
@@ -110,14 +107,9 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
             GradleExecutionListener listener) {
         ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
         ProjectConfig.ExecutionSection execConfig = projectConfig.execution();
-
-        if (execConfig.parallel()) {
-            HistoryRepository syncRepo = new SynchronizedHistoryRepository(historyRepo);
-            ExecutionListener syncListener = new SynchronizedExecutionListener(listener);
-            return new ParallelMigrationExecutor(
-                    context.graph(), syncRepo, syncListener, execConfig.maxParallelism());
-        }
-        return new MigrationExecutor(context.graph(), historyRepo, listener);
+        int maxParallelism = execConfig.parallel() ? execConfig.maxParallelism() : 1;
+        return new DagExecutor(
+                context.graph(), historyRepo, listener, ExecutionDirection.UP, maxParallelism);
     }
 
     private void displayMigrationGraph(

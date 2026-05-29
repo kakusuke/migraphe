@@ -15,6 +15,7 @@ import io.github.kakusuke.migraphe.core.graph.ExecutionLevel;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
+import io.github.kakusuke.migraphe.core.history.SynchronizedHistoryRepository;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -29,35 +30,31 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
-/** 仮想スレッドを使用した並列 UP マイグレーション実行サービス。 */
-public final class ParallelMigrationExecutor implements Executor {
+/** DAG ベース migration executor (UP/DOWN, sequential/parallel 統合)。 */
+public final class DagExecutor implements Executor {
 
     private final MigrationGraph graph;
-    private final HistoryRepository historyRepository;
+    private final HistoryRepository history;
     private final ExecutionListener listener;
+    private final ExecutionDirection direction;
     private final int maxParallelism;
 
-    public ParallelMigrationExecutor(
-            MigrationGraph graph, HistoryRepository historyRepository, ExecutionListener listener) {
-        this(graph, historyRepository, listener, 0);
-    }
-
-    /**
-     * 並列度制限付きコンストラクタ。
-     *
-     * @param graph マイグレーショングラフ
-     * @param historyRepository 履歴リポジトリ
-     * @param listener 実行リスナー
-     * @param maxParallelism 最大並列数（0 = 無制限）
-     */
-    public ParallelMigrationExecutor(
+    public DagExecutor(
             MigrationGraph graph,
-            HistoryRepository historyRepository,
+            HistoryRepository history,
             ExecutionListener listener,
+            ExecutionDirection direction,
             int maxParallelism) {
         this.graph = graph;
-        this.historyRepository = historyRepository;
-        this.listener = listener;
+        this.history =
+                history instanceof SynchronizedHistoryRepository
+                        ? history
+                        : new SynchronizedHistoryRepository(history);
+        this.listener =
+                listener instanceof SynchronizedExecutionListener
+                        ? listener
+                        : new SynchronizedExecutionListener(listener);
+        this.direction = direction;
         this.maxParallelism = maxParallelism;
     }
 
@@ -84,13 +81,47 @@ public final class ParallelMigrationExecutor implements Executor {
                         id -> {
                             MigrationNode node = graph.getNode(id).orElse(null);
                             if (node == null) return false;
-                            return !historyRepository.wasExecuted(id, node.environment().id());
+                            return !history.wasExecuted(id, node.environment().id());
                         })
                 .collect(Collectors.toSet());
     }
 
     /**
-     * マイグレーションを並列実行する。
+     * ロールバック対象ノードを決定する。
+     *
+     * @param targetVersion 特定のターゲットバージョン（null の場合は allMigrations の値に依存）
+     * @param allMigrations true の場合は全実行済みノードが対象
+     * @return ロールバック対象のノードIDセット
+     */
+    public Set<NodeId> determineRollbackTargets(
+            @Nullable NodeId targetVersion, boolean allMigrations) {
+        if (allMigrations) {
+            return graph.allNodes().stream()
+                    .filter(node -> history.wasExecuted(node.id(), node.environment().id()))
+                    .map(MigrationNode::id)
+                    .collect(Collectors.toSet());
+        }
+
+        if (targetVersion != null) {
+            Set<NodeId> targets = new HashSet<>();
+            targets.add(targetVersion);
+            targets.addAll(graph.getAllDependents(targetVersion));
+
+            return targets.stream()
+                    .filter(
+                            id -> {
+                                MigrationNode node = graph.getNode(id).orElse(null);
+                                if (node == null) return false;
+                                return history.wasExecuted(id, node.environment().id());
+                            })
+                    .collect(Collectors.toSet());
+        }
+
+        return Set.of();
+    }
+
+    /**
+     * マイグレーションを実行する。
      *
      * @param targetNodes 実行対象ノード
      * @return 実行結果
@@ -98,15 +129,14 @@ public final class ParallelMigrationExecutor implements Executor {
     @Override
     public ExecutionResult execute(Set<NodeId> targetNodes) {
         if (targetNodes.isEmpty()) {
-            ExecutionSummary summary = ExecutionSummary.success(ExecutionDirection.UP, 0, 0, 0);
+            ExecutionSummary summary = ExecutionSummary.success(direction, 0, 0, 0);
             listener.onCompleted(summary);
             return ExecutionResult.success(summary);
         }
 
-        ExecutionPlan plan = TopologicalSort.createExecutionPlanFor(graph, targetNodes);
+        ExecutionPlan plan = createPlanFor(targetNodes);
         int totalNodes = plan.totalNodes();
 
-        // トポロジカル順序でのポジションマップを構築
         Map<NodeId, Integer> positionMap = new HashMap<>();
         int pos = 0;
         for (ExecutionLevel level : plan.levels()) {
@@ -118,11 +148,10 @@ public final class ParallelMigrationExecutor implements Executor {
         Comparator<MigrationNode> orderComparator =
                 Comparator.comparingInt(n -> positionMap.getOrDefault(n.id(), Integer.MAX_VALUE));
 
-        ReadyNodeTracker tracker = new ReadyNodeTracker(graph, targetNodes);
+        ReadyNodeTracker tracker = new ReadyNodeTracker(graph, targetNodes, direction);
         PriorityBlockingQueue<MigrationNode> readyQueue =
                 new PriorityBlockingQueue<>(Math.max(1, targetNodes.size()), orderComparator);
 
-        // 初期の実行可能ノードをキューに追加
         for (NodeId readyId : tracker.initialReadyNodes()) {
             graph.getNode(readyId).ifPresent(readyQueue::put);
         }
@@ -138,30 +167,25 @@ public final class ParallelMigrationExecutor implements Executor {
             while (latch.getCount() > 0) {
                 MigrationNode node = readyQueue.poll(100, TimeUnit.MILLISECONDS);
                 if (node == null) {
-                    // 失敗伝播による latch 減算で残カウントが消化されていく途中。引き続き待機。
                     continue;
                 }
 
-                // 並列伝播で先に skip 済みのノードを取り出した場合は何もしない (二重処理防止)。
                 if (failedNodes.contains(node.id())) {
                     continue;
                 }
 
-                // 実行済みチェック
-                if (historyRepository.wasExecuted(node.id(), node.environment().id())) {
-                    listener.onNodeSkipped(node, ExecutionDirection.UP, "already executed");
+                if (isAlreadyInRequiredState(node)) {
+                    listener.onNodeSkipped(node, direction, requiredHistorySkipReason());
                     skippedCount.incrementAndGet();
                     processCompletion(node.id(), tracker, readyQueue);
                     latch.countDown();
                     continue;
                 }
 
-                // セマフォで並列度を制限（セマフォが設定されている場合）
                 if (semaphore != null) {
                     semaphore.acquire();
                 }
 
-                // 仮想スレッドで実行
                 @Nullable Semaphore sem = semaphore;
                 Thread.startVirtualThread(
                         () -> {
@@ -190,7 +214,7 @@ public final class ParallelMigrationExecutor implements Executor {
             Thread.currentThread().interrupt();
             ExecutionSummary summary =
                     ExecutionSummary.failure(
-                            ExecutionDirection.UP,
+                            direction,
                             totalNodes,
                             executedCount.get(),
                             skippedCount.get(),
@@ -202,7 +226,7 @@ public final class ParallelMigrationExecutor implements Executor {
         if (failureCount.get() > 0) {
             ExecutionSummary summary =
                     ExecutionSummary.failure(
-                            ExecutionDirection.UP,
+                            direction,
                             totalNodes,
                             executedCount.get(),
                             skippedCount.get(),
@@ -213,7 +237,7 @@ public final class ParallelMigrationExecutor implements Executor {
 
         ExecutionSummary summary =
                 ExecutionSummary.success(
-                        ExecutionDirection.UP, totalNodes, executedCount.get(), skippedCount.get());
+                        direction, totalNodes, executedCount.get(), skippedCount.get());
         listener.onCompleted(summary);
         return ExecutionResult.success(summary);
     }
@@ -229,26 +253,25 @@ public final class ParallelMigrationExecutor implements Executor {
             CountDownLatch latch,
             Set<NodeId> targetNodes) {
 
-        listener.onNodeStarted(node, ExecutionDirection.UP);
+        Task task = taskFor(node);
+        if (task == null) {
+            listener.onNodeSkipped(node, direction, "no down task");
+            skippedCount.incrementAndGet();
+            processCompletion(node.id(), tracker, readyQueue);
+            return;
+        }
+
+        listener.onNodeStarted(node, direction);
 
         long startTime = System.currentTimeMillis();
-        Result<TaskResult, String> result = node.upTask().execute();
+        Result<TaskResult, String> result = task.execute();
         long duration = System.currentTimeMillis() - startTime;
 
         if (result.isOk()) {
-            listener.onNodeSucceeded(node, ExecutionDirection.UP, duration);
+            listener.onNodeSucceeded(node, direction, duration);
 
             TaskResult taskResult = result.value();
-            String serializedDownTask = taskResult != null ? taskResult.serializedDownTask() : null;
-
-            ExecutionRecord record =
-                    ExecutionRecord.upSuccess(
-                            node.id(),
-                            node.environment().id(),
-                            node.name(),
-                            serializedDownTask,
-                            duration);
-            historyRepository.record(record);
+            history.record(recordSuccess(node, duration, taskResult));
 
             executedCount.incrementAndGet();
             processCompletion(node.id(), tracker, readyQueue);
@@ -256,21 +279,15 @@ public final class ParallelMigrationExecutor implements Executor {
             String errorMsg = result.error();
             String message = errorMsg != null ? errorMsg : "Unknown error";
             String sqlContent = null;
-            Task upTask = node.upTask();
-            if (upTask instanceof SqlContentProvider sqlProvider) {
+            if (task instanceof SqlContentProvider sqlProvider) {
                 sqlContent = sqlProvider.sqlContent();
             }
 
-            listener.onNodeFailed(node, ExecutionDirection.UP, sqlContent, message);
+            listener.onNodeFailed(node, direction, sqlContent, message);
 
-            ExecutionRecord failureRecord =
+            history.record(
                     ExecutionRecord.failure(
-                            node.id(),
-                            node.environment().id(),
-                            ExecutionDirection.UP,
-                            node.name(),
-                            message);
-            historyRepository.record(failureRecord);
+                            node.id(), node.environment().id(), direction, node.name(), message));
 
             failedNodes.add(node.id());
             failureCount.incrementAndGet();
@@ -284,21 +301,20 @@ public final class ParallelMigrationExecutor implements Executor {
             Set<NodeId> targetNodes,
             AtomicInteger skippedCount,
             CountDownLatch latch) {
-        Set<NodeId> cone = graph.getAllDependents(failedId);
+        Set<NodeId> cone = transitiveSuccessorsOf(failedId);
         for (NodeId skipId : cone) {
             if (!targetNodes.contains(skipId)) {
                 continue;
             }
             if (!failedNodes.add(skipId)) {
-                continue; // 既に処理済み
+                continue;
             }
             MigrationNode skipNode = graph.getNode(skipId).orElse(null);
             if (skipNode == null) {
                 latch.countDown();
                 continue;
             }
-            listener.onNodeSkipped(
-                    skipNode, ExecutionDirection.UP, "dependency failed: " + failedId.value());
+            listener.onNodeSkipped(skipNode, direction, "dependency failed: " + failedId.value());
             skippedCount.incrementAndGet();
             latch.countDown();
         }
@@ -312,5 +328,47 @@ public final class ParallelMigrationExecutor implements Executor {
         for (NodeId readyId : newlyReady) {
             graph.getNode(readyId).ifPresent(readyQueue::put);
         }
+    }
+
+    /** direction に応じたタスクを返す。DOWN の場合 null 可。 */
+    private @Nullable Task taskFor(MigrationNode node) {
+        return direction == ExecutionDirection.DOWN ? node.downTask() : node.upTask();
+    }
+
+    /** 失敗伝播に使う推移的後続ノード集合。UP: getAllDependents, DOWN: getAllDependencies。 */
+    private Set<NodeId> transitiveSuccessorsOf(NodeId nodeId) {
+        return direction == ExecutionDirection.DOWN
+                ? graph.getAllDependencies(nodeId)
+                : graph.getAllDependents(nodeId);
+    }
+
+    /** direction に応じた実行プランを生成する。 */
+    private ExecutionPlan createPlanFor(Set<NodeId> targetNodes) {
+        return direction == ExecutionDirection.DOWN
+                ? TopologicalSort.createReverseExecutionPlanFor(graph, targetNodes)
+                : TopologicalSort.createExecutionPlanFor(graph, targetNodes);
+    }
+
+    /** 成功時の ExecutionRecord を生成する。 */
+    private ExecutionRecord recordSuccess(
+            MigrationNode node, long duration, @Nullable TaskResult taskResult) {
+        if (direction == ExecutionDirection.DOWN) {
+            return ExecutionRecord.downSuccess(
+                    node.id(), node.environment().id(), node.name(), duration);
+        }
+        String serializedDownTask = taskResult != null ? taskResult.serializedDownTask() : null;
+        return ExecutionRecord.upSuccess(
+                node.id(), node.environment().id(), node.name(), serializedDownTask, duration);
+    }
+
+    /** 履歴状態が「既に目的の状態」かどうかを判定する。UP: 実行済みならスキップ, DOWN: 未実行ならスキップ。 */
+    private boolean isAlreadyInRequiredState(MigrationNode node) {
+        boolean wasExecuted = history.wasExecuted(node.id(), node.environment().id());
+        return direction == ExecutionDirection.DOWN ? !wasExecuted : wasExecuted;
+    }
+
+    /** 履歴状態スキップ時の reason 文字列。 */
+    private String requiredHistorySkipReason() {
+        return direction == ExecutionDirection.DOWN ? "not executed" : "already executed";
     }
 }
