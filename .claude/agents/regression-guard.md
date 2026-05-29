@@ -37,16 +37,22 @@ When reviewing a diff, systematically check:
 
 ## Output Format
 
-If regression risks are found:
+If regression risks are found, list each on one line with an explicit `severity:` tag so the parent can decide whether to act immediately, queue, or ignore:
+
 ```
-- [Risk description, specific and concise]
-- [Risk description, specific and concise]
-...
+- severity: blocker — [Risk description, specific and concise]
+- severity: important — [Risk description, specific and concise]
+- severity: nice-to-have — [Risk description, specific and concise]
 ```
+
+**Severity definitions:**
+- `blocker` — Almost certainly broken behavior that existing tests don't catch. Parent should address before moving on.
+- `important` — Plausible regression with concrete edge cases worth a follow-up test in the next cycle.
+- `nice-to-have` — Minor concern or unlikely edge case; parent may ignore unless the fix is trivial.
 
 If no risks are found:
 ```
 No regression risk detected under current assumptions.
 ```
 
-Do not include any preamble, summary, or closing remarks. Output only the risk bullets or the safe message.
+Do not include any preamble, summary, or closing remarks. Output only the severity-tagged bullets or the safe message.

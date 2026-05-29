@@ -166,6 +166,8 @@ The `/tdd-cycle` skill runs: `micro-plan → test-writer → minimal-fix → reg
 
 Call it repeatedly to advance implementation incrementally. Never write production code outside this cycle.
 
+Each phase subagent verifies through the `migraphe-build` MCP server (`mcp__migraphe-build__run_test` / `run_spotless` / `run_errorprone_check`) — the parent orchestrates and does **not** invoke `./gradlew` directly. The skill is scoped to incremental changes; net-new classes ≥200 lines or multi-file scaffolding are out of scope and route to `general-purpose` instead.
+
 | Phase | Rule |
 |-------|------|
 | **Red** | Write a failing test first. No production code yet. |

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "migraphe-build": {
+      "command": "mise",
+      "args": [
+        "exec",
+        "--",
+        "python3",
+        ".claude/mcp-servers/migraphe-build/server.py",
+        "--project-root",
+        "."
+      ]
+    }
+  }
+}
