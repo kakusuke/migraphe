@@ -89,10 +89,12 @@ Migraphe はプラグインアーキテクチャを採用しており、デー�
 
 | プラグイン | タイプ | 説明 |
 |-----------|--------|------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL データベースサポート（`postgresql-schema` ソースおよび `postgresql-markdown` アウトプットプラグインを含む） |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ データベースサポート（`mysql-schema` ソースおよび `mysql-markdown` アウトプットプラグインを含む） |
-| `migraphe-plugin-jdbc` | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
-| `migraphe-plugin-generator-json` | `output-json` | JSON 出力ジェネレータプラグイン |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql` | PostgreSQL データベースサポート（`postgresql-schema` ソースおよび `postgresql-markdown` アウトプットプラグインを含む） |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql` | MySQL 8.0+ データベースサポート（`mysql-schema` ソースおよび `mysql-markdown` アウトプットプラグインを含む） |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
+| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.md) | `output-json` | JSON 出力ジェネレータプラグイン |
+
+各プラグインの `README.md` には、ターゲットのフィールド、接続例、データベース固有の挙動が網羅されています（英語版。一部のプラグインには `README.ja.md` の日本語版もあります）。詳細は上記のプラグイン名のリンクを参照してください。
 
 #### 方法1: Maven 座標（推奨）
 
@@ -296,7 +298,7 @@ username: user
 password: secret
 ```
 
-汎用 JDBC プラグイン（`type: jdbc`）は任意の JDBC 対応データベースで使用できます。`driver_class` を指定し、JDBC ドライバ JAR がクラスパスで利用可能であることを確認してください。
+汎用 JDBC プラグイン（`type: jdbc`）は任意の JDBC 対応データベースで使用できます。`driver_class` を指定し、JDBC ドライバ JAR がクラスパスで利用可能であることを確認してください。ターゲットのフィールド一覧やデータベース固有の注意点については、各プラグインの README を参照してください: [postgresql](../migraphe-plugin-postgresql/README.md)、[mysql](../migraphe-plugin-mysql/README.md)、[jdbc](../migraphe-plugin-jdbc/README.md)。
 
 ### タスク設定
 
@@ -782,19 +784,19 @@ generators:
 
 | プラグイン | タイプ | データ | 説明 |
 |-----------|--------|--------|------|
-| `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
-| `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | JDBC基本スキーマ + PostgreSQL固有メタデータ（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）をpg_catalogから抽出 |
-| `migraphe-plugin-mysql` | `mysql-schema` | `MySQLSchemaInfo` | JDBC基本スキーマ + MySQL固有メタデータ（ストレージエンジン、テーブルメタ、トリガー、ルーチン、イベント、パーティション）をinformation_schemaから抽出 |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql-schema` | `PostgreSQLSchemaInfo` | JDBC基本スキーマ + PostgreSQL固有メタデータ（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）をpg_catalogから抽出 |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql-schema` | `MySQLSchemaInfo` | JDBC基本スキーマ + MySQL固有メタデータ（ストレージエンジン、テーブルメタ、トリガー、ルーチン、イベント、パーティション）をinformation_schemaから抽出 |
 | （組み込み） | `migration-tree` | `MigrationGraphView` | マイグレーションDAG構造を提供 |
 
 ### 利用可能なアウトプットプラグイン
 
 | プラグイン | タイプ | 説明 |
 |-----------|--------|------|
-| `migraphe-plugin-jdbc` | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
-| `migraphe-plugin-postgresql` | `postgresql-markdown` | PostgreSQL固有オブジェクト（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）を含むMarkdownドキュメントを生成 |
-| `migraphe-plugin-mysql` | `mysql-markdown` | MySQL固有オブジェクト（ストレージエンジン、テーブルメタデータ、トリガー、ルーチン、イベント、パーティション）を含むMarkdownドキュメントを生成 |
-| `migraphe-plugin-generator-json` | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql-markdown` | PostgreSQL固有オブジェクト（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）を含むMarkdownドキュメントを生成 |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql-markdown` | MySQL固有オブジェクト（ストレージエンジン、テーブルメタデータ、トリガー、ルーチン、イベント、パーティション）を含むMarkdownドキュメントを生成 |
+| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.md) | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
 
 ### 基本的な使い方
 
@@ -849,9 +851,11 @@ JDBC では外部キー関係に対して 2 つの視点が定義されており
 
 この区別は最近修正された箇所です。以前のバージョンでは exported key のリンクが PK 側（参照先）テーブルを指していたため、`Referenced By` が自己参照的になり機能していませんでした。
 
-### PostgreSQL固有ドキュメント
+### データベース固有のドキュメント
 
-PostgreSQLデータベースの場合、`postgresql-markdown` アウトプットプラグインと `postgresql-schema` ソースプラグインを使用して、PostgreSQL固有オブジェクトを含む包括的なドキュメントを生成できます:
+PostgreSQL および MySQL プラグインは専用のソース／アウトプットの組み合わせを提供しており、標準的な JDBC スキーマ（テーブル、ビュー、カラム、キー、インデックス）を超えたデータベース固有のオブジェクトで生成 Markdown を拡充します。
+
+たとえば PostgreSQL の組み合わせ（`postgresql-schema` ソース + `postgresql-markdown` アウトプット）は拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、RLS ポリシーを追加し、MySQL の組み合わせ（`mysql-schema` + `mysql-markdown`）はストレージエンジン、テーブルメタデータ、トリガー、ルーチン、イベント、パーティションを追加します。
 
 ```yaml
 generators:
@@ -863,48 +867,10 @@ generators:
     output-dir: docs/schema
 ```
 
-標準的なJDBCスキーマ情報（テーブル、ビュー、カラム、キー、インデックス）に加えて、生成されるドキュメントには以下が含まれます:
-- **拡張機能**（例: `pgcrypto`、`uuid-ossp`） — `Owner` 列付き
-- **列挙型** とその値 — `Owner` 列付き
-- **シーケンス** と現在の値・パラメータ — `Owned By`（`pg_depend` による依存先 table.column）と `Owner`（ロール）の 2 列付き
-- **関数** と引数型・戻り値型 — 個別ファイルに `Owner` プロパティ
-- **トリガー** とタイミング、イベント、関連関数
-- **マテリアライズドビュー** とカラム定義 — 個別ファイルに `Owner` プロパティ
-- **パーティションテーブル** とパーティション戦略・キー
-- **行レベルセキュリティ（RLS）ポリシー** とロール、コマンド、式
+データベース固有オブジェクトの完全な一覧、所有者／DEFINER の表示、テーブルごとに含まれる内容については、各プラグインの README に記載されています:
 
-テーブル固有のファイルには、各テーブルに関連するトリガー、ポリシー、パーティション情報も含まれます。
-
-**ロール所有者:** Tables/Views 一覧テーブルには `Owner` 列（`pg_get_userbyid(relowner)` から取得した PostgreSQL ロール名）が含まれ、各 `tables/<name>.md` / `views/<name>.md` ファイルのタイトル直下に `Owner: <role>` の行が出力されます。
-
-### MySQL固有ドキュメント
-
-MySQLデータベースの場合、`mysql-markdown` アウトプットプラグインと `mysql-schema` ソースプラグインを使用して、MySQL固有オブジェクトを含む包括的なドキュメントを生成できます:
-
-```yaml
-generators:
-  mysql-docs:
-    source:
-      type: mysql-schema
-      environment: db1
-    output:
-      type: mysql-markdown
-    name: my-database
-```
-
-標準的なJDBCスキーマ情報（テーブル、ビュー、カラム、キー、インデックス）に加えて、生成されるドキュメントには以下が含まれます:
-- **ストレージエンジン** MySQLインスタンスで利用可能なエンジン一覧
-- **テーブルメタデータ** ENGINE、照合順序、行フォーマットを含む
-- **トリガー** とタイミング、イベント、SQL文、`Definer`
-- **ルーチン**（ストアドプロシージャおよび関数）とパラメータ・戻り値型、`Definer`
-- **イベント** とスケジュール、ステータス、SQL本体、`Definer`
-- **パーティションテーブル** とパーティション方式、式、パーティション詳細
-
-テーブル固有のファイルには、各テーブルに関連するトリガーおよびパーティション情報も含まれます。
-
-**`DEFINER` の表示:** Views 一覧テーブルには `Definer` 列（`information_schema.VIEWS.DEFINER` から取得）が含まれ、各 `views/<name>.md` ファイルのタイトル直下に `Definer: <user>` の行が出力されます。Triggers / Routines / Events も同様に各一覧テーブル・個別ファイルで DEFINER を表示します。MySQL のテーブル自体には DEFINER がないため、Tables 一覧は変更されません。
-
-**注意:** MySQL JDBCはデータベースをカタログとして返します（スキーマではありません）。`mysql-schema` ソースプラグインは `connection.getCatalog()` を使用したカタログベースのスキーマ検出を行います。
+- PostgreSQL: [`migraphe-plugin-postgresql/README.md`](../migraphe-plugin-postgresql/README.md)
+- MySQL: [`migraphe-plugin-mysql/README.md`](../migraphe-plugin-mysql/README.md)
 
 ### 除外フィルタリング
 

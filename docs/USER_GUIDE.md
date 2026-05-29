@@ -89,10 +89,12 @@ Migraphe uses a plugin architecture where database support is provided by separa
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| `migraphe-plugin-postgresql` | `postgresql` | PostgreSQL database support (includes `postgresql-schema` source and `postgresql-markdown` output plugins) |
-| `migraphe-plugin-mysql` | `mysql` | MySQL 8.0+ database support (includes `mysql-schema` source and `mysql-markdown` output plugins) |
-| `migraphe-plugin-jdbc` | `jdbc` | Generic JDBC support (works with any JDBC database) |
-| `migraphe-plugin-generator-json` | `output-json` | JSON output generator plugin |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql` | PostgreSQL database support (includes `postgresql-schema` source and `postgresql-markdown` output plugins) |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql` | MySQL 8.0+ database support (includes `mysql-schema` source and `mysql-markdown` output plugins) |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc` | Generic JDBC support (works with any JDBC database) |
+| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.md) | `output-json` | JSON output generator plugin |
+
+Each plugin's `README.md` documents its target fields, connection examples, and database-specific behavior in full. Click a plugin name above for details.
 
 #### Method 1: Maven Coordinates (Recommended)
 
@@ -296,7 +298,7 @@ username: user
 password: secret
 ```
 
-The generic JDBC plugin (`type: jdbc`) can be used with any JDBC-compatible database. You need to provide the `driver_class` and ensure the JDBC driver JAR is available on the classpath.
+The generic JDBC plugin (`type: jdbc`) can be used with any JDBC-compatible database. You need to provide the `driver_class` and ensure the JDBC driver JAR is available on the classpath. For the full list of target fields and database-specific notes, see each plugin's README: [postgresql](../migraphe-plugin-postgresql/README.md), [mysql](../migraphe-plugin-mysql/README.md), [jdbc](../migraphe-plugin-jdbc/README.md).
 
 ### Task Configuration
 
@@ -782,19 +784,19 @@ generators:
 
 | Plugin | Type | Data | Description |
 |--------|------|------|-------------|
-| `migraphe-plugin-jdbc` | `jdbc-schema` | `JdbcSchemaInfo` | Extracts database schema metadata via JDBC DatabaseMetaData |
-| `migraphe-plugin-postgresql` | `postgresql-schema` | `PostgreSQLSchemaInfo` | Extracts JDBC base schema + PostgreSQL-specific metadata (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) from pg_catalog |
-| `migraphe-plugin-mysql` | `mysql-schema` | `MySQLSchemaInfo` | Extracts JDBC base schema + MySQL-specific metadata (storage engines, table meta, triggers, routines, events, partitions) from information_schema |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc-schema` | `JdbcSchemaInfo` | Extracts database schema metadata via JDBC DatabaseMetaData |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql-schema` | `PostgreSQLSchemaInfo` | Extracts JDBC base schema + PostgreSQL-specific metadata (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) from pg_catalog |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql-schema` | `MySQLSchemaInfo` | Extracts JDBC base schema + MySQL-specific metadata (storage engines, table meta, triggers, routines, events, partitions) from information_schema |
 | (built-in) | `migration-tree` | `MigrationGraphView` | Provides the migration DAG structure |
 
 ### Available Output Plugins
 
 | Plugin | Type | Description |
 |--------|------|-------------|
-| `migraphe-plugin-jdbc` | `jdbc-markdown` | Generates Markdown documentation from `JdbcSchemaInfo` |
-| `migraphe-plugin-postgresql` | `postgresql-markdown` | Generates Markdown documentation with PostgreSQL-specific objects (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) |
-| `migraphe-plugin-mysql` | `mysql-markdown` | Generates Markdown documentation with MySQL-specific objects (storage engines, table metadata, triggers, routines, events, partitions) |
-| `migraphe-plugin-generator-json` | `output-json` | Outputs any data as pretty-printed JSON to stdout |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc-markdown` | Generates Markdown documentation from `JdbcSchemaInfo` |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql-markdown` | Generates Markdown documentation with PostgreSQL-specific objects (extensions, enums, sequences, functions, triggers, materialized views, partitions, policies) |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql-markdown` | Generates Markdown documentation with MySQL-specific objects (storage engines, table metadata, triggers, routines, events, partitions) |
+| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.md) | `output-json` | Outputs any data as pretty-printed JSON to stdout |
 
 ### Basic Usage
 
@@ -849,9 +851,11 @@ Concretely, when rendering `tables/users.md`:
 
 This distinction was a recent fix — earlier versions of the exported-key rendering pointed the link at the referenced (PK-side) table instead of the referencing (FK-side) table, which made `Referenced By` self-referential and useless.
 
-### PostgreSQL-Specific Documentation
+### Database-Specific Documentation
 
-For PostgreSQL databases, use the `postgresql-markdown` output plugin with the `postgresql-schema` source plugin to generate comprehensive documentation that includes PostgreSQL-specific objects:
+The PostgreSQL and MySQL plugins ship dedicated source/output pairs that enrich the generated Markdown with database-specific objects beyond the standard JDBC schema (tables, views, columns, keys, indexes).
+
+For example, the PostgreSQL pair (`postgresql-schema` source + `postgresql-markdown` output) adds extensions, enums, sequences, functions, triggers, materialized views, partitions, and RLS policies, while the MySQL pair (`mysql-schema` + `mysql-markdown`) adds storage engines, table metadata, triggers, routines, events, and partitions.
 
 ```yaml
 generators:
@@ -863,48 +867,10 @@ generators:
     output-dir: docs/schema
 ```
 
-In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
-- **Extensions** (e.g., `pgcrypto`, `uuid-ossp`) — with `Owner` column
-- **Enum types** with their values — with `Owner` column
-- **Sequences** with current values and parameters — with `Owned By` (dependent table.column from `pg_depend`) and `Owner` (role) columns
-- **Functions** with argument types and return types — individual file shows `Owner` property
-- **Triggers** with timing, events, and associated functions
-- **Materialized views** with column definitions — individual file shows `Owner` property
-- **Partitioned tables** with partition strategy and key
-- **Row-Level Security (RLS) policies** with roles, commands, and expressions
+The full list of database-specific objects, ownership/definer attribution, and per-table content is documented in each plugin's README:
 
-Table-specific files also include related triggers, policies, and partition information for each table.
-
-**Role ownership:** The Tables/Views index tables include an `Owner` column (PostgreSQL role name from `pg_get_userbyid(relowner)`), and each `tables/<name>.md` / `views/<name>.md` file prints an `Owner: <role>` line below the title.
-
-### MySQL-Specific Documentation
-
-For MySQL databases, use the `mysql-markdown` output plugin with the `mysql-schema` source plugin to generate comprehensive documentation that includes MySQL-specific objects:
-
-```yaml
-generators:
-  mysql-docs:
-    source:
-      type: mysql-schema
-      environment: db1
-    output:
-      type: mysql-markdown
-    name: my-database
-```
-
-In addition to standard JDBC schema information (tables, views, columns, keys, indexes), the generated documentation includes:
-- **Storage engines** available in the MySQL instance
-- **Table metadata** including ENGINE, collation, and row format
-- **Triggers** with timing, events, SQL statements, and `Definer`
-- **Routines** (stored procedures and functions) with parameters, return types, and `Definer`
-- **Events** with schedule, status, SQL body, and `Definer`
-- **Partitioned tables** with partition method, expression, and partition details
-
-Table-specific files also include related triggers and partition information for each table.
-
-**`DEFINER` attribution:** The Views index table includes a `Definer` column (from `information_schema.VIEWS.DEFINER`), and each `views/<name>.md` file prints a `Definer: <user>` line below the title. Triggers, routines, and events carry their DEFINER through to the index tables / individual files as well. MySQL tables themselves have no DEFINER, so the Tables index is unchanged.
-
-**Note:** MySQL JDBC returns databases as catalogs (not schemas). The `mysql-schema` source plugin uses catalog-based schema discovery via `connection.getCatalog()`.
+- PostgreSQL: [`migraphe-plugin-postgresql/README.md`](../migraphe-plugin-postgresql/README.md)
+- MySQL: [`migraphe-plugin-mysql/README.md`](../migraphe-plugin-mysql/README.md)
 
 ### Exclude Filtering
 
