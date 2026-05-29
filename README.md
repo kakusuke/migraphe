@@ -28,7 +28,7 @@ mise use github:kakusuke/migraphe
 
 # Or manual install
 mkdir -p ~/.local/migraphe
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.3.0/migraphe-0.3.0.tar.gz | tar xz -C ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.4.0/migraphe-0.4.0.tar.gz | tar xz -C ~/.local/migraphe
 export PATH="$HOME/.local/migraphe/bin:$PATH"
 migraphe --help
 ```
