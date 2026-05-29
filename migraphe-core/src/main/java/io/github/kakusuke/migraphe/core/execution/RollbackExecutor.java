@@ -19,6 +19,7 @@ import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
@@ -122,9 +123,24 @@ public final class RollbackExecutor {
         int totalNodes = plan.totalNodes();
         int executedCount = 0;
         int skippedCount = 0;
+        int failureCount = 0;
+        Set<NodeId> failedNodes = new HashSet<>();
 
         for (ExecutionLevel level : plan.levels()) {
             for (MigrationNode node : level.nodes()) {
+                // DOWN 方向の依存 (UP の子) が失敗していれば伝播スキップ
+                Optional<NodeId> failedDownDep =
+                        findFailedDownDependency(node, failedNodes, targetNodes);
+                if (failedDownDep.isPresent()) {
+                    listener.onNodeSkipped(
+                            node,
+                            ExecutionDirection.DOWN,
+                            "dependency failed: " + failedDownDep.get().value());
+                    skippedCount++;
+                    failedNodes.add(node.id());
+                    continue;
+                }
+
                 // 未実行ならスキップ
                 if (!historyRepository.wasExecuted(node.id(), node.environment().id())) {
                     listener.onNodeSkipped(node, ExecutionDirection.DOWN, "not executed");
@@ -183,17 +199,23 @@ public final class RollbackExecutor {
                                     errorMsg != null ? errorMsg : "Unknown error");
                     historyRepository.record(failureRecord);
 
-                    // 失敗時はサマリーを作成して返す
-                    ExecutionSummary summary =
-                            ExecutionSummary.failure(
-                                    ExecutionDirection.DOWN,
-                                    totalNodes,
-                                    executedCount,
-                                    skippedCount);
-                    listener.onCompleted(summary);
-                    return ExecutionResult.failure(summary);
+                    failedNodes.add(node.id());
+                    failureCount++;
+                    // fail-soft: 失敗しても残りのノードを処理し続ける
                 }
             }
+        }
+
+        if (failureCount > 0) {
+            ExecutionSummary summary =
+                    ExecutionSummary.failure(
+                            ExecutionDirection.DOWN,
+                            totalNodes,
+                            executedCount,
+                            skippedCount,
+                            failureCount);
+            listener.onCompleted(summary);
+            return ExecutionResult.failure(summary);
         }
 
         // 成功サマリーを作成
@@ -202,5 +224,19 @@ public final class RollbackExecutor {
                         ExecutionDirection.DOWN, totalNodes, executedCount, skippedCount);
         listener.onCompleted(summary);
         return ExecutionResult.success(summary);
+    }
+
+    private Optional<NodeId> findFailedDownDependency(
+            MigrationNode node, Set<NodeId> failedNodes, Set<NodeId> targetNodes) {
+        // DOWN 方向の依存 = UP の子 (このノードを UP では parent としていたノード)
+        for (NodeId dep : graph.getDependents(node.id())) {
+            if (!targetNodes.contains(dep)) {
+                continue;
+            }
+            if (failedNodes.contains(dep)) {
+                return Optional.of(dep);
+            }
+        }
+        return Optional.empty();
     }
 }

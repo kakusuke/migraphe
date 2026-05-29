@@ -1,0 +1,9 @@
+name: Create index on table_b (depends on 002, independent of 003 failure cone)
+target: h2
+autocommit: true
+dependencies:
+  - 002_table_b
+up: |
+  CREATE INDEX idx_b_label ON table_b (label);
+down: |
+  DROP INDEX IF EXISTS idx_b_label;

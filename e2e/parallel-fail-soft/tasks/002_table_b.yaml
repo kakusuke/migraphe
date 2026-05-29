@@ -1,0 +1,7 @@
+name: Create table_b
+target: h2
+autocommit: true
+up: |
+  CREATE TABLE table_b (id INT PRIMARY KEY, label VARCHAR(100));
+down: |
+  DROP TABLE IF EXISTS table_b;

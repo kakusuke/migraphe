@@ -92,6 +92,51 @@ class GradleExecutionListenerTest {
         assertThat(capturingLogger.lifecycleMessages).anyMatch(msg -> msg.contains("up to date"));
     }
 
+    @Test
+    void onCompleted_failure_shouldListAllFailuresInSummary() {
+        // 2 件失敗 + 1 件 dependency skip のシナリオを再現
+        MigrationNode node1 = createTestNode("db1/003_create_orders", "Create orders");
+        MigrationNode node2 = createTestNode("db1/005_create_invoices", "Create invoices");
+        MigrationNode skipped = createTestNode("db1/006_seed_invoices", "Seed invoices");
+
+        listener.onNodeFailed(
+                node1, ExecutionDirection.UP, null, "relation \"orders\" does not exist");
+        listener.onNodeFailed(
+                node2, ExecutionDirection.UP, null, "syntax error at or near \"INVALID\"");
+        listener.onNodeSkipped(
+                skipped, ExecutionDirection.UP, "dependency failed: 005_create_invoices");
+
+        ExecutionSummary summary = ExecutionSummary.failure(ExecutionDirection.UP, 10, 6, 2, 2);
+        listener.onCompleted(summary);
+
+        // サマリーヘッダー + 集計行
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("MIGRATION SUMMARY (UP)"));
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("Result:") && msg.contains("FAILED"));
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("Failed:") && msg.contains("2"));
+
+        // 個別失敗の列挙 ([1] と [2] 両方が含まれる)
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("[1]") && msg.contains("db1/003_create_orders"));
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("[2]") && msg.contains("db1/005_create_invoices"));
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("Error:") && msg.contains("relation \"orders\""));
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("Error:") && msg.contains("syntax error"));
+
+        // dep-skip 一覧
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(msg -> msg.contains("Skipped due to failed dependencies"));
+        assertThat(capturingLogger.errorMessages)
+                .anyMatch(
+                        msg ->
+                                msg.contains("db1/006_seed_invoices")
+                                        && msg.contains("dependency failed: 005_create_invoices"));
+    }
+
     private MigrationNode createTestNode(String id, String name) {
         return new TestMigrationNode(NodeId.of(id), name, EnvironmentId.of("test-db"));
     }

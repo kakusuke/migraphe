@@ -20,10 +20,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
@@ -127,24 +128,29 @@ public final class ParallelMigrationExecutor implements Executor {
         }
 
         CountDownLatch latch = new CountDownLatch(totalNodes);
-        AtomicBoolean failureDetected = new AtomicBoolean(false);
+        Set<NodeId> failedNodes = ConcurrentHashMap.newKeySet();
         AtomicInteger executedCount = new AtomicInteger(0);
-        int skippedCount = 0;
+        AtomicInteger skippedCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
         @Nullable Semaphore semaphore = maxParallelism > 0 ? new Semaphore(maxParallelism) : null;
 
         try {
-            for (int i = 0; i < totalNodes; i++) {
-                MigrationNode node = readyQueue.take();
+            while (latch.getCount() > 0) {
+                MigrationNode node = readyQueue.poll(100, TimeUnit.MILLISECONDS);
+                if (node == null) {
+                    // 失敗伝播による latch 減算で残カウントが消化されていく途中。引き続き待機。
+                    continue;
+                }
 
-                if (failureDetected.get()) {
-                    latch.countDown();
+                // 並列伝播で先に skip 済みのノードを取り出した場合は何もしない (二重処理防止)。
+                if (failedNodes.contains(node.id())) {
                     continue;
                 }
 
                 // 実行済みチェック
                 if (historyRepository.wasExecuted(node.id(), node.environment().id())) {
                     listener.onNodeSkipped(node, ExecutionDirection.UP, "already executed");
-                    skippedCount++;
+                    skippedCount.incrementAndGet();
                     processCompletion(node.id(), tracker, readyQueue);
                     latch.countDown();
                     continue;
@@ -161,7 +167,15 @@ public final class ParallelMigrationExecutor implements Executor {
                         () -> {
                             try {
                                 executeNode(
-                                        node, failureDetected, executedCount, tracker, readyQueue);
+                                        node,
+                                        failedNodes,
+                                        executedCount,
+                                        skippedCount,
+                                        failureCount,
+                                        tracker,
+                                        readyQueue,
+                                        latch,
+                                        targetNodes);
                             } finally {
                                 if (sem != null) {
                                     sem.release();
@@ -176,32 +190,44 @@ public final class ParallelMigrationExecutor implements Executor {
             Thread.currentThread().interrupt();
             ExecutionSummary summary =
                     ExecutionSummary.failure(
-                            ExecutionDirection.UP, totalNodes, executedCount.get(), skippedCount);
+                            ExecutionDirection.UP,
+                            totalNodes,
+                            executedCount.get(),
+                            skippedCount.get(),
+                            Math.max(1, failureCount.get()));
             listener.onCompleted(summary);
             return ExecutionResult.failure(summary);
         }
 
-        if (failureDetected.get()) {
+        if (failureCount.get() > 0) {
             ExecutionSummary summary =
                     ExecutionSummary.failure(
-                            ExecutionDirection.UP, totalNodes, executedCount.get(), skippedCount);
+                            ExecutionDirection.UP,
+                            totalNodes,
+                            executedCount.get(),
+                            skippedCount.get(),
+                            failureCount.get());
             listener.onCompleted(summary);
             return ExecutionResult.failure(summary);
         }
 
         ExecutionSummary summary =
                 ExecutionSummary.success(
-                        ExecutionDirection.UP, totalNodes, executedCount.get(), skippedCount);
+                        ExecutionDirection.UP, totalNodes, executedCount.get(), skippedCount.get());
         listener.onCompleted(summary);
         return ExecutionResult.success(summary);
     }
 
     private void executeNode(
             MigrationNode node,
-            AtomicBoolean failureDetected,
+            Set<NodeId> failedNodes,
             AtomicInteger executedCount,
+            AtomicInteger skippedCount,
+            AtomicInteger failureCount,
             ReadyNodeTracker tracker,
-            PriorityBlockingQueue<MigrationNode> readyQueue) {
+            PriorityBlockingQueue<MigrationNode> readyQueue,
+            CountDownLatch latch,
+            Set<NodeId> targetNodes) {
 
         listener.onNodeStarted(node, ExecutionDirection.UP);
 
@@ -225,6 +251,7 @@ public final class ParallelMigrationExecutor implements Executor {
             historyRepository.record(record);
 
             executedCount.incrementAndGet();
+            processCompletion(node.id(), tracker, readyQueue);
         } else {
             String errorMsg = result.error();
             String message = errorMsg != null ? errorMsg : "Unknown error";
@@ -245,10 +272,36 @@ public final class ParallelMigrationExecutor implements Executor {
                             message);
             historyRepository.record(failureRecord);
 
-            failureDetected.set(true);
+            failedNodes.add(node.id());
+            failureCount.incrementAndGet();
+            propagateFailure(node.id(), failedNodes, targetNodes, skippedCount, latch);
         }
+    }
 
-        processCompletion(node.id(), tracker, readyQueue);
+    private void propagateFailure(
+            NodeId failedId,
+            Set<NodeId> failedNodes,
+            Set<NodeId> targetNodes,
+            AtomicInteger skippedCount,
+            CountDownLatch latch) {
+        Set<NodeId> cone = graph.getAllDependents(failedId);
+        for (NodeId skipId : cone) {
+            if (!targetNodes.contains(skipId)) {
+                continue;
+            }
+            if (!failedNodes.add(skipId)) {
+                continue; // 既に処理済み
+            }
+            MigrationNode skipNode = graph.getNode(skipId).orElse(null);
+            if (skipNode == null) {
+                latch.countDown();
+                continue;
+            }
+            listener.onNodeSkipped(
+                    skipNode, ExecutionDirection.UP, "dependency failed: " + failedId.value());
+            skippedCount.incrementAndGet();
+            latch.countDown();
+        }
     }
 
     private void processCompletion(

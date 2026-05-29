@@ -19,6 +19,7 @@ import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
@@ -110,9 +111,23 @@ public final class MigrationExecutor implements Executor {
         int totalNodes = plan.totalNodes();
         int executedCount = 0;
         int skippedCount = 0;
+        int failureCount = 0;
+        Set<NodeId> failedNodes = new HashSet<>();
 
         for (ExecutionLevel level : plan.levels()) {
             for (MigrationNode node : level.nodes()) {
+                // 依存ノードに失敗がある場合は伝播スキップ
+                Optional<NodeId> failedDep = findFailedDependency(node, failedNodes);
+                if (failedDep.isPresent()) {
+                    listener.onNodeSkipped(
+                            node,
+                            ExecutionDirection.UP,
+                            "dependency failed: " + failedDep.get().value());
+                    skippedCount++;
+                    failedNodes.add(node.id());
+                    continue;
+                }
+
                 // 既に実行済みかチェック
                 if (historyRepository.wasExecuted(node.id(), node.environment().id())) {
                     listener.onNodeSkipped(node, ExecutionDirection.UP, "already executed");
@@ -169,14 +184,23 @@ public final class MigrationExecutor implements Executor {
                                     message);
                     historyRepository.record(failureRecord);
 
-                    // 失敗時はサマリーを作成して返す
-                    ExecutionSummary summary =
-                            ExecutionSummary.failure(
-                                    ExecutionDirection.UP, totalNodes, executedCount, skippedCount);
-                    listener.onCompleted(summary);
-                    return ExecutionResult.failure(summary);
+                    failedNodes.add(node.id());
+                    failureCount++;
+                    // fail-soft: 失敗しても残りのノードを処理し続ける
                 }
             }
+        }
+
+        if (failureCount > 0) {
+            ExecutionSummary summary =
+                    ExecutionSummary.failure(
+                            ExecutionDirection.UP,
+                            totalNodes,
+                            executedCount,
+                            skippedCount,
+                            failureCount);
+            listener.onCompleted(summary);
+            return ExecutionResult.failure(summary);
         }
 
         // 成功サマリーを作成
@@ -185,5 +209,14 @@ public final class MigrationExecutor implements Executor {
                         ExecutionDirection.UP, totalNodes, executedCount, skippedCount);
         listener.onCompleted(summary);
         return ExecutionResult.success(summary);
+    }
+
+    private Optional<NodeId> findFailedDependency(MigrationNode node, Set<NodeId> failedNodes) {
+        for (NodeId dep : graph.getDependencies(node.id())) {
+            if (failedNodes.contains(dep)) {
+                return Optional.of(dep);
+            }
+        }
+        return Optional.empty();
     }
 }

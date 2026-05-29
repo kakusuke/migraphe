@@ -124,7 +124,7 @@ io.github.kakusuke.migraphe.gradle/
 10. **Gradle Plugin (Phase 15)**: `java-gradle-plugin` + Gradle TestKit. Custom `migraphePlugin` configuration for plugin JARs. `@Option` + `-P` property for task arguments. `PluginRegistry.loadFromClassLoader()` for Gradle's classloader
 11. **Shared Logic**: `ExecutionContext.createHistoryRepository()`, `ExecutionPlan.filterNodesInOrder()`, `ExecutionGraphView.renderLines()`, `FormatUtils`
 12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`. LayoutSort uses Kahn's with comparator (-inDegree, -outDegree, id asc). LayoutTree decomposes DAG into stream tree (greedy chain extension). GridCanvas places streams on 2D grid with `Cell` sealed interface (13 variants), `addNonTreeEdge()` with lane routing, merge row reuse, and crossing detection. Grid extracted as inner class with Cell connectivity methods (`connectsUp()`, `connectsDown()`, etc.)
-13. **Parallel Execution (Phase 16)**: Opt-in via `execution.parallel: true`. `ParallelMigrationExecutor` uses Virtual Threads + `PriorityBlockingQueue` + `ReadyNodeTracker` (ready-based approach). Fail-fast on failure. `Semaphore` for `execution.max-parallelism`. `SynchronizedHistoryRepository`/`SynchronizedExecutionListener` decorators for thread safety. `Executor` interface shared by sequential/parallel.
+13. **Parallel Execution (Phase 16)**: Opt-in via `execution.parallel: true`. `ParallelMigrationExecutor` uses Virtual Threads + `PriorityBlockingQueue` + `ReadyNodeTracker` (ready-based approach). **Fail-soft on failure** (revised Session 53): tasks that do not (transitively) depend on the failed node continue to execute; tasks that do depend on it are surfaced via `onNodeSkipped` with reason `"dependency failed: <id>"`. Applied uniformly to `MigrationExecutor` (sequential UP), `ParallelMigrationExecutor` (parallel UP), and `RollbackExecutor` (sequential DOWN). `Semaphore` for `execution.max-parallelism`. `SynchronizedHistoryRepository`/`SynchronizedExecutionListener` decorators for thread safety. `Executor` interface shared by sequential/parallel.
 14. **JDBC Plugin Extraction (Phase 17)**: Generic `migraphe-plugin-jdbc` module extracts common JDBC logic (connection, SQL execution, history). DB-specific plugins (`postgresql`, `mysql`) extend `JdbcEnvironment` with fixed driver/label and provide optimized DDL. `SqlStatements` utility for SQL splitting. `JdbcPlugin` (type="jdbc") works standalone for any JDBC database.
 15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api` (`io.github.kakusuke.migraphe.api.generator`). `SchemaInfoProvider<T>` on `MigraphePlugin` for schema extraction. `JdbcSchemaInfoProvider` uses `DatabaseMetaData` → `JdbcSchemaInfo` (19 record types). `JdbcMarkdownPlugin` (type="jdbc-markdown") generates Markdown docs with directory structure, cross-references, and exclude filtering. `GeneratorRegistry` + `GeneratorExecutor` in core. `GenerateCommand` in CLI (`migraphe generate --name`). `MigrapheGenerateTask` in Gradle plugin.
 16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: Data extraction decoupled from rendering. `GeneratorSourcePlugin<T>` extracts typed data (`jdbc-schema` → `JdbcSchemaInfo`, `migration-tree` → `MigrationGraphView`). `GeneratorOutputPlugin` renders data (`jdbc-markdown`, `output-json`). Same data source can output in multiple formats. Legacy `GeneratorPlugin`/`Generator` interfaces removed; `migraphe-generator-api` module merged into `migraphe-api` (`io.github.kakusuke.migraphe.api.generator`). `MigrationGraphView` read-only interface in `migraphe-api`. `SourceContext` (nullable Environment + nullable graph). `OutputContext` (definition + outputDir). `GeneratorExecutor.executeAll()` auto-routes based on `source.type` presence. `ProjectConfig.SourceSection` with `Optional<String> type()`. `MigrationTreeSourcePlugin` built into core. `migraphe-plugin-generator-json` module for JSON stdout output via Jackson.
@@ -254,6 +254,28 @@ Update when code changes:
 
 ## Changelog
 
+### 2026-05-28 (Session 53)
+- **Executor を fail-fast から fail-soft へ統一: 失敗時も独立タスクは完走させて rerun の冪等性を保つ**
+  - **Motivation**: ユーザーから「up / down を並列に実行し、どれかが止まると `failureDetected` で dispatch 即停止 → in-flight は完走するが queue 上のノードはドロップ → rerun したときに『最初から成功実行した場合に流れたはずのタスク』とは違う tasks が流れる ⇒ idempotency が壊れている」という指摘。原因は 3 executor の fail-fast 設計に共通する idempotency hole。
+  - **採用したセマンティクス (fail-soft / `make -k` 相当)**: 失敗ノードはその場で failure record を残しつつ、**失敗ノードに (推移的に) 依存しないタスクは引き続き実行**。失敗ノードの依存ツリーに属するタスクは `onNodeSkipped` で reason=`"dependency failed: <id>"` 通知 + skippedCount に加算。すべての実行可能タスクが終了したのち、failure が 1 件でもあれば全体結果は `failure`。
+  - **適用範囲**: ParallelMigrationExecutor (並列 UP) / MigrationExecutor (直列 UP) / RollbackExecutor (直列 DOWN) の 3 つ全て。デフォルト挙動として実装、config フラグや CLI フラグでの切り替えは設けない (ユーザー合意)。
+  - **実装ポイント**:
+    - **直列 UP / DOWN**: `Set<NodeId> failedNodes` を loop scope で持ち、各ノード処理前に `findFailedDependency` / `findFailedDownDependency` で依存先 (UP は `graph.getDependencies`, DOWN は `graph.getDependents`) が `failedNodes` に含まれていないかチェック。該当すれば skip 通知 + `failedNodes` 追加 + `continue`。失敗パスから `return` を削除し、ループ完了後に `failedNodes.isEmpty()` で結果分岐。トポロジカル順序で逐次処理するため、推移伝播は自動成立 (親が failedNodes に入れば子も自動的に検知)。
+    - **並列 UP**: `failureDetected.get() → drop` 短絡を削除。代わりに `Set<NodeId> failedNodes = ConcurrentHashMap.newKeySet()` を導入し、失敗 vthread の中で `graph.getAllDependents(failedId)` で推移的子集合を計算 → 各子について `failedNodes.add()` CAS で勝った場合のみ skip 通知 + `latch.countDown()`。失敗ノードは `processCompletion(tracker.markCompleted)` を呼ばない (= 子の inDegree は 0 にならず readyQueue に投入されない) ことで、失敗ノードの子が dispatch されないことを保証。
+    - **並列ループ**: `for (i = 0..totalNodes) readyQueue.take()` を `while (latch.getCount() > 0) readyQueue.poll(100ms)` に書き換え。失敗伝播で latch を直接減算するため、メインループは失敗ノードの子を queue から待つ必要がない (poll の null は無視して次回)。Race 保険として dispatch 直前に `failedNodes.contains(node.id())` をチェックして二重処理を防ぐ。
+    - **`skippedCount` を AtomicInteger 化** (並列のみ): 失敗伝播は vthread 内で発生するため thread-safe な加算が必要。
+  - **`ReadyNodeTracker` は変更不要**: 失敗ノードを `markCompleted` しない方針なので、子の inDegree が 0 にならず自動的に dispatch されない仕組み。トラッカー API は触らずに済んだ。
+  - **テスト**: 7 TDD cycle で進行。
+    - 直列 UP: `shouldContinueExecutingIndependentNodesAfterFailure` (A 失敗時に独立な B が完走), `shouldSkipTransitiveDependentsWithReasonOnFailure` (A→B→C で A 失敗時に B, C が `"dependency failed: a"` / `"dependency failed: b"` で skip)
+    - 並列 UP: `shouldSkipDependentsOnFailure` (旧 `shouldNotExecuteDependentsOnFailure` を fail-soft 化), `shouldContinueIndependentNodesAfterFailure`, `shouldSkipAllDependentsOnFailure` (A→B, A→C で兄弟独立な B, C 両方 skip), `shouldSkipMultiDepNodeIfAnyParentFails` (A→C, B→C で A 失敗 + B 成功 → C は A 失敗のため skip)
+    - DOWN: `shouldContinueIndependentNodesAfterDownFailure`, `shouldSkipUpstreamOnDownFailure` (DOWN 方向で B 失敗時に「B の DOWN を待っていた」UP 親 A が skip)
+    - `MockExecutionListener` 3 ファイルとも `Map<NodeId, String> skipReasons` を追加して reason を assert できるように。
+  - **既存テストの handling**: `shouldNotExecuteDependentsOnFailure` は名前と意図を `shouldSkipDependentsOnFailure` に更新し、`listener.skippedNodes` + `skipReasons` の追加 assert を入れた。「dependent は実行されない」という不変条件は変わらないため、回帰は出なかった。
+  - **ドキュメント更新**: `docs/USER_GUIDE.{md,ja.md}` の並列実行セクションの "fail-fast" 記述を fail-soft + 冪等性の説明に置換。`CLAUDE.md` の Design Decision 13 (Parallel Execution) も "Fail-fast" → "Fail-soft (revised Session 53)" に更新。
+  - **アウトオブスコープ**: failed node の **ロールバック** (例: 失敗時に in-flight の成功分を auto-revert する) は対象外。ユーザーは引き続き手動 down or 修正 + rerun で対処。冪等性が保たれていれば rerun で過剰実行は起きない。
+  - **Sample E2E**: 計画中だがメイン spec 確認は unit test で済んだため未実施。実機 DB で意図的失敗を仕込んでの確認は次セッションでも可。
+  - Tests: 全モジュール 100% passing (`./gradlew test` で全 task UP-TO-DATE / spotless / ErrorProne クリーン)。`migraphe-plugin-mysql:test` の Testcontainers 並列起動干渉と思われる flake は単独再実行で解消。7 micro TDD cycle で進めた。
+
 ### 2026-05-28 (Session 52)
 - **`project.scan-root`: tasks/targets/environments/plugins の親ディレクトリを `migraphe.yaml` 直下から切り離せるように**
   - **Motivation**: ユーザーから「`migraphe.yaml` 本体は repo ルートに置きつつ、`tasks/`, `targets/`, `environments/`, `plugins/` をサブディレクトリにまとめたい」という要望。これまでは `migraphe.yaml` の親 (`baseDir`) 直下に全部置く前提だった。
@@ -285,43 +307,7 @@ Update when code changes:
   - **Release procedure 明文化**: バージョン bump 時に `gradle.properties` を忘れがちな問題に対し、`CONTRIBUTING.md` に "Release procedure" セクションを新設 (gradle.properties が canonical、docs/sample は cosmetic、tag push で `release.yml` 起動) + 0.x の MINOR 扱いの注記を追加。`CLAUDE.md` の Session End Procedure にも version bump 時の `gradle.properties` 注意を追記。
   - **Doc/config-only change**: 本番 Java コードは無変更。
 
-### 2026-05-20 (Session 50)
-- **配布方針転換: JitPack をエンドユーザー向け配布チャネルに昇格 + 全 user-facing ドキュメント書き換え**
-  - **Motivation**: プラグイン JAR と Gradle プラグインがまだ Maven Central に未公開のため、`README` の "publishToMavenLocal してください" 手順では `git clone` 不要でサンプルを動かしたいユーザーが詰まる。Phase 22 で JitPack 配信路は既に整っているので、Maven Central 着地までの間はこれをそのまま公式ルートにする（"contributor-only beta" 位置づけを撤回）。
-  - **Version pin = 安定 git タグ (`v0.2.0`)**: 当初 `main-SNAPSHOT` を案内する設計だったが、JitPack は `main-SNAPSHOT` を `main-<tag>-<commit>-<n>` (例: `main-v0.2.0-ga997b7b-1`) のような具体バージョンに解決する一方、`LockSyncChecker` は yaml と lock のバージョン文字列リテラル一致を要求するため、エンドユーザーが `migraphe pin` 後の `migraphe validate` で同期エラーになる既知バグが存在する。回避のため、エンドユーザー向けドキュメントは安定 Git タグ (`v0.2.0`) を直接案内する形に倒した。`main-SNAPSHOT` のサポートは将来 LockSyncChecker 側の SNAPSHOT 対応バグ修正で復活させる予定（[CONTRIBUTING.md](CONTRIBUTING.md) の "Tag vs main-SNAPSHOT" セクション参照）。
-  - **Doc-only change — production code に変更なし**: `build.gradle.kts` / `jitpack.yml` / 本番 Java コードは無変更。CLI の `migraphe.yaml` repositories + map 形式 plugin 宣言は Phase 21 で既に実装済みなので、書き換えはすべてドキュメントとサンプル設定で完結。
-  - **Gradle plugin id の resolution 問題と対応**: `java-gradle-plugin` が自動生成する plugin marker artifact は plugin id (`io.github.kakusuke.migraphe`) の group に publish されるため、`-PpublishGroup=com.github.kakusuke.migraphe` を渡しても marker は `io.github.kakusuke.migraphe:io.github.kakusuke.migraphe.gradle.plugin` のまま → JitPack URL (`com/github/kakusuke/migraphe/...`) では取れない。回避策として `settings.gradle.kts` で `pluginManagement.resolutionStrategy.eachPlugin { useModule("com.github.kakusuke.migraphe:migraphe-gradle-plugin:${requested.version}") }` を案内し、plugin marker をバイパスして実体モジュールに直接解決させる構成にした。`sample/gradle/settings.gradle.kts`, `README*.md`, `docs/USER_GUIDE*.md` すべてこの形に統一。
-  - **書き換え範囲**:
-    - `README.md`, `README.ja.md` — Quick Start の `migraphe.yaml`、Run Migrations コマンド (`publishToMavenLocal` 削除)、Gradle Plugin セクション全体
-    - `docs/USER_GUIDE.md`, `docs/USER_GUIDE.ja.md` — Method 1: Maven Coordinates、Project Configuration、Gradle Plugin Setup、トラブルシュート ("Failed to resolve plugin" の例)、Distribution Roadmap 表
-    - `docs/PLUGIN_DEVELOPMENT.md`, `docs/PLUGIN_DEVELOPMENT.ja.md` — プラグイン開発者向け `migraphe-api` 依存の例
-    - `sample/cli/migraphe.yaml` — repositories: + 全 3 プラグインを map 形式 `{coordinate, repository: jitpack}` へ
-    - `sample/cli/migraphe.lock.yaml` — 削除（ユーザー環境で `migraphe pin` 実行を前提に削除 → `README.md` に手順を追加）
-    - `sample/cli/README.md` — セットアップから "プラグインをローカル Maven に公開" 削除、エイリアス設定後に `migraphe pin` ステップ追加
-    - `sample/gradle/build.gradle.kts` — `id(...) version "v0.2.0"`、`mavenLocal()` 削除、`maven("https://jitpack.io")` 追加、`migraphePlugin` 座標も `com.github.*` に
-    - `sample/gradle/settings.gradle.kts` — `pluginManagement` に JitPack + `resolutionStrategy.eachPlugin`、`dependencyResolutionManagement` にも JitPack
-    - `sample/gradle/README.md` — `publishToMavenLocal` 手順とトラブルシュートの該当箇所を JitPack 案内に
-    - `CONTRIBUTING.md` — "Pre-release builds via JitPack (beta channel)" セクションを大幅縮小。重複していた導入手順は README/USER_GUIDE に集約し、コントリビューター固有の運用注意（main 毎の SHA 不安定、JitPack キャッシュリフレッシュ、`-PpublishGroup` での local publish 切替、`jitpack.yml` の役割）のみを残す
-  - **暫定座標の警告は意図的に省略**: ユーザー指示により、警告ボックスや "Maven Central 着地で座標が変わる" 注意書きは付けない方針。Distribution Roadmap 表でのみ Maven Central 公開予定を示し、Maven Central 着地時に全座標を一括書き換えする前提。
-  - **保留**: 実 JitPack ビルドでの sample 動作確認は未実施（初回ユーザーが `v0.2.0` を要求した時に JitPack ビルドがトリガーされる想定）。Phase 22 で `~/.m2/com/github/kakusuke/migraphe/...` への local publish 動作は既に確認済みなので、JitPack 側のビルドが通れば同じ artefact が配信される。
-
-### 2026-05-19 (Session 49)
-- **DOWN コマンド単独ノード指定時のクラッシュ修正 + `MigrationGraph` の方向別サブグラフ構築 API 整理**
-  - **Bug**: `migraphe down mysql/02_catalog/003_products` のように依存先 (parents) を持つノードを単独ロールバック指定すると、`DownCommand.displayRollbackPlan` (line 147) → `new ExecutionGraphView(sortedNodes)` → 内部の `MigrationGraph.create() + addNode` で「`Dependency node does not exist: 001_categories (required by 003_products)`」と IllegalArgumentException。`RollbackExecutor.determineRollbackTargets` は `target ∪ getDependents(target)` の閉包 (= 依存"元" の集合) を返すため、依存"先" (parents) は sortedNodes に含まれず eager 検査で破綻していた。`UpCommand` 側は実行プランが依存先を必ず含むので発症しない。
-  - **Root cause framing**: `MigrationGraph.addNode` の eager 検査が **UP 方向の不変条件 (「各ノードの依存先 parents がサブグラフ内に存在する」)** のみを表現しており、ロールバックの DOWN 方向 (「各ノードの依存元 dependents がサブグラフ内に存在する」) と非対称だった。さらに `addNode` の検査は挿入順序依存 (UP 順) を呼び出し側に強要する負債でもあった。
-  - **Fix — 方向別サブグラフ構築 API**: `MigrationGraph` に静的ファクトリ 2 つを新設。
-    - `fromNodesUp(List<MigrationNode>)`: 現在の `create() + addNode` ループと等価 (UP 方向)。
-    - `fromNodesDown(List<MigrationNode>)`: **reversed adjacency** + **リスト外フィルタ**。各ノードの `dependencies()` (= parents) を子方向に反転 (`adjacencyList[parent].add(child)`) し、リスト外を指す参照は `parentAdjacency == null` 経路で自然に除外。これにより DOWN サブグラフは adjacency がリスト内に閉じ、`LayoutSort` の inDegree 計算が正しく機能する (旧実装では dangling adjacency により inDegree がズレ、layout から該当ノードが消える silent failure になっていた)。
-  - **`ExecutionGraphView(List, boolean reversed)` 追加**: 既存 `(List)` コンストラクタは `(List, false)` への委譲に整理。reversed=true で `fromNodesDown`、false で `fromNodesUp` を選ぶ。`DownCommand` / `MigrapheDownTask` の呼び出し箇所を `(sortedNodes, true)` に切替。`UpCommand` / `MigrapheUpTask` は false のまま (= 既存挙動)。
-  - **`MigrationGraph.getRoots()` の整合性修正**: 旧実装は `MigrationNode::hasNoDependencies` (= 元の `node.dependencies()` が空か) を直接見ていたため、DOWN グラフ (reversed adjacency) で「DOWN 視点の起点」を取れなかった。`adjacencyList.getOrDefault(id, Set.of()).isEmpty()` ベースに変更し、adjacency に追従するようにした。consumer は `GraphVisualizer` のみで現バグ経路には載らないが、将来の地雷を予防。
-  - **後片付け (Sessions 8-10)**: 設計合意に基づき以下も整理。
-    - **`addNode` の eager 検査削除**: `validate()` と完全に重複していた dangling-dep チェックを削除。代わりに `ExecutionContext.create` で `graph.validate()` を呼んで safety net 化 (cycle / dangling を `IllegalStateException` で surface)。`MigrationGraph.validate()` は dead 寸前だったが **production safety net として復活**。
-    - **`addDependency` 削除**: production 0 caller の dead public API。test 側 4 箇所 (`TopologicalSortTest`, `MigrationGraphTest` ×3, `MigrationTreeSourcePluginTest` ×2) は `node().dependencies(...)` を使った宣言的な cycle 構築に書き換えた。
-    - **`create()` / `addNode()` は保持**: `addNode` は `fromNodesUp` 内部 + テストの低レベル builder として、`create()` はテスト用 builder として多数の利用箇所があるため、API としては残す判断。
-  - **Sample 動作確認**: `migraphe down mysql/02_catalog/003_products --dry-run` で例外なく 5 ノード (003 + dependents の 004, 005, product_indexes, reviews) が DOWN 順で正しく可視化されること、葉ノード単独 (`mysql/04_indexes/001_product_indexes`) の単独 down も例外なく動くこと、`down --all --dry-run` で全 19 ノードが正しい DOWN レイアウトで出ることを実 CLI で確認。
-  - Tests: 798 total, 100% passing. `./gradlew clean build --warning-mode all` で警告ゼロ・Spotless / ErrorProne クリーン。10 micro TDD cycle (cycle 1-7 + 8 + 8.5 + 10) で進めた。
-
 ---
 
 **Last Updated**: 2026-05-28
-**Current Work**: `project.scan-root` の追加 (Session 52)。tasks/targets/environments/plugins の探索起点を `migraphe.yaml` 直下から `migraphe.yaml` の親ディレクトリ起点の相対パス (or 絶対パス) に切替可能にした。CLI/Gradle 両方で同一 `migraphe.yaml` フィールド経由でのみ指定。未指定時は完全な後方互換。実装は `ConfigLoader.resolveScanRoot` + `ExecutionContext.scanRoot()` accessor + `PluginConfigPreParser` 拡張 + `Main.resolvePluginsDir`。直前の Session 51 ではリリースアーカイブをフラット化 (`bin/` `lib/` をルート直下に配置) + バージョン 0.3.0 への bump を実施済み。
+**Current Work**: Executor の fail-fast を fail-soft に統一 (Session 53)。`ParallelMigrationExecutor` / `MigrationExecutor` / `RollbackExecutor` の 3 つすべてで、失敗ノードに (推移的に) 依存しないタスクは引き続き実行する。失敗ノードの依存圏は `onNodeSkipped(reason="dependency failed: <id>")` で通知。これで「失敗→rerun」と「単発成功」とで実行タスクの集合が一致し、idempotency が保たれる。直前の Session 52 では `project.scan-root` を追加し、tasks/targets/environments/plugins の探索起点を `migraphe.yaml` の親ディレクトリから切り離せるようにした。

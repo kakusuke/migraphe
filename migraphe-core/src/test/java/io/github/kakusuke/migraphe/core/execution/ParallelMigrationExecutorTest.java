@@ -23,7 +23,9 @@ import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.jspecify.annotations.Nullable;
@@ -173,8 +175,8 @@ class ParallelMigrationExecutorTest {
     }
 
     @Test
-    @DisplayName("fail-fast — 失敗時に依存ノードは実行されない")
-    void shouldNotExecuteDependentsOnFailure() {
+    @DisplayName("fail-soft — 失敗時に依存ノードはスキップ伝播される")
+    void shouldSkipDependentsOnFailure() {
         // Given: A -> B, A fails
         Task failingTask = ControllableTask.failing("task failed");
         MigrationNode nodeA =
@@ -198,6 +200,104 @@ class ParallelMigrationExecutorTest {
         assertThat(result.success()).isFalse();
         assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
         assertThat(listener.succeededNodes).doesNotContain(NodeId.of("b"));
+        assertThat(listener.skippedNodes).containsExactly(NodeId.of("b"));
+        assertThat(listener.skipReasons.get(NodeId.of("b"))).isEqualTo("dependency failed: a");
+    }
+
+    @Test
+    @DisplayName("fail-soft — 独立ノードは失敗後も完走する")
+    void shouldContinueIndependentNodesAfterFailure() {
+        // Given: A (失敗) と B (独立、deps なし)
+        Task failingTask = ControllableTask.failing("task failed");
+        MigrationNode nodeA =
+                SimpleMigrationNode.builder()
+                        .id(NodeId.of("a"))
+                        .name("Node A")
+                        .environment(testEnv)
+                        .dependencies(Set.of())
+                        .upTask(failingTask)
+                        .downTask(SimpleTask.of("DOWN: A"))
+                        .build();
+        MigrationNode nodeB = createNode("b", "Node B");
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        executor = new ParallelMigrationExecutor(graph, syncHistoryRepo, listener);
+
+        // When
+        ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("b")));
+
+        // Then: failure result だが B は完走する
+        assertThat(result.success()).isFalse();
+        assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
+        assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
+        assertThat(syncHistoryRepo.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+    }
+
+    @Test
+    @DisplayName("fail-soft — 失敗ノードの兄弟 dependents は全てスキップ伝播される")
+    void shouldSkipAllDependentsOnFailure() {
+        // Given: A -> B, A -> C (B and C are independent siblings)
+        Task failingTask = ControllableTask.failing("task failed");
+        MigrationNode nodeA =
+                SimpleMigrationNode.builder()
+                        .id(NodeId.of("a"))
+                        .name("Node A")
+                        .environment(testEnv)
+                        .dependencies(Set.of())
+                        .upTask(failingTask)
+                        .downTask(SimpleTask.of("DOWN: A"))
+                        .build();
+        MigrationNode nodeB = createNode("b", "Node B", Set.of(NodeId.of("a")));
+        MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("a")));
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        graph.addNode(nodeC);
+        executor = new ParallelMigrationExecutor(graph, syncHistoryRepo, listener);
+
+        // When
+        ExecutionResult result =
+                executor.execute(Set.of(NodeId.of("a"), NodeId.of("b"), NodeId.of("c")));
+
+        // Then
+        assertThat(result.success()).isFalse();
+        assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
+        assertThat(listener.succeededNodes).isEmpty();
+        assertThat(listener.skippedNodes).containsExactlyInAnyOrder(NodeId.of("b"), NodeId.of("c"));
+        assertThat(listener.skipReasons.get(NodeId.of("b"))).isEqualTo("dependency failed: a");
+        assertThat(listener.skipReasons.get(NodeId.of("c"))).isEqualTo("dependency failed: a");
+    }
+
+    @Test
+    @DisplayName("fail-soft — 多依存ノードは親の 1 つでも失敗していればスキップされる")
+    void shouldSkipMultiDepNodeIfAnyParentFails() {
+        // Given: A -> C, B -> C (C は A,B の両方に依存)。A 失敗、B 成功。
+        Task failingTask = ControllableTask.failing("task failed");
+        MigrationNode nodeA =
+                SimpleMigrationNode.builder()
+                        .id(NodeId.of("a"))
+                        .name("Node A")
+                        .environment(testEnv)
+                        .dependencies(Set.of())
+                        .upTask(failingTask)
+                        .downTask(SimpleTask.of("DOWN: A"))
+                        .build();
+        MigrationNode nodeB = createNode("b", "Node B");
+        MigrationNode nodeC = createNode("c", "Node C", Set.of(NodeId.of("a"), NodeId.of("b")));
+        graph.addNode(nodeA);
+        graph.addNode(nodeB);
+        graph.addNode(nodeC);
+        executor = new ParallelMigrationExecutor(graph, syncHistoryRepo, listener);
+
+        // When
+        ExecutionResult result =
+                executor.execute(Set.of(NodeId.of("a"), NodeId.of("b"), NodeId.of("c")));
+
+        // Then
+        assertThat(result.success()).isFalse();
+        assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
+        assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
+        assertThat(listener.skippedNodes).containsExactly(NodeId.of("c"));
+        assertThat(listener.skipReasons.get(NodeId.of("c"))).isEqualTo("dependency failed: a");
     }
 
     @Test
@@ -416,6 +516,7 @@ class ParallelMigrationExecutorTest {
         final List<NodeId> startedNodes = Collections.synchronizedList(new ArrayList<>());
         final List<NodeId> succeededNodes = Collections.synchronizedList(new ArrayList<>());
         final List<NodeId> skippedNodes = Collections.synchronizedList(new ArrayList<>());
+        final Map<NodeId, String> skipReasons = new ConcurrentHashMap<>();
         final List<NodeId> failedNodes = Collections.synchronizedList(new ArrayList<>());
         volatile boolean completedCalled = false;
 
@@ -436,6 +537,7 @@ class ParallelMigrationExecutorTest {
         @Override
         public void onNodeSkipped(MigrationNode node, ExecutionDirection direction, String reason) {
             skippedNodes.add(node.id());
+            skipReasons.put(node.id(), reason);
         }
 
         @Override
