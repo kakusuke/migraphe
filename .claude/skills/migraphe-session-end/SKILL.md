@@ -28,7 +28,9 @@ Update when code changes:
 4. Run `./gradlew spotlessApply`.
 5. Commit if working on a feature.
 
-**Version bumps**: when changing the version in docs/samples, **always bump `gradle.properties` in the same change** — it is the canonical version that drives the built artifacts (the doc/sample/JitPack-tag edits are cosmetic without it). See the full Release procedure in [CONTRIBUTING.md](../../../CONTRIBUTING.md#release-procedure).
+## Releases & version bumps
+
+Version bumps and releases are explicit — never part of session end. Use the `migraphe-version-up` skill.
 
 ## ErrorProne / NullAway
 

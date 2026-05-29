@@ -135,3 +135,8 @@ fabric.properties
 
 # Generated sample output (`migraphe generate` results)
 sample/**/docs/
+
+# Sample lockfiles — regenerated locally via `migraphe pin`.
+# Their SHA-256 hashes are tied to the released JARs, so committing them would
+# force a churn on every release; sample users run `migraphe pin` themselves.
+sample/**/migraphe.lock.yaml
