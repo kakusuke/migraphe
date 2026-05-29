@@ -10,18 +10,30 @@ Migraphe マイグレーションオーケストレーションツール用 Post
 - トランザクションサポート付き SQL ベースマイグレーション実行
 - PostgreSQL でのマイグレーション履歴追跡
 - トランザクション内で実行できない DDL 文用の Autocommit モード
+- スキーマドキュメントジェネレーター（`postgresql-schema` source / `postgresql-markdown` output）。PostgreSQL 固有オブジェクト（拡張・列挙型・シーケンス・関数・トリガー・マテリアライズドビュー・パーティション・ポリシー）に対応
 
 ## インストール
 
-### Fat JAR のビルド
+### JitPack 経由（推奨）
+
+`migraphe.yaml` にプラグインを宣言:
+
+```yaml
+repositories:
+  - id: jitpack
+    url: https://jitpack.io
+
+plugins:
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.3.0
+    repository: jitpack
+```
+
+### plugins ディレクトリ経由
+
+Fat JAR をビルドしてプロジェクトの `plugins/` ディレクトリに配置:
 
 ```bash
 ./gradlew :migraphe-plugin-postgresql:fatJar
-```
-
-### plugins ディレクトリに配置
-
-```bash
 mkdir -p your-project/plugins
 cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar your-project/plugins/
 ```
@@ -78,6 +90,39 @@ down: |
 - `CREATE INDEX CONCURRENTLY`
 - `VACUUM`
 - `CLUSTER`
+
+## ジェネレータータイプ
+
+このプラグインは PostgreSQL スキーマドキュメント用の source/output ジェネレーターペアを提供します。
+
+| 種別 | タイプ | 説明 |
+|------|--------|------|
+| Source | `postgresql-schema` | JDBC ベーススキーマに加え、`pg_catalog` から PostgreSQL 固有メタデータ（拡張・列挙型・シーケンス・関数・トリガー・マテリアライズドビュー・パーティション・ポリシー）を抽出 |
+| Output | `postgresql-markdown` | 上記 PostgreSQL 固有オブジェクトを含む Markdown ドキュメントを生成 |
+
+### ジェネレーター設定
+
+`migraphe.yaml` に `generators` セクションを追加:
+
+```yaml
+generators:
+  - name: pg-schema-docs
+    type: postgresql-markdown
+    source:
+      type: postgresql-schema
+      target: mydb
+    output-dir: docs/postgresql
+    excludes:
+      - schema: "information_schema"
+      - schema: "public"
+        table: "tmp_.*"
+```
+
+実行:
+
+```bash
+migraphe generate --name pg-schema-docs
+```
 
 ## 設定フィールド
 
