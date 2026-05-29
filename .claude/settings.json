@@ -1,5 +1,13 @@
 {
   "enabledPlugins": {
     "jdtls-lsp@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp__migraphe-build__run_test",
+      "mcp__migraphe-build__run_build",
+      "mcp__migraphe-build__run_spotless",
+      "mcp__migraphe-build__run_errorprone_check"
+    ]
   }
 }
