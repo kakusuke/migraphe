@@ -101,4 +101,26 @@ class JdbcUpTaskTest {
         var task = JdbcUpTask.create(env, "CREATE TABLE t1 (id INT)", null, false);
         assertThat(task.sqlContent()).isEqualTo("CREATE TABLE t1 (id INT)");
     }
+
+    @Test
+    void executeWithTransactionMultipleStatements() throws Exception {
+        var task =
+                JdbcUpTask.create(
+                        env,
+                        "CREATE TABLE tx1 (id INT);\nCREATE TABLE tx2 (id INT);\n",
+                        null,
+                        false);
+        Result<TaskResult, String> result = task.execute();
+        assertThat(result.isOk()).isTrue();
+
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN"
+                                        + " ('TX1', 'TX2')")) {
+            rs.next();
+            assertThat(rs.getInt(1)).isEqualTo(2);
+        }
+    }
 }

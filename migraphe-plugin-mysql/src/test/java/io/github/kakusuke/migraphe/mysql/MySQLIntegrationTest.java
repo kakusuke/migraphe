@@ -56,7 +56,121 @@ class MySQLIntegrationTest {
             stmt.execute("DROP TABLE IF EXISTS autocommit_down_test");
             stmt.execute("DROP TABLE IF EXISTS node_test");
             stmt.execute("DROP TABLE IF EXISTS rollback_test");
+            stmt.execute("DROP TABLE IF EXISTS multi_a");
+            stmt.execute("DROP TABLE IF EXISTS multi_b");
+            stmt.execute("DROP TABLE IF EXISTS proc_target");
+            stmt.execute("DROP PROCEDURE IF EXISTS seed_proc");
+            stmt.execute("DROP PROCEDURE IF EXISTS delim_proc");
+            stmt.execute("DROP TABLE IF EXISTS delim_target");
             stmt.execute("TRUNCATE TABLE migraphe_history");
+        }
+    }
+
+    @Test
+    void shouldExecuteMultipleCreateTableInTransactionMode() throws Exception {
+        // given - autocommit=false (default / transaction mode), multiple statements in one task.
+        // This case previously failed because the whole text was sent as a single statement.
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
+                        .id("multi_ddl")
+                        .name("Create two tables")
+                        .environment(environment)
+                        .upSql(
+                                "CREATE TABLE multi_a (id INT PRIMARY KEY);\n"
+                                        + "CREATE TABLE multi_b (id INT PRIMARY KEY);\n")
+                        .downSql("DROP TABLE IF EXISTS multi_b;\nDROP TABLE IF EXISTS multi_a;\n")
+                        .build();
+
+        // when
+        Result<TaskResult, String> result = node.upTask().execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        assertThat(tableExists("multi_a")).isTrue();
+        assertThat(tableExists("multi_b")).isTrue();
+    }
+
+    @Test
+    void shouldExecuteProcedureWithoutDelimiterInTransactionMode() throws Exception {
+        // given - CREATE PROCEDURE with inline BEGIN...END (no DELIMITER directive).
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
+                        .id("proc_inline")
+                        .name("Create procedure inline")
+                        .environment(environment)
+                        .upSql(
+                                "CREATE TABLE proc_target (id INT);\n"
+                                        + "CREATE PROCEDURE seed_proc()\n"
+                                        + "BEGIN\n"
+                                        + "  INSERT INTO proc_target VALUES (1);\n"
+                                        + "  INSERT INTO proc_target VALUES (2);\n"
+                                        + "END")
+                        .downSql(
+                                "DROP PROCEDURE IF EXISTS seed_proc;\n"
+                                        + "DROP TABLE IF EXISTS proc_target;\n")
+                        .build();
+
+        // when
+        Result<TaskResult, String> result = node.upTask().execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        assertThat(procedureExists("seed_proc")).isTrue();
+    }
+
+    @Test
+    void shouldExecuteDelimiterScriptInTransactionMode() throws Exception {
+        // given - DELIMITER $$ ... END$$ DELIMITER ; style script.
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
+                        .id("proc_delim")
+                        .name("Create procedure with DELIMITER")
+                        .environment(environment)
+                        .upSql(
+                                "CREATE TABLE delim_target (id INT);\n"
+                                        + "DELIMITER $$\n"
+                                        + "CREATE PROCEDURE delim_proc()\n"
+                                        + "BEGIN\n"
+                                        + "  INSERT INTO delim_target VALUES (1);\n"
+                                        + "  INSERT INTO delim_target VALUES (2);\n"
+                                        + "END$$\n"
+                                        + "DELIMITER ;\n")
+                        .downSql(
+                                "DROP PROCEDURE IF EXISTS delim_proc;\n"
+                                        + "DROP TABLE IF EXISTS delim_target;\n")
+                        .build();
+
+        // when
+        Result<TaskResult, String> result = node.upTask().execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        assertThat(procedureExists("delim_proc")).isTrue();
+    }
+
+    private boolean tableExists(String table) throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT table_name FROM information_schema.tables "
+                                        + "WHERE table_name = '"
+                                        + table
+                                        + "' AND table_schema = 'migraphe_test'")) {
+            return rs.next();
+        }
+    }
+
+    private boolean procedureExists(String name) throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT routine_name FROM information_schema.routines "
+                                        + "WHERE routine_name = '"
+                                        + name
+                                        + "' AND routine_schema = 'migraphe_test'")) {
+            return rs.next();
         }
     }
 

@@ -12,6 +12,7 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **DAG-based migration** with explicit dependencies between tasks
 - **Multi-environment** support (development, staging, production)
 - **Pluggable database support**: PostgreSQL, MySQL, and any JDBC database
+- **Dialect-aware SQL statement splitting**: multi-statement migrations, stored procedures, PostgreSQL `DO $$...$$`, and MySQL `DELIMITER`
 - **Automatic plugin resolution** from Maven coordinates in `migraphe.yaml` (Maven Central, JitPack, or any HTTPS Maven repository)
 - **Reproducible builds** via SHA-256 lockfile (`migraphe.lock.yaml`)
 - **Gradle plugin** with `migrapheUp`/`Down`/`Status`/`Validate`/`Generate` tasks

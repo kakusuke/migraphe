@@ -44,4 +44,24 @@ class MySQLEnvironmentTest {
         // then
         assertThat(env.getPassword()).isNull();
     }
+
+    @Test
+    void shouldUseMySqlStatementSplitter() {
+        // given
+        var env =
+                MySQLEnvironment.create(
+                        "testdb", "jdbc:mysql://localhost:3306/mydb", "user", "pass");
+
+        // when: MySQL ルーチン本体の内部 ; では分割されない
+        var result =
+                env.statementSplitter()
+                        .split(
+                                "CREATE PROCEDURE p() BEGIN INSERT INTO t VALUES(1); END;\n"
+                                        + "SELECT 1;\n");
+
+        // then
+        assertThat(result)
+                .containsExactly(
+                        "CREATE PROCEDURE p() BEGIN INSERT INTO t VALUES(1); END", "SELECT 1");
+    }
 }

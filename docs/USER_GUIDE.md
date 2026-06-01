@@ -388,7 +388,7 @@ down: |
 
 ### Multi-Statement Migrations
 
-PostgreSQL supports transactional DDL, so multiple statements are safe:
+You can write multiple statements in a single `up` / `down`, separated by semicolons. Migraphe parses each dialect's lexis — string literals, quoted identifiers, comments, PostgreSQL dollar-quoting (`$$...$$`), and MySQL `BEGIN...END` blocks — to split the script safely, and **executes the statements sequentially even in the default (transaction) mode**. This is not limited to PostgreSQL: MySQL and any JDBC database can put multiple statements (e.g. several `CREATE TABLE`s) in one task.
 
 ```yaml
 name: Add indexes
@@ -406,7 +406,69 @@ down: |
   DROP INDEX IF EXISTS idx_users_created_at;
 ```
 
+### Stored Procedures and Functions
+
+Statement splitting understands dialect-specific procedure/function bodies, so the inner `;` characters do not split the body into pieces.
+
+**PostgreSQL** — dollar-quoted bodies (`$$ ... $$`) are treated as a single statement:
+
+```yaml
+name: Create audit function
+target: db1
+up: |
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auditor') THEN
+      CREATE ROLE auditor;
+    END IF;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE FUNCTION touch_updated_at() RETURNS trigger AS $$
+  BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+down: |
+  DROP FUNCTION IF EXISTS touch_updated_at();
+```
+
+**MySQL** — a `BEGIN ... END` body is parsed as one statement, so no `DELIMITER` is needed when writing it directly:
+
+```yaml
+name: Create reorder procedure
+target: db1
+up: |
+  CREATE PROCEDURE reorder(IN pid INT)
+  BEGIN
+    UPDATE products SET reordered = 1 WHERE id = pid;
+    INSERT INTO reorder_log(product_id) VALUES (pid);
+  END;
+down: |
+  DROP PROCEDURE IF EXISTS reorder;
+```
+
+`mysql`-client-style scripts that change the statement terminator with `DELIMITER` are also supported:
+
+```yaml
+up: |
+  DELIMITER $$
+  CREATE PROCEDURE reorder(IN pid INT)
+  BEGIN
+    UPDATE products SET reordered = 1 WHERE id = pid;
+    INSERT INTO reorder_log(product_id) VALUES (pid);
+  END$$
+  DELIMITER ;
+```
+
+### Comments in Migrations
+
+SQL comments are preserved, not stripped. A leading comment stays attached to the statement that follows it — line comments (`--`, MySQL `#`) keep their trailing newline so the next statement is not accidentally commented out. Dialect-specific *executable* comments are honored: MySQL version-conditional comments (`/*! ... */`, `/*!50110 ... */`) are sent to the server and executed, and optimizer hints (`/*+ ... */`) are kept on the statement. Only empty or whitespace-only segments are dropped; a comment-only line is a harmless no-op.
+
 ### Autocommit Mode
+
+> Autocommit is **not** required to run multiple statements — the default transaction mode already splits and executes them sequentially. Autocommit is only for statements that cannot run inside a transaction (e.g. `CREATE DATABASE`, `CREATE INDEX CONCURRENTLY`).
 
 Some SQL statements cannot run inside a transaction. For these cases, use `autocommit: true`:
 
