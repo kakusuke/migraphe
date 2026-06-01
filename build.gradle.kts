@@ -33,6 +33,9 @@ subprojects {
         "errorprone"(rootProject.libs.nullaway)
         "compileOnly"(rootProject.libs.jspecify)
         "testCompileOnly"(rootProject.libs.jspecify)
+        // Gradle 9 no longer adds the JUnit Platform launcher to the test
+        // runtime classpath implicitly; declare it for all subprojects.
+        "testRuntimeOnly"(rootProject.libs.junit.platform.launcher)
     }
 
     configure<com.diffplug.gradle.spotless.SpotlessExtension> {

@@ -6,8 +6,10 @@ import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.net.URLClassLoader;
 import org.gradle.api.GradleException;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
 /** 設定ファイルをオフラインで検証する Gradle タスク。DB 接続不要。 */
+@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
 public abstract class MigrapheValidateTask extends AbstractMigrapheTask {
 
     @TaskAction

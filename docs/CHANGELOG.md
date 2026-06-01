@@ -2,6 +2,14 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-06-01 (Session 56)
+- **Gradle 8.5 → 9.5.1 へアップグレード（Dependabot PR #15 の CI 失敗を解消）**
+  - **JUnit Platform launcher**: Gradle 9 はテスト実行時クラスパスに JUnit Platform launcher を暗黙追加しなくなったため、`migraphe-api` などで `Failed to load JUnit Platform` で失敗していた。ルート `build.gradle.kts` の `subprojects { dependencies { ... } }` に `testRuntimeOnly(libs.junit.platform.launcher)` を一元追加し、`migraphe-core` / `migraphe-gradle-plugin` に残っていた個別宣言を削除して重複を解消。
+  - **NullAway（Gradle 9 が API に null 注釈を追加）**: `MigrapheGenerateTask` で `Property.getOrElse(null)` → `getOrNull()`、`new GradleException(e.getMessage(), e)` → `String.valueOf(e.getMessage())` に修正。
+  - **タスク検証の厳格化（警告 → エラー）**: Gradle 9 は入力プロパティの正規化戦略とタスクのキャッシュ可否注釈を必須化。`AbstractMigrapheTask` の `getBaseDir()` に `@PathSensitive(RELATIVE)`、`getPluginClasspath()` を `@InputFiles` → `@Classpath` に変更。`@DisableCachingByDefault` は継承されないため、5 つの具象タスク（Up/Down/Status/Validate/Generate）すべてに付与。
+  - **mise**: `.mise.toml` から `gradle` 行を削除し、gradle バージョンの source of truth を Gradle Wrapper（`gradle-wrapper.properties`）に一本化した（CI/IDE/Dependabot はすべて wrapper 経由で動作するため。mise は `java` の管理に専念）。
+  - **検証**: `./gradlew build`（全 956 テスト + spotless + ErrorProne）成功。CI ワークフロー（`gradle/actions/setup-gradle@v6`）は変更不要。Gradle 10 向けの前方互換 deprecation 警告は残るが 9.5.1 ビルドには影響しないためスコープ外。
+
 ### 2026-06-01 (Session 55)
 - **SQL 文分割をパーサーコンビネーター方式に刷新し、方言ごとの文法を各プラグインで独自定義**
   - **Motivation**: 2 件の実害を解消するため。(1) MySQL で複数 SQL 文をデフォルト（トランザクション）モードで書くと、従来は 1 回の `Statement.execute()` にまとめて渡していたため失敗していた。(2) PostgreSQL の `DO $$ ... $$ LANGUAGE plpgsql` が autocommit モードの素朴な正規表現分割で `$$` 内の `;` により壊れていた。素朴な正規表現/文字列スキャン方式では方言ごとの字句（ドル引用符・バッククォート・`BEGIN...END` ブロック・DELIMITER）を正しく扱えないため、文法を宣言的に組めるパーサーコンビネーターへ刷新した。
