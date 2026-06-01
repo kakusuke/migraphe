@@ -9,6 +9,7 @@ dependencies {
 
     // プラグイン（テスト用のみ - 本番は plugins/ ディレクトリから動的ロード）
     testImplementation(project(":migraphe-plugin-postgresql"))
+    testImplementation(project(":migraphe-plugin-mysql"))
 
     // CLI フレームワーク
     implementation(libs.picocli)
@@ -30,6 +31,7 @@ dependencies {
     // Testcontainers（統合テスト用）
     testImplementation(platform(libs.testcontainers.bom))
     testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.mysql)
     testImplementation(libs.testcontainers.junit.jupiter)
 }
 

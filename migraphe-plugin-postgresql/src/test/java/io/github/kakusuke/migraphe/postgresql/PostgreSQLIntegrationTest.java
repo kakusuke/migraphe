@@ -63,8 +63,110 @@ class PostgreSQLIntegrationTest {
             stmt.execute("DROP TABLE IF EXISTS users CASCADE");
             stmt.execute("DROP TABLE IF EXISTS autocommit_test CASCADE");
             stmt.execute("DROP TABLE IF EXISTS autocommit_down_test CASCADE");
+            stmt.execute("DROP TABLE IF EXISTS do_target CASCADE");
+            stmt.execute("DROP FUNCTION IF EXISTS f_add(int, int) CASCADE");
             // Clear history
             stmt.execute("TRUNCATE TABLE migraphe_history");
+        }
+    }
+
+    @Test
+    void shouldExecuteDoBlockInTransactionMode() throws Exception {
+        // given - DO $$ ... PERFORM ...; ... END $$, autocommit=false (transaction mode).
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
+                        .id("do_tx")
+                        .name("DO block transaction")
+                        .environment(environment)
+                        .upSql(
+                                "CREATE TABLE do_target (id int);\n"
+                                        + "DO $$\n"
+                                        + "BEGIN\n"
+                                        + "  PERFORM 1;\n"
+                                        + "  INSERT INTO do_target VALUES (1);\n"
+                                        + "  INSERT INTO do_target VALUES (2);\n"
+                                        + "END\n"
+                                        + "$$ LANGUAGE plpgsql;\n")
+                        .downSql("DROP TABLE IF EXISTS do_target;")
+                        .build();
+
+        // when
+        Result<TaskResult, String> result = node.upTask().execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        assertThat(rowCount("do_target")).isEqualTo(2);
+    }
+
+    @Test
+    void shouldExecuteDoBlockInAutocommitMode() throws Exception {
+        // given - same DO $$ block, autocommit=true.
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
+                        .id("do_ac")
+                        .name("DO block autocommit")
+                        .environment(environment)
+                        .upSql(
+                                "CREATE TABLE do_target (id int);\n"
+                                        + "DO $$\n"
+                                        + "BEGIN\n"
+                                        + "  PERFORM 1;\n"
+                                        + "  INSERT INTO do_target VALUES (1);\n"
+                                        + "  INSERT INTO do_target VALUES (2);\n"
+                                        + "  INSERT INTO do_target VALUES (3);\n"
+                                        + "END\n"
+                                        + "$$ LANGUAGE plpgsql;\n")
+                        .downSql("DROP TABLE IF EXISTS do_target;")
+                        .autocommit(true)
+                        .build();
+
+        // when
+        Result<TaskResult, String> result = node.upTask().execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        assertThat(rowCount("do_target")).isEqualTo(3);
+    }
+
+    @Test
+    void shouldExecuteCreateFunctionAsSingleStatement() throws Exception {
+        // given - CREATE FUNCTION whose $$ body contains inner ; must run as a single statement.
+        JdbcMigrationNode node =
+                JdbcMigrationNode.builder()
+                        .id("create_fn")
+                        .name("Create function")
+                        .environment(environment)
+                        .upSql(
+                                "CREATE FUNCTION f_add(a int, b int) RETURNS int AS $$\n"
+                                        + "DECLARE\n"
+                                        + "  r int;\n"
+                                        + "BEGIN\n"
+                                        + "  r := a + b;\n"
+                                        + "  RETURN r;\n"
+                                        + "END;\n"
+                                        + "$$ LANGUAGE plpgsql;\n")
+                        .downSql("DROP FUNCTION IF EXISTS f_add(int, int);")
+                        .build();
+
+        // when
+        Result<TaskResult, String> result = node.upTask().execute();
+
+        // then
+        assertThat(result.isOk()).isTrue();
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("SELECT f_add(2, 3)")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isEqualTo(5);
+        }
+    }
+
+    private int rowCount(String table) throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + table)) {
+            rs.next();
+            return rs.getInt(1);
         }
     }
 

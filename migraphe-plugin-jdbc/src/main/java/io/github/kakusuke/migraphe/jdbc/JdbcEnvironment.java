@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -98,6 +99,18 @@ public class JdbcEnvironment implements Environment {
     public Connection createConnection() throws SQLException {
         ensureDriverLoaded();
         return DriverManager.getConnection(jdbcUrl, username, password);
+    }
+
+    /**
+     * SQL テキストをステートメント単位に分割する {@link StatementSplitter} を返す。
+     *
+     * <p>標準実装は標準的な引用・コメント領域を認識する {@link StatementSplitter#standard()} を返す。 方言固有の文法（例: PostgreSQL
+     * のドル引用符）を扱うサブクラスはこれをオーバーライドする。
+     *
+     * @return ステートメント分割器
+     */
+    public StatementSplitter statementSplitter() {
+        return StatementSplitter.standard();
     }
 
     /**

@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 21 (JitPack support + SHA-256 lockfile pinning) - COMPLETE
-**Tests**: 796, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: parser-combinator SQL statement splitting (Session 55)
+**Tests**: 956, 100% passing
 
 ## Module Structure
 
@@ -67,7 +67,8 @@ io.github.kakusuke.migraphe.core/
 io.github.kakusuke.migraphe.jdbc/
 ├── JdbcEnvironment, JdbcUpTask, JdbcDownTask, JdbcMigrationNode, JdbcHistoryRepository
 ├── JdbcPlugin, Jdbc{Environment,MigrationNode,HistoryRepository}Provider
-├── JdbcEnvironmentDefinition, SqlTaskDefinition, SqlStatements, JdbcException
+├── JdbcEnvironmentDefinition, SqlTaskDefinition, JdbcException
+├── statement/      # SQL splitting toolkit: SqlParser, SqlParsers (combinators), StatementSplitter (StatementSplitter.standard()), DelimiterDirective
 ├── schema/         # JdbcSchemaInfo, JdbcSchemaDetail, JdbcTableInfo, JdbcViewInfo, JdbcColumnInfo, etc. (19 types)
 │                   # JdbcSchemaInfoProvider (DatabaseMetaData → JdbcSchemaInfo)
 ├── markdown/       # JdbcMarkdownPlugin (type="jdbc-markdown"), JdbcMarkdownGenerator, JdbcMarkdownDefinition
@@ -77,6 +78,7 @@ io.github.kakusuke.migraphe.postgresql/
 ├── PostgreSQLEnvironment (extends JdbcEnvironment), PostgreSQLException (extends JdbcException)
 ├── PostgreSQLPlugin, PostgreSQL{Environment,MigrationNode,HistoryRepository}Provider
 ├── PostgreSQLEnvironmentDefinition
+├── statement/      # PostgreSqlGrammar (dollar-quote $tag$; no keyword blocks) — wired via PostgreSQLEnvironment.statementSplitter()
 ├── schema/         # PostgreSQLSchemaInfo, PostgreSQLSchemaInfoProvider (delegates JDBC base + pg_catalog extras)
 │                   # PG-specific: extensions, enums, sequences, functions, triggers, materialized views, partitions, policies
 ├── markdown/       # PostgreSQLMarkdownPlugin (type="postgresql-markdown"), PostgreSQLMarkdownGenerator (extends JdbcMarkdownGenerator)
@@ -86,6 +88,7 @@ io.github.kakusuke.migraphe.mysql/
 ├── MySQLEnvironment (extends JdbcEnvironment), MySQLException (extends JdbcException)
 ├── MySQLPlugin, MySQL{Environment,MigrationNode,HistoryRepository}Provider
 ├── MySQLEnvironmentDefinition
+├── statement/      # MySqlGrammar (backtick id, # / -- comments, recursive BEGIN/END blocks, DELIMITER) — wired via MySQLEnvironment.statementSplitter()
 ├── schema/         # MySQLSchemaInfo, MySQLSchemaInfoProvider (catalog-based, information_schema queries)
 │                   # MySQL-specific: storage engines, table meta, triggers, routines, events, partitions
 ├── markdown/       # MySQLMarkdownPlugin (type="mysql-markdown"), MySQLMarkdownGenerator (extends JdbcMarkdownGenerator)
@@ -135,6 +138,7 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 19. **MySQL Generator Plugins**: `mysql-schema` source (catalog-based, information_schema) + `mysql-markdown` output via the same Template Method pattern
 20. **JitPack + Lockfile Pinning (Phase 21)**: `repositories:` (HTTPS-only), `migraphe.lock.yaml` SHA-256 pinning via `migraphe pin`/`--check`/`validate`
 21. **JitPack Distribution (Phase 22)**: JitPack is the primary distribution channel until Maven Central; `-PpublishGroup` switch, plugin-marker workaround, tag-based user docs
+22. **SQL Statement Splitting (Session 55)**: parser-combinator toolkit in `migraphe-plugin-jdbc` (`...jdbc.statement`); dialect grammars defined per-plugin (PostgreSQL dollar-quote, no keyword blocks; MySQL recursive BEGIN/END blocks + DELIMITER); unified split-and-loop execution in both autocommit/transaction modes; old `SqlStatements` removed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## CLI Project Structure
 
@@ -208,11 +212,11 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-05-29 (Session 54)
-- Unified the three executors (`MigrationExecutor` / `ParallelMigrationExecutor` / `RollbackExecutor`) into a single `DagExecutor(graph, history, listener, direction, maxParallelism)` covering all UP/DOWN + sequential/parallel combinations.
-- Always runs the vthread + `Semaphore` + `PriorityBlockingQueue` + direction-aware `ReadyNodeTracker` path (`maxParallelism=1` just bounds the Semaphore). `DagExecutor` auto-wraps the sync repository/listener. Deleted 6 old files (3 executors + 3 tests); migrated tests into `DagExecutor{SequentialUp,ParallelUp,Rollback}Test`. All 1,400+ tests green.
+### 2026-06-01 (Session 55)
+- Reworked SQL statement splitting into a parser-combinator engine. Added a generic toolkit in `migraphe-plugin-jdbc` (`...jdbc.statement`: `SqlParser`, `SqlParsers` combinators, `StatementSplitter`, `DelimiterDirective`) and defined dialect grammars per-plugin: `PostgreSqlGrammar` (dollar-quote `$tag$`, no keyword blocks so `BEGIN;`/`COMMIT;` stay independent) and `MySqlGrammar` (backtick id, `#`/`-- ` comments, recursive BEGIN/END blocks, DELIMITER), wired via `{PostgreSQL,MySQL}Environment.statementSplitter()`.
+- `JdbcUpTask`/`JdbcDownTask` now loop-execute `environment.statementSplitter().split()` in both autocommit and transaction modes (transaction commits once at the end); removed the old `SqlStatements`. Fixes MySQL multi-statement failures in transaction mode and PostgreSQL `DO $$...$$` breakage in autocommit mode. Covered by dialect grammar unit tests, Testcontainers integration tests, and CLI e2e (`UpCommandTest`, new `UpCommandMySQLTest`).
 
 ---
 
-**Last Updated**: 2026-05-29
-**Current Work**: Unified the three executors into a single `DagExecutor(graph, history, listener, direction, maxParallelism)` (Session 54). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Last Updated**: 2026-06-01
+**Current Work**: Reworked SQL statement splitting into a parser-combinator engine with per-plugin dialect grammars; unified split-and-loop execution across autocommit/transaction modes (Session 55). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.

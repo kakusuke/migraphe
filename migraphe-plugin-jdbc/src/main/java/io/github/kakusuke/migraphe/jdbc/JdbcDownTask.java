@@ -48,7 +48,7 @@ public final class JdbcDownTask implements Task {
 
     private Result<TaskResult, String> executeWithAutocommit(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            for (String sql : SqlStatements.splitStatements(downSql)) {
+            for (String sql : environment.statementSplitter().split(downSql)) {
                 stmt.execute(sql);
             }
             long durationMs = System.currentTimeMillis() - startTime;
@@ -62,7 +62,9 @@ public final class JdbcDownTask implements Task {
 
     private Result<TaskResult, String> executeWithTransaction(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            stmt.execute(downSql);
+            for (String sql : environment.statementSplitter().split(downSql)) {
+                stmt.execute(sql);
+            }
             conn.commit();
 
             long durationMs = System.currentTimeMillis() - startTime;

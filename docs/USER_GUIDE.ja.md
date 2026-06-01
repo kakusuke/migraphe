@@ -388,7 +388,7 @@ down: |
 
 ### 複数ステートメントのマイグレーション
 
-PostgreSQLはトランザクショナルDDLをサポートしているため、複数のステートメントも安全です:
+`up` / `down` にはセミコロン区切りで複数の文を書けます。Migraphe は方言ごとの字句（文字列リテラル・引用符付き識別子・コメント・PostgreSQL のドル引用符 `$$...$$`・MySQL の `BEGIN...END` ブロック）を解釈して安全に分割し、**デフォルト（トランザクション）モードでも複数文を順次実行**します。これは PostgreSQL 限定ではなく、MySQL や任意の JDBC データベースでも、複数の `CREATE TABLE` などを 1 タスクにまとめられます。
 
 ```yaml
 name: Add indexes
@@ -406,7 +406,65 @@ down: |
   DROP INDEX IF EXISTS idx_users_created_at;
 ```
 
+### ストアドプロシージャと関数
+
+文分割は方言固有のプロシージャ／関数本体を解釈するため、本体内の `;` で文が分割されることはありません。
+
+**PostgreSQL** — ドル引用符の本体（`$$ ... $$`）は 1 つの文として扱われます:
+
+```yaml
+name: Create audit function
+target: db1
+up: |
+  DO $$
+  BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auditor') THEN
+      CREATE ROLE auditor;
+    END IF;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  CREATE FUNCTION touch_updated_at() RETURNS trigger AS $$
+  BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+down: |
+  DROP FUNCTION IF EXISTS touch_updated_at();
+```
+
+**MySQL** — `BEGIN ... END` の本体は 1 つの文として解釈されるため、直接記述する場合は `DELIMITER` が不要です:
+
+```yaml
+name: Create reorder procedure
+target: db1
+up: |
+  CREATE PROCEDURE reorder(IN pid INT)
+  BEGIN
+    UPDATE products SET reordered = 1 WHERE id = pid;
+    INSERT INTO reorder_log(product_id) VALUES (pid);
+  END;
+down: |
+  DROP PROCEDURE IF EXISTS reorder;
+```
+
+`DELIMITER` で文の終端文字を切り替える `mysql` クライアント形式のスクリプトにも対応しています:
+
+```yaml
+up: |
+  DELIMITER $$
+  CREATE PROCEDURE reorder(IN pid INT)
+  BEGIN
+    UPDATE products SET reordered = 1 WHERE id = pid;
+    INSERT INTO reorder_log(product_id) VALUES (pid);
+  END$$
+  DELIMITER ;
+```
+
 ### Autocommitモード
+
+> 複数文の実行に autocommit は**不要**です。デフォルトのトランザクションモードで分割して順次実行されます。autocommit は、トランザクション内で実行できない文（`CREATE DATABASE`、`CREATE INDEX CONCURRENTLY` など）専用です。
 
 一部のSQL文はトランザクション内で実行できません。そのような場合は `autocommit: true` を使用します:
 

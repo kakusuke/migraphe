@@ -71,6 +71,10 @@ class UpCommandTest {
                     // Drop all user tables
                     stmt.execute("DROP TABLE IF EXISTS users CASCADE");
                     stmt.execute("DROP INDEX IF EXISTS idx_users_name");
+                    // SQL-splitting e2e objects
+                    stmt.execute("DROP TABLE IF EXISTS do_block_target CASCADE");
+                    stmt.execute("DROP TABLE IF EXISTS multi_stmt_target CASCADE");
+                    stmt.execute("DROP FUNCTION IF EXISTS f(int, int) CASCADE");
                     // Clear history
                     stmt.execute("DROP TABLE IF EXISTS migraphe_history CASCADE");
                 }
@@ -319,6 +323,140 @@ class UpCommandTest {
         String output = outputStream.toString(StandardCharsets.UTF_8);
         // 緑色のOKステータス
         assertThat(output).contains("\u001B[32m");
+    }
+
+    @Test
+    void shouldExecuteDoBlockInTransactionMode() throws Exception {
+        // Given: DO $$ ... $$ ブロック内に複数の `;` を含むタスク（デフォルト=トランザクションモード）
+        createSqlSplittingProject(
+                tempDir,
+                """
+                name: Seed via DO block
+                target: test-db
+                up: |
+                  CREATE TABLE do_block_target (id INT PRIMARY KEY, val VARCHAR(50));
+                  DO $$
+                  BEGIN
+                    INSERT INTO do_block_target VALUES (1, 'a');
+                    INSERT INTO do_block_target VALUES (2, 'b');
+                    INSERT INTO do_block_target VALUES (3, 'c');
+                  END $$ LANGUAGE plpgsql;
+                down: DROP TABLE IF EXISTS do_block_target;
+                """);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        UpCommand command =
+                new UpCommand(
+                        context, null, true, false, new ByteArrayInputStream(new byte[0]), false);
+
+        // When: 実行（autocommit 指定なし → トランザクションモード）
+        int exitCode = command.execute();
+
+        // Then: 成功し、DO ブロック内 INSERT の副作用が反映される
+        assertThat(exitCode).isEqualTo(0);
+        assertThat(rowCount(context, "SELECT COUNT(*) FROM do_block_target")).isEqualTo(3);
+    }
+
+    @Test
+    void shouldExecuteMultipleStatementsInTransactionMode() throws Exception {
+        // Given: 1タスクに複数文（CREATE TABLE; INSERT; INSERT;）
+        createSqlSplittingProject(
+                tempDir,
+                """
+                name: Multiple statements
+                target: test-db
+                up: |
+                  CREATE TABLE multi_stmt_target (id INT PRIMARY KEY, val VARCHAR(50));
+                  INSERT INTO multi_stmt_target VALUES (1, 'x');
+                  INSERT INTO multi_stmt_target VALUES (2, 'y');
+                down: DROP TABLE IF EXISTS multi_stmt_target;
+                """);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        UpCommand command =
+                new UpCommand(
+                        context, null, true, false, new ByteArrayInputStream(new byte[0]), false);
+
+        // When: 実行（デフォルト=トランザクションモードで全文実行）
+        int exitCode = command.execute();
+
+        // Then: 成功し、両 INSERT が反映される
+        assertThat(exitCode).isEqualTo(0);
+        assertThat(rowCount(context, "SELECT COUNT(*) FROM multi_stmt_target")).isEqualTo(2);
+    }
+
+    @Test
+    void shouldExecuteCreateFunctionWithDollarBody() throws Exception {
+        // Given: CREATE FUNCTION ... $$ ... ; ... $$（本体内に複数 `;`）
+        createSqlSplittingProject(
+                tempDir,
+                """
+                name: Create function
+                target: test-db
+                up: |
+                  CREATE FUNCTION f(a int, b int) RETURNS int AS $$
+                  DECLARE
+                    result int;
+                  BEGIN
+                    result := a + b;
+                    RETURN result;
+                  END;
+                  $$ LANGUAGE plpgsql;
+                down: DROP FUNCTION IF EXISTS f(int, int);
+                """);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        UpCommand command =
+                new UpCommand(
+                        context, null, true, false, new ByteArrayInputStream(new byte[0]), false);
+
+        // When: 実行
+        int exitCode = command.execute();
+
+        // Then: 成功し、関数が呼び出せて f(2,3)=5
+        assertThat(exitCode).isEqualTo(0);
+        assertThat(rowCount(context, "SELECT f(2, 3)")).isEqualTo(5);
+    }
+
+    /** SQL分割検証用に、単一タスクだけを含むプロジェクト構造を作成する。 */
+    private void createSqlSplittingProject(Path baseDir, String taskYaml) throws IOException {
+        String projectYaml =
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                """;
+        Files.writeString(baseDir.resolve("migraphe.yaml"), projectYaml);
+
+        Path targetsDir = baseDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        String targetYaml =
+                String.format(
+                        """
+                        type: postgresql
+                        jdbc_url: %s
+                        username: %s
+                        password: %s
+                        """,
+                        postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+        Files.writeString(targetsDir.resolve("test-db.yaml"), targetYaml);
+
+        Path tasksDir = baseDir.resolve("tasks").resolve("test-db");
+        Files.createDirectories(tasksDir);
+        Files.writeString(tasksDir.resolve("001_split.yaml"), taskYaml);
+    }
+
+    /** クエリを実行して最初の列の int 値を返す。 */
+    private int rowCount(ExecutionContext context, String query) throws Exception {
+        Environment env = context.environments().get("test-db");
+        PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) env;
+        try (Connection conn = pgEnv.createConnection();
+                Statement stmt = conn.createStatement();
+                java.sql.ResultSet rs = stmt.executeQuery(query)) {
+            assertThat(rs.next()).isTrue();
+            return rs.getInt(1);
+        }
     }
 
     /** テスト用のプロジェクト構造を作成する。 */

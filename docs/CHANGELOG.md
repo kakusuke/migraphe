@@ -2,6 +2,17 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-06-01 (Session 55)
+- **SQL 文分割をパーサーコンビネーター方式に刷新し、方言ごとの文法を各プラグインで独自定義**
+  - **Motivation**: 2 件の実害を解消するため。(1) MySQL で複数 SQL 文をデフォルト（トランザクション）モードで書くと、従来は 1 回の `Statement.execute()` にまとめて渡していたため失敗していた。(2) PostgreSQL の `DO $$ ... $$ LANGUAGE plpgsql` が autocommit モードの素朴な正規表現分割で `$$` 内の `;` により壊れていた。素朴な正規表現/文字列スキャン方式では方言ごとの字句（ドル引用符・バッククォート・`BEGIN...END` ブロック・DELIMITER）を正しく扱えないため、文法を宣言的に組めるパーサーコンビネーターへ刷新した。
+  - **設計（パーサーコンビネーター）**: `migraphe-plugin-jdbc` に汎用ツールキット `io.github.kakusuke.migraphe.jdbc.statement` を新設。`SqlParser` インターフェースと `SqlParsers` のコンビネーター群（`literal`/`seq`/`or`/`anyChar`/`not`/`many`/`opt`/`keyword`/`ref`/`quoted`/`lineComment`/`delimited`/`standardRegion`/`whitespace`）で文法を宣言的に合成する。`StatementSplitter` が分割エンジン、`DelimiterDirective` が DELIMITER フックを表す。
+  - **責務分担（JDBC は汎用のみ・方言は各プラグイン）**: `StatementSplitter.standard()` は文字列リテラル/識別子/`--`/`/* */` コメント内の `;` を分割せず、各セグメント先頭のトリビア（空白・コメント）をスキップする。多文字区切り＋ DELIMITER ディレクティブフックに対応。方言固有の文法は各プラグインで独自定義する。
+    - **PostgreSQL**: `PostgreSqlGrammar`（ドル引用符 `$tag$...$tag$`）。`DO $$...$$` / `CREATE FUNCTION ... $$...$$` を 1 文化し、内部 `;` で割れない。**キーワードブロックは持たない**ので `BEGIN;`/`COMMIT;` のトランザクション制御文は独立分割される（`BEGIN` をブロック開始として誤飲しない）。`PostgreSQLEnvironment.statementSplitter()` でオーバーライド。
+    - **MySQL**: `MySqlGrammar`（バッククォート識別子、`#` および `-- `（空白要求）コメント、`\'`/`''` エスケープ文字列、**再帰ブロック文法** BEGIN/IF/CASE/LOOP/WHILE/REPEAT、**DELIMITER** ディレクティブ）。再帰文法によりブロック内 `;` を非分割とする挙動が自然に導かれる。`MySQLEnvironment.statementSplitter()` でオーバーライド。
+  - **配線（両モードで分割ループ統一・旧 SqlStatements 削除）**: `JdbcEnvironment.statementSplitter()` を追加（既定は `StatementSplitter.standard()`）。`JdbcUpTask`/`JdbcDownTask` は autocommit/transaction **両モードとも** `environment.statementSplitter().split()` でループ実行する（transaction モードは最後に 1 回だけ commit）。旧 `SqlStatements` は削除。
+  - **テスト**: 各方言文法のユニットテスト（`SqlParsersTest`/`StatementSplitterTest`/`PostgreSqlGrammarTest`/`MySqlGrammarTest`）、Testcontainers 結合テスト（`MySQLIntegrationTest`/`PostgreSQLIntegrationTest`）、CLI e2e（`UpCommandTest` に PostgreSQL の DO/複数文/FUNCTION、新規 `UpCommandMySQLTest` に MySQL の複数 CREATE TABLE/PROCEDURE/DELIMITER）。`migraphe-cli/build.gradle.kts` のテスト依存に `testImplementation(project(":migraphe-plugin-mysql"))` と testcontainers-mysql を追加（テストスコープのみ）。
+  - **TDD 段取り**: micro-plan → test-writer → minimal-fix → regression-guard → tidy の `/tdd-cycle` を複数ループで進行（コンビネーター基盤 → StatementSplitter.standard → PostgreSQL ドル引用符 → MySQL 再帰ブロック/DELIMITER → JdbcUp/DownTask 配線 → 結合・CLI e2e）。
+
 ### 2026-05-29 (Session 54)
 - **3 つの Executor (`MigrationExecutor` / `ParallelMigrationExecutor` / `RollbackExecutor`) を `DagExecutor` 1 つに統合**
   - **Motivation**: Session 53 の fail-soft 化で 3 つの同型ロジックを同期更新する保守税が顕在化。今後の observability / retry / hooks 追加で 3 倍コストが乗るため一本化。本質的に 3 つとも「DAG を direction + maxParallelism + ready-queue で消化する worklist」であり同一アルゴリズムの specialization。

@@ -12,6 +12,7 @@
 - **DAGベースのマイグレーション**: タスク間の依存関係を明示的に定義
 - **マルチ環境**: 開発／ステージング／本番をひとつの定義で管理
 - **プラガブルなデータベースサポート**: PostgreSQL、MySQL、および任意の JDBC データベース
+- **方言対応の SQL 文分割**: 複数文マイグレーション、ストアドプロシージャ、PostgreSQL の `DO $$...$$`、MySQL の `DELIMITER` に対応
 - **プラグイン自動解決**: `migraphe.yaml` の Maven 座標から解決（Maven Central、JitPack、任意の HTTPS Maven リポジトリ）
 - **再現可能なビルド**: SHA-256 ロックファイル (`migraphe.lock.yaml`) で全プラグインと推移的依存をピン留め
 - **Gradle プラグイン**: `migrapheUp`/`Down`/`Status`/`Validate`/`Generate` タスクを提供
