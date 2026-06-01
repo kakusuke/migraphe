@@ -462,6 +462,10 @@ up: |
   DELIMITER ;
 ```
 
+### Comments in Migrations
+
+SQL comments are preserved, not stripped. A leading comment stays attached to the statement that follows it — line comments (`--`, MySQL `#`) keep their trailing newline so the next statement is not accidentally commented out. Dialect-specific *executable* comments are honored: MySQL version-conditional comments (`/*! ... */`, `/*!50110 ... */`) are sent to the server and executed, and optimizer hints (`/*+ ... */`) are kept on the statement. Only empty or whitespace-only segments are dropped; a comment-only line is a harmless no-op.
+
 ### Autocommit Mode
 
 > Autocommit is **not** required to run multiple statements — the default transaction mode already splits and executes them sequentially. Autocommit is only for statements that cannot run inside a transaction (e.g. `CREATE DATABASE`, `CREATE INDEX CONCURRENTLY`).
