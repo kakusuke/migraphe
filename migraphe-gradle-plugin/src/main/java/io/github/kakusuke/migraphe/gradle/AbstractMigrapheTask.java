@@ -15,16 +15,21 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.provider.MapProperty;
+import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputDirectory;
-import org.gradle.api.tasks.InputFiles;
+import org.gradle.api.tasks.PathSensitive;
+import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.work.DisableCachingByDefault;
 import org.jspecify.annotations.Nullable;
 
 /** migraphe タスクの共通基底クラス。 */
+@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
 public abstract class AbstractMigrapheTask extends DefaultTask {
 
     /** プロジェクト設定のベースディレクトリ。 */
     @InputDirectory
+    @PathSensitive(PathSensitivity.RELATIVE)
     public abstract DirectoryProperty getBaseDir();
 
     /** SmallRye Config に差し込む変数マップ。 */
@@ -32,7 +37,7 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
     public abstract MapProperty<String, String> getVariables();
 
     /** migraphePlugin configuration の解決済み JAR パス。 */
-    @InputFiles
+    @Classpath
     public abstract ConfigurableFileCollection getPluginClasspath();
 
     /** migraphePlugin configuration の JAR から URLClassLoader を作成する。 */

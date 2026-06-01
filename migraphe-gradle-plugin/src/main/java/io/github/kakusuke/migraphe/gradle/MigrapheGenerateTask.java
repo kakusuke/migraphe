@@ -13,9 +13,11 @@ import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.options.Option;
+import org.gradle.work.DisableCachingByDefault;
 import org.jspecify.annotations.Nullable;
 
 /** ジェネレーターを実行する Gradle タスク。 */
+@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
 public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
 
     /** 実行するジェネレーター名。 */
@@ -44,7 +46,7 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
             List<ProjectConfig.GeneratorSection> generators =
                     projectConfig.generators().orElse(Collections.emptyList());
 
-            @Nullable String nameFilter = getGeneratorName().getOrElse(null);
+            @Nullable String nameFilter = getGeneratorName().getOrNull();
 
             if (generators.isEmpty()) {
                 getLogger().lifecycle("No generators configured.");
@@ -68,7 +70,7 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
                 getLogger().lifecycle("");
                 getLogger().lifecycle("Generation completed successfully.");
             } catch (IllegalArgumentException e) {
-                throw new GradleException(e.getMessage(), e);
+                throw new GradleException(String.valueOf(e.getMessage()), e);
             }
         } finally {
             closePluginClassLoader(pluginClassLoader);

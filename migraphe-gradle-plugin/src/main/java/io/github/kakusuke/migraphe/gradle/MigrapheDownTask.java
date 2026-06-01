@@ -18,8 +18,10 @@ import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.options.Option;
+import org.gradle.work.DisableCachingByDefault;
 
 /** DOWN（ロールバック）マイグレーションを実行する Gradle タスク。 */
+@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
 public abstract class MigrapheDownTask extends AbstractMigrapheTask {
 
     /** ターゲットノード ID。 */

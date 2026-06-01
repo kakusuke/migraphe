@@ -6,7 +6,7 @@
 
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
-**Tech Stack**: Java 21, Gradle 8.5 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
+**Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: parser-combinator SQL statement splitting (Session 55)
 **Tests**: 956, 100% passing
 
@@ -212,11 +212,10 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-06-01 (Session 55)
-- Reworked SQL statement splitting into a parser-combinator engine. Added a generic toolkit in `migraphe-plugin-jdbc` (`...jdbc.statement`: `SqlParser`, `SqlParsers` combinators, `StatementSplitter`, `DelimiterDirective`) and defined dialect grammars per-plugin: `PostgreSqlGrammar` (dollar-quote `$tag$`, no keyword blocks so `BEGIN;`/`COMMIT;` stay independent) and `MySqlGrammar` (backtick id, `#`/`-- ` comments, recursive BEGIN/END blocks, DELIMITER), wired via `{PostgreSQL,MySQL}Environment.statementSplitter()`.
-- `JdbcUpTask`/`JdbcDownTask` now loop-execute `environment.statementSplitter().split()` in both autocommit and transaction modes (transaction commits once at the end); removed the old `SqlStatements`. Fixes MySQL multi-statement failures in transaction mode and PostgreSQL `DO $$...$$` breakage in autocommit mode. Covered by dialect grammar unit tests, Testcontainers integration tests, and CLI e2e (`UpCommandTest`, new `UpCommandMySQLTest`).
+### 2026-06-01 (Session 56)
+- Upgraded Gradle 8.5 → 9.5.1 (resolves the failing CI on Dependabot PR #15). Centralized `testRuntimeOnly(libs.junit.platform.launcher)` in the root `subprojects` block (Gradle 9 no longer adds it implicitly) and removed the now-redundant per-module declarations. Fixed two NullAway hits surfaced by Gradle 9's API null annotations in `MigrapheGenerateTask` (`getOrNull()`, `String.valueOf(e.getMessage())`). Satisfied Gradle 9's stricter task validation: `@PathSensitive(RELATIVE)` on `getBaseDir()`, `@Classpath` on `getPluginClasspath()`, and `@DisableCachingByDefault` on all five concrete tasks (not inherited). Dropped the `gradle` line from `.mise.toml` so the Gradle Wrapper is the single source of truth for the version (mise manages `java`).
 
 ---
 
 **Last Updated**: 2026-06-01
-**Current Work**: Reworked SQL statement splitting into a parser-combinator engine with per-plugin dialect grammars; unified split-and-loop execution across autocommit/transaction modes (Session 55). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Current Work**: Upgraded Gradle to 9.5.1 and fixed the resulting CI failures (JUnit launcher classpath, NullAway, strict task validation); Dependabot PR #15 (Session 56). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.

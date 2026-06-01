@@ -6,8 +6,10 @@ import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
 import java.util.List;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
 /** マイグレーションの実行状況を表示する Gradle タスク。 */
+@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
 public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
 
     @TaskAction
