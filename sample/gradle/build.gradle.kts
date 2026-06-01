@@ -1,5 +1,5 @@
 plugins {
-    id("io.github.kakusuke.migraphe") version "v0.4.0"
+    id("io.github.kakusuke.migraphe") version "v0.4.1"
 }
 
 repositories {
@@ -8,7 +8,7 @@ repositories {
 }
 
 dependencies {
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.4.0")
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.4.0")
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.4.0")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.4.1")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.4.1")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.4.1")
 }
