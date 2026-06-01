@@ -155,20 +155,13 @@ public final class MySqlGrammar {
     /**
      * MySQL 方言の {@link StatementSplitter} を返す。
      *
-     * <p>領域はクォート/コメントと複合文ブロック、トリビアは空白・行コメント・ブロックコメント、 初期区切り文字は {@code ';'}。{@code DELIMITER}
-     * ディレクティブで実行中に区切りを変更できる。
+     * <p>領域はクォート/コメントと複合文ブロック、初期区切り文字は {@code ';'}。{@code DELIMITER} ディレクティブで実行中に区切りを変更できる。
+     * 先頭コメントは後続文に付随して保持される。
      *
      * @return MySQL 用ステートメント分割器
      */
     public static StatementSplitter splitter() {
-        SqlParser dashComment = SqlParsers.lineComment("--", true);
-        SqlParser hashComment = SqlParsers.lineComment("#", false);
-        SqlParser blockComment = SqlParsers.delimited("/*", "*/");
         SqlParser region = SqlParsers.or(quoteOrComment(), block());
-        SqlParser trivia =
-                SqlParsers.many(
-                        SqlParsers.or(
-                                SqlParsers.whitespace(), dashComment, hashComment, blockComment));
-        return new StatementSplitter(region, trivia, ";", delimiterDirective());
+        return new StatementSplitter(region, ";", delimiterDirective());
     }
 }

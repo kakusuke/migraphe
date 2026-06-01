@@ -5,7 +5,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * セグメント先頭で区切り文字の変更指示（例: MySQL の {@code DELIMITER} ディレクティブ）を検出するパーサー。
  *
- * <p>{@link StatementSplitter} は各セグメントのトリビアスキップ後にこれを適用し、検出された場合は その指示自体を出力に含めず、以降の区切り文字を {@link
+ * <p>{@link StatementSplitter} は各セグメント先頭の空白スキップ後にこれを適用し、検出された場合は その指示自体を出力に含めず、以降の区切り文字を {@link
  * Result#newDelimiter()} に切り替える。
  */
 public interface DelimiterDirective {
@@ -14,7 +14,7 @@ public interface DelimiterDirective {
      * {@code pos} から区切り変更指示を検出する。
      *
      * @param sql 解析対象の SQL テキスト
-     * @param pos 検出を試みる位置（トリビアスキップ後のセグメント先頭）
+     * @param pos 検出を試みる位置（空白スキップ後のセグメント先頭）
      * @return 検出時は変更後の区切り文字と次の位置、非検出時は {@code null}
      */
     @Nullable Result detect(String sql, int pos);

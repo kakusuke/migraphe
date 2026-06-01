@@ -149,10 +149,10 @@ class PostgreSqlGrammarTest {
         }
 
         @Test
-        @DisplayName("行コメント内の ; は無視される")
+        @DisplayName("行コメント内の ; は無視され、先頭行コメントは次文に付随する")
         void semicolonInLineCommentIgnored() {
             String sql = "SELECT 1; -- a; b\nSELECT 2;";
-            assertThat(split(sql)).containsExactly("SELECT 1", "SELECT 2");
+            assertThat(split(sql)).containsExactly("SELECT 1", "-- a; b\nSELECT 2");
         }
 
         @Test
@@ -160,6 +160,13 @@ class PostgreSqlGrammarTest {
         void semicolonInBlockCommentIgnored() {
             String sql = "SELECT 1 /* a; b */; SELECT 2;";
             assertThat(split(sql)).containsExactly("SELECT 1 /* a; b */", "SELECT 2");
+        }
+
+        @Test
+        @DisplayName("先頭の最適化ヒント /*+ */ は次文に付随して保持される")
+        void leadingHintRetained() {
+            String sql = "/*+ SeqScan(t) */ SELECT 1;\n";
+            assertThat(split(sql)).containsExactly("/*+ SeqScan(t) */ SELECT 1");
         }
     }
 
@@ -261,8 +268,8 @@ class PostgreSqlGrammarTest {
                             + "INSERT INTO t SELECT 2 WHERE 'a;b' <> 'c;d';\n";
             List<String> result = split(sql);
             assertThat(result).hasSize(3);
-            assertThat(result.get(0)).startsWith("CREATE TABLE t (id int)");
-            assertThat(result.get(1)).startsWith("INSERT INTO t VALUES (1)");
+            assertThat(result.get(0)).contains("CREATE TABLE t (id int)");
+            assertThat(result.get(1)).contains("INSERT INTO t VALUES (1)");
             assertThat(result.get(2)).contains("'a;b' <> 'c;d'");
         }
 

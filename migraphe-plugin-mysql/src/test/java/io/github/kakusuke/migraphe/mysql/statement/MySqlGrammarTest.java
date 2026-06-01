@@ -24,10 +24,10 @@ class MySqlGrammarTest {
         }
 
         @Test
-        @DisplayName("# コメント内の ; は無視する")
+        @DisplayName("# コメント内の ; は無視し、先頭コメントは次文に付随する")
         void hashComment() {
             List<String> result = splitter.split("SELECT 1; # drop; everything\nSELECT 2;\n");
-            assertThat(result).containsExactly("SELECT 1", "SELECT 2");
+            assertThat(result).containsExactly("SELECT 1", "# drop; everything\nSELECT 2");
         }
 
         @Test
@@ -38,10 +38,10 @@ class MySqlGrammarTest {
         }
 
         @Test
-        @DisplayName("-- (空白あり) はコメントになり ; を無視する")
+        @DisplayName("-- (空白あり) はコメントになり ; を無視し、先頭コメントは次文に付随する")
         void dashCommentWithSpace() {
             List<String> result = splitter.split("SELECT 1; -- drop; everything\nSELECT 2;\n");
-            assertThat(result).containsExactly("SELECT 1", "SELECT 2");
+            assertThat(result).containsExactly("SELECT 1", "-- drop; everything\nSELECT 2");
         }
 
         @Test
@@ -63,6 +63,20 @@ class MySqlGrammarTest {
         void blockComment() {
             List<String> result = splitter.split("SELECT 1 /* a;b */;\nSELECT 2;\n");
             assertThat(result).containsExactly("SELECT 1 /* a;b */", "SELECT 2");
+        }
+
+        @Test
+        @DisplayName("実行コメント /*!...*/ 単体は1文として保持される")
+        void executableCommentRetained() {
+            List<String> result = splitter.split("/*!40101 SET @x = 1 */;\nSELECT 1;\n");
+            assertThat(result).containsExactly("/*!40101 SET @x = 1 */", "SELECT 1");
+        }
+
+        @Test
+        @DisplayName("先頭の最適化ヒント /*+ */ は次文に付随して保持される")
+        void leadingHintRetained() {
+            List<String> result = splitter.split("/*+ SOME_HINT */ SELECT 1;\n");
+            assertThat(result).containsExactly("/*+ SOME_HINT */ SELECT 1");
         }
     }
 

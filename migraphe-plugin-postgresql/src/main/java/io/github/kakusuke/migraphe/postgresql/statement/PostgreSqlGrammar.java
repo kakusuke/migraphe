@@ -63,19 +63,13 @@ public final class PostgreSqlGrammar {
     /**
      * PostgreSQL 方言の {@link StatementSplitter} を返す。
      *
-     * <p>領域はドル引用符と標準引用・コメント領域、トリビアは空白・行コメント・ブロックコメント、 区切り文字は {@code ';'}。手続き本体は常にドル引用符／文字列内に
-     * 収まるため、キーワードブロックや DELIMITER 文法は含めない。
+     * <p>領域はドル引用符と標準引用・コメント領域、区切り文字は {@code ';'}。手続き本体は常にドル引用符／文字列内に 収まるため、キーワードブロックや DELIMITER
+     * 文法は含めない。先頭コメントは後続文に付随して保持される。
      *
      * @return PostgreSQL 用ステートメント分割器
      */
     public static StatementSplitter splitter() {
         SqlParser region = SqlParsers.or(dollarQuoted(), SqlParsers.standardRegion());
-        SqlParser trivia =
-                SqlParsers.many(
-                        SqlParsers.or(
-                                SqlParsers.whitespace(),
-                                SqlParsers.lineComment("--", false),
-                                SqlParsers.delimited("/*", "*/")));
-        return new StatementSplitter(region, trivia, ';');
+        return new StatementSplitter(region, ";", null);
     }
 }
