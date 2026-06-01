@@ -89,12 +89,12 @@ Migraphe はプラグインアーキテクチャを採用しており、デー�
 
 | プラグイン | タイプ | 説明 |
 |-----------|--------|------|
-| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql` | PostgreSQL データベースサポート（`postgresql-schema` ソースおよび `postgresql-markdown` アウトプットプラグインを含む） |
-| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql` | MySQL 8.0+ データベースサポート（`mysql-schema` ソースおよび `mysql-markdown` アウトプットプラグインを含む） |
-| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
-| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.md) | `output-json` | JSON 出力ジェネレータプラグイン |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.ja.md) | `postgresql` | PostgreSQL データベースサポート（`postgresql-schema` ソースおよび `postgresql-markdown` アウトプットプラグインを含む） |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.ja.md) | `mysql` | MySQL 8.0+ データベースサポート（`mysql-schema` ソースおよび `mysql-markdown` アウトプットプラグインを含む） |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.ja.md) | `jdbc` | 汎用 JDBC サポート（任意の JDBC データベースで使用可能） |
+| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.ja.md) | `output-json` | JSON 出力ジェネレータプラグイン |
 
-各プラグインの `README.md` には、ターゲットのフィールド、接続例、データベース固有の挙動が網羅されています（英語版。一部のプラグインには `README.ja.md` の日本語版もあります）。詳細は上記のプラグイン名のリンクを参照してください。
+各プラグインの `README.ja.md` には、ターゲットのフィールド、接続例、データベース固有の挙動が網羅されています。詳細は上記のプラグイン名のリンクを参照してください。
 
 #### 方法1: Maven 座標（推奨）
 
@@ -298,7 +298,7 @@ username: user
 password: secret
 ```
 
-汎用 JDBC プラグイン（`type: jdbc`）は任意の JDBC 対応データベースで使用できます。`driver_class` を指定し、JDBC ドライバ JAR がクラスパスで利用可能であることを確認してください。ターゲットのフィールド一覧やデータベース固有の注意点については、各プラグインの README を参照してください: [postgresql](../migraphe-plugin-postgresql/README.md)、[mysql](../migraphe-plugin-mysql/README.md)、[jdbc](../migraphe-plugin-jdbc/README.md)。
+汎用 JDBC プラグイン（`type: jdbc`）は任意の JDBC 対応データベースで使用できます。`driver_class` を指定し、JDBC ドライバ JAR がクラスパスで利用可能であることを確認してください。ターゲットのフィールド一覧やデータベース固有の注意点については、各プラグインの README を参照してください: [postgresql](../migraphe-plugin-postgresql/README.ja.md)、[mysql](../migraphe-plugin-mysql/README.ja.md)、[jdbc](../migraphe-plugin-jdbc/README.ja.md)。
 
 ### タスク設定
 
@@ -846,19 +846,19 @@ generators:
 
 | プラグイン | タイプ | データ | 説明 |
 |-----------|--------|--------|------|
-| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
-| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql-schema` | `PostgreSQLSchemaInfo` | JDBC基本スキーマ + PostgreSQL固有メタデータ（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）をpg_catalogから抽出 |
-| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql-schema` | `MySQLSchemaInfo` | JDBC基本スキーマ + MySQL固有メタデータ（ストレージエンジン、テーブルメタ、トリガー、ルーチン、イベント、パーティション）をinformation_schemaから抽出 |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.ja.md) | `jdbc-schema` | `JdbcSchemaInfo` | JDBC DatabaseMetaData経由でデータベーススキーマメタデータを抽出 |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.ja.md) | `postgresql-schema` | `PostgreSQLSchemaInfo` | JDBC基本スキーマ + PostgreSQL固有メタデータ（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）をpg_catalogから抽出 |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.ja.md) | `mysql-schema` | `MySQLSchemaInfo` | JDBC基本スキーマ + MySQL固有メタデータ（ストレージエンジン、テーブルメタ、トリガー、ルーチン、イベント、パーティション）をinformation_schemaから抽出 |
 | （組み込み） | `migration-tree` | `MigrationGraphView` | マイグレーションDAG構造を提供 |
 
 ### 利用可能なアウトプットプラグイン
 
 | プラグイン | タイプ | 説明 |
 |-----------|--------|------|
-| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
-| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql-markdown` | PostgreSQL固有オブジェクト（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）を含むMarkdownドキュメントを生成 |
-| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql-markdown` | MySQL固有オブジェクト（ストレージエンジン、テーブルメタデータ、トリガー、ルーチン、イベント、パーティション）を含むMarkdownドキュメントを生成 |
-| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.md) | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.ja.md) | `jdbc-markdown` | `JdbcSchemaInfo` からMarkdownドキュメントを生成 |
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.ja.md) | `postgresql-markdown` | PostgreSQL固有オブジェクト（拡張機能、列挙型、シーケンス、関数、トリガー、マテリアライズドビュー、パーティション、ポリシー）を含むMarkdownドキュメントを生成 |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.ja.md) | `mysql-markdown` | MySQL固有オブジェクト（ストレージエンジン、テーブルメタデータ、トリガー、ルーチン、イベント、パーティション）を含むMarkdownドキュメントを生成 |
+| [`migraphe-plugin-generator-json`](../migraphe-plugin-generator-json/README.ja.md) | `output-json` | 任意のデータを整形済みJSONで標準出力に出力 |
 
 ### 基本的な使い方
 
@@ -931,8 +931,8 @@ generators:
 
 データベース固有オブジェクトの完全な一覧、所有者／DEFINER の表示、テーブルごとに含まれる内容については、各プラグインの README に記載されています:
 
-- PostgreSQL: [`migraphe-plugin-postgresql/README.md`](../migraphe-plugin-postgresql/README.md)
-- MySQL: [`migraphe-plugin-mysql/README.md`](../migraphe-plugin-mysql/README.md)
+- PostgreSQL: [`migraphe-plugin-postgresql/README.ja.md`](../migraphe-plugin-postgresql/README.ja.md)
+- MySQL: [`migraphe-plugin-mysql/README.ja.md`](../migraphe-plugin-mysql/README.ja.md)
 
 ### 除外フィルタリング
 
