@@ -526,13 +526,18 @@ Error:
 
 ### Environment-Specific Execution
 
-```bash
-# Load production environment overrides
-migraphe up --env production
+Pass `--env <name>` to overlay `environments/<name>.yaml` on top of your `targets/` configuration. The overlay takes highest precedence and overrides target connection settings (e.g. `jdbc_url`, `username`, `password`). Supported by the `up`, `down`, and `status` commands:
 
-# Load development environment overrides
+```bash
+# Apply environments/production.yaml overrides
+migraphe up --env production
+migraphe status --env production
+
+# Apply environments/development.yaml overrides
 migraphe up --env development
 ```
+
+If `environments/<name>.yaml` does not exist, the flag is ignored (base configuration is used). `validate` and `generate` do not currently read `--env`.
 
 ## Rollback (down)
 

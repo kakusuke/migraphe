@@ -5,13 +5,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
+import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
+import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MainTest {
 
@@ -69,6 +74,13 @@ class MainTest {
     }
 
     @Test
+    void parseEnvOptionShouldReturnEnvNameOrNull() {
+        assertThat(Main.parseEnvOption(new String[] {"up", "--env", "staging"}))
+                .isEqualTo("staging");
+        assertThat(Main.parseEnvOption(new String[] {"up", "--dry-run"})).isNull();
+    }
+
+    @Test
     void shouldResolvePluginsDirToBaseDirWhenScanRootIsAbsent() {
         Path baseDir = Path.of("/tmp/proj");
         PluginConfigParseResult parsed =
@@ -77,6 +89,45 @@ class MainTest {
         Path result = Main.resolvePluginsDir(baseDir, parsed);
 
         assertThat(result).isEqualTo(Path.of("/tmp/proj/plugins"));
+    }
+
+    @Test
+    void loadContextShouldPassEnvOptionToExecutionContextLoad(@TempDir Path tempDir)
+            throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: noop-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        Files.createDirectories(tempDir.resolve("environments"));
+
+        String[] argsWithEnv = {"up", "--env", "staging"};
+        String[] argsWithoutEnv = {"up"};
+
+        ExecutionContext contextWithEnv = Main.loadContext(tempDir, pluginRegistry, argsWithEnv);
+        ExecutionContext contextWithoutEnv =
+                Main.loadContext(tempDir, pluginRegistry, argsWithoutEnv);
+        ExecutionContext directLoad = ExecutionContext.load(tempDir, pluginRegistry, "staging");
+
+        assertThat(contextWithEnv.environments()).containsKey("noop-db");
+        assertThat(contextWithoutEnv.environments()).containsKey("noop-db");
+        assertThat(contextWithEnv.environments().keySet())
+                .isEqualTo(directLoad.environments().keySet());
+    }
+
+    @Test
+    void firstPositionalArgShouldSkipFlagPairsWhenExtracting() {
+        assertThat(Main.firstPositionalArg(new String[] {"up", "--env", "production", "db1/001"}))
+                .isEqualTo("db1/001");
+        assertThat(Main.firstPositionalArg(new String[] {"up", "--env", "production"})).isNull();
     }
 
     @Test

@@ -2,6 +2,17 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-06-25 (Session 58)
+- **環境プロファイル選択 `--env <name>` を CLI に実装（up/down/status）**
+  - **Motivation**: `environments/<name>.yaml` のオーバーレイ機構はコア層（`ConfigLoader.loadConfig(baseDir, envName, variables)`）に実装済み・テスト済みだったが、CLI から環境を選択する経路が無く、`ExecutionContext.load` が常に envName=null で呼ばれていたため一切適用されなかった。`docs/USER_GUIDE.md` は `migraphe up --env production` と記載していたが実際には動かないドキュメント/実装ギャップ状態だった。
+  - **実装（`/tdd-cycle` を 4 サイクル）**:
+    1. `ExecutionContext.load(Path, PluginRegistry, @Nullable String envName)` および `(..., envName, Map variables)` オーバーロードを追加。内部で `configLoader.load(...)` → `configLoader.loadConfig(baseDir, envName, variables)` に切替。既存2オーバーロードは envName=null 委譲で後方互換維持。
+    2. `Main.parseEnvOption(String[])`（package-private）追加。tidy で `parseNameOption` と共通化し `parseValueOption(args, flag)` を抽出。
+    3. `Main.loadContext(baseDir, pluginRegistry, args)` を抽出し、`Main.run` の up/down/status 経路を `ExecutionContext.load(baseDir, pluginRegistry, parseEnvOption(args))` 配線に変更。
+    4. **位置引数バグ修正**: `createUpCommand` / `createDownCommand` が `--env <value>` を位置引数（マイグレーションID/version）として誤取得していた。`firstPositionalArg(String[])` を追加し、コマンド語・値付きフラグ（`--env`/`--name`）とその値・真偽フラグ（`-y`/`--dry-run`/`--all`）を読み飛ばして最初の位置引数を返すよう修正。printUsage に `--env <name>` を追記。
+  - **挙動**: `environments/<name>.yaml` が存在しなければフラグは無視（ベース設定）。`validate`/`generate` は独自ロード経路のため未対応（フォローアップ）。Gradle plugin も別途。
+  - **検証**: `./gradlew build`（全モジュール、テスト + spotless + ErrorProne）成功。新規テスト: `ExecutionContextTest`（envName で target 上書きが反映）、`MainTest`（parseEnvOption / loadContext 配線 / firstPositionalArg のフラグ読み飛ばし）。
+
 ### 2026-06-25 (Session 57)
 - **ドキュメント整理: プラグインの使い方を各プラグイン README に集約し、USER_GUIDE はリンク誘導に集約**
   - **方針（ユーザー合意済）**: (1) プラグインの使い方はプラグイン側 README に集約。(2) メインドキュメント（USER_GUIDE）はプラグイン一覧テーブル＋リンク＋1行説明にとどめる。(3) 各プラグイン README はそのプラグインのオプションを**すべて**列挙・説明することを必須とする。(4) 英語版・日本語版の両方を同期。

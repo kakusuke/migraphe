@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /**
  * 実行時のコンテキスト。
@@ -70,16 +71,20 @@ public record ExecutionContext(
     /**
      * プロジェクトディレクトリから ExecutionContext をロードする。
      *
+     * <p>環境ファイルはロードしない（{@code envName = null}）。
+     *
      * @param baseDir プロジェクトのルートディレクトリ
      * @param pluginRegistry プラグインレジストリ
      * @return ExecutionContext
      */
     public static ExecutionContext load(Path baseDir, PluginRegistry pluginRegistry) {
-        return load(baseDir, pluginRegistry, Collections.emptyMap());
+        return load(baseDir, pluginRegistry, null, Collections.emptyMap());
     }
 
     /**
      * プロジェクトディレクトリから ExecutionContext をロードする（変数指定あり）。
+     *
+     * <p>環境ファイルはロードしない（{@code envName = null}）。
      *
      * @param baseDir プロジェクトのルートディレクトリ
      * @param pluginRegistry プラグインレジストリ
@@ -88,10 +93,40 @@ public record ExecutionContext(
      */
     public static ExecutionContext load(
             Path baseDir, PluginRegistry pluginRegistry, Map<String, String> variables) {
+        return load(baseDir, pluginRegistry, null, variables);
+    }
+
+    /**
+     * プロジェクトディレクトリから ExecutionContext をロードする（環境名指定あり）。
+     *
+     * @param baseDir プロジェクトのルートディレクトリ
+     * @param pluginRegistry プラグインレジストリ
+     * @param envName 環境名 (null の場合は環境ファイルをロードしない)
+     * @return ExecutionContext
+     */
+    public static ExecutionContext load(
+            Path baseDir, PluginRegistry pluginRegistry, @Nullable String envName) {
+        return load(baseDir, pluginRegistry, envName, Collections.emptyMap());
+    }
+
+    /**
+     * プロジェクトディレクトリから ExecutionContext をロードする（環境名・変数指定あり）。
+     *
+     * @param baseDir プロジェクトのルートディレクトリ
+     * @param pluginRegistry プラグインレジストリ
+     * @param envName 環境名 (null の場合は環境ファイルをロードしない)
+     * @param variables 変数マップ（SmallRye Config に最優先で差し込まれる）
+     * @return ExecutionContext
+     */
+    public static ExecutionContext load(
+            Path baseDir,
+            PluginRegistry pluginRegistry,
+            @Nullable String envName,
+            Map<String, String> variables) {
         // 1. ConfigLoader でYAML設定を読み込み
         ConfigLoader configLoader = new ConfigLoader();
         Path scanRoot = configLoader.resolveScanRoot(baseDir);
-        SmallRyeConfig config = configLoader.load(baseDir, variables);
+        SmallRyeConfig config = configLoader.loadConfig(baseDir, envName, variables);
 
         // 2. EnvironmentDefinition を読み込み、EnvironmentFactory で全Environment生成
         Map<String, EnvironmentDefinition> environmentDefinitions =

@@ -212,10 +212,13 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
+### 2026-06-25 (Session 58)
+- Implemented the `--env <name>` CLI option (up/down/status) so deployment-environment profiles (`environments/<name>.yaml`) actually apply. The core overlay (`ConfigLoader.loadConfig(baseDir, envName, variables)`) already existed and was tested, but `ExecutionContext.load` always passed `envName=null`, so the documented `migraphe up --env production` never worked. Done via 4 `/tdd-cycle` passes: (1) `ExecutionContext.load` envName overloads → `loadConfig`; (2) `Main.parseEnvOption` (+ extracted `parseValueOption`); (3) `Main.loadContext` wiring of up/down/status; (4) fixed `createUpCommand`/`createDownCommand` mis-parsing `--env <value>` as the positional migration id via a new `firstPositionalArg` that skips the command word, value-flags (`--env`/`--name`) + their values, and boolean flags (`-y`/`--dry-run`/`--all`); added `--env` to printUsage. Updated USER_GUIDE en/ja. `validate`/`generate` and the Gradle plugin remain follow-ups. `./gradlew build` green.
+
 ### 2026-06-25 (Session 57)
 - Documentation reorg: plugin usage now lives in each plugin's `README.md`/`README.ja.md`; `docs/USER_GUIDE.md`/`.ja.md` keep only common scaffolding plus a plugin list with links. Each plugin README now exhaustively enumerates its options (Target / Task / Generator field tables) — a hard requirement. Moved dialect-specific behavior (multi-statement splitting: PostgreSQL `$$`, MySQL `BEGIN...END`/`DELIMITER`, generic `;`; Autocommit use cases; jdbc-markdown output structure & imported/exported FK rendering) out of USER_GUIDE into the relevant plugin READMEs. Fixed the `password` required/optional mismatch (code is `Optional<String>` → documented as optional in postgresql/mysql). Docs-only; verified link/anchor integrity and en/ja heading parity.
 
 ---
 
 **Last Updated**: 2026-06-25
-**Current Work**: Documentation reorg — consolidated plugin usage into per-plugin READMEs (with full option enumeration, en+ja) and reduced USER_GUIDE to common content plus links (Session 57). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Current Work**: Implemented `--env <name>` CLI option (up/down/status) so `environments/<name>.yaml` profiles apply; fixed positional-arg parsing; updated docs en/ja (Session 58). validate/generate + Gradle plugin are follow-ups. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
