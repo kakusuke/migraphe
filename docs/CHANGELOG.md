@@ -2,6 +2,15 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-06-25 (Session 57)
+- **ドキュメント整理: プラグインの使い方を各プラグイン README に集約し、USER_GUIDE はリンク誘導に集約**
+  - **方針（ユーザー合意済）**: (1) プラグインの使い方はプラグイン側 README に集約。(2) メインドキュメント（USER_GUIDE）はプラグイン一覧テーブル＋リンク＋1行説明にとどめる。(3) 各プラグイン README はそのプラグインのオプションを**すべて**列挙・説明することを必須とする。(4) 英語版・日本語版の両方を同期。
+  - **各プラグイン README（英・日 計8ファイル）にオプション全列挙**: `migraphe-plugin-jdbc` / `-postgresql` / `-mysql` / `-generator-json`。**ターゲットフィールド**表（既存を補完）、**タスクフィールド**表（`name`/`description`/`target`/`dependencies`/`up`/`down`/`autocommit` を新設。`SqlTaskDefinition` 由来）、**ジェネレーターフィールド**表（`name`/`type`/`source.type`/`source.target`/`output-dir`（default `docs/schema`）/`excludes[].schema`/`excludes[].table`。`JdbcMarkdownDefinition` 由来）を新設。
+  - **方言依存の挙動を各 README へ移設**: 複数文分割（PostgreSQL のドル引用符 `$$`、MySQL の再帰 `BEGIN ... END` / `DELIMITER`、汎用 JDBC の標準 `;` 分割）と Autocommit のユースケースを、USER_GUIDE から具体例ごと各プラグイン README へ移した。jdbc README には jdbc-markdown の出力構造と imported/exported 外部キーの説明も移設。
+  - **`password` の必須/任意の食い違いを解消**: postgresql/mysql README が `password` を「必須」と記載していたが、コード（`PostgreSQLEnvironmentDefinition` / `MySQLEnvironmentDefinition`）は `Optional<String>`。実装に合わせて全プラグインで「任意」に統一。
+  - **USER_GUIDE.md / .ja.md の整理**: ターゲットのDB別設定例・複数文分割の方言別例・ストアドプロシージャ例・Autocommit のDB固有ユースケース・generator のタイプ別フィールド詳細を削除し、概要＋プラグイン一覧テーブル（リンク+1行説明）＋各 README への誘導に置換。`generate` コマンド／source-output アーキテクチャ／プラグイン一覧などの共通基盤は維持。
+  - **検証**: 外部相対リンク（`../migraphe-plugin-*/README*.md`）の解決、各 README 内アンカー（`#target-fields` / `#task-fields` / `#generator-fields` / `#autocommit-mode` および日本語版アンカー）と見出しの一致、英/日の見出し数一致、TOC に削除セクションへの dead anchor が無いことを確認。コード変更なし（ドキュメントのみ）。
+
 ### 2026-06-01 (Session 56)
 - **Gradle 8.5 → 9.5.1 へアップグレード（Dependabot PR #15 の CI 失敗を解消）**
   - **JUnit Platform launcher**: Gradle 9 はテスト実行時クラスパスに JUnit Platform launcher を暗黙追加しなくなったため、`migraphe-api` などで `Failed to load JUnit Platform` で失敗していた。ルート `build.gradle.kts` の `subprojects { dependencies { ... } }` に `testRuntimeOnly(libs.junit.platform.launcher)` を一元追加し、`migraphe-core` / `migraphe-gradle-plugin` に残っていた個別宣言を削除して重複を解消。

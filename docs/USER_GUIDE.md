@@ -259,17 +259,17 @@ username: myuser
 password: mypassword
 ```
 
-**Fields:**
-- `type` (required): Database type (`postgresql`, `mysql`, or `jdbc`)
-- `jdbc_url` (required): JDBC connection URL
-- `username` (required): Database username
-- `password` (required): Database password
-- `driver_class` (required for `jdbc` type): Fully qualified JDBC driver class name
-- `db_label` (optional, `jdbc` type only): Display label for the database (e.g., "MariaDB")
+**Common fields:** every target needs a `type` (the plugin that backs it) plus that plugin's connection settings (typically `jdbc_url`, `username`, `password`). **The exact field set is defined by each plugin** — for example the generic `jdbc` type additionally requires `driver_class`. See each plugin's README for the complete field list (required/optional, defaults) and per-database examples:
+
+| Plugin | Type | Target fields & examples |
+|--------|------|--------------------------|
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md) | `postgresql` | PostgreSQL connection fields |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md) | `mysql` | MySQL connection fields |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md) | `jdbc` | Generic JDBC fields (incl. `driver_class`, `db_label`) |
 
 Note: The target name is derived from the filename (e.g., `db1.yaml` → target name `db1`).
 
-**Example: `targets/history.yaml`**
+**Example: `targets/history.yaml`** (used as the history store)
 
 ```yaml
 type: postgresql
@@ -277,28 +277,6 @@ jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
 username: historyuser
 password: historypass
 ```
-
-**Example: MySQL target (`targets/mysql_db.yaml`)**
-
-```yaml
-type: mysql
-jdbc_url: jdbc:mysql://localhost:3306/myapp
-username: dbuser
-password: secret
-```
-
-**Example: Generic JDBC target (`targets/mariadb.yaml`)**
-
-```yaml
-type: jdbc
-driver_class: org.mariadb.jdbc.Driver
-db_label: MariaDB
-jdbc_url: jdbc:mariadb://localhost:3306/myapp
-username: user
-password: secret
-```
-
-The generic JDBC plugin (`type: jdbc`) can be used with any JDBC-compatible database. You need to provide the `driver_class` and ensure the JDBC driver JAR is available on the classpath. For the full list of target fields and database-specific notes, see each plugin's README: [postgresql](../migraphe-plugin-postgresql/README.md), [mysql](../migraphe-plugin-mysql/README.md), [jdbc](../migraphe-plugin-jdbc/README.md).
 
 ### Task Configuration
 
@@ -388,7 +366,7 @@ down: |
 
 ### Multi-Statement Migrations
 
-You can write multiple statements in a single `up` / `down`, separated by semicolons. Migraphe parses each dialect's lexis — string literals, quoted identifiers, comments, PostgreSQL dollar-quoting (`$$...$$`), and MySQL `BEGIN...END` blocks — to split the script safely, and **executes the statements sequentially even in the default (transaction) mode**. This is not limited to PostgreSQL: MySQL and any JDBC database can put multiple statements (e.g. several `CREATE TABLE`s) in one task.
+A single `up` / `down` may contain multiple statements separated by `;`. Migraphe splits the script using the **target's SQL dialect** and runs the statements sequentially — even in the default transaction mode (autocommit is **not** required for multiple statements). Dialect-specific constructs such as PostgreSQL dollar-quoting (`$$ ... $$`) and MySQL `BEGIN ... END` blocks / the `DELIMITER` directive are recognized so inner `;` characters do not split a routine body.
 
 ```yaml
 name: Add indexes
@@ -398,69 +376,16 @@ dependencies:
 up: |
   CREATE INDEX idx_users_email ON users(email);
   CREATE INDEX idx_users_created_at ON users(created_at);
-
-  COMMENT ON TABLE users IS 'User account information';
-  COMMENT ON COLUMN users.email IS 'Unique user email address';
 down: |
   DROP INDEX IF EXISTS idx_users_email;
   DROP INDEX IF EXISTS idx_users_created_at;
 ```
 
-### Stored Procedures and Functions
+The dialect rules and stored-procedure / function body examples (PostgreSQL dollar-quoting, MySQL `BEGIN ... END` / `DELIMITER`, generic `;` splitting) live in each plugin's README:
 
-Statement splitting understands dialect-specific procedure/function bodies, so the inner `;` characters do not split the body into pieces.
-
-**PostgreSQL** — dollar-quoted bodies (`$$ ... $$`) are treated as a single statement:
-
-```yaml
-name: Create audit function
-target: db1
-up: |
-  DO $$
-  BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auditor') THEN
-      CREATE ROLE auditor;
-    END IF;
-  END;
-  $$ LANGUAGE plpgsql;
-
-  CREATE FUNCTION touch_updated_at() RETURNS trigger AS $$
-  BEGIN
-    NEW.updated_at = now();
-    RETURN NEW;
-  END;
-  $$ LANGUAGE plpgsql;
-down: |
-  DROP FUNCTION IF EXISTS touch_updated_at();
-```
-
-**MySQL** — a `BEGIN ... END` body is parsed as one statement, so no `DELIMITER` is needed when writing it directly:
-
-```yaml
-name: Create reorder procedure
-target: db1
-up: |
-  CREATE PROCEDURE reorder(IN pid INT)
-  BEGIN
-    UPDATE products SET reordered = 1 WHERE id = pid;
-    INSERT INTO reorder_log(product_id) VALUES (pid);
-  END;
-down: |
-  DROP PROCEDURE IF EXISTS reorder;
-```
-
-`mysql`-client-style scripts that change the statement terminator with `DELIMITER` are also supported:
-
-```yaml
-up: |
-  DELIMITER $$
-  CREATE PROCEDURE reorder(IN pid INT)
-  BEGIN
-    UPDATE products SET reordered = 1 WHERE id = pid;
-    INSERT INTO reorder_log(product_id) VALUES (pid);
-  END$$
-  DELIMITER ;
-```
+- PostgreSQL: [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.md)
+- MySQL: [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.md)
+- Generic JDBC: [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.md)
 
 ### Comments in Migrations
 
@@ -470,15 +395,7 @@ SQL comments are preserved, not stripped. A leading comment stays attached to th
 
 > Autocommit is **not** required to run multiple statements — the default transaction mode already splits and executes them sequentially. Autocommit is only for statements that cannot run inside a transaction (e.g. `CREATE DATABASE`, `CREATE INDEX CONCURRENTLY`).
 
-Some SQL statements cannot run inside a transaction. For these cases, use `autocommit: true`:
-
-**Common Use Cases:**
-- `CREATE DATABASE` / `DROP DATABASE`
-- `CREATE INDEX CONCURRENTLY`
-- `VACUUM`
-- `CLUSTER`
-
-**Example: Create database**
+Some SQL statements cannot run inside a transaction. For these cases, set `autocommit: true` on the task; each statement is then committed immediately rather than wrapped in one transaction:
 
 ```yaml
 # tasks/admin/001_create_database.yaml
@@ -495,6 +412,8 @@ down: |
 - Autocommit migrations do NOT have automatic rollback on failure
 - If the SQL fails partway through, partial changes may persist
 - Use with caution and only when necessary
+
+Which statements require autocommit is database-specific (e.g. PostgreSQL `CREATE INDEX CONCURRENTLY`, `VACUUM`, `CLUSTER`). See the plugin READMEs for dialect-specific use cases: [postgresql](../migraphe-plugin-postgresql/README.md), [mysql](../migraphe-plugin-mysql/README.md), [jdbc](../migraphe-plugin-jdbc/README.md).
 
 ### Best Practices
 
@@ -842,6 +761,8 @@ generators:
   - `schema`: Regex pattern to match schema names
   - `table`: Regex pattern to match table names (used with `schema`)
 
+The available source/output types and their **full per-type option tables** are documented in each plugin's README (linked below).
+
 ### Available Source Plugins
 
 | Plugin | Type | Data | Description |
@@ -870,48 +791,9 @@ migraphe generate
 migraphe generate --name mydb
 ```
 
-### Output Structure (jdbc-markdown)
+### Output Structure
 
-The `jdbc-markdown` generator produces the following directory structure:
-
-```
-docs/schema/
-└── mydb/
-    └── public/
-        ├── index.md              # Schema overview (table/view listing)
-        ├── tables/
-        │   ├── users.md          # Table details (columns, keys, indexes)
-        │   └── posts.md
-        └── views/
-            └── recent_posts.md   # View details
-```
-
-Each table documentation includes:
-- Column definitions (name, type, nullable, default)
-- Primary key and unique constraints
-- Foreign key references with cross-links to referenced tables
-- Indexes
-
-#### Foreign-Key Rendering: Imported vs. Exported Keys
-
-JDBC distinguishes two perspectives on a foreign-key relationship; the generator renders both for each table:
-
-| Section in `tables/<name>.md` | JDBC source | Meaning | Link target |
-|---|---|---|---|
-| **Foreign Keys** | `DatabaseMetaData.getImportedKeys()` | FK columns *on this table* that reference another table's primary key | The referenced table |
-| **Referenced By** | `DatabaseMetaData.getExportedKeys()` | FK columns *on other tables* that reference this table's primary key | The referencing (child) table |
-
-Each row uses two distinct column lists:
-
-- `columns` — the FK columns local to the table being rendered.
-- `referencedColumns` — the primary-key columns on the linked table.
-
-Concretely, when rendering `tables/users.md`:
-
-- A row in **Foreign Keys** like `manager_id → users(id)` means `users.manager_id` references `users(id)`.
-- A row in **Referenced By** like `posts(user_id) → id` means `posts.user_id` references `users.id`; the link points to `posts.md`, not back to `users.md`.
-
-This distinction was a recent fix — earlier versions of the exported-key rendering pointed the link at the referenced (PK-side) table instead of the referencing (FK-side) table, which made `Referenced By` self-referential and useless.
+Markdown output plugins (`jdbc-markdown`, `postgresql-markdown`, `mysql-markdown`) write one directory per schema, each with an `index.md`, a `tables/` directory, and a `views/` directory. Every table page lists column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links — both the **Foreign Keys** (imported keys) and **Referenced By** (exported keys) perspectives — and indexes. The exact directory layout and the imported-vs-exported foreign-key rendering are documented in the [`migraphe-plugin-jdbc` README](../migraphe-plugin-jdbc/README.md).
 
 ### Database-Specific Documentation
 
@@ -936,24 +818,7 @@ The full list of database-specific objects, ownership/definer attribution, and p
 
 ### Exclude Filtering
 
-Use `excludes` to skip schemas or tables matching regex patterns:
-
-```yaml
-generators:
-  - name: mydb
-    type: jdbc-markdown
-    source:
-      type: jdbc-schema
-      target: db1
-    output-dir: docs/schema
-    excludes:
-      - schema: "information_schema"     # Exclude entire schema
-      - schema: "pg_catalog"             # Exclude PostgreSQL system schema
-      - schema: "public"
-        table: "tmp_.*"                  # Exclude temp tables in public schema
-      - schema: ".*"
-        table: "flyway_schema_history"   # Exclude specific table in all schemas
-```
+Markdown generators accept an `excludes` list to skip schemas or tables by regex (`schema` and `table` patterns). The full option reference and examples are in each plugin's Generator Fields section: [postgresql](../migraphe-plugin-postgresql/README.md), [mysql](../migraphe-plugin-mysql/README.md), [jdbc](../migraphe-plugin-jdbc/README.md).
 
 ## Environment Management
 

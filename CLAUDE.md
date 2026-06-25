@@ -212,10 +212,10 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-06-01 (Session 56)
-- Upgraded Gradle 8.5 → 9.5.1 (resolves the failing CI on Dependabot PR #15). Centralized `testRuntimeOnly(libs.junit.platform.launcher)` in the root `subprojects` block (Gradle 9 no longer adds it implicitly) and removed the now-redundant per-module declarations. Fixed two NullAway hits surfaced by Gradle 9's API null annotations in `MigrapheGenerateTask` (`getOrNull()`, `String.valueOf(e.getMessage())`). Satisfied Gradle 9's stricter task validation: `@PathSensitive(RELATIVE)` on `getBaseDir()`, `@Classpath` on `getPluginClasspath()`, and `@DisableCachingByDefault` on all five concrete tasks (not inherited). Dropped the `gradle` line from `.mise.toml` so the Gradle Wrapper is the single source of truth for the version (mise manages `java`).
+### 2026-06-25 (Session 57)
+- Documentation reorg: plugin usage now lives in each plugin's `README.md`/`README.ja.md`; `docs/USER_GUIDE.md`/`.ja.md` keep only common scaffolding plus a plugin list with links. Each plugin README now exhaustively enumerates its options (Target / Task / Generator field tables) — a hard requirement. Moved dialect-specific behavior (multi-statement splitting: PostgreSQL `$$`, MySQL `BEGIN...END`/`DELIMITER`, generic `;`; Autocommit use cases; jdbc-markdown output structure & imported/exported FK rendering) out of USER_GUIDE into the relevant plugin READMEs. Fixed the `password` required/optional mismatch (code is `Optional<String>` → documented as optional in postgresql/mysql). Docs-only; verified link/anchor integrity and en/ja heading parity.
 
 ---
 
-**Last Updated**: 2026-06-01
-**Current Work**: Upgraded Gradle to 9.5.1 and fixed the resulting CI failures (JUnit launcher classpath, NullAway, strict task validation); Dependabot PR #15 (Session 56). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Last Updated**: 2026-06-25
+**Current Work**: Documentation reorg — consolidated plugin usage into per-plugin READMEs (with full option enumeration, en+ja) and reduced USER_GUIDE to common content plus links (Session 57). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.

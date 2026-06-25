@@ -259,17 +259,17 @@ username: myuser
 password: mypassword
 ```
 
-**フィールド:**
-- `type`（必須）: データベースタイプ（`postgresql`、`mysql`、または `jdbc`）
-- `jdbc_url`（必須）: JDBC接続URL
-- `username`（必須）: データベースユーザー名
-- `password`（必須）: データベースパスワード
-- `driver_class`（`jdbc` タイプの場合は必須）: JDBCドライバの完全修飾クラス名
-- `db_label`（オプション、`jdbc` タイプのみ）: データベースの表示ラベル（例: "MariaDB"）
+**共通フィールド:** すべてのターゲットには `type`（背後のプラグイン）と、そのプラグインの接続設定（通常は `jdbc_url`、`username`、`password`）が必要です。**正確なフィールドセットは各プラグインが定義します** — 例えば汎用 `jdbc` タイプは追加で `driver_class` を必要とします。完全なフィールド一覧（必須/任意・デフォルト）とデータベース別の例は各プラグインの README を参照してください:
+
+| プラグイン | タイプ | ターゲットフィールドと例 |
+|-----------|--------|------------------------|
+| [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.ja.md) | `postgresql` | PostgreSQL 接続フィールド |
+| [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.ja.md) | `mysql` | MySQL 接続フィールド |
+| [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.ja.md) | `jdbc` | 汎用 JDBC フィールド（`driver_class`、`db_label` を含む） |
 
 注: ターゲット名はファイル名から導出されます（例: `db1.yaml` → ターゲット名 `db1`）。
 
-**例: `targets/history.yaml`**
+**例: `targets/history.yaml`**（履歴ストアとして使用）
 
 ```yaml
 type: postgresql
@@ -277,28 +277,6 @@ jdbc_url: jdbc:postgresql://localhost:5432/migraphe_history
 username: historyuser
 password: historypass
 ```
-
-**例: MySQL ターゲット（`targets/mysql_db.yaml`）**
-
-```yaml
-type: mysql
-jdbc_url: jdbc:mysql://localhost:3306/myapp
-username: dbuser
-password: secret
-```
-
-**例: 汎用 JDBC ターゲット（`targets/mariadb.yaml`）**
-
-```yaml
-type: jdbc
-driver_class: org.mariadb.jdbc.Driver
-db_label: MariaDB
-jdbc_url: jdbc:mariadb://localhost:3306/myapp
-username: user
-password: secret
-```
-
-汎用 JDBC プラグイン（`type: jdbc`）は任意の JDBC 対応データベースで使用できます。`driver_class` を指定し、JDBC ドライバ JAR がクラスパスで利用可能であることを確認してください。ターゲットのフィールド一覧やデータベース固有の注意点については、各プラグインの README を参照してください: [postgresql](../migraphe-plugin-postgresql/README.ja.md)、[mysql](../migraphe-plugin-mysql/README.ja.md)、[jdbc](../migraphe-plugin-jdbc/README.ja.md)。
 
 ### タスク設定
 
@@ -388,7 +366,7 @@ down: |
 
 ### 複数ステートメントのマイグレーション
 
-`up` / `down` にはセミコロン区切りで複数の文を書けます。Migraphe は方言ごとの字句（文字列リテラル・引用符付き識別子・コメント・PostgreSQL のドル引用符 `$$...$$`・MySQL の `BEGIN...END` ブロック）を解釈して安全に分割し、**デフォルト（トランザクション）モードでも複数文を順次実行**します。これは PostgreSQL 限定ではなく、MySQL や任意の JDBC データベースでも、複数の `CREATE TABLE` などを 1 タスクにまとめられます。
+単一の `up` / `down` には `;` 区切りで複数の文を記述できます。Migraphe は**ターゲットの SQL 方言**を使ってスクリプトを分割し、デフォルトのトランザクションモードでも順次実行します（複数文の実行に autocommit は**不要**です）。PostgreSQL のドル引用符（`$$ ... $$`）や MySQL の `BEGIN ... END` ブロック／`DELIMITER` ディレクティブといった方言固有の構文を認識するため、本体内の `;` でルーチン本体が分割されることはありません。
 
 ```yaml
 name: Add indexes
@@ -398,69 +376,16 @@ dependencies:
 up: |
   CREATE INDEX idx_users_email ON users(email);
   CREATE INDEX idx_users_created_at ON users(created_at);
-
-  COMMENT ON TABLE users IS 'User account information';
-  COMMENT ON COLUMN users.email IS 'Unique user email address';
 down: |
   DROP INDEX IF EXISTS idx_users_email;
   DROP INDEX IF EXISTS idx_users_created_at;
 ```
 
-### ストアドプロシージャと関数
+方言ごとのルールと、ストアドプロシージャ／関数本体の例（PostgreSQL のドル引用符、MySQL の `BEGIN ... END` / `DELIMITER`、汎用 `;` 分割）は各プラグインの README に記載しています:
 
-文分割は方言固有のプロシージャ／関数本体を解釈するため、本体内の `;` で文が分割されることはありません。
-
-**PostgreSQL** — ドル引用符の本体（`$$ ... $$`）は 1 つの文として扱われます:
-
-```yaml
-name: Create audit function
-target: db1
-up: |
-  DO $$
-  BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auditor') THEN
-      CREATE ROLE auditor;
-    END IF;
-  END;
-  $$ LANGUAGE plpgsql;
-
-  CREATE FUNCTION touch_updated_at() RETURNS trigger AS $$
-  BEGIN
-    NEW.updated_at = now();
-    RETURN NEW;
-  END;
-  $$ LANGUAGE plpgsql;
-down: |
-  DROP FUNCTION IF EXISTS touch_updated_at();
-```
-
-**MySQL** — `BEGIN ... END` の本体は 1 つの文として解釈されるため、直接記述する場合は `DELIMITER` が不要です:
-
-```yaml
-name: Create reorder procedure
-target: db1
-up: |
-  CREATE PROCEDURE reorder(IN pid INT)
-  BEGIN
-    UPDATE products SET reordered = 1 WHERE id = pid;
-    INSERT INTO reorder_log(product_id) VALUES (pid);
-  END;
-down: |
-  DROP PROCEDURE IF EXISTS reorder;
-```
-
-`DELIMITER` で文の終端文字を切り替える `mysql` クライアント形式のスクリプトにも対応しています:
-
-```yaml
-up: |
-  DELIMITER $$
-  CREATE PROCEDURE reorder(IN pid INT)
-  BEGIN
-    UPDATE products SET reordered = 1 WHERE id = pid;
-    INSERT INTO reorder_log(product_id) VALUES (pid);
-  END$$
-  DELIMITER ;
-```
+- PostgreSQL: [`migraphe-plugin-postgresql`](../migraphe-plugin-postgresql/README.ja.md)
+- MySQL: [`migraphe-plugin-mysql`](../migraphe-plugin-mysql/README.ja.md)
+- 汎用 JDBC: [`migraphe-plugin-jdbc`](../migraphe-plugin-jdbc/README.ja.md)
 
 ### マイグレーション中のコメント
 
@@ -470,15 +395,7 @@ SQL コメントは除去されず保持されます。先頭のコメントは�
 
 > 複数文の実行に autocommit は**不要**です。デフォルトのトランザクションモードで分割して順次実行されます。autocommit は、トランザクション内で実行できない文（`CREATE DATABASE`、`CREATE INDEX CONCURRENTLY` など）専用です。
 
-一部のSQL文はトランザクション内で実行できません。そのような場合は `autocommit: true` を使用します:
-
-**一般的なユースケース:**
-- `CREATE DATABASE` / `DROP DATABASE`
-- `CREATE INDEX CONCURRENTLY`
-- `VACUUM`
-- `CLUSTER`
-
-**例: データベースの作成**
+一部のSQL文はトランザクション内で実行できません。そのような場合はタスクに `autocommit: true` を指定します。各文は単一トランザクションでまとめられず、即座にコミットされます:
 
 ```yaml
 # tasks/admin/001_create_database.yaml
@@ -495,6 +412,8 @@ down: |
 - Autocommitマイグレーションは失敗時の自動ロールバックがありません
 - SQLが途中で失敗した場合、部分的な変更が残る可能性があります
 - 必要な場合にのみ注意して使用してください
+
+どの文が autocommit を必要とするかはデータベース依存です（例: PostgreSQL の `CREATE INDEX CONCURRENTLY`、`VACUUM`、`CLUSTER`）。方言固有のユースケースは各プラグインの README を参照してください: [postgresql](../migraphe-plugin-postgresql/README.ja.md)、[mysql](../migraphe-plugin-mysql/README.ja.md)、[jdbc](../migraphe-plugin-jdbc/README.ja.md)。
 
 ### ベストプラクティス
 
@@ -842,6 +761,8 @@ generators:
   - `schema`: スキーマ名にマッチする正規表現パターン
   - `table`: テーブル名にマッチする正規表現パターン（`schema` と組み合わせて使用）
 
+利用可能な source/output タイプと、それぞれの**タイプ別の完全なオプション表**は各プラグインの README（下記リンク）に記載しています。
+
 ### 利用可能なソースプラグイン
 
 | プラグイン | タイプ | データ | 説明 |
@@ -870,48 +791,9 @@ migraphe generate
 migraphe generate --name mydb
 ```
 
-### 出力構造（jdbc-markdown）
+### 出力構造
 
-`jdbc-markdown` ジェネレータは以下のディレクトリ構造を生成します:
-
-```
-docs/schema/
-└── mydb/
-    └── public/
-        ├── index.md              # スキーマ概要（テーブル/ビュー一覧）
-        ├── tables/
-        │   ├── users.md          # テーブル詳細（カラム、キー、インデックス）
-        │   └── posts.md
-        └── views/
-            └── recent_posts.md   # ビュー詳細
-```
-
-各テーブルのドキュメントには以下が含まれます:
-- カラム定義（名前、型、NULL許可、デフォルト値）
-- 主キーとユニーク制約
-- 外部キー参照（参照先テーブルへのクロスリンク付き）
-- インデックス
-
-#### 外部キーのレンダリング: Imported / Exported Keys
-
-JDBC では外部キー関係に対して 2 つの視点が定義されており、ジェネレーターは各テーブルに対して両方をレンダリングします:
-
-| `tables/<name>.md` 内のセクション | JDBC ソース | 意味 | リンク先 |
-|---|---|---|---|
-| **Foreign Keys** | `DatabaseMetaData.getImportedKeys()` | *このテーブル上の* FK カラム → 他テーブルの主キー | 参照先テーブル |
-| **Referenced By** | `DatabaseMetaData.getExportedKeys()` | *他テーブル上の* FK カラム → このテーブルの主キー | 参照元（子）テーブル |
-
-各行は 2 つの異なるカラムリストを使用します:
-
-- `columns` — レンダリング対象テーブル側のローカルな FK カラム
-- `referencedColumns` — リンク先テーブル側の主キーカラム
-
-具体例として、`tables/users.md` をレンダリングする場合:
-
-- **Foreign Keys** の `manager_id → users(id)` という行は、`users.manager_id` が `users(id)` を参照していることを意味する。
-- **Referenced By** の `posts(user_id) → id` という行は、`posts.user_id` が `users.id` を参照していることを意味し、リンク先は `posts.md`（`users.md` ではない）。
-
-この区別は最近修正された箇所です。以前のバージョンでは exported key のリンクが PK 側（参照先）テーブルを指していたため、`Referenced By` が自己参照的になり機能していませんでした。
+Markdown アウトプットプラグイン（`jdbc-markdown`、`postgresql-markdown`、`mysql-markdown`）はスキーマごとに 1 ディレクトリを生成し、それぞれに `index.md`、`tables/` ディレクトリ、`views/` ディレクトリを書き出します。各テーブルページには、カラム定義（名前、型、NULL 許可、デフォルト値）、主キー/ユニークキー、相互リンク付きの外部キー（**Foreign Keys**（imported key）と **Referenced By**（exported key）の両視点）、インデックスが含まれます。正確なディレクトリ構造と imported/exported 外部キーのレンダリングは [`migraphe-plugin-jdbc` の README](../migraphe-plugin-jdbc/README.ja.md) に記載しています。
 
 ### データベース固有のドキュメント
 
@@ -936,24 +818,7 @@ generators:
 
 ### 除外フィルタリング
 
-`excludes` を使用して、正規表現パターンにマッチするスキーマやテーブルをスキップします:
-
-```yaml
-generators:
-  - name: mydb
-    type: jdbc-markdown
-    source:
-      type: jdbc-schema
-      target: db1
-    output-dir: docs/schema
-    excludes:
-      - schema: "information_schema"     # スキーマ全体を除外
-      - schema: "pg_catalog"             # PostgreSQLシステムスキーマを除外
-      - schema: "public"
-        table: "tmp_.*"                  # publicスキーマの一時テーブルを除外
-      - schema: ".*"
-        table: "flyway_schema_history"   # 全スキーマで特定テーブルを除外
-```
+Markdown ジェネレーターは `excludes` リストを受け付け、正規表現（`schema` / `table` パターン）にマッチするスキーマやテーブルをスキップします。完全なオプションリファレンスと例は各プラグインのジェネレーターフィールドの節を参照してください: [postgresql](../migraphe-plugin-postgresql/README.ja.md)、[mysql](../migraphe-plugin-mysql/README.ja.md)、[jdbc](../migraphe-plugin-jdbc/README.ja.md)。
 
 ## 環境管理
 

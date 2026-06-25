@@ -79,6 +79,20 @@ The serialized JSON is written to stdout, so you can redirect or pipe it:
 migraphe generate --name tree > tree.json
 ```
 
+### Generator Fields
+
+For the `output-json` output type:
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `name` | Yes | — | Generator identifier (used by `--name`) |
+| `type` | Yes | — | Must be `output-json` |
+| `source.type` | Yes | — | Source plugin type; any source works (e.g., `migration-tree`, `jdbc-schema`) |
+| `source.target` | Depends on source | — | Target name, required only by sources that need a database connection (e.g., `jdbc-schema`); omit for `migration-tree` |
+| `output-dir` | No | — | Accepted for consistency with other output plugins, but ignored — JSON is always written to stdout |
+
+This output plugin has **no user-configurable formatting options**: it always renders pretty-printed JSON to stdout. Any source-specific fields are defined by the chosen source plugin.
+
 ## Requirements
 
 - Java 21 or later

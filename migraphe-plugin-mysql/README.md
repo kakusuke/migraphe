@@ -10,6 +10,7 @@ MySQL plugin for Migraphe migration orchestration tool.
 - SQL-based migration execution with transaction support
 - Migration history tracking in MySQL (InnoDB, `utf8mb4`)
 - Autocommit mode for DDL statements that cannot run in transactions
+- Recursive `BEGIN ... END` block handling and `DELIMITER` directive support for stored routines
 - Schema documentation generators (`mysql-schema` source / `mysql-markdown` output) covering MySQL-specific objects (storage engines, table metadata, triggers, routines, events, partitions)
 
 ## Installation
@@ -52,6 +53,17 @@ username: myuser
 password: mypassword
 ```
 
+The driver class and DB label are fixed by this plugin, so they are not configurable.
+
+#### Target Fields
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `type` | Yes | — | Must be `mysql` |
+| `jdbc_url` | Yes | — | JDBC connection URL |
+| `username` | Yes | — | Database username |
+| `password` | No | — | Database password (omit for password-less / externally-authenticated connections) |
+
 ### Task Configuration
 
 Create migration tasks in `tasks/` directory:
@@ -70,9 +82,43 @@ down: |
   DROP TABLE IF EXISTS users;
 ```
 
+#### Task Fields
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `name` | Yes | — | Human-readable task name |
+| `description` | No | — | Optional description |
+| `target` | Yes | — | Target name this task runs against (matches a file in `targets/`) |
+| `dependencies` | No | `[]` | List of task IDs that must run before this task |
+| `up` | Yes | — | SQL executed on migrate up |
+| `down` | No | — | SQL executed on rollback (down). Omit for irreversible migrations |
+| `autocommit` | No | `false` | Run outside a transaction (see [Autocommit Mode](#autocommit-mode)) |
+
+### Multi-Statement SQL, BEGIN ... END, and DELIMITER
+
+`up` / `down` may contain multiple statements separated by `;`. The MySQL plugin handles **recursive `BEGIN ... END` blocks**, so semicolons inside a stored routine body are not mistaken for statement separators. It also supports the **`DELIMITER` directive** to switch the statement terminator when defining routines that themselves contain `;`:
+
+```yaml
+# tasks/mydb/002_add_trigger.yaml
+name: Add audit trigger
+target: mydb
+up: |
+  DELIMITER //
+  CREATE TRIGGER users_audit AFTER INSERT ON users
+  FOR EACH ROW
+  BEGIN
+    INSERT INTO audit_log (entity, entity_id) VALUES ('users', NEW.id);
+  END //
+  DELIMITER ;
+down: |
+  DROP TRIGGER users_audit;
+```
+
+Unlike PostgreSQL (which uses dollar-quoting), MySQL relies on `BEGIN ... END` blocks and the `DELIMITER` directive to delimit routine bodies.
+
 ### Autocommit Mode
 
-For DDL statements that cannot run in transactions (note: in MySQL most DDL triggers an implicit commit regardless):
+Set `autocommit: true` for DDL statements that cannot run inside a transaction (note: in MySQL most DDL triggers an implicit commit regardless):
 
 ```yaml
 # tasks/admin/001_create_database.yaml
@@ -122,14 +168,41 @@ Run with:
 migraphe generate --name mysql-schema-docs
 ```
 
+#### Generator Fields
+
+For the `mysql-markdown` output type:
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `name` | Yes | — | Generator identifier (used by `--name`) |
+| `type` | Yes | — | Must be `mysql-markdown` |
+| `source.type` | Yes | — | Source plugin type; `mysql-schema` for full MySQL coverage |
+| `source.target` | Yes | — | Target name the source reads schema metadata from |
+| `output-dir` | No | `docs/schema` | Directory where generated Markdown files are written |
+| `excludes` | No | — | List of exclusion filters applied to extracted schemas/tables |
+| `excludes[].schema` | No | — | Regex matching schema (database) names to exclude |
+| `excludes[].table` | No | — | Regex matching table names to exclude (used together with `schema`) |
+
+The `mysql-schema` source accepts a single `target` field (the target whose schema is extracted).
+
+### MySQL-Specific Documentation
+
+On top of the standard JDBC schema (tables, views, columns, keys, indexes), the `mysql-schema` / `mysql-markdown` pair documents MySQL-specific objects extracted from `information_schema`:
+
+- **Storage Engines** — per-table engine (e.g., InnoDB) and table options
+- **Table Metadata** — collation, row format, auto-increment, comments
+- **Triggers** — table triggers with timing/events
+- **Routines** — stored procedures and functions, including definer attribution
+- **Events** — scheduled events
+- **Partitions** — partitioning method and partition list
+
 ## Configuration Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `type` | Yes | Must be `mysql` |
-| `jdbc_url` | Yes | JDBC connection URL |
-| `username` | Yes | Database username |
-| `password` | Yes | Database password |
+All option tables are documented inline above:
+
+- [Target Fields](#target-fields)
+- [Task Fields](#task-fields)
+- [Generator Fields](#generator-fields)
 
 ## Requirements
 

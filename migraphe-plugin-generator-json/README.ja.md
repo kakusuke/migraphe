@@ -79,6 +79,20 @@ migraphe generate --name tree
 migraphe generate --name tree > tree.json
 ```
 
+### ジェネレーターフィールド
+
+`output-json` output タイプの場合:
+
+| フィールド | 必須 | デフォルト | 説明 |
+|-----------|------|-----------|------|
+| `name` | はい | — | ジェネレーター識別子（`--name` で指定） |
+| `type` | はい | — | `output-json` である必要があります |
+| `source.type` | はい | — | source プラグインのタイプ。任意の source が利用可能（例: `migration-tree`, `jdbc-schema`） |
+| `source.target` | source 依存 | — | ターゲット名。データベース接続が必要な source（例: `jdbc-schema`）でのみ必須。`migration-tree` では省略 |
+| `output-dir` | いいえ | — | 他の output プラグインとの一貫性のため受け付けるが無視される。JSON は常に標準出力へ書き出される |
+
+この output プラグインには**ユーザー設定可能な整形オプションはありません**。常に整形済み JSON を標準出力にレンダリングします。source 固有のフィールドは選択した source プラグインが定義します。
+
 ## 要件
 
 - Java 21 以降
