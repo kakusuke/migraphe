@@ -319,6 +319,73 @@ class ConfigLoaderTest {
         assertThat(config.getValue("DB_HOST", String.class)).isEqualTo("subdir-host");
     }
 
+    @Test
+    void shouldExpandSystemPropertyInYamlValue(@TempDir Path tempDir) throws IOException {
+        createProjectStructure(tempDir);
+        Path db1Config = tempDir.resolve("targets/db1.yaml");
+        Files.writeString(
+                db1Config,
+                """
+                type: postgresql
+                jdbc_url: jdbc:postgresql://${TEST_DB_HOST}:5432/mydb
+                username: dbuser
+                password: secret
+                """);
+        System.setProperty("TEST_DB_HOST", "sysprop-host");
+        ConfigLoader loader = new ConfigLoader();
+        try {
+            SmallRyeConfig config = loader.loadConfig(tempDir, null);
+            assertThat(config.getValue("target.db1.jdbc_url", String.class))
+                    .isEqualTo("jdbc:postgresql://sysprop-host:5432/mydb");
+        } finally {
+            System.clearProperty("TEST_DB_HOST");
+        }
+    }
+
+    @Test
+    void shouldExpandEnvVarWithEnvPrefix(@TempDir Path tempDir) throws IOException {
+        createProjectStructure(tempDir);
+        String pathValue = System.getenv("PATH");
+        org.junit.jupiter.api.Assumptions.assumeTrue(pathValue != null);
+
+        Path db1Config = tempDir.resolve("targets/db1.yaml");
+        Files.writeString(
+                db1Config,
+                """
+                type: postgresql
+                jdbc_url: jdbc:postgresql://${env.PATH}/mydb
+                username: dbuser
+                password: secret
+                """);
+        ConfigLoader loader = new ConfigLoader();
+
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getValue("target.db1.jdbc_url", String.class))
+                .isEqualTo("jdbc:postgresql://" + pathValue + "/mydb");
+    }
+
+    @Test
+    void shouldNotExpandEnvVarWithBareKey(@TempDir Path tempDir) throws IOException {
+        createProjectStructure(tempDir);
+        org.junit.jupiter.api.Assumptions.assumeTrue(System.getenv("PATH") != null);
+
+        Path db1Config = tempDir.resolve("targets/db1.yaml");
+        Files.writeString(
+                db1Config,
+                """
+                type: postgresql
+                jdbc_url: jdbc:postgresql://${PATH}/mydb
+                username: dbuser
+                password: secret
+                """);
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThatThrownBy(() -> config.getValue("target.db1.jdbc_url", String.class))
+                .hasMessageContaining("SRCFG00011");
+    }
+
     /** テスト用のプロジェクト構造を作成する。 */
     private void createProjectStructure(Path baseDir) throws IOException {
         // migraphe.yaml

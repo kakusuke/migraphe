@@ -9,6 +9,7 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import io.github.kakusuke.migraphe.jdbc.JdbcEnvironment;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
 import java.io.IOException;
@@ -210,6 +211,43 @@ class ExecutionContextTest {
                 down: DROP INDEX idx_users_name;
                 """;
         Files.writeString(tasksDir.resolve("002_add_index.yaml"), task2Yaml);
+    }
+
+    @Test
+    void shouldApplyEnvironmentOverrideToTargetConfig() throws IOException {
+        // Given: targets/test-db.yaml に ${DB_URL} を含むプロジェクトと environments/staging.yaml
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(
+                targetsDir.resolve("test-db.yaml"),
+                """
+                type: postgresql
+                jdbc_url: ${DB_URL}
+                username: testuser
+                password: testpass
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("staging.yaml"),
+                "DB_URL: jdbc:postgresql://staging-host:5432/stagingdb\n");
+
+        // When: envName = "staging" を指定して load
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry, "staging");
+
+        // Then: staging 環境の jdbc_url が Environment に反映されている
+        Environment env = Objects.requireNonNull(context.environments().get("test-db"));
+        assertThat(env).isInstanceOf(JdbcEnvironment.class);
+        assertThat(((JdbcEnvironment) env).getJdbcUrl())
+                .isEqualTo("jdbc:postgresql://staging-host:5432/stagingdb");
     }
 
     /**

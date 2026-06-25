@@ -321,10 +321,11 @@ Environment files override base configuration for specific environments.
 target:
   db1:
     jdbc_url: jdbc:postgresql://prod-db.example.com:5432/mydb
-    password: ${DB_PASSWORD}  # Environment variable substitution
+    password: ${env.DB_PASSWORD}  # OS environment variable
+
 ```
 
-Variable substitution using `${VAR}` is supported via MicroProfile Config.
+Variable substitution using `${VAR}` is supported via MicroProfile Config. Values resolve in this priority order (highest first): Gradle-injected variables, `environments/*.yaml` profiles, system properties (`-D`), then `migraphe.yaml`/`targets`/`tasks`. **OS environment variables must be referenced with the `env.` prefix — `${env.VAR}`, not `${VAR}`** — so that environment variables cannot leak into config keys such as `target.*`. Inline defaults are supported: `${env.VAR:default}`.
 
 ## Writing Migrations
 
@@ -526,13 +527,18 @@ Error:
 
 ### Environment-Specific Execution
 
-```bash
-# Load production environment overrides
-migraphe up --env production
+Pass `--env <name>` to overlay `environments/<name>.yaml` on top of your `targets/` configuration. The overlay takes highest precedence and overrides target connection settings (e.g. `jdbc_url`, `username`, `password`). Supported by the `up`, `down`, and `status` commands:
 
-# Load development environment overrides
+```bash
+# Apply environments/production.yaml overrides
+migraphe up --env production
+migraphe status --env production
+
+# Apply environments/development.yaml overrides
 migraphe up --env development
 ```
+
+If `environments/<name>.yaml` does not exist, the flag is ignored (base configuration is used). `validate` and `generate` do not currently read `--env`.
 
 ## Rollback (down)
 
@@ -846,11 +852,11 @@ target:
   db1:
     jdbc_url: jdbc:postgresql://prod-db.company.com:5432/mydb
     username: produser
-    password: ${PROD_DB_PASSWORD}  # From environment variable
+    password: ${env.PROD_DB_PASSWORD}  # From OS environment variable
 
   history:
     jdbc_url: jdbc:postgresql://prod-db.company.com:5432/migraphe_history
-    password: ${PROD_HISTORY_PASSWORD}
+    password: ${env.PROD_HISTORY_PASSWORD}
 ```
 
 ### Using Environment Variables

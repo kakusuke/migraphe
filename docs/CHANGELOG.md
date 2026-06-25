@@ -2,6 +2,31 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-06-25 (Session 59)
+- **CLI 経路で `${VAR}` の env/sysprop 展開が効かないバグを修正（OS環境変数を `${env.VAR}` に名前空間化）**
+  - **Motivation**: ユーザー報告。`password: ${PROBE_PW}` のような設定が、環境変数 `PROBE_PW` をプロセスに渡していても全て `SRCFG00011 Could not expand` で失敗していた。`${VAR:default}` だけは常に default に解決される（式評価のインラインフォールバックで ConfigSource を引かないため）という症状も一致。原因は `ConfigLoader.loadConfig` が `new SmallRyeConfigBuilder().addDefaultInterceptors()` のみを呼び、**env/sysprop の ConfigSource を一切登録していなかった**こと（式評価インターセプタはあるが展開先が無い）。コア（variables マップ ordinal 600）や `--env` プロファイルとは独立した、`ConfigLoader` の組み立ての問題だった。
+  - **設計判断**: 単純な `addDefaultSources()` 追加では SmallRye の `EnvConfigSource` が環境変数名を正規化して（`TARGET_FOO` → `target.foo`）フラットな設定キー空間に直接乗せるため、`ConfigLoader.extractTargetIds`（`getPropertyNames()` を列挙して `target.` 接頭辞からターゲットIDを抽出）に `TARGET_*` 環境変数が混入するリスクがある。これを避けるため、**OS環境変数を `env.` 接頭辞に隔離**する方式を採用（ユーザー提案）。systemProperty は migraphe を起動する側が `-D` で明示的に渡す信頼入力なので `environments`/`variables` と同列に生キーのまま残す。
+  - **最終的な解決順位（ordinal）**: `variables`(600, Gradle注入) > `environments/*.yaml`(500) > sysprop(400, `${VAR}`) > OS env(300, `${env.VAR}` のみ) > multi-file YAML(100)。
+  - **実装（`/tdd-cycle` を 4 サイクル）**:
+    1. （暫定）`addDefaultSources()` 追加 + sysprop 生キー解決のリグレッションテスト `shouldExpandSystemPropertyInYamlValue`。
+    2. `System.getenv()` を `env.<NAME>` キーに詰めた `MapConfigSource(envVars, 300)` を登録 → `${env.VAR}` 解決（`shouldExpandEnvVarWithEnvPrefix`）。`MapConfigSource` に ordinal 指定コンストラクタを追加。
+    3. 生キー `${VAR}` が env から解決されない（隔離）テスト `shouldNotExpandEnvVarWithBareKey`。
+    4. `addDefaultSources()` を除去し、sysprop は `System.getProperties()` を `MapConfigSource(sysProps, 400)` として明示登録（`SysPropConfigSource` は依存に無かったため）。これで env 隔離と sysprop 生キー解決が両立。
+  - **ドキュメント**: `docs/USER_GUIDE.md`/`.ja.md`（環境ファイル例・本番環境例・変数置換の総括記述に `${env.VAR}` 必須を明記）、`docs/ARCHITECTURE.md`（設計判断5を解決順位＋env隔離の根拠付きで詳述）、`sample/{cli,gradle}/targets/{pg,mysql}.yaml`（`${env.POSTGRES_PASSWORD:...}` / `${env.MYSQL_PASSWORD:...}` に修正）。
+  - **既知の影響（破壊的変更ではないが利用側で要注意）**: env の参照構文が `${VAR}` → `${env.VAR}` に変わった（従来 CLI では env 展開自体が動いていなかったため実害は限定的）。
+  - **検証**: `ConfigLoaderTest` 17件 green、`mcp__migraphe-build__run_errorprone_check`（全モジュール `clean build --warning-mode all`）exit 0。
+
+### 2026-06-25 (Session 58)
+- **環境プロファイル選択 `--env <name>` を CLI に実装（up/down/status）**
+  - **Motivation**: `environments/<name>.yaml` のオーバーレイ機構はコア層（`ConfigLoader.loadConfig(baseDir, envName, variables)`）に実装済み・テスト済みだったが、CLI から環境を選択する経路が無く、`ExecutionContext.load` が常に envName=null で呼ばれていたため一切適用されなかった。`docs/USER_GUIDE.md` は `migraphe up --env production` と記載していたが実際には動かないドキュメント/実装ギャップ状態だった。
+  - **実装（`/tdd-cycle` を 4 サイクル）**:
+    1. `ExecutionContext.load(Path, PluginRegistry, @Nullable String envName)` および `(..., envName, Map variables)` オーバーロードを追加。内部で `configLoader.load(...)` → `configLoader.loadConfig(baseDir, envName, variables)` に切替。既存2オーバーロードは envName=null 委譲で後方互換維持。
+    2. `Main.parseEnvOption(String[])`（package-private）追加。tidy で `parseNameOption` と共通化し `parseValueOption(args, flag)` を抽出。
+    3. `Main.loadContext(baseDir, pluginRegistry, args)` を抽出し、`Main.run` の up/down/status 経路を `ExecutionContext.load(baseDir, pluginRegistry, parseEnvOption(args))` 配線に変更。
+    4. **位置引数バグ修正**: `createUpCommand` / `createDownCommand` が `--env <value>` を位置引数（マイグレーションID/version）として誤取得していた。`firstPositionalArg(String[])` を追加し、コマンド語・値付きフラグ（`--env`/`--name`）とその値・真偽フラグ（`-y`/`--dry-run`/`--all`）を読み飛ばして最初の位置引数を返すよう修正。printUsage に `--env <name>` を追記。
+  - **挙動**: `environments/<name>.yaml` が存在しなければフラグは無視（ベース設定）。`validate`/`generate` は独自ロード経路のため未対応（フォローアップ）。Gradle plugin も別途。
+  - **検証**: `./gradlew build`（全モジュール、テスト + spotless + ErrorProne）成功。新規テスト: `ExecutionContextTest`（envName で target 上書きが反映）、`MainTest`（parseEnvOption / loadContext 配線 / firstPositionalArg のフラグ読み飛ばし）。
+
 ### 2026-06-25 (Session 57)
 - **ドキュメント整理: プラグインの使い方を各プラグイン README に集約し、USER_GUIDE はリンク誘導に集約**
   - **方針（ユーザー合意済）**: (1) プラグインの使い方はプラグイン側 README に集約。(2) メインドキュメント（USER_GUIDE）はプラグイン一覧テーブル＋リンク＋1行説明にとどめる。(3) 各プラグイン README はそのプラグインのオプションを**すべて**列挙・説明することを必須とする。(4) 英語版・日本語版の両方を同期。

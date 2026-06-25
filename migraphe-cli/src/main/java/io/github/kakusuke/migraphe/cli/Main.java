@@ -20,8 +20,10 @@ import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /** Migraphe CLI のエントリーポイント。 */
@@ -81,8 +83,8 @@ public class Main {
                 return generateCommand.execute();
             }
 
-            // ExecutionContext をロード
-            ExecutionContext context = ExecutionContext.load(baseDir, pluginRegistry);
+            // ExecutionContext をロード（--env オプションを考慮）
+            ExecutionContext context = loadContext(baseDir, pluginRegistry, args);
 
             Command command = createCommand(commandName, args, context);
 
@@ -138,12 +140,7 @@ public class Main {
         boolean skipConfirm = argList.contains("-y");
         boolean dryRun = argList.contains("--dry-run");
 
-        // ID引数を取得（up, -y, --dry-run 以外の最初の引数）
-        String targetId =
-                argList.stream()
-                        .filter(a -> !a.equals("up") && !a.equals("-y") && !a.equals("--dry-run"))
-                        .findFirst()
-                        .orElse(null);
+        String targetId = firstPositionalArg(args);
 
         NodeId nodeId = targetId != null ? NodeId.of(targetId) : null;
         return new UpCommand(context, nodeId, skipConfirm, dryRun);
@@ -156,17 +153,7 @@ public class Main {
         boolean dryRun = argList.contains("--dry-run");
         boolean allMigrations = argList.contains("--all");
 
-        // バージョン引数を取得（down, -y, --dry-run, --all 以外の最初の引数）
-        String version =
-                argList.stream()
-                        .filter(
-                                a ->
-                                        !a.equals("down")
-                                                && !a.equals("-y")
-                                                && !a.equals("--dry-run")
-                                                && !a.equals("--all"))
-                        .findFirst()
-                        .orElse(null);
+        String version = firstPositionalArg(args);
 
         // --all が指定されていない場合はバージョンが必要
         if (!allMigrations && version == null) {
@@ -181,9 +168,49 @@ public class Main {
 
     /** --name オプションの値を取得する。 */
     private static @Nullable String parseNameOption(String[] args) {
+        return parseValueOption(args, "--name");
+    }
+
+    /** --env オプションの値を取得する。 */
+    static @Nullable String parseEnvOption(String[] args) {
+        return parseValueOption(args, "--env");
+    }
+
+    /** args から --env オプションを解析して ExecutionContext をロードする。 */
+    static ExecutionContext loadContext(
+            Path baseDir, PluginRegistry pluginRegistry, String[] args) {
+        String envName = parseEnvOption(args);
+        return ExecutionContext.load(baseDir, pluginRegistry, envName);
+    }
+
+    /** 先頭コマンド語・値付きフラグ・真偽フラグを除いた最初の位置引数を返す。存在しない場合は null。 */
+    static @Nullable String firstPositionalArg(String[] args) {
+        if (args.length == 0) {
+            return null;
+        }
+        // 値を取るフラグ（フラグ自身 + 次トークンをスキップ）
+        Set<String> valueFlags = Set.of("--env", "--name");
+        // 真偽フラグ（単体でスキップ）
+        Set<String> boolFlags = Set.of("-y", "--dry-run", "--all");
+        int i = 1; // args[0] はコマンド語なので飛ばす
+        while (i < args.length) {
+            String a = args[i];
+            if (valueFlags.contains(a)) {
+                i += 2; // フラグと値をスキップ
+            } else if (boolFlags.contains(a)) {
+                i += 1;
+            } else {
+                return a;
+            }
+        }
+        return null;
+    }
+
+    /** 指定したフラグの次引数を取得する。フラグが存在しない場合は null を返す。 */
+    static @Nullable String parseValueOption(String[] args, String flag) {
         List<String> argList = Arrays.asList(args);
         for (int i = 0; i < argList.size() - 1; i++) {
-            if ("--name".equals(argList.get(i))) {
+            if (flag.equals(argList.get(i))) {
                 return argList.get(i + 1);
             }
         }
@@ -202,7 +229,7 @@ public class Main {
     private static MavenPluginResolver defaultMavenResolver(Path baseDir) {
         PluginConfigParseResult parsed =
                 new PluginConfigPreParser().parse(baseDir.resolve("migraphe.yaml"));
-        java.util.List<RepositoryConfig> all = new java.util.ArrayList<>();
+        List<RepositoryConfig> all = new ArrayList<>();
         all.add(RepositoryConfig.mavenCentral());
         for (RepositoryConfig r : parsed.repositories()) {
             if (!"maven-central".equals(r.id())) {
@@ -247,15 +274,17 @@ public class Main {
                 "  pin [--check]                       Generate or verify migraphe.lock.yaml");
         System.out.println();
         System.out.println("Up options:");
-        System.out.println("  <id>        Execute migrations up to and including <id>");
-        System.out.println("  -y          Skip confirmation prompt");
-        System.out.println("  --dry-run   Show plan without executing");
+        System.out.println("  <id>           Execute migrations up to and including <id>");
+        System.out.println("  --env <name>   Use the specified environment overlay");
+        System.out.println("  -y             Skip confirmation prompt");
+        System.out.println("  --dry-run      Show plan without executing");
         System.out.println();
         System.out.println("Down options:");
-        System.out.println("  <version>   Rollback migrations that depend on <version>");
-        System.out.println("  --all       Rollback all executed migrations");
-        System.out.println("  -y          Skip confirmation prompt");
-        System.out.println("  --dry-run   Show plan without executing");
+        System.out.println("  <version>      Rollback migrations that depend on <version>");
+        System.out.println("  --all          Rollback all executed migrations");
+        System.out.println("  --env <name>   Use the specified environment overlay");
+        System.out.println("  -y             Skip confirmation prompt");
+        System.out.println("  --dry-run      Show plan without executing");
         System.out.println();
         System.out.println("Generate options:");
         System.out.println("  --name <name>  Run only the generator with matching name");

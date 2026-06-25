@@ -321,10 +321,10 @@ down: |
 target:
   db1:
     jdbc_url: jdbc:postgresql://prod-db.example.com:5432/mydb
-    password: ${DB_PASSWORD}  # 環境変数の置換
+    password: ${env.DB_PASSWORD}  # OS環境変数
 ```
 
-`${VAR}`を使用した変数置換はMicroProfile Configによりサポートされています。
+`${VAR}`を使用した変数置換はMicroProfile Configによりサポートされています。値は次の優先順位（高い順）で解決されます: Gradle注入のvariables、`environments/*.yaml`プロファイル、システムプロパティ（`-D`）、`migraphe.yaml`/`targets`/`tasks`。**OS環境変数は `env.` 接頭辞付きで参照する必要があります（`${VAR}` ではなく `${env.VAR}`）** — これにより環境変数が `target.*` などの設定キーに混入しません。インライン既定値も利用できます: `${env.VAR:default}`。
 
 ## マイグレーションの作成
 
@@ -526,13 +526,18 @@ Error:
 
 ### 環境固有の実行
 
-```bash
-# 本番環境のオーバーライドを読み込む
-migraphe up --env production
+`--env <name>` を渡すと、`environments/<name>.yaml` を `targets/` 設定の上にオーバーレイします。このオーバーレイは最優先で適用され、target の接続設定(`jdbc_url`、`username`、`password` など)を上書きします。`up`、`down`、`status` コマンドで利用できます:
 
-# 開発環境のオーバーライドを読み込む
+```bash
+# environments/production.yaml の上書きを適用
+migraphe up --env production
+migraphe status --env production
+
+# environments/development.yaml の上書きを適用
 migraphe up --env development
 ```
+
+`environments/<name>.yaml` が存在しない場合、このフラグは無視されます(ベース設定が使われます)。`validate` と `generate` は現時点では `--env` を読み取りません。
 
 ## ロールバック（down）
 
@@ -846,11 +851,11 @@ target:
   db1:
     jdbc_url: jdbc:postgresql://prod-db.company.com:5432/mydb
     username: produser
-    password: ${PROD_DB_PASSWORD}  # 環境変数から
+    password: ${env.PROD_DB_PASSWORD}  # OS環境変数から
 
   history:
     jdbc_url: jdbc:postgresql://prod-db.company.com:5432/migraphe_history
-    password: ${PROD_HISTORY_PASSWORD}
+    password: ${env.PROD_HISTORY_PASSWORD}
 ```
 
 ### 環境変数の使用

@@ -121,7 +121,7 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 2. **Up/Down Migrations**: `upTask()` for forward, `downTask()` for rollback
 3. **HistoryRepository**: Pluggable persistence (InMemory, JDBC/PostgreSQL/MySQL, etc.)
 4. **DOWN Task Serialization**: Plain text SQL stored in ExecutionRecord
-5. **MicroProfile Config**: YAML with `@ConfigMapping`, automatic `${VAR}` expansion
+5. **MicroProfile Config**: YAML with `@ConfigMapping`; `${VAR}` resolves from variables(600)/profiles(500)/sysprops(400)/YAML(100); OS env only via `${env.VAR}` (namespaced at ordinal 300 to avoid `target.*` key collisions; no `addDefaultSources()`). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 6. **Multi-file Configuration**: `migraphe.yaml`, `targets/*.yaml`, `tasks/**/*.yaml`, `environments/*.yaml`
 7. **Auto Task ID**: Generated from file path (e.g., `tasks/db1/create.yaml` → `"db1/create"`)
 8. **Plugin System (Phase 11)**: ServiceLoader + URLClassLoader for runtime loading
@@ -212,10 +212,13 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-06-25 (Session 57)
-- Documentation reorg: plugin usage now lives in each plugin's `README.md`/`README.ja.md`; `docs/USER_GUIDE.md`/`.ja.md` keep only common scaffolding plus a plugin list with links. Each plugin README now exhaustively enumerates its options (Target / Task / Generator field tables) — a hard requirement. Moved dialect-specific behavior (multi-statement splitting: PostgreSQL `$$`, MySQL `BEGIN...END`/`DELIMITER`, generic `;`; Autocommit use cases; jdbc-markdown output structure & imported/exported FK rendering) out of USER_GUIDE into the relevant plugin READMEs. Fixed the `password` required/optional mismatch (code is `Optional<String>` → documented as optional in postgresql/mysql). Docs-only; verified link/anchor integrity and en/ja heading parity.
+### 2026-06-25 (Session 59)
+- Fixed a bug where `${VAR}` expansion never resolved from env/sysprop on the CLI path (`SRCFG00011 Could not expand`): `ConfigLoader.loadConfig` built `SmallRyeConfigBuilder` with `addDefaultInterceptors()` only — no env/sysprop ConfigSource was ever registered. Rather than `addDefaultSources()` (whose `EnvConfigSource` normalizes `TARGET_FOO`→`target.foo` and pollutes the `extractTargetIds` key space), namespaced OS env under an `env.` prefix: `System.getenv()` → `MapConfigSource(env.<NAME>, 300)` referenced as `${env.VAR}` only; system properties → `MapConfigSource(raw, 400)` as `${VAR}` (trusted explicit input, same tier as profiles/variables). Added an ordinal-accepting `MapConfigSource` constructor. 4 `/tdd-cycle` passes; 3 new `ConfigLoaderTest` cases (env. expansion / bare-key isolation / sysprop raw-key). Updated USER_GUIDE en/ja, ARCHITECTURE decision 5, and `sample/*/targets/*.yaml` to `${env.VAR:default}`. ErrorProne clean, full `clean build` green.
+
+### 2026-06-25 (Session 58)
+- Implemented the `--env <name>` CLI option (up/down/status) so deployment-environment profiles (`environments/<name>.yaml`) actually apply. Done via 4 `/tdd-cycle` passes wiring `ExecutionContext.load` envName → `loadConfig`, `Main.parseEnvOption`/`loadContext`, and a `firstPositionalArg` fix for `--env <value>` mis-parsing; added `--env` to printUsage. Updated USER_GUIDE en/ja. `validate`/`generate` and the Gradle plugin remain follow-ups. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full detail.
 
 ---
 
 **Last Updated**: 2026-06-25
-**Current Work**: Documentation reorg — consolidated plugin usage into per-plugin READMEs (with full option enumeration, en+ja) and reduced USER_GUIDE to common content plus links (Session 57). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Current Work**: Fixed `${VAR}` env/sysprop expansion on the CLI path — OS env is now namespaced as `${env.VAR}` (ordinal 300), sysprop as `${VAR}` (400); updated docs en/ja + samples (Session 59). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
