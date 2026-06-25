@@ -29,7 +29,7 @@ mise use github:kakusuke/migraphe
 
 # または手動インストール
 mkdir -p ~/.local/migraphe
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.4.1/migraphe-0.4.1.tar.gz | tar xz -C ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.4.2/migraphe-0.4.2.tar.gz | tar xz -C ~/.local/migraphe
 export PATH="$HOME/.local/migraphe/bin:$PATH"
 migraphe --help
 ```
