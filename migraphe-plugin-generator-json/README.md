@@ -23,7 +23,7 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.4.1
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.4.2
     repository: jitpack
 ```
 
