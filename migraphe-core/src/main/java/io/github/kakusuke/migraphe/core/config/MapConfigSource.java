@@ -17,6 +17,7 @@ public class MapConfigSource implements ConfigSource {
     private static final int ORDINAL = 600;
 
     private final Map<String, String> properties;
+    private final int ordinal;
 
     /**
      * コンストラクタ。
@@ -24,7 +25,18 @@ public class MapConfigSource implements ConfigSource {
      * @param properties 変数マップ
      */
     public MapConfigSource(Map<String, String> properties) {
+        this(properties, ORDINAL);
+    }
+
+    /**
+     * ordinal 指定付きコンストラクタ。
+     *
+     * @param properties 変数マップ
+     * @param ordinal 優先度
+     */
+    public MapConfigSource(Map<String, String> properties, int ordinal) {
         this.properties = Map.copyOf(properties);
+        this.ordinal = ordinal;
     }
 
     @Override
@@ -44,7 +56,7 @@ public class MapConfigSource implements ConfigSource {
 
     @Override
     public int getOrdinal() {
-        return ORDINAL;
+        return ordinal;
     }
 
     @Override

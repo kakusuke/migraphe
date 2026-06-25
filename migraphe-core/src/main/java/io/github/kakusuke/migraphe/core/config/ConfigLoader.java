@@ -118,12 +118,28 @@ public class ConfigLoader {
             builder.withSources(multiFileSource);
         }
 
-        // 7. variables があれば MapConfigSource を追加（最優先 ordinal 600）
+        // 7. System.getenv() を env.<NAME> キーで登録（ordinal 300）: ${env.VAR} で参照可能
+        Map<String, String> envVars = new HashMap<>();
+        for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
+            envVars.put("env." + entry.getKey(), entry.getValue());
+        }
+        builder.withSources(new MapConfigSource(envVars, 300));
+
+        // 8. システムプロパティを生キーで登録（ordinal 400）: ${prop.name} で参照可能
+        Map<String, String> sysProps = new HashMap<>();
+        for (Map.Entry<Object, Object> entry : System.getProperties().entrySet()) {
+            if (entry.getKey() instanceof String k && entry.getValue() instanceof String v) {
+                sysProps.put(k, v);
+            }
+        }
+        builder.withSources(new MapConfigSource(sysProps, 400));
+
+        // 9. variables があれば MapConfigSource を追加（最優先 ordinal 600）
         if (!variables.isEmpty()) {
             builder.withSources(new MapConfigSource(variables));
         }
 
-        // 8. マッピングとバリデーション設定
+        // 10. マッピングとバリデーション設定
         builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // マッピングされていないプロパティを許可
 
         return builder.build();
