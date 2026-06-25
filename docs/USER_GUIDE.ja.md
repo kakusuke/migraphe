@@ -321,10 +321,10 @@ down: |
 target:
   db1:
     jdbc_url: jdbc:postgresql://prod-db.example.com:5432/mydb
-    password: ${DB_PASSWORD}  # 環境変数の置換
+    password: ${env.DB_PASSWORD}  # OS環境変数
 ```
 
-`${VAR}`を使用した変数置換はMicroProfile Configによりサポートされています。
+`${VAR}`を使用した変数置換はMicroProfile Configによりサポートされています。値は次の優先順位（高い順）で解決されます: Gradle注入のvariables、`environments/*.yaml`プロファイル、システムプロパティ（`-D`）、`migraphe.yaml`/`targets`/`tasks`。**OS環境変数は `env.` 接頭辞付きで参照する必要があります（`${VAR}` ではなく `${env.VAR}`）** — これにより環境変数が `target.*` などの設定キーに混入しません。インライン既定値も利用できます: `${env.VAR:default}`。
 
 ## マイグレーションの作成
 
@@ -851,11 +851,11 @@ target:
   db1:
     jdbc_url: jdbc:postgresql://prod-db.company.com:5432/mydb
     username: produser
-    password: ${PROD_DB_PASSWORD}  # 環境変数から
+    password: ${env.PROD_DB_PASSWORD}  # OS環境変数から
 
   history:
     jdbc_url: jdbc:postgresql://prod-db.company.com:5432/migraphe_history
-    password: ${PROD_HISTORY_PASSWORD}
+    password: ${env.PROD_HISTORY_PASSWORD}
 ```
 
 ### 環境変数の使用
