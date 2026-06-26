@@ -10,31 +10,56 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 
-/** レイアウト用トポロジカルソート。Kahn's アルゴリズムを使用。 */
+/**
+ * Topological sort tuned for layout, implemented with Kahn's algorithm.
+ *
+ * <p>This is the first stage of the ASCII layout pipeline ({@code MigrationGraph -> LayoutSort ->
+ * LayoutTree -> GridCanvas -> ExecutionGraphView}). It orders the nodes so that dependencies always
+ * precede their dependents and produces a stable, deterministic ordering by breaking ties on degree
+ * and then node id. The resulting {@link LayoutOrder} feeds {@link LayoutTree#build(MigrationGraph,
+ * LayoutOrder)}.
+ *
+ * <p>This is a static utility class and cannot be instantiated.
+ */
 public final class LayoutSort {
 
     private LayoutSort() {}
 
-    /** ソート結果。ノードリストとランクマップを保持する。 */
+    /**
+     * The result of a layout sort: the nodes in topological order plus their assigned ranks.
+     *
+     * @param nodes the nodes in topological (layout) order; copied defensively to an immutable list
+     * @param rankMap a map from each node id to its zero-based position in {@link #nodes}; copied
+     *     defensively to an immutable map
+     */
     public record LayoutOrder(List<MigrationNode> nodes, Map<NodeId, Integer> rankMap) {
 
+        /** Canonical constructor that defensively copies the node list and rank map. */
         public LayoutOrder {
             nodes = List.copyOf(nodes);
             rankMap = Map.copyOf(rankMap);
         }
 
+        /**
+         * Returns the rank (sort position) assigned to the given node.
+         *
+         * @param nodeId the node to look up
+         * @return the zero-based rank, or {@code 0} if the node is not present in this order
+         */
         public int rank(NodeId nodeId) {
             return rankMap.getOrDefault(nodeId, 0);
         }
     }
 
     /**
-     * グラフのノードをレイアウト用にソートする。
+     * Sorts the nodes of the graph into a deterministic layout order.
      *
-     * <p>比較順: (-inDegree, -outDegree, id昇順)
+     * <p>Roots (in-degree 0) are processed first; among ready nodes the priority order is {@code
+     * (-inDegree, -outDegree, id ascending)}, so nodes with more dependencies and more dependents
+     * come earlier and ties break on the node id value.
      *
-     * @param graph マイグレーショングラフ
-     * @return ソート結果
+     * @param graph the migration graph to order
+     * @return the topological layout order, including the per-node rank map
      */
     public static LayoutOrder sort(MigrationGraph graph) {
         Map<NodeId, Integer> inDegree = new HashMap<>();

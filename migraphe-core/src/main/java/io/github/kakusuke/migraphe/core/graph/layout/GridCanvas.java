@@ -9,12 +9,30 @@ import java.util.Map;
 import java.util.function.Function;
 import org.jspecify.annotations.Nullable;
 
-/** ストリームツリーをグリッドセルに配置するキャンバス。 */
+/**
+ * A 2D grid of {@link Cell}s onto which a {@link LayoutStream} tree is drawn, and from which ASCII
+ * text is rendered.
+ *
+ * <p>This is the third stage of the layout pipeline ({@code MigrationGraph -> LayoutSort ->
+ * LayoutTree -> GridCanvas -> ExecutionGraphView}). The root stream is placed with {@link
+ * #addStream(LayoutStream)}; each non-tree edge is then routed with {@link #addNonTreeEdge(NodeId,
+ * NodeId)}; redundant filler rows are dropped with {@link #removeRedundantRows()}; and finally
+ * {@link #render(Function)} converts the cells to box- drawing characters. Rows and columns
+ * auto-expand and auto-connect as cells are placed.
+ */
 public final class GridCanvas {
+
+    /** Creates a new {@code GridCanvas}. */
+    public GridCanvas() {}
 
     private final Grid internalGrid = new Grid();
 
-    /** ストリームをグリッドに追加する。 */
+    /**
+     * Draws a stream (and recursively its child streams) onto the grid, starting on a freshly
+     * appended row in column 0.
+     *
+     * @param stream the root stream to place; child streams fork to the right as they are visited
+     */
     public void addStream(LayoutStream stream) {
         int firstRow = internalGrid.insertRow(internalGrid.rowCount());
         drawStream(stream, 0, firstRow);
@@ -53,27 +71,53 @@ public final class GridCanvas {
         }
     }
 
-    /** 指定位置のセルを設定する。 */
+    /**
+     * Sets the cell at the given position, growing the row with {@link Cell.Empty} padding as
+     * needed.
+     *
+     * @param row the zero-based row index
+     * @param col the zero-based column index
+     * @param cell the cell to place
+     */
     public void setCell(int row, int col, Cell cell) {
         internalGrid.setCell(row, col, cell);
     }
 
-    /** 指定位置のセルを返す。範囲外は Cell.Empty を返す。 */
+    /**
+     * Returns the cell at the given position.
+     *
+     * @param row the zero-based row index
+     * @param col the zero-based column index
+     * @return the cell at the position, or a {@link Cell.Empty} if it is out of bounds
+     */
     public Cell cellAt(int row, int col) {
         return internalGrid.cellAt(row, col);
     }
 
-    /** グリッドの行数を返す。 */
+    /**
+     * Returns the number of rows currently in the grid.
+     *
+     * @return the row count
+     */
     public int rowCount() {
         return internalGrid.rowCount();
     }
 
-    /** グリッドの列数（最大列数）を返す。 */
+    /**
+     * Returns the number of columns in the grid (the width of its widest row).
+     *
+     * @return the column count
+     */
     public int colCount() {
         return internalGrid.colCount();
     }
 
-    /** ノード位置情報リストを返す。 */
+    /**
+     * Collects the placement info for every node cell on the grid, scanned row by row then column
+     * by column.
+     *
+     * @return one {@link NodeLineInfo} per {@link Cell.Node} found, in scan order
+     */
     public List<NodeLineInfo> toNodeLineInfos() {
         List<NodeLineInfo> result = new ArrayList<>();
         for (int r = 0; r < internalGrid.rowCount(); r++) {
@@ -87,14 +131,25 @@ public final class GridCanvas {
         return result;
     }
 
-    /** 非ツリー辺をグリッドに追加する（ボトムアップ：ターゲット起点）。 */
+    /**
+     * Routes a non-tree edge from {@code source} to {@code target} onto the grid (bottom-up,
+     * anchored at the target).
+     *
+     * <p>Does nothing if either endpoint is not present, or if the source is on the same row as or
+     * below the target (an upward edge, which {@link LayoutTree} guarantees never occurs).
+     * Otherwise it inserts or reuses a merge row above the target, selects a vertical routing lane
+     * column, and fills the horizontal and vertical connectors that join source to target.
+     *
+     * @param source the upstream (dependency) node id
+     * @param target the downstream (dependent) node id
+     */
     public void addNonTreeEdge(NodeId source, NodeId target) {
         int[] srcPos = internalGrid.nodePosition(source);
         int[] tgtPos = internalGrid.nodePosition(target);
         if (srcPos == null || tgtPos == null) {
             return;
         }
-        // source が target より下（または同じ行）の場合は描画をスキップ
+        // Skip drawing if source is below target (or on the same row)
         if (srcPos[0] >= tgtPos[0]) {
             return;
         }
@@ -285,12 +340,23 @@ public final class GridCanvas {
         }
     }
 
-    /** 冗長な行（Vertical/Empty のみで、ノード間ブリッジでない行）を除去する。 */
+    /**
+     * Removes redundant rows: rows containing only {@link Cell.Vertical}/{@link Cell.Empty} cells
+     * that do not bridge a node directly above to a node directly below.
+     */
     public void removeRedundantRows() {
         internalGrid.removeRedundantRows();
     }
 
-    /** グリッドをテキスト表現で返す。 */
+    /**
+     * Renders the grid as ASCII text using box-drawing characters.
+     *
+     * <p>Each cell maps to a glyph; rows containing a node append a space and that node's label.
+     * Lines without a node are right-trimmed, and every line is newline-terminated.
+     *
+     * @param labelFn function returning the label to append for the node found on a row
+     * @return the multi-line rendered grid
+     */
     public String render(Function<MigrationNode, String> labelFn) {
         StringBuilder sb = new StringBuilder();
         for (int r = 0; r < internalGrid.rowCount(); r++) {
@@ -330,6 +396,14 @@ public final class GridCanvas {
         return sb.toString();
     }
 
+    /**
+     * The mutable backing store of the canvas: a ragged list of rows plus a node-id-to-position
+     * index.
+     *
+     * <p>Inserting a row or column auto-fills connecting {@link Cell.Vertical}/{@link
+     * Cell.Horizontal} cells based on the neighbors' {@code connects*} predicates, and keeps the
+     * {@code nodePositions} index in sync as indices shift.
+     */
     static final class Grid {
         private final List<List<Cell>> rows = new ArrayList<>();
         private final Map<NodeId, int[]> nodePositions = new HashMap<>();

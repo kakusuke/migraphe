@@ -8,14 +8,25 @@ import java.util.List;
 import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 
-/** YAMLファイルをディレクトリから発見するスキャナー。 */
+/**
+ * Locates the YAML files that make up a Migraphe configuration on disk.
+ *
+ * <p>Migraphe spreads its configuration across several conventionally-named files and directories
+ * ({@code migraphe.yaml}, {@code targets/*.yaml}, <code>tasks/&#42;&#42;/*.yaml</code>, {@code
+ * environments/*.yaml}). This scanner encapsulates the file-system discovery for those locations so
+ * that {@link ConfigLoader} and {@link ConfigValidator} can stay focused on interpreting the
+ * resulting files. All methods are pure look-ups and never modify the file system.
+ */
 public class YamlFileScanner {
 
+    /** Creates a new {@code YamlFileScanner}. */
+    public YamlFileScanner() {}
+
     /**
-     * プロジェクト設定ファイル (migraphe.yaml) を検索する。
+     * Locates the project configuration file ({@code migraphe.yaml}).
      *
-     * @param baseDir プロジェクトルート
-     * @return migraphe.yaml のパス (存在しない場合は null)
+     * @param baseDir the directory to look in (the project root)
+     * @return the path to {@code migraphe.yaml}, or {@code null} if it does not exist
      */
     public @Nullable Path findProjectConfig(Path baseDir) {
         Path projectConfig = baseDir.resolve("migraphe.yaml");
@@ -23,10 +34,13 @@ public class YamlFileScanner {
     }
 
     /**
-     * targets/ ディレクトリ配下の全 .yaml ファイルを収集する。
+     * Collects all {@code .yaml} files directly under the {@code targets/} directory.
      *
-     * @param baseDir プロジェクトルート
-     * @return targets/*.yaml のリスト (ディレクトリが存在しない場合は空リスト)
+     * <p>The scan is non-recursive (target ids are flat). The returned order is unspecified.
+     *
+     * @param baseDir the scan-root directory (the one containing {@code targets/})
+     * @return the list of {@code targets/*.yaml} files, or an empty list if the directory is absent
+     * @throws java.io.UncheckedIOException if the directory cannot be listed
      */
     public List<Path> scanTargetFiles(Path baseDir) {
         Path targetsDir = baseDir.resolve("targets");
@@ -45,10 +59,15 @@ public class YamlFileScanner {
     }
 
     /**
-     * tasks/ ディレクトリ配下の全 .yaml ファイルを再帰的に収集する。
+     * Recursively collects all {@code .yaml} files under the {@code tasks/} directory.
      *
-     * @param baseDir プロジェクトルート
-     * @return tasks/**\/*.yaml のリスト (ディレクトリが存在しない場合は空リスト)
+     * <p>Unlike {@link #scanTargetFiles}, this walk descends into sub-directories, since task ids
+     * may be nested (for example {@code db1/create_users}). The returned order is unspecified.
+     *
+     * @param baseDir the scan-root directory (the one containing {@code tasks/})
+     * @return the list of <code>tasks/&#42;&#42;/*.yaml</code> files, or an empty list if the
+     *     directory is absent
+     * @throws java.io.UncheckedIOException if the directory tree cannot be walked
      */
     public List<Path> scanTaskFiles(Path baseDir) {
         Path tasksDir = baseDir.resolve("tasks");
@@ -67,11 +86,12 @@ public class YamlFileScanner {
     }
 
     /**
-     * environments/{envName}.yaml を検索する。
+     * Locates the environment-override file {@code environments/<envName>.yaml}.
      *
-     * @param baseDir プロジェクトルート
-     * @param envName 環境名 (例: "development", "production")
-     * @return environments/{envName}.yaml のパス (存在しない場合は null)
+     * @param baseDir the scan-root directory (the one containing {@code environments/})
+     * @param envName the deployment-environment name (for example {@code "development"} or {@code
+     *     "production"})
+     * @return the path to {@code environments/<envName>.yaml}, or {@code null} if it does not exist
      */
     public @Nullable Path findEnvironmentFile(Path baseDir, String envName) {
         Path environmentsDir = baseDir.resolve("environments");

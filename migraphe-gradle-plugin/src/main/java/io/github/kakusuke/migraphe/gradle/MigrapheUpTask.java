@@ -22,30 +22,72 @@ import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.options.Option;
 import org.gradle.work.DisableCachingByDefault;
 
-/** UP（前進）マイグレーションを実行する Gradle タスク。 */
-@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
+/**
+ * Gradle task that runs forward (UP) migrations.
+ *
+ * <p>Registered as {@code migrapheUp} by {@link MigrapheGradlePlugin}, the task resolves the set of
+ * pending nodes (optionally bounded by a {@linkplain #getTarget() target node}), prints the
+ * execution graph, and — unless running in {@linkplain #getDryRun() dry-run} mode — executes the
+ * migrations via a {@link DagExecutor} in the {@link ExecutionDirection#UP} direction. Parallelism
+ * is taken from the project's {@code execution} configuration.
+ *
+ * <p>The task fails the build with a {@link GradleException} when the target node is unknown or
+ * when any migration fails.
+ */
+@DisableCachingByDefault(
+        because = "Migraphe tasks have side effects and their output cannot be cached")
 public abstract class MigrapheUpTask extends AbstractMigrapheTask {
 
-    /** ターゲットノード ID。 */
+    /**
+     * Returns the optional target node ID to migrate up to. When absent, all pending migrations are
+     * executed.
+     *
+     * @return the optional target node ID property
+     */
     @Input
     @Optional
     public abstract Property<String> getTarget();
 
-    /** dry-run モード。 */
+    /**
+     * Returns the optional dry-run flag. When {@code true}, the plan is printed but no migrations
+     * are executed.
+     *
+     * @return the optional dry-run flag property
+     */
     @Input
     @Optional
     public abstract Property<Boolean> getDryRun();
 
+    /**
+     * Sets the {@linkplain #getTarget() target} from the {@code --target} command-line option.
+     *
+     * @param target the target node ID to migrate up to
+     */
     @Option(option = "target", description = "Target node ID to migrate up to")
     public void setTargetOption(String target) {
         getTarget().set(target);
     }
 
+    /**
+     * Enables {@linkplain #getDryRun() dry-run} mode from the {@code --preview} command-line
+     * option.
+     *
+     * @param dryRun {@code true} to preview the plan without executing migrations
+     */
     @Option(option = "preview", description = "Show what would be executed without making changes")
     public void setDryRunOption(boolean dryRun) {
         getDryRun().set(dryRun);
     }
 
+    /**
+     * Task action that executes the forward migrations.
+     *
+     * <p>Loads the execution context, resolves the target nodes, prints the execution graph, and —
+     * unless in dry-run mode — runs the migrations. Initializes the history repository before
+     * execution.
+     *
+     * @throws GradleException if the target node is not found or if any migration fails
+     */
     @TaskAction
     public void up() {
         withExecutionContext(
@@ -97,12 +139,20 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                 });
     }
 
-    /** 副作用のあるタスクはキャッシュしない。 */
+    /** Creates the task and marks it as never up to date, since it has side effects. */
     public MigrapheUpTask() {
         getOutputs().upToDateWhen(task -> false);
     }
 
-    /** 設定に基づいて Executor を作成する。 */
+    /**
+     * Creates the {@link Executor} for the UP direction, applying the project's parallelism
+     * configuration ({@code maxParallelism} when {@code parallel} is enabled, otherwise 1).
+     *
+     * @param context the loaded execution context providing the graph
+     * @param historyRepo the history repository tracking executed migrations
+     * @param listener the listener that receives execution events
+     * @return a configured executor for forward migrations
+     */
     private Executor createExecutor(
             ExecutionContext context,
             HistoryRepository historyRepo,
@@ -126,7 +176,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
         getLogger().lifecycle("{}Migrations to execute:", prefix);
         getLogger().lifecycle("");
 
-        // プランのノードを DFS 順でフィルタ
+        // Filter the plan's nodes in DFS order.
         List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes);

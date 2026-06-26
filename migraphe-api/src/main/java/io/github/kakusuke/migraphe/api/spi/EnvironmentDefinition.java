@@ -1,12 +1,20 @@
 package io.github.kakusuke.migraphe.api.spi;
 
 /**
- * 環境定義インターフェース。
+ * Base interface for a plugin's environment (target) configuration.
  *
- * <p>プラグインが提供する EnvironmentDefinition サブタイプの基底インターフェース。 各プラグインは {@code @ConfigMapping}
- * 付きのサブタイプを実装し、YAML から直接マッピングされる。
+ * <p>An environment definition is the configuration view of a single target as declared in the
+ * project's YAML. Each {@link MigraphePlugin} declares a concrete subtype via {@link
+ * MigraphePlugin#environmentDefinitionClass()} and implements it as a SmallRye
+ * {@code @ConfigMapping} interface so its fields bind directly from YAML. The runtime then hands
+ * the bound definition to {@link EnvironmentProvider#createEnvironment(String,
+ * EnvironmentDefinition)} to construct the concrete {@link
+ * io.github.kakusuke.migraphe.api.environment.Environment}.
  *
- * <p>実装例:
+ * <p>The only contract guaranteed by this base interface is {@link #type()}; plugin-specific
+ * subtypes add whatever connection or configuration properties they require.
+ *
+ * <p>Example implementation:
  *
  * <pre>{@code
  * @ConfigMapping(prefix = "")
@@ -22,15 +30,19 @@ package io.github.kakusuke.migraphe.api.spi;
  *     String password();
  * }
  * }</pre>
+ *
+ * @see MigraphePlugin#environmentDefinitionClass()
+ * @see EnvironmentProvider
  */
 public interface EnvironmentDefinition {
 
     /**
-     * 環境タイプを返す。
+     * Returns the environment type identifier.
      *
-     * <p>設定ファイルで使用される型名（例: "postgresql", "mysql", "mongodb"）
+     * <p>This is the type name used in configuration files (for example {@code "postgresql"},
+     * {@code "mysql"}, or {@code "mongodb"}) and selects the plugin that handles this target.
      *
-     * @return 環境タイプ
+     * @return the environment type identifier
      */
     String type();
 }

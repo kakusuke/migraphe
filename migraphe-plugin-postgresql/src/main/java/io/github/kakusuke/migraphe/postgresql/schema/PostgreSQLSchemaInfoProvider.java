@@ -14,8 +14,37 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Extracts {@link PostgreSQLSchemaInfo} from a live {@link PostgreSQLEnvironment}.
+ *
+ * <p>This provider first delegates to {@link JdbcSchemaInfoProvider} for the generic JDBC schema
+ * details (tables, views, columns), then opens a connection and queries the PostgreSQL system
+ * catalogs ({@code pg_extension}, {@code pg_type}/{@code pg_enum}, {@code pg_sequences}, {@code
+ * pg_proc}, {@code pg_trigger}, {@code pg_matviews}, {@code pg_partitioned_table}, {@code
+ * pg_policy}) for the PostgreSQL-specific objects. Built-in schemas ({@code pg_catalog} and {@code
+ * information_schema}) are excluded from the catalog queries. The combined result is returned as a
+ * single {@link PostgreSQLSchemaInfo}.
+ *
+ * <p>It implements {@link SchemaInfoProvider} so generators can introspect a PostgreSQL database in
+ * a dialect-aware way.
+ */
 public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreSQLSchemaInfo> {
 
+    /** Creates a new {@code PostgreSQLSchemaInfoProvider}. */
+    public PostgreSQLSchemaInfoProvider() {}
+
+    /**
+     * Extracts the full PostgreSQL schema snapshot from the given environment.
+     *
+     * <p>The {@code environment} must be a {@link PostgreSQLEnvironment}; the generic JDBC schema
+     * details are obtained via {@link JdbcSchemaInfoProvider} and merged with PostgreSQL-specific
+     * catalog data queried over a fresh connection.
+     *
+     * @param environment the environment to introspect; must be a {@link PostgreSQLEnvironment}
+     * @return the combined PostgreSQL schema information
+     * @throws PostgreSQLException if {@code environment} is not a {@link PostgreSQLEnvironment}, or
+     *     if a {@link SQLException} occurs while reading the catalogs
+     */
     @Override
     public PostgreSQLSchemaInfo getSchemaInfo(Environment environment) {
         if (!(environment instanceof PostgreSQLEnvironment pgEnv)) {

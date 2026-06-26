@@ -25,6 +25,16 @@ public final class PluginPinCommand implements Command {
     private final MavenPluginResolver resolver;
     private final boolean checkOnly;
 
+    /**
+     * Creates the pin command.
+     *
+     * @param baseDir the project base directory containing {@code migraphe.yaml} and where {@code
+     *     migraphe.lock.yaml} is read from or written to
+     * @param resolver the Maven plugin resolver used to resolve declared plugins to concrete
+     *     artifacts and their checksums
+     * @param checkOnly {@code true} to verify the existing lockfile against the current
+     *     configuration without writing; {@code false} to (re)generate the lockfile
+     */
     public PluginPinCommand(Path baseDir, MavenPluginResolver resolver, boolean checkOnly) {
         this.baseDir = baseDir;
         this.resolver = resolver;

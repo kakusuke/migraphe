@@ -8,13 +8,21 @@ import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 
 /**
- * 指定されたプレフィックスを持つプロパティを、プレフィックスを除去してエクスポーズする ConfigSource。
+ * A {@link ConfigSource} that re-exposes a prefixed slice of another config with the prefix
+ * removed.
  *
- * <p>例: prefix="target.db1." の場合
+ * <p>Target and task configuration lives under dynamic, per-id prefixes inside the merged config
+ * (for example {@code target.db1.*}). To map such a slice onto a plugin's {@code @ConfigMapping}
+ * interface — which expects un-prefixed keys — {@link ConfigLoader} wraps the merged {@link
+ * SmallRyeConfig} in this source with the relevant prefix. Properties whose values resolve to
+ * {@code null} are skipped, so {@code ${...}} expansion has already been applied by the underlying
+ * config.
+ *
+ * <p>Example, with {@code prefix = "target.db1."}:
  *
  * <ul>
- *   <li>"target.db1.type" → "type"
- *   <li>"target.db1.jdbc_url" → "jdbc_url"
+ *   <li>{@code "target.db1.type"} &rarr; {@code "type"}
+ *   <li>{@code "target.db1.jdbc_url"} &rarr; {@code "jdbc_url"}
  * </ul>
  */
 public class PrefixedConfigSource implements ConfigSource {
@@ -23,10 +31,11 @@ public class PrefixedConfigSource implements ConfigSource {
     private final String name;
 
     /**
-     * コンストラクタ。
+     * Builds the source by copying every property of {@code sourceConfig} whose name starts with
+     * {@code prefix}, stripping that prefix from the key.
      *
-     * @param sourceConfig 元の設定
-     * @param prefix プレフィックス（末尾に "." を含むこと）
+     * @param sourceConfig the underlying config to slice (values are read fully resolved)
+     * @param prefix the prefix to match and strip; must include the trailing {@code "."}
      */
     public PrefixedConfigSource(SmallRyeConfig sourceConfig, String prefix) {
         this.name = "PrefixedConfigSource[" + prefix + "]";

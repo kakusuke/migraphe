@@ -6,114 +6,172 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * プロジェクト全体の設定。
+ * The top-level, project-wide configuration mapped from {@code migraphe.yaml}.
  *
- * <p>YAMLファイル（application.yaml）からMicroProfile Configで読み込まれる。
+ * <p>This is a SmallRye {@code @ConfigMapping} interface (empty prefix) bound against the merged
+ * config produced by {@link ConfigLoader}: SmallRye proxies it and resolves each accessor against
+ * the layered config sources, expanding {@code ${...}} references as it goes. It groups the stable,
+ * statically-known sections of the configuration ({@code project}, {@code history}, {@code
+ * execution}, {@code generators}); the dynamically-keyed {@code target.*} and {@code task.*}
+ * entries are read programmatically elsewhere rather than through this mapping.
  */
 @ConfigMapping(prefix = "")
 public interface ProjectConfig {
 
     /**
-     * プロジェクト情報セクション。
+     * The {@code project} section (name and scan-root).
      *
-     * @return プロジェクト情報
+     * @return the project-information section
      */
     ProjectSection project();
 
     /**
-     * 履歴管理設定セクション。
+     * The {@code history} section (where migration history is stored).
      *
-     * @return 履歴管理設定
+     * @return the history-management section
      */
     HistorySection history();
 
     /**
-     * 実行設定セクション。
+     * The {@code execution} section (parallelism settings).
      *
-     * @return 実行設定
+     * @return the execution section
      */
     ExecutionSection execution();
 
     /**
-     * ジェネレーター設定リスト。
+     * The optional list of generator definitions.
      *
-     * @return ジェネレーター設定（未設定の場合は空）
+     * @return the generator sections, or an empty {@link Optional} if none are configured
      */
     Optional<List<GeneratorSection>> generators();
 
-    /** プロジェクト情報。 */
+    /** The {@code project} section: project identity and the configuration scan root. */
     interface ProjectSection {
         /**
-         * プロジェクト名。
+         * The human-readable project name.
          *
-         * @return プロジェクト名
+         * @return the project name
          */
         String name();
 
         /**
-         * tasks/targets/environments/plugins を探す起点ディレクトリ。
+         * The root directory under which {@code tasks/}, {@code targets/}, {@code environments/}
+         * and {@code plugins} are looked up.
          *
-         * <p>{@code migraphe.yaml} の親ディレクトリ起点の相対パス、または絶対パス。 未指定の場合は {@code migraphe.yaml}
-         * の親ディレクトリと同じ。
+         * <p>May be a path relative to the directory containing {@code migraphe.yaml}, or an
+         * absolute path. When absent, the scan root defaults to {@code migraphe.yaml}'s own parent
+         * directory.
          *
-         * @return scan-root のパス文字列 (未指定の場合は empty)
+         * @return the scan-root path string, or an empty {@link Optional} if unspecified
          */
         Optional<String> scanRoot();
     }
 
-    /** 履歴管理設定。 */
+    /** The {@code history} section: where execution history is persisted. */
     interface HistorySection {
         /**
-         * 履歴を保存するターゲットID。
+         * The id of the target used to store migration history.
          *
-         * @return ターゲットID
+         * @return the history target id
          */
         String target();
     }
 
-    /** 実行設定。 */
+    /** The {@code execution} section: how migrations are scheduled. */
     interface ExecutionSection {
         /**
-         * 並列実行を有効にするかどうか。
+         * Whether ready nodes may be executed in parallel.
          *
-         * @return 並列実行が有効の場合 true
+         * @return {@code true} if parallel execution is enabled (defaults to {@code false})
          */
         @WithDefault("false")
         boolean parallel();
 
         /**
-         * 最大並列数。0 の場合は無制限。
+         * The maximum number of nodes to run concurrently; {@code 0} means unbounded. Only
+         * meaningful when {@link #parallel()} is {@code true}.
          *
-         * @return 最大並列数
+         * @return the maximum parallelism (defaults to {@code 0})
          */
         @WithDefault("0")
         int maxParallelism();
     }
 
-    /** ジェネレーター設定。 */
+    /** A single generator definition under the {@code generators} list. */
     interface GeneratorSection {
+        /**
+         * The unique name identifying this generator (selectable via {@code migraphe generate
+         * --name}).
+         *
+         * @return the generator name
+         */
         String name();
 
+        /**
+         * The output-plugin type that renders the extracted data (for example {@code jdbc-markdown}
+         * or {@code output-json}).
+         *
+         * @return the output-plugin type identifier
+         */
         String type();
 
+        /**
+         * The source sub-section describing where this generator's input data comes from.
+         *
+         * @return the source configuration
+         */
         SourceSection source();
 
+        /**
+         * The directory, relative to the project, into which generated artifacts are written.
+         *
+         * @return the output directory (defaults to {@code docs/schema})
+         */
         @WithDefault("docs/schema")
         String outputDir();
 
+        /**
+         * Optional patterns identifying schema objects to exclude from generation.
+         *
+         * @return the exclude rules, or an empty {@link Optional} if none are configured
+         */
         Optional<List<ExcludeSection>> excludes();
 
-        /** ソースプラグイン設定。 */
+        /** The {@code source} sub-section: which source plugin feeds the generator. */
         interface SourceSection {
+            /**
+             * The source-plugin type that extracts data (for example {@code jdbc-schema} or {@code
+             * migration-tree}). When absent, the generator's output type may imply a default
+             * source.
+             *
+             * @return the source-plugin type identifier, or an empty {@link Optional} if unset
+             */
             Optional<String> type();
 
+            /**
+             * The id of the target the source plugin should read from (for schema-extracting
+             * sources).
+             *
+             * @return the source target id, or an empty {@link Optional} if not applicable
+             */
             Optional<String> target();
         }
 
-        /** 除外パターン。 */
+        /** A single exclusion rule matching schema objects to skip. */
         interface ExcludeSection {
+            /**
+             * A schema-name pattern to exclude.
+             *
+             * @return the schema pattern, or an empty {@link Optional} if not set
+             */
             Optional<String> schema();
 
+            /**
+             * A table-name pattern to exclude.
+             *
+             * @return the table pattern, or an empty {@link Optional} if not set
+             */
             Optional<String> table();
         }
     }

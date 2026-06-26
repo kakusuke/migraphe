@@ -21,70 +21,104 @@ import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
 
-/** YAML ファイルから設定を読み込み、SmallRyeConfig を構築するローダー。 */
+/**
+ * Loads Migraphe's multi-file YAML configuration into a {@link SmallRyeConfig}.
+ *
+ * <p>This is the central entry point of the {@code config} package. It discovers the configuration
+ * files via {@link YamlFileScanner}, merges them through {@link MultiFileYamlConfigSource}, and
+ * stacks the additional config sources that drive {@code ${...}} expansion. The precedence (by
+ * ordinal, highest wins) is:
+ *
+ * <ol>
+ *   <li>explicit {@code variables} (ordinal 600)
+ *   <li>environment-override file {@code environments/<envName>.yaml} (ordinal 500)
+ *   <li>system properties, referenced as {@code ${name}} (ordinal 400)
+ *   <li>OS environment, namespaced under {@code env.} and referenced as {@code ${env.NAME}}
+ *       (ordinal 300)
+ *   <li>the merged YAML files (ordinal 100)
+ * </ol>
+ *
+ * <p>Only {@link ProjectConfig} is bound via {@code withMapping}; the dynamically-keyed {@code
+ * target.*} and {@code task.*} entries are read programmatically through {@link
+ * #loadEnvironmentDefinitions} and {@link #loadTaskDefinitions}, which map each entry onto the
+ * relevant plugin's definition type via {@link PrefixedConfigSource}.
+ */
 public class ConfigLoader {
 
+    /** Creates a new {@code ConfigLoader}. */
+    public ConfigLoader() {}
+
     /**
-     * YAML ファイルから設定をロードして SmallRyeConfig を構築する（環境指定なし）。
+     * Loads the configuration with no environment file and no extra variables.
      *
-     * @param baseDir プロジェクトルートディレクトリ
-     * @return SmallRyeConfig
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * @param baseDir the project root directory
+     * @return the built config
+     * @throws ConfigurationException if the configuration cannot be loaded
      */
     public SmallRyeConfig load(Path baseDir) {
         return loadConfig(baseDir, null, Collections.emptyMap());
     }
 
     /**
-     * YAML ファイルから設定をロードして SmallRyeConfig を構築する（変数指定あり）。
+     * Loads the configuration with extra variables but no environment file.
      *
-     * @param baseDir プロジェクトルートディレクトリ
-     * @param variables 変数マップ（SmallRye Config に最優先で差し込まれる）
-     * @return SmallRyeConfig
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * @param baseDir the project root directory
+     * @param variables externally-supplied variables, injected at the highest precedence (ordinal
+     *     600)
+     * @return the built config
+     * @throws ConfigurationException if the configuration cannot be loaded
      */
     public SmallRyeConfig load(Path baseDir, Map<String, String> variables) {
         return loadConfig(baseDir, null, variables);
     }
 
     /**
-     * YAML ファイルから設定をロードして SmallRyeConfig を構築する。
+     * Loads the configuration, optionally applying a deployment-environment override file.
      *
-     * @param baseDir プロジェクトルートディレクトリ
-     * @param envName 環境名 (null の場合は環境ファイルをロードしない)
-     * @return SmallRyeConfig
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * @param baseDir the project root directory
+     * @param envName the environment name; when {@code null} no {@code environments/*.yaml} file is
+     *     loaded
+     * @return the built config
+     * @throws ConfigurationException if the configuration cannot be loaded
      */
     public SmallRyeConfig loadConfig(Path baseDir, @Nullable String envName) {
         return loadConfig(baseDir, envName, Collections.emptyMap());
     }
 
     /**
-     * YAML ファイルから設定をロードして SmallRyeConfig を構築する。
+     * Loads the configuration, optionally applying an environment file and extra variables.
      *
-     * @param baseDir プロジェクトルートディレクトリ
-     * @param envName 環境名 (null の場合は環境ファイルをロードしない)
-     * @param variables 変数マップ（SmallRye Config に最優先で差し込まれる）
-     * @return SmallRyeConfig
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * <p>Discovers {@code migraphe.yaml}, resolves the scan root, scans targets and tasks, merges
+     * them, and registers the environment file, system properties, OS environment and explicit
+     * variables as additional sources (see the class documentation for the precedence). {@link
+     * ProjectConfig} is bound as a mapping with unknown-property validation disabled.
+     *
+     * @param baseDir the project root directory
+     * @param envName the environment name; when {@code null} no {@code environments/*.yaml} file is
+     *     loaded
+     * @param variables externally-supplied variables, injected at the highest precedence (ordinal
+     *     600); ignored when empty
+     * @return the built config
+     * @throws ConfigurationException if {@code migraphe.yaml} is missing or an environment file
+     *     cannot be read
      */
     public SmallRyeConfig loadConfig(
             Path baseDir, @Nullable String envName, Map<String, String> variables) {
         YamlFileScanner scanner = new YamlFileScanner();
         TaskIdGenerator idGenerator = new TaskIdGenerator();
 
-        // 1. プロジェクト設定ファイル (migraphe.yaml) を発見
+        // 1. Discover the project config file (migraphe.yaml).
         Path projectConfigFile = scanner.findProjectConfig(baseDir);
         if (projectConfigFile == null) {
             throw new ConfigurationException(
                     "Project config file not found: " + baseDir.resolve("migraphe.yaml"));
         }
 
-        // 2. scan-root を解決し、ターゲットファイル (targets/*.yaml) をスキャン
+        // 2. Resolve the scan root and scan the target files (targets/*.yaml).
         Path scanRoot = resolveScanRoot(baseDir, projectConfigFile);
         List<Path> targetFiles = scanner.scanTargetFiles(scanRoot);
 
-        // 3. タスクファイル (tasks/**/*.yaml) をスキャンして Task ID を生成
+        // 3. Scan the task files (tasks/**/*.yaml) and generate their task ids.
         List<Path> taskFilePaths = scanner.scanTaskFiles(scanRoot);
         Map<NodeId, Path> taskFiles = new HashMap<>();
         for (Path taskFile : taskFilePaths) {
@@ -92,40 +126,40 @@ public class ConfigLoader {
             taskFiles.put(taskId, taskFile);
         }
 
-        // 4. MultiFileYamlConfigSource を構築
+        // 4. Build the merged MultiFileYamlConfigSource.
         MultiFileYamlConfigSource multiFileSource =
                 new MultiFileYamlConfigSource(projectConfigFile, targetFiles, taskFiles);
 
-        // 5. SmallRyeConfigBuilder を構築
-        // 注: ProjectConfig のみ withMapping を使用。
-        // TargetConfig と TaskConfig は動的なプレフィックスを持つため、
-        // プログラマティックに取得する必要がある。
+        // 5. Build the SmallRyeConfigBuilder.
+        // Note: only ProjectConfig is bound via withMapping. TargetConfig and TaskConfig live under
+        // dynamic prefixes and must be retrieved programmatically.
         SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().addDefaultInterceptors();
 
-        // 6. 環境ファイルがあればロード (最優先 - ordinal 500)
+        // 6. Load the environment override file if present (ordinal 500).
         Path envFile = envName != null ? scanner.findEnvironmentFile(scanRoot, envName) : null;
 
         if (envFile != null) {
             try {
                 YamlConfigSource envSource = new YamlConfigSource(envFile.toUri().toURL(), 500);
-                // 環境ファイルと MultiFileYamlConfigSource を同時に追加
+                // Register the environment file and the MultiFileYamlConfigSource together.
                 builder.withSources(envSource, multiFileSource);
             } catch (IOException e) {
                 throw new ConfigurationException("Failed to load environment file: " + envFile, e);
             }
         } else {
-            // 環境ファイルがない場合は MultiFileYamlConfigSource のみ
+            // No environment file: register only the MultiFileYamlConfigSource.
             builder.withSources(multiFileSource);
         }
 
-        // 7. System.getenv() を env.<NAME> キーで登録（ordinal 300）: ${env.VAR} で参照可能
+        // 7. Register System.getenv() under env.<NAME> keys (ordinal 300): referenced as
+        // ${env.VAR}.
         Map<String, String> envVars = new HashMap<>();
         for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
             envVars.put("env." + entry.getKey(), entry.getValue());
         }
         builder.withSources(new MapConfigSource(envVars, 300));
 
-        // 8. システムプロパティを生キーで登録（ordinal 400）: ${prop.name} で参照可能
+        // 8. Register system properties under their raw keys (ordinal 400): referenced as ${name}.
         Map<String, String> sysProps = new HashMap<>();
         for (Map.Entry<Object, Object> entry : System.getProperties().entrySet()) {
             if (entry.getKey() instanceof String k && entry.getValue() instanceof String v) {
@@ -134,27 +168,29 @@ public class ConfigLoader {
         }
         builder.withSources(new MapConfigSource(sysProps, 400));
 
-        // 9. variables があれば MapConfigSource を追加（最優先 ordinal 600）
+        // 9. Register explicit variables, if any, at the highest precedence (ordinal 600).
         if (!variables.isEmpty()) {
             builder.withSources(new MapConfigSource(variables));
         }
 
-        // 10. マッピングとバリデーション設定
-        builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // マッピングされていないプロパティを許可
+        // 10. Configure the mapping and validation.
+        builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // allow unmapped keys
 
         return builder.build();
     }
 
     /**
-     * tasks/ ディレクトリから TaskDefinition を読み込む。
+     * Loads every {@link TaskDefinition} from the {@code tasks/} directory.
      *
-     * <p>各タスクファイルの target フィールドからプラグインを特定し、 プラグイン固有の TaskDefinition サブタイプにマッピングする。
+     * <p>For each task file, the {@code target} field selects a target whose {@code type}
+     * identifies the plugin; the file is then mapped onto that plugin's task-definition type.
      *
-     * @param baseDir プロジェクトのベースディレクトリ（内部で {@code project.scan-root} を解決し、実際のスキャン対象ディレクトリを決定する）
-     * @param mainConfig メイン設定（ターゲット情報を含む）
-     * @param pluginRegistry プラグインレジストリ
-     * @return NodeId → TaskDefinition のマップ
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * @param baseDir the project base directory (the scan root is resolved internally from {@code
+     *     project.scan-root})
+     * @param mainConfig the merged main config, used to look up target types
+     * @param pluginRegistry the registry used to resolve plugins by type
+     * @return a map from task {@link NodeId} to its loaded {@link TaskDefinition}, in scan order
+     * @throws ConfigurationException if a task file cannot be loaded or its target type is unknown
      */
     public Map<NodeId, TaskDefinition<?>> loadTaskDefinitions(
             Path baseDir, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
@@ -163,7 +199,7 @@ public class ConfigLoader {
         TaskIdGenerator idGenerator = new TaskIdGenerator();
         Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
-        // tasks/ ディレクトリ配下の全YAMLファイルをスキャン
+        // Scan all YAML files under the tasks/ directory.
         Path projectConfigFile = scanner.findProjectConfig(baseDir);
         Path scanRoot =
                 projectConfigFile != null ? resolveScanRoot(baseDir, projectConfigFile) : baseDir;
@@ -179,21 +215,23 @@ public class ConfigLoader {
     }
 
     /**
-     * targets/ ディレクトリから EnvironmentDefinition を読み込む。
+     * Loads an {@link EnvironmentDefinition} for every target.
      *
-     * <p>各ターゲットの type フィールドからプラグインを特定し、 プラグイン固有の EnvironmentDefinition サブタイプにマッピングする。
+     * <p>Target ids are discovered from the {@code target.*} keys of the merged config; each
+     * target's {@code type} identifies the plugin, and the target's properties are mapped onto that
+     * plugin's environment-definition type.
      *
-     * @param mainConfig メイン設定（ターゲット情報を含む）
-     * @param pluginRegistry プラグインレジストリ
-     * @return targetId → EnvironmentDefinition のマップ
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * @param mainConfig the merged main config containing the {@code target.*} entries
+     * @param pluginRegistry the registry used to resolve plugins by type
+     * @return a map from target id to its loaded {@link EnvironmentDefinition}
+     * @throws ConfigurationException if a target's type is missing or unknown
      */
     public Map<String, EnvironmentDefinition> loadEnvironmentDefinitions(
             SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
 
         Map<String, EnvironmentDefinition> environmentDefinitions = new LinkedHashMap<>();
 
-        // 1. target.* プレフィックスを持つプロパティからターゲットIDを抽出
+        // 1. Extract target ids from the target.* prefixed properties.
         Set<String> targetIds = extractTargetIds(mainConfig);
 
         for (String targetId : targetIds) {
@@ -206,30 +244,34 @@ public class ConfigLoader {
     }
 
     /**
-     * 単一のターゲットから EnvironmentDefinition を読み込む。
+     * Loads the {@link EnvironmentDefinition} for a single target.
      *
-     * @param targetId ターゲットID
-     * @param mainConfig メイン設定
-     * @param pluginRegistry プラグインレジストリ
-     * @return EnvironmentDefinition
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * <p>Reads {@code target.<targetId>.type}, resolves the corresponding plugin, then maps the
+     * target's properties (exposed prefix-stripped via {@link PrefixedConfigSource}) onto the
+     * plugin's {@link MigraphePlugin#environmentDefinitionClass()}.
+     *
+     * @param targetId the target id
+     * @param mainConfig the merged main config containing this target's properties
+     * @param pluginRegistry the registry used to resolve the plugin by type
+     * @return the loaded environment definition
+     * @throws ConfigurationException if the target's {@code type} is missing
      */
     public EnvironmentDefinition loadEnvironmentDefinition(
             String targetId, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
 
         String prefix = "target." + targetId + ".";
 
-        // 1. type を取得
+        // 1. Read the type.
         String type = mainConfig.getValue(prefix + "type", String.class);
         if (type == null) {
             throw new ConfigurationException("Target type not found for target: " + targetId);
         }
 
-        // 2. プラグインを取得
+        // 2. Resolve the plugin.
         MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
 
-        // 3. プラグインの EnvironmentDefinition クラスでマッピング
-        // プレフィックス付きで EnvironmentDefinition を構築
+        // 3. Map onto the plugin's EnvironmentDefinition class.
+        // Build it from a prefix-stripped view of this target's properties.
         SmallRyeConfig envConfig =
                 new SmallRyeConfigBuilder()
                         .withSources(new PrefixedConfigSource(mainConfig, prefix))
@@ -241,12 +283,14 @@ public class ConfigLoader {
     }
 
     /**
-     * migraphe.yaml の project.scan-root を解決する。
+     * Resolves the configuration scan root from {@code project.scan-root} in {@code migraphe.yaml}.
      *
-     * <p>scan-root が指定されていれば baseDir からの相対パス、指定されていなければ baseDir を返す。
+     * <p>If {@code scan-root} is set, the result is that path resolved against {@code baseDir};
+     * otherwise {@code baseDir} itself is returned. If {@code migraphe.yaml} is absent, {@code
+     * baseDir} is returned unchanged.
      *
-     * @param baseDir プロジェクトルートディレクトリ
-     * @return scan-root の絶対パス
+     * @param baseDir the project root directory
+     * @return the resolved scan-root path
      */
     public Path resolveScanRoot(Path baseDir) {
         YamlFileScanner scanner = new YamlFileScanner();
@@ -258,13 +302,14 @@ public class ConfigLoader {
     }
 
     /**
-     * migraphe.yaml の project.scan-root を解決する。
+     * Resolves the scan root from a known {@code migraphe.yaml} path.
      *
-     * <p>scan-root が指定されていれば baseDir からの相対パス、指定されていなければ baseDir を返す。
+     * <p>Loads only the project section, then resolves {@code project.scan-root} against {@code
+     * baseDir}, falling back to {@code baseDir} when unspecified.
      *
-     * @param baseDir プロジェクトルートディレクトリ
-     * @param projectConfigFile migraphe.yaml のパス
-     * @return scan-root の絶対パス
+     * @param baseDir the project root directory
+     * @param projectConfigFile the path to {@code migraphe.yaml}
+     * @return the resolved scan-root path
      */
     private Path resolveScanRoot(Path baseDir, Path projectConfigFile) {
         SmallRyeConfig projectOnlyConfig =
@@ -285,10 +330,10 @@ public class ConfigLoader {
     }
 
     /**
-     * 設定からターゲットIDを抽出する。
+     * Extracts the set of target ids from the {@code target.*} property names of the config.
      *
-     * @param config SmallRyeConfig
-     * @return ターゲットIDのセット
+     * @param config the merged config to inspect
+     * @return the distinct target ids found
      */
     private Set<String> extractTargetIds(SmallRyeConfig config) {
         Set<String> targetIds = new HashSet<>();
@@ -307,13 +352,16 @@ public class ConfigLoader {
     }
 
     /**
-     * 単一のタスクファイルから TaskDefinition を読み込む。
+     * Loads a single {@link TaskDefinition} from a task file.
      *
-     * @param taskFile タスクファイルのパス
-     * @param mainConfig メイン設定（ターゲット情報を含む）
-     * @param pluginRegistry プラグインレジストリ
-     * @return TaskDefinition
-     * @throws ConfigurationException 設定ファイルのロードに失敗した場合
+     * <p>First reads just the {@code target} field, looks up that target's {@code type} in {@code
+     * mainConfig}, resolves the plugin, then maps the file onto the plugin's task-definition type.
+     *
+     * @param taskFile the path to the task file
+     * @param mainConfig the merged main config, used to look up the target's type
+     * @param pluginRegistry the registry used to resolve the plugin by type
+     * @return the loaded task definition
+     * @throws ConfigurationException if the file cannot be read or its target type is unknown
      */
     public TaskDefinition<?> loadTaskDefinition(
             Path taskFile, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
@@ -321,7 +369,7 @@ public class ConfigLoader {
         try {
             YamlConfigSource taskSource = new YamlConfigSource(taskFile.toUri().toURL());
 
-            // 1. まず target フィールドだけを読み取る
+            // 1. Read only the target field first.
             SmallRyeConfig targetOnlyConfig =
                     new SmallRyeConfigBuilder()
                             .withSources(taskSource)
@@ -332,18 +380,18 @@ public class ConfigLoader {
             TaskTargetOnly targetOnly = targetOnlyConfig.getConfigMapping(TaskTargetOnly.class);
             String targetId = targetOnly.target();
 
-            // 2. target から type を取得
+            // 2. Look up the target's type.
             String type = mainConfig.getValue("target." + targetId + ".type", String.class);
             if (type == null) {
                 throw new ConfigurationException(
                         "Target type not found for target: " + targetId + " in file: " + taskFile);
             }
 
-            // 3. プラグインを取得
+            // 3. Resolve the plugin.
             MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
 
-            // 4. プラグインの TaskDefinition クラスでマッピング
-            // 注: YamlConfigSource を再作成（SmallRyeConfig はソースを使い切る）
+            // 4. Map onto the plugin's TaskDefinition class.
+            // Note: recreate the YamlConfigSource (SmallRyeConfig consumes its sources).
             YamlConfigSource taskSource2 = new YamlConfigSource(taskFile.toUri().toURL());
             SmallRyeConfig taskConfig =
                     new SmallRyeConfigBuilder()
@@ -359,9 +407,17 @@ public class ConfigLoader {
         }
     }
 
-    /** target フィールドのみを読み取るための最小インターフェース。 */
+    /**
+     * Minimal {@code @ConfigMapping} used to read only a task file's {@code target} field, so the
+     * full plugin-specific mapping can be selected before the file is mapped a second time.
+     */
     @ConfigMapping(prefix = "")
     interface TaskTargetOnly {
+        /**
+         * The id of the target this task runs against.
+         *
+         * @return the target id
+         */
         String target();
     }
 }

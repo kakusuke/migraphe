@@ -4,12 +4,24 @@ import io.github.kakusuke.migraphe.api.schema.SchemaInfoProvider;
 import java.util.Optional;
 
 /**
- * Migraphe プラグインの統合インターフェース。
+ * Central service-provider interface that bundles everything Migraphe needs to support one backend
+ * type.
  *
- * <p>プラグインは ServiceLoader で発見され、type によって識別される。 各プラグインは Environment, MigrationNode,
- * HistoryRepository の生成を担当する。
+ * <p>A {@code MigraphePlugin} ties together, under a single {@linkplain #type() type identifier},
+ * the pieces required to run migrations against a particular kind of target (for example {@code
+ * "postgresql"}, {@code "mysql"}, or {@code "jdbc"}): the configuration mapping types for tasks and
+ * environments, and the providers that turn that configuration into runtime objects ({@link
+ * EnvironmentProvider}, {@link MigrationNodeProvider}, and {@link HistoryRepositoryProvider}). It
+ * may optionally expose a {@link SchemaInfoProvider} for the generator subsystem.
  *
- * <p>実装例:
+ * <p>Implementations are discovered at runtime through the {@link java.util.ServiceLoader}
+ * mechanism. To register a plugin, list its fully qualified class name in a {@code
+ * META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin} resource file on the
+ * classpath. The runtime selects an implementation by matching a configuration {@code type} value
+ * against {@link #type()}, then uses the returned definition classes to bind YAML configuration and
+ * the returned providers to construct runtime objects.
+ *
+ * <p>Example implementation:
  *
  * <pre>{@code
  * public class PostgreSQLPlugin implements MigraphePlugin<String> {
@@ -45,60 +57,81 @@ import java.util.Optional;
  * }
  * }</pre>
  *
- * @param <T> TaskDefinition の UP/DOWN アクション型（例: PostgreSQL では String）
+ * @param <T> the type of the UP/DOWN action carried by this plugin's {@link TaskDefinition} (for
+ *     example {@code String} for SQL-based plugins such as PostgreSQL)
+ * @see EnvironmentProvider
+ * @see MigrationNodeProvider
+ * @see HistoryRepositoryProvider
+ * @see TaskDefinition
+ * @see EnvironmentDefinition
  */
 public interface MigraphePlugin<T> {
 
     /**
-     * プラグインの型識別子を返す。
+     * Returns this plugin's type identifier.
      *
-     * <p>設定ファイルで使用される型名（例: "postgresql", "mysql", "mongodb"）
+     * <p>This is the type name used in configuration files (for example {@code "postgresql"},
+     * {@code "mysql"}, or {@code "mongodb"}) and is how the runtime selects this plugin. It must be
+     * unique among the plugins on the classpath.
      *
-     * @return プラグインの型識別子
+     * @return the plugin's type identifier
      */
     String type();
 
     /**
-     * プラグイン固有の TaskDefinition サブタイプを返す。
+     * Returns the plugin-specific {@link TaskDefinition} subtype.
      *
-     * <p>フレームワークは返されたクラスを使用して YAML から TaskDefinition をマッピングする。 サブタイプは {@code @ConfigMapping}
-     * アノテーション付きで実装する必要がある。
+     * <p>The framework uses the returned class to bind task configuration from YAML. The subtype is
+     * expected to be implemented as a SmallRye {@code @ConfigMapping} interface.
      *
-     * @return TaskDefinition サブタイプの Class
+     * @return the {@link Class} of this plugin's {@link TaskDefinition} subtype
      */
     Class<? extends TaskDefinition<T>> taskDefinitionClass();
 
     /**
-     * プラグイン固有の EnvironmentDefinition サブタイプを返す。
+     * Returns the plugin-specific {@link EnvironmentDefinition} subtype.
      *
-     * <p>フレームワークは返されたクラスを使用して YAML から EnvironmentDefinition をマッピングする。 サブタイプは {@code @ConfigMapping}
-     * アノテーション付きで実装する必要がある。
+     * <p>The framework uses the returned class to bind environment configuration from YAML. The
+     * subtype is expected to be implemented as a SmallRye {@code @ConfigMapping} interface.
      *
-     * @return EnvironmentDefinition サブタイプの Class
+     * @return the {@link Class} of this plugin's {@link EnvironmentDefinition} subtype
      */
     Class<? extends EnvironmentDefinition> environmentDefinitionClass();
 
     /**
-     * Environment を生成する Provider を返す。
+     * Returns the provider that constructs {@link
+     * io.github.kakusuke.migraphe.api.environment.Environment} instances for this plugin.
      *
-     * @return EnvironmentProvider
+     * @return the {@link EnvironmentProvider} for this plugin
      */
     EnvironmentProvider environmentProvider();
 
     /**
-     * MigrationNode を生成する Provider を返す。
+     * Returns the provider that constructs {@link
+     * io.github.kakusuke.migraphe.api.graph.MigrationNode} instances for this plugin.
      *
-     * @return MigrationNodeProvider
+     * @return the {@link MigrationNodeProvider} for this plugin
      */
     MigrationNodeProvider<T> migrationNodeProvider();
 
     /**
-     * HistoryRepository を生成する Provider を返す。
+     * Returns the provider that constructs {@link
+     * io.github.kakusuke.migraphe.api.history.HistoryRepository} instances for this plugin.
      *
-     * @return HistoryRepositoryProvider
+     * @return the {@link HistoryRepositoryProvider} for this plugin
      */
     HistoryRepositoryProvider historyRepositoryProvider();
 
+    /**
+     * Returns this plugin's {@link SchemaInfoProvider}, if any.
+     *
+     * <p>A schema-info provider lets the generator subsystem extract schema information from an
+     * environment. Plugins that do not support schema extraction can rely on the default, which
+     * returns {@link Optional#empty()}.
+     *
+     * @return an {@link Optional} containing the plugin's {@link SchemaInfoProvider}, or an empty
+     *     {@link Optional} if the plugin does not provide one
+     */
     default Optional<SchemaInfoProvider<?>> schemaInfoProvider() {
         return Optional.empty();
     }

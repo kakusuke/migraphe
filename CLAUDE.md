@@ -7,7 +7,7 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: parser-combinator SQL statement splitting (Session 55)
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: Maven-Central-readiness Javadoc pass — full English Javadoc, zero `javadoc` warnings, javadoc/sources jars (Session 60)
 **Tests**: 956, 100% passing
 
 ## Module Structure
@@ -212,6 +212,9 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
+### 2026-06-26 (Session 60)
+- Maven-Central-readiness Javadoc pass: added English Javadoc to every type and public/protected member across all 204 main source files (was 35% covered), rewrote all remaining Japanese Javadoc/inline comments to English (main java is now Japanese-free), and drove `javadoc` to **zero warnings/errors** under `Xdoclint:all`. Added `withJavadocJar()`/`withSourcesJar()` (all 8 modules now emit `*-javadoc.jar`/`*-sources.jar`) and a UTF-8 + `Xdoclint:all` Javadoc config in `build.gradle.kts` as a docs-quality gate. Orchestrated via Explore (coverage map) → 2 agents to set the `migraphe-api` style baseline → 17 edit-only agents (gradle-free, package-scoped) with central serialized javadoc verification → 1 cleanup agent for the last warnings. Cleanup notes: FQN-ified a cross-package `{@link Main}`, converted `{@code …&#42;&#42;/*.yaml}` to `<code>` (EscapedEntity), and resolved ~40 implicit default-constructor warnings (private ctor for static utils, public+Javadoc for instantiated types/Builders/providers, protected for abstract types). Regression fix: `MigrapheExtension` ctor reverted `protected`→`public` so Gradle's ObjectFactory can instantiate the managed type (TestKit). `clean build` green, ErrorProne/NullAway clean. Remaining for Central: POM metadata + GPG signing + OSSRH/Portal wiring. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+
 ### 2026-06-25 (Session 59)
 - Fixed a bug where `${VAR}` expansion never resolved from env/sysprop on the CLI path (`SRCFG00011 Could not expand`): `ConfigLoader.loadConfig` built `SmallRyeConfigBuilder` with `addDefaultInterceptors()` only — no env/sysprop ConfigSource was ever registered. Rather than `addDefaultSources()` (whose `EnvConfigSource` normalizes `TARGET_FOO`→`target.foo` and pollutes the `extractTargetIds` key space), namespaced OS env under an `env.` prefix: `System.getenv()` → `MapConfigSource(env.<NAME>, 300)` referenced as `${env.VAR}` only; system properties → `MapConfigSource(raw, 400)` as `${VAR}` (trusted explicit input, same tier as profiles/variables). Added an ordinal-accepting `MapConfigSource` constructor. 4 `/tdd-cycle` passes; 3 new `ConfigLoaderTest` cases (env. expansion / bare-key isolation / sysprop raw-key). Updated USER_GUIDE en/ja, ARCHITECTURE decision 5, and `sample/*/targets/*.yaml` to `${env.VAR:default}`. ErrorProne clean, full `clean build` green.
 
@@ -220,5 +223,5 @@ Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-06-25
-**Current Work**: Fixed `${VAR}` env/sysprop expansion on the CLI path — OS env is now namespaced as `${env.VAR}` (ordinal 300), sysprop as `${VAR}` (400); updated docs en/ja + samples (Session 59). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Last Updated**: 2026-06-26
+**Current Work**: Maven-Central-readiness Javadoc pass — English Javadoc on all 204 main files, `javadoc` warnings/errors driven to zero under `Xdoclint:all`, `withJavadocJar()`/`withSourcesJar()` added; remaining for Central = POM metadata + GPG signing + OSSRH/Portal wiring (Session 60). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.

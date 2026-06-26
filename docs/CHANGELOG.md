@@ -2,6 +2,17 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-06-26 (Session 60)
+- **Maven Central 登録に向けた全モジュール Javadoc 整備（英語・javadoc 警告ゼロ化）**
+  - **Motivation**: Maven Central は javadoc jar / sources jar を必須要求し、公開 API はプラグイン開発者が直接参照する。調査の結果、204 main ソースファイル中 Javadoc があるのは 72（35%）のみで、特に public API（`migraphe-api`）のコア SPI 9 インターフェースが完全に未文書化、PostgreSQL/MySQL プラグインは約 5% しか整備されていなかった。
+  - **基盤整備（`build.gradle.kts`）**: `subprojects` の `java {}` に `withJavadocJar()` / `withSourcesJar()` を追加（全 8 モジュールで `*-javadoc.jar` / `*-sources.jar` を生成）。`tasks.withType<Javadoc>` に `Xdoclint:all`（`-quiet`）+ UTF-8 を設定し、Javadoc 警告をドキュメント品質ゲートとして可視化（`Werror=false` のためビルドは落とさない）。
+  - **整備内容**: 全 204 ファイルの型（class/interface/record/enum）と public/protected メンバ（メソッド・コンストラクタ・record コンポーネント `@param`・enum 定数）に英語 Javadoc を付与。既存の日本語 Javadoc / インラインコメントも英語へ書き換え（`Result` の `value()`/`error()`、`ExecutionRecord` のコンポーネントコメント等を含め main java から日本語を一掃 = 残存 0）。SPI 型は ServiceLoader 発見と `META-INF/services` リソースを明記、実装者・呼び出し側双方の契約を記述。実装に合わせた正確な記述を徹底（例: `EnvironmentFactory.createEnvironment` の `@throws` を実体の `PluginNotFoundException` に修正）。
+  - **オーケストレーション**: Explore でカバレッジマップを作成後、`migraphe-api` を 2 エージェントで先行整備して英語スタイル基準を確立（warning ゼロを先に達成）。共通スタイルガイドを scratchpad に書き出し、残りを「編集専任エージェント（gradle 非実行）」17 並列でパッケージ単位に分担 → ルートビルドロック競合を避けるため javadoc 検証は親が一括・逐次で実施。
+  - **警告ゼロ化（クリーンアップ）**: 中央検証で検出した全件を修正 — 別パッケージへの未解決 `{@link Main}` を FQN 化（参照エラー）、`{@code ...&#42;&#42;/*.yaml}` の EscapedEntity を `<code>` 要素化（コメント終端 `*/` 回避とエンティティ解釈を両立）、暗黙 public デフォルトコンストラクタ約 40 件をクラスの実体に応じて修正（静的ユーティリティ＝private ctor、被インスタンス化型・Builder・ServiceLoader provider＝public ctor + Javadoc、抽象型＝protected）。
+  - **回帰修正**: `MigrapheExtension`（Gradle managed type）のコンストラクタを誤って `protected` 化し ObjectFactory が生成不能になり TestKit 13 件が失敗 → `public` に戻して解消（Gradle は extension に public 引数なしコンストラクタを要求）。
+  - **検証**: `./gradlew clean build` green、`javadoc --rerun-tasks` の警告/エラー **0**、テスト失敗 0、ErrorProne/NullAway clean、main java の日本語残存 0、全 8 モジュールで javadoc/sources jar 生成を確認。
+  - **未了（Maven Central 残作業）**: POM メタデータ（name/description/url/licenses/developers/scm）と GPG 署名・OSSRH/Central Portal 連携は本セッション範囲外。
+
 ### 2026-06-25 (Session 59)
 - **CLI 経路で `${VAR}` の env/sysprop 展開が効かないバグを修正（OS環境変数を `${env.VAR}` に名前空間化）**
   - **Motivation**: ユーザー報告。`password: ${PROBE_PW}` のような設定が、環境変数 `PROBE_PW` をプロセスに渡していても全て `SRCFG00011 Could not expand` で失敗していた。`${VAR:default}` だけは常に default に解決される（式評価のインラインフォールバックで ConfigSource を引かないため）という症状も一致。原因は `ConfigLoader.loadConfig` が `new SmallRyeConfigBuilder().addDefaultInterceptors()` のみを呼び、**env/sysprop の ConfigSource を一切登録していなかった**こと（式評価インターセプタはあるが展開先が無い）。コア（variables マップ ordinal 600）や `--env` プロファイルとは独立した、`ConfigLoader` の組み立ての問題だった。

@@ -7,10 +7,25 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Thread-safe {@link HistoryRepository} decorator that serializes every operation on the delegate.
+ *
+ * <p>{@link io.github.kakusuke.migraphe.core.execution.DagExecutor} reads prior state and records
+ * results from many concurrent virtual threads. This wrapper guards each method with {@code
+ * synchronized (delegate)} so that a delegate that is not itself thread-safe (for example {@link
+ * InMemoryHistoryRepository}) is accessed by at most one thread at a time. {@code DagExecutor}
+ * applies this wrapper automatically unless the supplied repository is already an instance of this
+ * class.
+ */
 public final class SynchronizedHistoryRepository implements HistoryRepository {
 
     private final HistoryRepository delegate;
 
+    /**
+     * Wraps a repository so that all of its operations are mutually exclusive.
+     *
+     * @param delegate the repository to which all calls are forwarded under synchronization
+     */
     public SynchronizedHistoryRepository(HistoryRepository delegate) {
         this.delegate = delegate;
     }

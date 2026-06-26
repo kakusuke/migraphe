@@ -4,33 +4,69 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * タスク定義インターフェース。
+ * Base interface for a plugin's task configuration.
  *
- * <p>プラグインが提供する TaskDefinition サブタイプの基底インターフェース。 各プラグインは {@code @ConfigMapping} 付きのサブタイプを実装し、YAML
- * から直接マッピングされる。
+ * <p>A task definition is the configuration view of a single migration task as declared in the
+ * project's YAML. Each {@link MigraphePlugin} declares a concrete subtype via {@link
+ * MigraphePlugin#taskDefinitionClass()} and implements it as a SmallRye {@code @ConfigMapping}
+ * interface so its fields bind directly from YAML. The runtime then hands the bound definition to
+ * {@link MigrationNodeProvider#createNode(io.github.kakusuke.migraphe.api.graph.NodeId,
+ * TaskDefinition, java.util.Set, io.github.kakusuke.migraphe.api.environment.Environment)} to build
+ * a graph node.
  *
- * <p>注意: SmallRye Config の {@code @ConfigMapping} はオプショナルプロパティに {@code Optional<T>} を要求するため、
- * このインターフェースは {@code Optional} を使用する。
+ * <p>Because SmallRye Config's {@code @ConfigMapping} represents optional properties as {@link
+ * Optional}, this interface exposes optional fields as {@link Optional} values rather than nullable
+ * references.
  *
- * @param <T> UP/DOWN アクションの型（例: PostgreSQL では String（SQL文字列））
+ * @param <T> the type of the UP/DOWN action (for example {@code String}, an SQL statement, for
+ *     SQL-based plugins such as PostgreSQL)
+ * @see MigraphePlugin#taskDefinitionClass()
+ * @see MigrationNodeProvider
  */
 public interface TaskDefinition<T> {
 
-    /** タスク名 */
+    /**
+     * Returns the task's name.
+     *
+     * @return the human-readable task name
+     */
     String name();
 
-    /** タスクの説明（オプション） */
+    /**
+     * Returns the task's optional description.
+     *
+     * @return an {@link Optional} containing the description, or an empty {@link Optional} if none
+     *     was configured
+     */
     Optional<String> description();
 
-    /** 実行対象のターゲットID */
+    /**
+     * Returns the ID of the target this task runs against.
+     *
+     * @return the target ID
+     */
     String target();
 
-    /** 依存するタスクIDのリスト（オプション） */
+    /**
+     * Returns the IDs of the tasks this task depends on.
+     *
+     * @return an {@link Optional} containing the list of dependency task IDs, or an empty {@link
+     *     Optional} if the task has no declared dependencies
+     */
     Optional<List<String>> dependencies();
 
-    /** UP マイグレーション定義 */
+    /**
+     * Returns the UP (forward) migration action.
+     *
+     * @return the action to apply when migrating forward
+     */
     T up();
 
-    /** DOWN マイグレーション定義（オプション） */
+    /**
+     * Returns the optional DOWN (rollback) migration action.
+     *
+     * @return an {@link Optional} containing the rollback action, or an empty {@link Optional} if
+     *     the task does not support rollback
+     */
     Optional<T> down();
 }

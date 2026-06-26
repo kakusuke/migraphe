@@ -6,11 +6,14 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * SQL ベースの TaskDefinition。
+ * SQL-based {@link TaskDefinition} used by the JDBC plugin family.
  *
- * <p>YAML ファイルから直接マッピングされる。up/down は SQL 文字列。
+ * <p>This is the SmallRye {@link ConfigMapping} bound to a task YAML file. The {@code up} and
+ * {@code down} actions are plain SQL strings (the type parameter of {@link TaskDefinition} is
+ * {@link String}). {@link JdbcMigrationNodeProvider} reads these values to build a {@link
+ * JdbcMigrationNode}.
  *
- * <p>YAML 例:
+ * <p>Example task YAML:
  *
  * <pre>{@code
  * name: create_database
@@ -23,30 +26,64 @@ import java.util.Optional;
 @ConfigMapping(prefix = "")
 public interface SqlTaskDefinition extends TaskDefinition<String> {
 
+    /**
+     * Returns the task name.
+     *
+     * @return the human readable task name
+     */
     @Override
     String name();
 
+    /**
+     * Returns the optional task description.
+     *
+     * @return an {@link Optional} containing the description, or empty when none is configured
+     */
     @Override
     Optional<String> description();
 
+    /**
+     * Returns the target identifier this task runs against.
+     *
+     * @return the target (environment) identifier
+     */
     @Override
     String target();
 
+    /**
+     * Returns the optional list of dependency task identifiers.
+     *
+     * @return an {@link Optional} containing the dependency identifiers, or empty when the task has
+     *     no declared dependencies
+     */
     @Override
     Optional<List<String>> dependencies();
 
+    /**
+     * Returns the forward (UP) migration SQL.
+     *
+     * @return the SQL executed when the migration is applied
+     */
     @Override
     String up();
 
+    /**
+     * Returns the optional rollback (DOWN) migration SQL.
+     *
+     * @return an {@link Optional} containing the rollback SQL, or empty when the task is not
+     *     reversible
+     */
     @Override
     Optional<String> down();
 
     /**
-     * autocommit モードで実行するかどうか。
+     * Returns whether the task runs in autocommit mode.
      *
-     * <p>true の場合、トランザクションを使用せずに実行する。 CREATE DATABASE などトランザクション内で実行できない SQL 用。
+     * <p>When {@code true}, statements are executed without an enclosing transaction. This is
+     * required for SQL that cannot run inside a transaction, such as {@code CREATE DATABASE}.
      *
-     * @return autocommit を有効にする場合は true を含む Optional、指定なしの場合は空
+     * @return an {@link Optional} containing {@code true} to enable autocommit, or empty when
+     *     unspecified (treated as {@code false})
      */
     Optional<Boolean> autocommit();
 }

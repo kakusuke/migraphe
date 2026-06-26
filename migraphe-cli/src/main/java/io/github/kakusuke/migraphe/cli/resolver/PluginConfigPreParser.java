@@ -12,9 +12,31 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.Yaml;
 
-/** migraphe.yaml から plugins / repositories セクションを事前パースする。 */
+/**
+ * Pre-parses the {@code plugins:} and {@code repositories:} sections of {@code migraphe.yaml}.
+ *
+ * <p>Plugin classes live in JARs that are not on the classpath until they have been resolved, so
+ * the full MicroProfile-based config loader cannot run first. This parser performs a deliberately
+ * minimal, SnakeYAML-only read to learn which plugins and repositories are needed, producing a
+ * {@link PluginConfigParseResult} that {@link PluginResolver} uses to build the plugin {@link
+ * java.net.URLClassLoader URLClassLoader}. A missing or empty file yields an empty result;
+ * structural errors within the recognized sections raise {@link IllegalArgumentException}.
+ */
 public final class PluginConfigPreParser {
 
+    /** Creates a new {@code PluginConfigPreParser}. */
+    public PluginConfigPreParser() {}
+
+    /**
+     * Pre-parses the given {@code migraphe.yaml}, extracting the repositories, plugins, and {@code
+     * project.scan-root}.
+     *
+     * @param migrapheYaml the path to {@code migraphe.yaml}; need not exist
+     * @return the extracted bootstrap configuration, or an all-empty result if the file is absent,
+     *     empty, or unreadable
+     * @throws IllegalArgumentException if the {@code repositories} or {@code plugins} section is
+     *     present but malformed
+     */
     public PluginConfigParseResult parse(Path migrapheYaml) {
         if (!Files.exists(migrapheYaml)) {
             return new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
@@ -42,6 +64,13 @@ public final class PluginConfigPreParser {
         return v instanceof String s ? Optional.of(s) : Optional.empty();
     }
 
+    /**
+     * Convenience accessor returning only the plugin coordinates, discarding repository references.
+     *
+     * @param migrapheYaml the path to {@code migraphe.yaml}; need not exist
+     * @return the declared plugin coordinates in declaration order, or an empty list if none
+     * @throws IllegalArgumentException if the {@code plugins} section is present but malformed
+     */
     public List<MavenArtifactCoordinate> parsePlugins(Path migrapheYaml) {
         return parse(migrapheYaml).plugins().stream().map(PluginDeclaration::coordinate).toList();
     }

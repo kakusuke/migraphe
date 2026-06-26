@@ -8,10 +8,26 @@ import org.gradle.api.GradleException;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.work.DisableCachingByDefault;
 
-/** 設定ファイルをオフラインで検証する Gradle タスク。DB 接続不要。 */
-@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
+/**
+ * Gradle task that validates the Migraphe configuration files offline.
+ *
+ * <p>Registered as {@code migrapheValidate} by {@link MigrapheGradlePlugin}, the task runs the
+ * {@link ConfigValidator} over the configuration rooted at {@link #getBaseDir()} without requiring
+ * any database connection, reporting each error and failing the build if validation does not pass.
+ */
+@DisableCachingByDefault(
+        because = "Migraphe tasks have side effects and their output cannot be cached")
 public abstract class MigrapheValidateTask extends AbstractMigrapheTask {
 
+    /**
+     * Task action that validates the configuration files.
+     *
+     * <p>Builds a {@link PluginRegistry} from the plugin classpath, runs the {@link
+     * ConfigValidator}, prints any errors, and reports success or failure. The plugin class loader
+     * is closed afterwards.
+     *
+     * @throws GradleException if validation fails with one or more errors
+     */
     @TaskAction
     public void validate() {
         getLogger().lifecycle("Validation");
@@ -45,7 +61,7 @@ public abstract class MigrapheValidateTask extends AbstractMigrapheTask {
         }
     }
 
-    /** 副作用のあるタスクはキャッシュしない。 */
+    /** Creates the task and marks it as never up to date, since it has side effects. */
     public MigrapheValidateTask() {
         getOutputs().upToDateWhen(task -> false);
     }

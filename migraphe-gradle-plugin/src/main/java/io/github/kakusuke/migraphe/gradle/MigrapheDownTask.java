@@ -20,35 +20,77 @@ import org.gradle.api.tasks.TaskAction;
 import org.gradle.api.tasks.options.Option;
 import org.gradle.work.DisableCachingByDefault;
 
-/** DOWN（ロールバック）マイグレーションを実行する Gradle タスク。 */
-@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
+/**
+ * Gradle task that runs rollback (DOWN) migrations.
+ *
+ * <p>Registered as {@code migrapheDown} by {@link MigrapheGradlePlugin}, the task rolls back
+ * previously executed migrations, either {@linkplain #getAll() all of them} or down to a given
+ * {@linkplain #getTarget() target node}. It prints the rollback plan and — unless running in
+ * {@linkplain #getDryRun() dry-run} mode — executes it via a {@link DagExecutor} in the {@link
+ * ExecutionDirection#DOWN} direction. Rollback always runs with a parallelism of 1.
+ *
+ * <p>The task fails the build with a {@link GradleException} when neither {@code --all} nor {@code
+ * --target} is given, when the target node is unknown, or when any rollback fails.
+ */
+@DisableCachingByDefault(
+        because = "Migraphe tasks have side effects and their output cannot be cached")
 public abstract class MigrapheDownTask extends AbstractMigrapheTask {
 
-    /** ターゲットノード ID。 */
+    /**
+     * Returns the optional target node ID to roll back to.
+     *
+     * @return the optional target node ID property
+     */
     @Input
     @Optional
     public abstract Property<String> getTarget();
 
-    /** 全マイグレーションをロールバック。 */
+    /**
+     * Returns the optional flag requesting rollback of all executed migrations.
+     *
+     * @return the optional rollback-all flag property
+     */
     @Input
     @Optional
     public abstract Property<Boolean> getAll();
 
-    /** dry-run モード。 */
+    /**
+     * Returns the optional dry-run flag. When {@code true}, the rollback plan is printed but
+     * nothing is executed.
+     *
+     * @return the optional dry-run flag property
+     */
     @Input
     @Optional
     public abstract Property<Boolean> getDryRun();
 
+    /**
+     * Sets the {@linkplain #getTarget() target} from the {@code --target} command-line option.
+     *
+     * @param target the target node ID to roll back to
+     */
     @Option(option = "target", description = "Target node ID to rollback to")
     public void setTargetOption(String target) {
         getTarget().set(target);
     }
 
+    /**
+     * Enables rollback of {@linkplain #getAll() all} executed migrations from the {@code --all}
+     * command-line option.
+     *
+     * @param all {@code true} to roll back all executed migrations
+     */
     @Option(option = "all", description = "Rollback all executed migrations")
     public void setAllOption(boolean all) {
         getAll().set(all);
     }
 
+    /**
+     * Enables {@linkplain #getDryRun() dry-run} mode from the {@code --preview} command-line
+     * option.
+     *
+     * @param dryRun {@code true} to preview the rollback without executing it
+     */
     @Option(
             option = "preview",
             description = "Show what would be rolled back without making changes")
@@ -56,6 +98,16 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
         getDryRun().set(dryRun);
     }
 
+    /**
+     * Task action that executes the rollback migrations.
+     *
+     * <p>Loads the execution context, determines the rollback targets (all, or down to the target),
+     * prints the plan, and — unless in dry-run mode — runs the rollback. Initializes the history
+     * repository before execution.
+     *
+     * @throws GradleException if neither {@code --all} nor {@code --target} is specified, if the
+     *     target version is not found, or if any rollback fails
+     */
     @TaskAction
     public void down() {
         withExecutionContext(
@@ -123,7 +175,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                 });
     }
 
-    /** 副作用のあるタスクはキャッシュしない。 */
+    /** Creates the task and marks it as never up to date, since it has side effects. */
     public MigrapheDownTask() {
         getOutputs().upToDateWhen(task -> false);
     }
@@ -140,7 +192,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
         getLogger().lifecycle("{}Migrations to rollback:", prefix);
         getLogger().lifecycle("");
 
-        // プランのノードを DFS 順でフィルタ
+        // Filter the plan's nodes in DFS order.
         List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, true);

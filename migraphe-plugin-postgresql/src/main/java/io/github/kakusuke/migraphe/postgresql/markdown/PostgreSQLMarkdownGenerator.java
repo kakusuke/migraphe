@@ -9,10 +9,29 @@ import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSequenceInfo;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * PostgreSQL-specific Markdown generator.
+ *
+ * <p>Extends the generic {@link JdbcMarkdownGenerator} and overrides its template-method hooks to
+ * emit PostgreSQL extras on top of the base table/view/column documentation: an {@code Owner}
+ * column on table and view indexes, an {@code Owner} line in per-object files, top-level Extensions
+ * and Enum Types tables, per-table Triggers/Policies/Partition sections, and per-schema
+ * Sequences/Functions/Materialized Views/Triggers/Partitions/Policies sections (some of which also
+ * write detail files). The base class drives the overall layout and file writing; this subclass
+ * only fills in the PostgreSQL-specific portions read from the supplied {@link
+ * PostgreSQLSchemaInfo}.
+ */
 public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
 
     private final PostgreSQLSchemaInfo pgInfo;
 
+    /**
+     * Creates a PostgreSQL Markdown generator.
+     *
+     * @param name the generator name, used as the root subdirectory for generated files
+     * @param schemaInfo the PostgreSQL schema information to render
+     * @param excludes patterns identifying tables/objects to omit from the output
+     */
     public PostgreSQLMarkdownGenerator(
             String name,
             PostgreSQLSchemaInfo schemaInfo,
@@ -21,11 +40,25 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
         this.pgInfo = schemaInfo;
     }
 
+    /**
+     * Adds an {@code Owner} header to the table index when owner information is available.
+     *
+     * @return a single-element {@code ["Owner"]} list, or an empty list if no table owners are
+     *     known
+     */
     @Override
     protected List<String> extraTableIndexHeaders() {
         return pgInfo.tableOwners().isEmpty() ? List.of() : List.of("Owner");
     }
 
+    /**
+     * Supplies the {@code Owner} cell value for a table row in the index.
+     *
+     * @param schemaName the schema the table belongs to
+     * @param table the table whose owner cell is being produced
+     * @return a single-element list with the owner name (empty string if unknown), or an empty list
+     *     when no table owners are known
+     */
     @Override
     protected List<String> extraTableIndexCells(String schemaName, JdbcTableInfo table) {
         if (pgInfo.tableOwners().isEmpty()) {
@@ -35,11 +68,24 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
         return List.of(owner);
     }
 
+    /**
+     * Adds an {@code Owner} header to the view index when owner information is available.
+     *
+     * @return a single-element {@code ["Owner"]} list, or an empty list if no view owners are known
+     */
     @Override
     protected List<String> extraViewIndexHeaders() {
         return pgInfo.viewOwners().isEmpty() ? List.of() : List.of("Owner");
     }
 
+    /**
+     * Supplies the {@code Owner} cell value for a view row in the index.
+     *
+     * @param schemaName the schema the view belongs to
+     * @param view the view whose owner cell is being produced
+     * @return a single-element list with the owner name (empty string if unknown), or an empty list
+     *     when no view owners are known
+     */
     @Override
     protected List<String> extraViewIndexCells(String schemaName, JdbcViewInfo view) {
         if (pgInfo.viewOwners().isEmpty()) {
@@ -49,6 +95,13 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
         return List.of(owner);
     }
 
+    /**
+     * Appends an {@code Owner:} line to a per-table Markdown file header.
+     *
+     * @param sb the buffer accumulating the table file content
+     * @param schemaName the schema the table belongs to
+     * @param table the table being documented
+     */
     @Override
     protected void appendTableFileHeader(StringBuilder sb, String schemaName, JdbcTableInfo table) {
         String owner = pgInfo.tableOwners().get(schemaName + "." + table.name());
@@ -57,6 +110,13 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Appends an {@code Owner:} line to a per-view Markdown file header.
+     *
+     * @param sb the buffer accumulating the view file content
+     * @param schemaName the schema the view belongs to
+     * @param view the view being documented
+     */
     @Override
     protected void appendViewFileHeader(StringBuilder sb, String schemaName, JdbcViewInfo view) {
         String owner = pgInfo.viewOwners().get(schemaName + "." + view.name());
@@ -65,6 +125,14 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Appends top-level {@code Extensions} and {@code Enum Types} tables to the main index file.
+     *
+     * <p>Each table is emitted only when the corresponding {@link PostgreSQLSchemaInfo} list is
+     * non-empty.
+     *
+     * @param sb the buffer accumulating the main index content
+     */
     @Override
     protected void appendIndexHeader(StringBuilder sb) {
         if (!pgInfo.extensions().isEmpty()) {
@@ -99,6 +167,16 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Appends PostgreSQL-specific sections (Triggers, Policies, Partition Info) to a per-table
+     * file.
+     *
+     * <p>Each section is filtered to the given schema and table and emitted only when non-empty.
+     *
+     * @param sb the buffer accumulating the table file content
+     * @param schemaName the schema the table belongs to
+     * @param tableName the name of the table being documented
+     */
     @Override
     protected void appendTableSections(StringBuilder sb, String schemaName, String tableName) {
         var tableTriggers =
@@ -170,6 +248,18 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Appends PostgreSQL-specific sections to a per-schema index file.
+     *
+     * <p>Emits, when non-empty, Sequences, Functions, Materialized Views, Triggers, Partitions, and
+     * Policies sections for the given schema. The Functions and Materialized Views sections also
+     * write individual detail files under {@code <name>/<schema>/functions/} and {@code
+     * <name>/<schema>/materialized-views/} respectively, via {@link #writeFile(Path, String)}.
+     *
+     * @param sb the buffer accumulating the schema index content
+     * @param schemaName the schema being documented
+     * @param outputDir the root output directory under which detail files are written
+     */
     @Override
     protected void appendSchemaIndexSections(StringBuilder sb, String schemaName, Path outputDir) {
         var sequences =

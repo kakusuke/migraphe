@@ -7,10 +7,28 @@ import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import java.util.*;
 
-/** マイグレーショングラフをターミナルに可視化するユーティリティ。 初期マイルストーン機能。 */
+/**
+ * Utility that renders a {@link MigrationGraph} as human-readable text for terminal display.
+ *
+ * <p>Unlike the {@link ExecutionGraphView} pipeline, which draws a compact ASCII tree, this is an
+ * early-milestone text report: it lists every node with its environment, description, and
+ * dependency/dependent edges, followed by the parallel execution plan and per-environment
+ * statistics. This is a static utility class and cannot be instantiated.
+ */
 public final class GraphVisualizer {
 
-    /** グラフをASCIIアートとしてターミナルに出力 */
+    /** Creates a new {@code GraphVisualizer}. */
+    public GraphVisualizer() {}
+
+    /**
+     * Renders the graph as a multi-section ASCII text report (header, node list, execution plan).
+     *
+     * <p>If a valid execution plan cannot be created (e.g. the graph contains a cycle), an error
+     * notice with the failure reason is appended instead of the plan.
+     *
+     * @param graph the migration graph to visualize
+     * @return the rendered report text
+     */
     public static String visualize(MigrationGraph graph) {
         StringBuilder sb = new StringBuilder();
         sb.append("=".repeat(60)).append("\n");
@@ -20,14 +38,14 @@ public final class GraphVisualizer {
         sb.append(String.format("Total Nodes: %d\n", graph.size()));
         sb.append(String.format("Root Nodes: %d\n\n", graph.getRoots().size()));
 
-        // 全ノードをリスト表示
+        // List all nodes
         sb.append("Nodes:\n");
         sb.append("-".repeat(60)).append("\n");
         for (MigrationNode node : graph.allNodes()) {
             sb.append(formatNode(node, graph));
         }
 
-        // 実行プランを表示
+        // Display the execution plan
         try {
             ExecutionPlan plan = TopologicalSort.createExecutionPlan(graph);
             sb.append("\n").append("=".repeat(60)).append("\n");
@@ -95,7 +113,13 @@ public final class GraphVisualizer {
         return sb.toString();
     }
 
-    /** グラフの統計情報を出力 */
+    /**
+     * Renders summary statistics for the graph: total node count, root count, and the number of
+     * nodes per environment.
+     *
+     * @param graph the migration graph to summarize
+     * @return the rendered statistics text
+     */
     public static String statistics(MigrationGraph graph) {
         Map<String, Long> envCounts = new HashMap<>();
 

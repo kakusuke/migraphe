@@ -8,7 +8,18 @@ import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** MigrationNode のシンプルなリファレンス実装。 プラグイン開発者はこれを参考に独自の実装を作成できる。 */
+/**
+ * Simple, immutable reference implementation of {@link MigrationNode}.
+ *
+ * <p>This class is provided as a baseline implementation that plugin developers can use directly or
+ * study when writing their own {@link MigrationNode}. Instances are constructed through the {@link
+ * Builder} returned by {@link #builder()}; the node's identity (used by {@link #equals(Object)} and
+ * {@link #hashCode()}) is its {@link NodeId} alone.
+ *
+ * @see MigrationNode
+ * @see SimpleTask
+ * @see SimpleEnvironment
+ */
 public final class SimpleMigrationNode implements MigrationNode {
     private final NodeId id;
     private final String name;
@@ -64,11 +75,29 @@ public final class SimpleMigrationNode implements MigrationNode {
         return downTask;
     }
 
+    /**
+     * Returns a new {@link Builder} for constructing a {@link SimpleMigrationNode}.
+     *
+     * @return a fresh, empty builder
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Fluent builder for {@link SimpleMigrationNode}.
+     *
+     * <p>At minimum the {@linkplain #id(NodeId) id}, {@linkplain #name(String) name}, {@linkplain
+     * #environment(Environment) environment}, and {@linkplain #upTask(Task) up task} must be set
+     * before {@link #build()} is called; otherwise {@code build()} throws {@link
+     * NullPointerException}. Dependencies default to the empty set and {@code description}/{@code
+     * downTask} default to {@code null}.
+     */
     public static class Builder {
+
+        /** Creates a new {@code Builder}. */
+        public Builder() {}
+
         private @Nullable NodeId id;
         private @Nullable String name;
         private @Nullable String description;
@@ -77,51 +106,112 @@ public final class SimpleMigrationNode implements MigrationNode {
         private @Nullable Task upTask;
         private @Nullable Task downTask;
 
+        /**
+         * Sets the node's unique identifier.
+         *
+         * @param id the node ID
+         * @return this builder
+         */
         public Builder id(NodeId id) {
             this.id = id;
             return this;
         }
 
+        /**
+         * Sets the node's unique identifier from its string form.
+         *
+         * @param id the node ID string, converted via {@link NodeId#of(String)}
+         * @return this builder
+         */
         public Builder id(String id) {
             this.id = NodeId.of(id);
             return this;
         }
 
+        /**
+         * Sets the node's human-readable name.
+         *
+         * @param name the node name
+         * @return this builder
+         */
         public Builder name(String name) {
             this.name = name;
             return this;
         }
 
+        /**
+         * Sets the node's optional description.
+         *
+         * @param description the description, or {@code null} for none
+         * @return this builder
+         */
         public Builder description(@Nullable String description) {
             this.description = description;
             return this;
         }
 
+        /**
+         * Sets the environment (target) the node runs against.
+         *
+         * @param environment the environment
+         * @return this builder
+         */
         public Builder environment(Environment environment) {
             this.environment = environment;
             return this;
         }
 
+        /**
+         * Sets the IDs of the nodes this node depends on.
+         *
+         * @param dependencies the set of dependency node IDs; copied defensively at build time
+         * @return this builder
+         */
         public Builder dependencies(Set<NodeId> dependencies) {
             this.dependencies = dependencies;
             return this;
         }
 
+        /**
+         * Sets the IDs of the nodes this node depends on.
+         *
+         * @param dependencies the dependency node IDs
+         * @return this builder
+         */
         public Builder dependencies(NodeId... dependencies) {
             this.dependencies = Set.of(dependencies);
             return this;
         }
 
+        /**
+         * Sets the task executed when migrating the node forward (UP).
+         *
+         * @param upTask the forward (UP) task
+         * @return this builder
+         */
         public Builder upTask(Task upTask) {
             this.upTask = upTask;
             return this;
         }
 
+        /**
+         * Sets the optional task executed when rolling the node back (DOWN).
+         *
+         * @param downTask the rollback (DOWN) task, or {@code null} if rollback is not supported
+         * @return this builder
+         */
         public Builder downTask(@Nullable Task downTask) {
             this.downTask = downTask;
             return this;
         }
 
+        /**
+         * Builds the {@link SimpleMigrationNode} from this builder's current state.
+         *
+         * @return the constructed node
+         * @throws NullPointerException if {@code id}, {@code name}, {@code environment}, or {@code
+         *     upTask} has not been set
+         */
         public SimpleMigrationNode build() {
             return new SimpleMigrationNode(this);
         }

@@ -30,7 +30,54 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
-/** DAG ベース migration executor (UP/DOWN, sequential/parallel 統合)。 */
+/**
+ * Unified DAG-based migration executor covering UP/DOWN and sequential/parallel execution.
+ *
+ * <p>This is the single executor used for every migration run in Migraphe. A single instance is
+ * bound to one traversal {@link ExecutionDirection}: {@link ExecutionDirection#UP} walks the graph
+ * in dependency order and runs each node's {@link MigrationNode#upTask()}, while {@link
+ * ExecutionDirection#DOWN} walks it in reverse and runs each node's {@link
+ * MigrationNode#downTask()}. The same code path serves both sequential and parallel runs — the
+ * degree of concurrency is controlled solely by the {@code maxParallelism} constructor argument.
+ *
+ * <h2>Concurrency model</h2>
+ *
+ * <p>Execution is driven by a single coordinator loop on the calling thread plus one virtual thread
+ * per executing node:
+ *
+ * <ul>
+ *   <li>A {@link ReadyNodeTracker} (constructed for this {@code direction}) tracks the
+ *       direction-aware in-degree of every target node and reports nodes that have become ready.
+ *   <li>Ready nodes are placed into a {@link PriorityBlockingQueue} ordered by their position in
+ *       the {@link ExecutionPlan}, so that — even under parallelism — nodes are dispatched in a
+ *       stable, plan-consistent order.
+ *   <li>The coordinator loop polls the queue and, for each ready node, acquires a permit from a
+ *       {@link Semaphore} sized to {@code maxParallelism} and dispatches the node on a new virtual
+ *       thread ({@link Thread#startVirtualThread}). When {@code maxParallelism == 1} the semaphore
+ *       effectively serializes execution. When {@code maxParallelism <= 0} no semaphore is created
+ *       and dispatch is unbounded.
+ *   <li>A {@link CountDownLatch} initialized to the total node count tracks outstanding work; the
+ *       coordinator loop runs until the latch reaches zero, then awaits it before summarizing.
+ *   <li>On task completion the node is reported back to the tracker, releasing any newly ready
+ *       successors into the queue.
+ * </ul>
+ *
+ * <p>To keep the supplied {@link HistoryRepository} and {@link ExecutionListener} safe to call from
+ * many concurrent virtual threads, the constructor wraps each in a synchronizing decorator ({@link
+ * SynchronizedHistoryRepository}, {@link SynchronizedExecutionListener}) unless the supplied
+ * instance is already of that wrapper type (avoiding double wrapping).
+ *
+ * <h2>Failure handling (fail-soft)</h2>
+ *
+ * <p>A node failure does not abort the whole run. The failed node is recorded, its transitive
+ * successors (dependents for UP, dependencies for DOWN) within the target set are marked skipped
+ * via {@link #propagateFailure}, and any independent branches keep running. The final {@link
+ * ExecutionResult} reports failure whenever at least one node failed.
+ *
+ * @see Executor
+ * @see ReadyNodeTracker
+ * @see ExecutionPlan
+ */
 public final class DagExecutor implements Executor {
 
     private final MigrationGraph graph;
@@ -39,6 +86,22 @@ public final class DagExecutor implements Executor {
     private final ExecutionDirection direction;
     private final int maxParallelism;
 
+    /**
+     * Creates an executor bound to a graph, persistence, listener, direction, and parallelism.
+     *
+     * <p>The {@code history} and {@code listener} are automatically wrapped in synchronizing
+     * decorators for thread safety unless they already are such wrappers.
+     *
+     * @param graph the migration graph to traverse
+     * @param history the history repository used to read prior state and record results; wrapped in
+     *     a {@link SynchronizedHistoryRepository} unless already synchronized
+     * @param listener the listener notified of execution events; wrapped in a {@link
+     *     SynchronizedExecutionListener} unless already synchronized
+     * @param direction the traversal direction; {@link ExecutionDirection#UP} runs up tasks in
+     *     dependency order, {@link ExecutionDirection#DOWN} runs down tasks in reverse order
+     * @param maxParallelism the maximum number of nodes executed concurrently; {@code 1} serializes
+     *     execution and a value {@code <= 0} disables the bounding semaphore (unbounded dispatch)
+     */
     public DagExecutor(
             MigrationGraph graph,
             HistoryRepository history,
@@ -59,10 +122,16 @@ public final class DagExecutor implements Executor {
     }
 
     /**
-     * 実行対象ノードを決定する。
+     * Determines the set of nodes to execute for an UP run.
      *
-     * @param targetId 特定のターゲットID（null の場合は全ノード）
-     * @return 未実行のノードIDセット
+     * <p>When {@code targetId} is supplied, the candidate set is that node plus all of its
+     * transitive dependencies; otherwise every node in the graph is a candidate. The candidate set
+     * is then filtered to nodes that have not yet been successfully applied (per {@link
+     * HistoryRepository#wasExecuted}), so already-applied nodes are excluded.
+     *
+     * @param targetId a specific target node to migrate up to, or {@code null} to consider all
+     *     nodes
+     * @return the set of not-yet-executed node IDs to run
      */
     @Override
     public Set<NodeId> determineTargetNodes(@Nullable NodeId targetId) {
@@ -87,11 +156,18 @@ public final class DagExecutor implements Executor {
     }
 
     /**
-     * ロールバック対象ノードを決定する。
+     * Determines the set of nodes to roll back for a DOWN run.
      *
-     * @param targetVersion 特定のターゲットバージョン（null の場合は allMigrations の値に依存）
-     * @param allMigrations true の場合は全実行済みノードが対象
-     * @return ロールバック対象のノードIDセット
+     * <p>If {@code allMigrations} is {@code true}, every currently applied node is selected.
+     * Otherwise, if {@code targetVersion} is supplied, the selection is that node plus all of its
+     * transitive dependents, filtered to nodes that are currently applied (per {@link
+     * HistoryRepository#wasExecuted}). If neither applies, an empty set is returned.
+     *
+     * @param targetVersion the node to roll back (together with its dependents), or {@code null} to
+     *     defer to {@code allMigrations}
+     * @param allMigrations when {@code true}, selects all currently applied nodes regardless of
+     *     {@code targetVersion}
+     * @return the set of currently applied node IDs to roll back
      */
     public Set<NodeId> determineRollbackTargets(
             @Nullable NodeId targetVersion, boolean allMigrations) {
@@ -121,10 +197,22 @@ public final class DagExecutor implements Executor {
     }
 
     /**
-     * マイグレーションを実行する。
+     * Executes the given target nodes in this executor's direction.
      *
-     * @param targetNodes 実行対象ノード
-     * @return 実行結果
+     * <p>An empty target set completes immediately with a success summary. Otherwise an {@link
+     * ExecutionPlan} is built for the targets, ready nodes are dispatched on virtual threads
+     * bounded by {@code maxParallelism}, and the coordinator awaits completion of all nodes.
+     * Execution is fail-soft: a node failure marks its transitive successors (within the target
+     * set) as skipped but allows independent branches to continue. Per-node lifecycle events are
+     * emitted to the listener and outcomes are persisted to the history repository.
+     *
+     * <p>If the coordinator thread is interrupted while awaiting work, the interrupt flag is
+     * restored and a failure result is returned.
+     *
+     * @param targetNodes the set of node IDs to execute; typically the result of {@link
+     *     #determineTargetNodes} or {@link #determineRollbackTargets}
+     * @return a success {@link ExecutionResult} if no node failed, otherwise a failure result; the
+     *     embedded {@link ExecutionSummary} carries the executed/skipped/failed counts
      */
     @Override
     public ExecutionResult execute(Set<NodeId> targetNodes) {
@@ -330,26 +418,31 @@ public final class DagExecutor implements Executor {
         }
     }
 
-    /** direction に応じたタスクを返す。DOWN の場合 null 可。 */
+    /**
+     * Returns the task for this direction; may be {@code null} for DOWN when no down task exists.
+     */
     private @Nullable Task taskFor(MigrationNode node) {
         return direction == ExecutionDirection.DOWN ? node.downTask() : node.upTask();
     }
 
-    /** 失敗伝播に使う推移的後続ノード集合。UP: getAllDependents, DOWN: getAllDependencies。 */
+    /**
+     * Returns the transitive successor set used for failure propagation: {@code getAllDependents}
+     * for UP, {@code getAllDependencies} for DOWN.
+     */
     private Set<NodeId> transitiveSuccessorsOf(NodeId nodeId) {
         return direction == ExecutionDirection.DOWN
                 ? graph.getAllDependencies(nodeId)
                 : graph.getAllDependents(nodeId);
     }
 
-    /** direction に応じた実行プランを生成する。 */
+    /** Builds the execution plan for this direction (forward for UP, reverse for DOWN). */
     private ExecutionPlan createPlanFor(Set<NodeId> targetNodes) {
         return direction == ExecutionDirection.DOWN
                 ? TopologicalSort.createReverseExecutionPlanFor(graph, targetNodes)
                 : TopologicalSort.createExecutionPlanFor(graph, targetNodes);
     }
 
-    /** 成功時の ExecutionRecord を生成する。 */
+    /** Builds the success {@link ExecutionRecord} for a completed node in this direction. */
     private ExecutionRecord recordSuccess(
             MigrationNode node, long duration, @Nullable TaskResult taskResult) {
         if (direction == ExecutionDirection.DOWN) {
@@ -361,13 +454,16 @@ public final class DagExecutor implements Executor {
                 node.id(), node.environment().id(), node.name(), serializedDownTask, duration);
     }
 
-    /** 履歴状態が「既に目的の状態」かどうかを判定する。UP: 実行済みならスキップ, DOWN: 未実行ならスキップ。 */
+    /**
+     * Reports whether the node is already in its target history state and can be skipped: for UP,
+     * skip when already executed; for DOWN, skip when not yet executed.
+     */
     private boolean isAlreadyInRequiredState(MigrationNode node) {
         boolean wasExecuted = history.wasExecuted(node.id(), node.environment().id());
         return direction == ExecutionDirection.DOWN ? !wasExecuted : wasExecuted;
     }
 
-    /** 履歴状態スキップ時の reason 文字列。 */
+    /** Returns the skip-reason string used when a node is skipped due to its history state. */
     private String requiredHistorySkipReason() {
         return direction == ExecutionDirection.DOWN ? "not executed" : "already executed";
     }

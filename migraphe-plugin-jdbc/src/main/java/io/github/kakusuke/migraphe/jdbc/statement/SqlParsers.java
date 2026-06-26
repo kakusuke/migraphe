@@ -1,22 +1,61 @@
 package io.github.kakusuke.migraphe.jdbc.statement;
 
-/** {@link SqlParser} のファクトリーメソッド集。 */
+/**
+ * Factory methods for building and composing {@link SqlParser} combinators.
+ *
+ * <p>This class is the combinator library at the heart of Migraphe's SQL statement-splitting
+ * toolkit. It provides two kinds of factories: <em>primitive recognizers</em> that match concrete
+ * lexical features ({@link #whitespace()}, {@link #literal(String)}, {@link #keyword(String)},
+ * {@link #quoted(char, boolean, boolean)}, {@link #lineComment(String, boolean)}, {@link
+ * #delimited(String, String)}, {@link #anyChar()}), and <em>combinators</em> that compose other
+ * parsers into larger ones ({@link #seq(SqlParser...)}, {@link #or(SqlParser...)}, {@link
+ * #many(SqlParser)}, {@link #opt(SqlParser)}, {@link #not(SqlParser)}, {@link #ref}).
+ *
+ * <p>All parsers follow the same contract as {@link SqlParser#parse(String, int)}: a non-negative
+ * return value is the position after the consumed text, and {@code -1} means no match. Because
+ * parsers are pure position-computing functions, dialect grammars (PostgreSQL dollar-quoting, MySQL
+ * backtick identifiers and {@code BEGIN}/{@code END} blocks, etc.) are expressed simply by
+ * combining these factories, then handed to {@link StatementSplitter} as the region parser that
+ * marks the spans a statement delimiter must not be recognized inside. The class is a stateless
+ * utility and cannot be instantiated.
+ */
 public final class SqlParsers {
 
     private SqlParsers() {}
 
-    /** pos の文字が空白なら {@code pos + 1}、そうでなければ -1 を返すパーサー。 */
+    /**
+     * Creates a parser that consumes a single whitespace character.
+     *
+     * @return a parser that returns {@code pos + 1} when the character at {@code pos} is
+     *     {@linkplain Character#isWhitespace whitespace}, or {@code -1} otherwise (including at end
+     *     of input)
+     */
     public static SqlParser whitespace() {
         return (sql, pos) ->
                 pos < sql.length() && Character.isWhitespace(sql.charAt(pos)) ? pos + 1 : -1;
     }
 
-    /** pos から {@code token} に完全一致したら {@code pos + token.length()} を返すパーサー。 非マッチは -1。 */
+    /**
+     * Creates a parser that matches an exact, case-sensitive substring.
+     *
+     * @param token the literal text to match starting at {@code pos}
+     * @return a parser that returns {@code pos + token.length()} when {@code token} occurs exactly
+     *     at {@code pos}, or {@code -1} otherwise
+     */
     public static SqlParser literal(String token) {
         return (sql, pos) -> sql.startsWith(token, pos) ? pos + token.length() : -1;
     }
 
-    /** 各パーサーを順に適用し、全成功なら最後の pos を返す。途中で -1 なら即 -1。 */
+    /**
+     * Creates a parser that applies the given parsers in order, requiring all of them to succeed.
+     *
+     * <p>Each parser is fed the position produced by its predecessor. If any parser returns {@code
+     * -1}, the sequence fails immediately and consumes nothing.
+     *
+     * @param parsers the sub-parsers to apply consecutively
+     * @return a parser that returns the final position when every sub-parser matches, or {@code -1}
+     *     as soon as one fails
+     */
     public static SqlParser seq(SqlParser... parsers) {
         return (sql, pos) -> {
             int p = pos;
@@ -28,7 +67,16 @@ public final class SqlParsers {
         };
     }
 
-    /** 各パーサーを先頭から試し、最初に成功（-1 以外）したパーサーの結果を返す。 全て失敗なら -1。 */
+    /**
+     * Creates an ordered-choice parser that returns the result of the first sub-parser to succeed.
+     *
+     * <p>Each sub-parser is tried at the same {@code pos}; the first one returning a non-negative
+     * position wins. If none match, the result is {@code -1}.
+     *
+     * @param parsers the alternative sub-parsers to try, in priority order
+     * @return a parser yielding the first successful sub-parser's position, or {@code -1} if all
+     *     fail
+     */
     public static SqlParser or(SqlParser... parsers) {
         return (sql, pos) -> {
             for (SqlParser parser : parsers) {
@@ -39,17 +87,38 @@ public final class SqlParsers {
         };
     }
 
-    /** pos に文字があれば 1 文字消費して {@code pos + 1}、終端なら -1。 */
+    /**
+     * Creates a parser that consumes exactly one character if any remains.
+     *
+     * @return a parser that returns {@code pos + 1} when {@code pos} is within bounds, or {@code
+     *     -1} at end of input
+     */
     public static SqlParser anyChar() {
         return (sql, pos) -> pos < sql.length() ? pos + 1 : -1;
     }
 
-    /** 負の先読み。{@code p} が失敗（-1）なら消費せず pos を返し、成功（>=0）なら -1。 */
+    /**
+     * Creates a negative-lookahead parser that succeeds without consuming input when the given
+     * parser fails.
+     *
+     * @param p the parser whose failure is required
+     * @return a parser that returns {@code pos} (consuming nothing) when {@code p} fails at {@code
+     *     pos}, or {@code -1} when {@code p} succeeds
+     */
     public static SqlParser not(SqlParser p) {
         return (sql, pos) -> p.parse(sql, pos) < 0 ? pos : -1;
     }
 
-    /** {@code p} を 0 回以上貪欲に繰り返し、常に成功して最遠の pos を返す。 {@code p} が pos を進めずに成功した場合は無限ループ回避のため停止する。 */
+    /**
+     * Creates a greedy zero-or-more repetition parser.
+     *
+     * <p>The given parser is applied repeatedly and the farthest reached position is returned. The
+     * combinator always succeeds (matching zero repetitions yields {@code pos}). To avoid an
+     * infinite loop, repetition stops if {@code p} succeeds without advancing the position.
+     *
+     * @param p the parser to repeat
+     * @return a parser that returns the farthest position reachable by repeating {@code p}
+     */
     public static SqlParser many(SqlParser p) {
         return (sql, pos) -> {
             int cur = pos;
@@ -61,7 +130,13 @@ public final class SqlParsers {
         };
     }
 
-    /** {@code p} が成功すればその pos、失敗すれば消費せず pos を返す。 */
+    /**
+     * Creates an optional parser that never fails.
+     *
+     * @param p the parser to attempt
+     * @return a parser that returns {@code p}'s position when it matches, or {@code pos} (consuming
+     *     nothing) when it does not
+     */
     public static SqlParser opt(SqlParser p) {
         return (sql, pos) -> {
             int next = p.parse(sql, pos);
@@ -70,8 +145,18 @@ public final class SqlParsers {
     }
 
     /**
-     * 大文字小文字を無視して {@code word} に語境界で一致する場合のみ消費後 pos を返す。 語境界は直前の文字（pos &gt; 0
-     * のとき）と一致直後の文字がいずれも識別子文字 （{@link Character#isLetterOrDigit} または {@code '_'}）でないこと。非一致は -1。
+     * Creates a parser that matches a keyword case-insensitively, honoring identifier word
+     * boundaries.
+     *
+     * <p>The match succeeds only when {@code word} appears at {@code pos} (ignoring case) and is
+     * not adjacent to identifier characters on either side: the character before {@code pos} (when
+     * {@code pos > 0}) and the character immediately after the match must each not be an identifier
+     * character (a {@linkplain Character#isLetterOrDigit letter or digit} or {@code '_'}). This
+     * prevents, for example, {@code "BEGIN"} from matching inside {@code "BEGINNING"}.
+     *
+     * @param word the keyword to match
+     * @return a parser that returns the position after the keyword on a bounded, case-insensitive
+     *     match, or {@code -1} otherwise
      */
     public static SqlParser keyword(String word) {
         int len = word.length();
@@ -88,16 +173,38 @@ public final class SqlParsers {
         return Character.isLetterOrDigit(c) || c == '_';
     }
 
-    /** 遅延参照。呼び出し時に {@code supplier} から解決したパーサーへ委譲する。 相互再帰の前方参照解決に用いる。 */
+    /**
+     * Creates a lazily resolved parser that delegates to a parser obtained from the supplier on
+     * each call.
+     *
+     * <p>This is used to break forward references when defining mutually recursive grammars (for
+     * example a block parser that contains nested blocks of the same kind).
+     *
+     * @param supplier the supplier consulted at parse time to obtain the delegate parser
+     * @return a parser that forwards each {@code parse} call to {@code supplier.get()}
+     */
     public static SqlParser ref(java.util.function.Supplier<SqlParser> supplier) {
         return (sql, pos) -> supplier.get().parse(sql, pos);
     }
 
     /**
-     * {@code quote} で始まる引用領域を消費する。開始が {@code quote} でなければ -1。 {@code doubling} が true なら {@code
-     * quote} の 2 連続をエスケープとして 2 文字スキップ、 {@code backslashEscape} が true なら {@code '\'} の次の 1 文字を 2
-     * 文字スキップする。 閉じ {@code quote} の次の pos を返す。閉じが見つからず終端に達したら {@code sql.length()}（未終端は終端まで 1
-     * 領域とみなす）。
+     * Creates a parser that consumes a quoted region delimited by the given quote character.
+     *
+     * <p>The region must begin with {@code quote} at {@code pos}, otherwise the parser returns
+     * {@code -1}. While scanning for the closing quote: when {@code doubling} is {@code true}, a
+     * doubled quote ({@code quote} immediately followed by {@code quote}) is treated as an escaped
+     * quote and skipped as two characters; when {@code backslashEscape} is {@code true}, a
+     * backslash ({@code '\'}) causes the following character to be skipped as part of an escape
+     * sequence. On a successful close, the position after the closing quote is returned. If no
+     * closing quote is found before the end of input, the unterminated region is treated as
+     * extending to the end and {@code sql.length()} is returned.
+     *
+     * @param quote the character that opens and closes the region (for example {@code '\''} for a
+     *     string literal or {@code '"'} for a quoted identifier)
+     * @param doubling whether a doubled quote escapes a literal quote inside the region
+     * @param backslashEscape whether a backslash escapes the next character inside the region
+     * @return a parser that returns the position after the region, or {@code -1} if it does not
+     *     start with {@code quote}
      */
     public static SqlParser quoted(char quote, boolean doubling, boolean backslashEscape) {
         return (sql, pos) -> {
@@ -124,9 +231,21 @@ public final class SqlParsers {
     }
 
     /**
-     * {@code prefix} で始まる行コメントを消費する。{@code prefix} で始まらなければ -1。 {@code requireSpaceAfter} が true
-     * の場合、{@code prefix} 直後が空白 （{@link Character#isWhitespace}）か終端でなければ -1（MySQL の {@code "-- "}
-     * 要件）。 一致したら次の {@code '\n'} の手前までの pos を返す。{@code '\n'} が無ければ {@code sql.length()}。
+     * Creates a parser that consumes a line comment introduced by the given prefix.
+     *
+     * <p>The comment must begin with {@code prefix} at {@code pos}, otherwise the parser returns
+     * {@code -1}. When {@code requireSpaceAfter} is {@code true}, the character immediately after
+     * the prefix must be {@linkplain Character#isWhitespace whitespace} or the end of input,
+     * otherwise the parser fails — this models MySQL's requirement that a {@code "--"} comment be
+     * written as {@code "-- "}. On a match, the parser stops just before the next {@code '\n'} (so
+     * the newline itself is not consumed) and returns that position, or {@code sql.length()} if no
+     * newline follows.
+     *
+     * @param prefix the text that introduces the line comment (for example {@code "--"} or {@code
+     *     "#"})
+     * @param requireSpaceAfter whether the prefix must be followed by whitespace or end of input
+     * @return a parser that returns the position just before the terminating newline (or end of
+     *     input), or {@code -1} if no comment starts at {@code pos}
      */
     public static SqlParser lineComment(String prefix, boolean requireSpaceAfter) {
         int len = prefix.length();
@@ -144,8 +263,19 @@ public final class SqlParsers {
     }
 
     /**
-     * {@code open} で始まる区切り領域を消費する。{@code open} で始まらなければ -1。 {@code open} 消費後に {@code close}
-     * を探し、見つかれば {@code close} を含めた次の pos を返す。 見つからなければ {@code sql.length()}（未終端は終端まで 1 領域とみなす）。
+     * Creates a parser that consumes a region bounded by an opening and closing token.
+     *
+     * <p>The region must begin with {@code open} at {@code pos}, otherwise the parser returns
+     * {@code -1}. After consuming {@code open}, the parser searches for the first occurrence of
+     * {@code close} and, if found, returns the position after it. If {@code close} is never found,
+     * the unterminated region is treated as extending to the end of input and {@code sql.length()}
+     * is returned. This is used for block comments (for example {@code "/*"} to {@code "*}{@code
+     * /"}).
+     *
+     * @param open the token that opens the region
+     * @param close the token that closes the region
+     * @return a parser that returns the position after the closing token (or end of input if
+     *     unterminated), or {@code -1} if the region does not start with {@code open}
      */
     public static SqlParser delimited(String open, String close) {
         return (sql, pos) -> {
@@ -157,8 +287,17 @@ public final class SqlParsers {
     }
 
     /**
-     * 標準的な引用・コメント領域をまとめて消費するパーサー。 シングルクォート文字列・ダブルクォート識別子（いずれも二重化エスケープ）・ {@code --} 行コメント・{@code
-     * /*}〜{@code *}{@code /} ブロックコメントを試す。
+     * Creates a parser recognizing the standard SQL quote and comment regions.
+     *
+     * <p>This is the default region parser used by {@link StatementSplitter#standard()}. It is an
+     * ordered choice over a single-quoted string literal (with doubled-quote escaping), a
+     * double-quoted identifier (with doubled-quote escaping), a {@code --} line comment, and a
+     * {@code /*}...{@code *}{@code /} block comment. Dialect grammars typically extend this set
+     * with additional alternatives (such as PostgreSQL dollar-quoting or MySQL backtick
+     * identifiers).
+     *
+     * @return a parser that consumes a standard string literal, quoted identifier, line comment, or
+     *     block comment at {@code pos}, or returns {@code -1} if none apply
      */
     public static SqlParser standardRegion() {
         return or(

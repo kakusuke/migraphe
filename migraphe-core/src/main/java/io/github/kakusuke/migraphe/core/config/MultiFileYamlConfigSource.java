@@ -12,14 +12,21 @@ import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 
 /**
- * 複数の YAML ファイルを統合する ConfigSource。
+ * A {@link ConfigSource} that merges Migraphe's several YAML files into a single flat key space.
  *
- * <p>プレフィックス戦略:
+ * <p>Each source file is loaded with {@link YamlConfigSource} and its keys are re-namespaced
+ * according to the file's role, so that the combined config can be addressed by a single set of
+ * property names. The merge happens eagerly in the constructor; the resulting map is exposed at
+ * ordinal {@code 100}, the lowest tier in the layering, so that environment files, system
+ * properties, OS env and explicit variables can all override it.
+ *
+ * <p>Prefixing strategy:
  *
  * <ul>
- *   <li>migraphe.yaml → プレフィックスなし (project.*, history.*)
- *   <li>targets/db1.yaml → "target.db1.*" プレフィックス
- *   <li>tasks/db1/create_users.yaml → "task.\"db1/create_users\".*" プレフィックス
+ *   <li>{@code migraphe.yaml} &rarr; no prefix ({@code project.*}, {@code history.*})
+ *   <li>{@code targets/db1.yaml} &rarr; {@code "target.db1.*"} prefix
+ *   <li>{@code tasks/db1/create_users.yaml} &rarr; {@code "task.\"db1/create_users\".*"} prefix
+ *       (the task id is quoted so embedded slashes are not treated as key separators)
  * </ul>
  */
 public class MultiFileYamlConfigSource implements ConfigSource {
@@ -30,12 +37,12 @@ public class MultiFileYamlConfigSource implements ConfigSource {
     private final Map<String, String> properties = new HashMap<>();
 
     /**
-     * 複数の YAML ファイルをロードして統合する ConfigSource を構築する。
+     * Loads and merges the given YAML files into a single config source.
      *
-     * @param projectConfigFile migraphe.yaml のパス
-     * @param targetFiles targets/*.yaml のリスト
-     * @param taskFiles タスクファイルのマップ (TaskId → ファイルパス)
-     * @throws ConfigurationException YAML ファイルの読み込みに失敗した場合
+     * @param projectConfigFile the path to {@code migraphe.yaml} (loaded without a prefix)
+     * @param targetFiles the {@code targets/*.yaml} files (each prefixed by its target id)
+     * @param taskFiles the task files keyed by their {@link NodeId} (each prefixed by its task id)
+     * @throws ConfigurationException if any YAML file cannot be read
      */
     public MultiFileYamlConfigSource(
             Path projectConfigFile, List<Path> targetFiles, Map<NodeId, Path> taskFiles) {
@@ -45,10 +52,10 @@ public class MultiFileYamlConfigSource implements ConfigSource {
     }
 
     /**
-     * migraphe.yaml をロードする (プレフィックスなし)。
+     * Loads {@code migraphe.yaml} with no prefix applied.
      *
-     * @param file migraphe.yaml のパス
-     * @throws ConfigurationException YAML ファイルの読み込みに失敗した場合
+     * @param file the path to {@code migraphe.yaml}
+     * @throws ConfigurationException if the YAML file cannot be read
      */
     private void loadProjectConfig(Path file) {
         try {
@@ -60,21 +67,22 @@ public class MultiFileYamlConfigSource implements ConfigSource {
     }
 
     /**
-     * targets/*.yaml をロードする ("target.{targetId}.*" プレフィックス)。
+     * Loads each {@code targets/*.yaml} file under a {@code "target.<targetId>.*"} prefix, where
+     * the target id is derived from the file name.
      *
-     * @param files targets/*.yaml のリスト
-     * @throws ConfigurationException YAML ファイルの読み込みに失敗した場合
+     * @param files the {@code targets/*.yaml} files
+     * @throws ConfigurationException if any YAML file cannot be read
      */
     private void loadTargetConfigs(List<Path> files) {
         for (Path file : files) {
             try {
-                // ファイル名から targetId を抽出 (db1.yaml → "db1")
+                // Derive the targetId from the file name (db1.yaml -> "db1").
                 String targetId = file.getFileName().toString().replaceAll("\\.yaml$", "");
 
-                // YAML ロード
+                // Load the YAML.
                 YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
 
-                // プレフィックス付与して統合
+                // Merge in with the prefix applied.
                 for (Map.Entry<String, String> entry : yamlSource.getProperties().entrySet()) {
                     String prefixedKey = "target." + targetId + "." + entry.getKey();
                     properties.put(prefixedKey, entry.getValue());
@@ -86,10 +94,12 @@ public class MultiFileYamlConfigSource implements ConfigSource {
     }
 
     /**
-     * tasks/**\/*.yaml をロードする ("task.\"{taskId}\".*" プレフィックス)。
+     * Loads each task file under a {@code "task.\"<taskId>\".*"} prefix. The task id is quoted so
+     * that ids containing slashes (such as {@code db1/create_users}) are not split into nested
+     * keys.
      *
-     * @param taskFiles タスクファイルのマップ (TaskId → ファイルパス)
-     * @throws ConfigurationException YAML ファイルの読み込みに失敗した場合
+     * @param taskFiles the task files keyed by their {@link NodeId}
+     * @throws ConfigurationException if any YAML file cannot be read
      */
     private void loadTaskConfigs(Map<NodeId, Path> taskFiles) {
         for (Map.Entry<NodeId, Path> entry : taskFiles.entrySet()) {
@@ -97,11 +107,11 @@ public class MultiFileYamlConfigSource implements ConfigSource {
             Path file = entry.getValue();
 
             try {
-                // YAML ロード
+                // Load the YAML.
                 YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
 
-                // プレフィックス付与して統合
-                // Task ID にスラッシュが含まれる場合、"task.\"db1/create_users\".*" 形式
+                // Merge in with the prefix applied.
+                // When a task id contains slashes, the form is "task.\"db1/create_users\".*".
                 for (Map.Entry<String, String> prop : yamlSource.getProperties().entrySet()) {
                     String prefixedKey = "task.\"" + taskId.value() + "\"." + prop.getKey();
                     properties.put(prefixedKey, prop.getValue());

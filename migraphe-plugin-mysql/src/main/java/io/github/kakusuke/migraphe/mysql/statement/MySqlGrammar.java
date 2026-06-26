@@ -5,12 +5,31 @@ import io.github.kakusuke.migraphe.jdbc.statement.SqlParser;
 import io.github.kakusuke.migraphe.jdbc.statement.SqlParsers;
 import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
 
-/** MySQL 方言の SQL 分割文法を提供するファクトリー。 */
+/**
+ * Factory for the MySQL-dialect SQL splitting grammar.
+ *
+ * <p>Assembles the parser combinators ({@link SqlParser} / {@link SqlParsers}) that make {@link
+ * StatementSplitter} aware of MySQL syntax — backtick-quoted identifiers, {@code '} and {@code "}
+ * string literals, line comments ({@code --} and {@code #}) and C-style block comments, recursive
+ * compound-statement blocks, and the {@code DELIMITER} directive — so that statement delimiters
+ * appearing inside those regions are not treated as boundaries. The assembled splitter is exposed
+ * through {@link #splitter()} and wired into the MySQL environment's statement splitter.
+ *
+ * <p>This class is not instantiable.
+ *
+ * @see StatementSplitter
+ */
 public final class MySqlGrammar {
 
     private MySqlGrammar() {}
 
-    /** バッククォート識別子・各種クォート文字列・コメントを 1 領域として消費するパーサー。 */
+    /**
+     * Returns a parser that consumes, as a single skipped region, a backtick-quoted identifier, a
+     * single- or double-quoted string literal, a {@code --} or {@code #} line comment, or a C-style
+     * block comment.
+     *
+     * @return a parser matching any one quote-or-comment region
+     */
     private static SqlParser quoteOrComment() {
         SqlParser singleQuote = SqlParsers.quoted('\'', true, true);
         SqlParser doubleQuote = SqlParsers.quoted('"', true, true);
@@ -23,19 +42,22 @@ public final class MySqlGrammar {
     }
 
     /**
-     * MySQL のストアドルーチン本体に現れる複合文ブロック （{@code BEGIN...END}, {@code IF...END IF}, {@code CASE...END
-     * [CASE]}, {@code LOOP...END LOOP}, {@code WHILE...END WHILE}, {@code REPEAT...END REPEAT}）を 1
-     * 領域として消費するパーサーを返す。
+     * Returns a parser that consumes, as a single region, a MySQL compound-statement block found in
+     * stored-routine bodies: {@code BEGIN...END}, {@code IF...END IF}, {@code CASE...END [CASE]},
+     * {@code LOOP...END LOOP}, {@code WHILE...END WHILE}, and {@code REPEAT...END REPEAT}.
      *
-     * <p>内部の文区切り {@code ;} や入れ子ブロックを正しく取り込むため相互再帰で構成する。 {@code content}
-     * は「クォート/コメント領域」「入れ子ブロック」「{@code END} 手前の任意 1 文字」のいずれかを 消費し、{@code many(content)} は最初の {@code
-     * END} の手前で停止する。各ブロックが {@code END}（+ 固有の後続語） を消費することで、外側ブロックが内側の {@code END} を取り違えることはない。
+     * <p>The parser is built with mutual recursion so that inner statement delimiters ({@code ;})
+     * and nested blocks are absorbed correctly. The {@code content} parser matches a quote/comment
+     * region, a nested block, or any single character that is not the start of an {@code END}
+     * keyword; {@code many(content)} therefore stops just before the first {@code END}. Because
+     * each block consumes its own {@code END} (plus any block-specific trailing keyword), an outer
+     * block never mistakes an inner block's {@code END} for its own.
      *
-     * @return 複合文ブロックパーサー
+     * @return a parser matching one compound-statement block
      */
     static SqlParser block() {
         SqlParser quoteOrComment = quoteOrComment();
-        // content / block の相互再帰。block を遅延参照で解決する。
+        // Mutual recursion between content and block; resolve block via a lazy reference.
         SqlParser[] holder = new SqlParser[1];
         SqlParser content =
                 SqlParsers.or(
@@ -44,7 +66,7 @@ public final class MySqlGrammar {
                         SqlParsers.seq(
                                 SqlParsers.not(SqlParsers.keyword("END")), SqlParsers.anyChar()));
         SqlParser body = SqlParsers.many(content);
-        // END とその後続キーワードの間には空白が入るため、空白を読み飛ばしてから後続語を照合する。
+        // Whitespace may appear between END and its trailing keyword, so skip it before matching.
         SqlParser ws = SqlParsers.many(SqlParsers.whitespace());
         SqlParser beginBlock =
                 SqlParsers.seq(SqlParsers.keyword("BEGIN"), body, SqlParsers.keyword("END"));
@@ -89,13 +111,17 @@ public final class MySqlGrammar {
     }
 
     /**
-     * 行頭の {@code DELIMITER} ディレクティブを検出する {@link DelimiterDirective} を返す。
+     * Returns a {@link DelimiterDirective} that detects a {@code DELIMITER} directive at the start
+     * of a line.
      *
-     * <p>大文字小文字を無視した {@code DELIMITER} の直後に 1 つ以上の空白（改行を除く）が続き、 その後に行末（{@code \r} / {@code \n} /
-     * EOF）までの非空白連続を新しい区切りトークンとして読み取る。 検出時は指示行自体を出力させないため、行末の改行直後（または EOF）を次位置として返す。非検出は {@code
-     * null}。
+     * <p>It matches {@code DELIMITER} case-insensitively at a word boundary, requires one or more
+     * horizontal spaces (no newlines) immediately after it, and then reads the following run of
+     * non-whitespace characters up to the end of line ({@code \r} / {@code \n} / EOF) as the new
+     * delimiter token. On a match it advances the next position to just after the end-of-line
+     * newline (or to EOF) so that the directive line itself is not emitted. It returns {@code null}
+     * when no directive is present.
      *
-     * @return DELIMITER ディレクティブ検出器
+     * @return a detector for the {@code DELIMITER} directive
      */
     static DelimiterDirective delimiterDirective() {
         return (sql, pos) -> {
@@ -104,12 +130,12 @@ public final class MySqlGrammar {
             if (!sql.regionMatches(true, pos, keyword, 0, keyword.length())) {
                 return null;
             }
-            // 語境界: 直前が識別子文字でないこと。
+            // Word boundary: the preceding character must not be an identifier character.
             if (pos > 0 && isIdentifierChar(sql.charAt(pos - 1))) {
                 return null;
             }
             int i = pos + keyword.length();
-            // 直後に 1 つ以上の水平空白を要求する。
+            // Require one or more horizontal spaces immediately after the keyword.
             int spaceStart = i;
             while (i < len && isHorizontalSpace(sql.charAt(i))) {
                 i++;
@@ -117,7 +143,7 @@ public final class MySqlGrammar {
             if (i == spaceStart) {
                 return null;
             }
-            // 行末までの非空白連続を区切りトークンとして読む。
+            // Read the run of non-whitespace up to end of line as the delimiter token.
             int tokenStart = i;
             while (i < len && !isLineEnd(sql.charAt(i))) {
                 i++;
@@ -126,7 +152,7 @@ public final class MySqlGrammar {
             if (token.isEmpty()) {
                 return null;
             }
-            // 改行直後（または EOF）まで進める。
+            // Advance past the end-of-line newline (or to EOF).
             int nextPos = i;
             if (nextPos < len) {
                 char c = sql.charAt(nextPos);
@@ -153,12 +179,13 @@ public final class MySqlGrammar {
     }
 
     /**
-     * MySQL 方言の {@link StatementSplitter} を返す。
+     * Returns a {@link StatementSplitter} configured for the MySQL dialect.
      *
-     * <p>領域はクォート/コメントと複合文ブロック、初期区切り文字は {@code ';'}。{@code DELIMITER} ディレクティブで実行中に区切りを変更できる。
-     * 先頭コメントは後続文に付随して保持される。
+     * <p>Its skipped regions are quote/comment regions and compound-statement blocks, its initial
+     * delimiter is {@code ';'}, and it honors the {@code DELIMITER} directive to change the
+     * delimiter mid-stream. Leading comments are retained with the statement that follows them.
      *
-     * @return MySQL 用ステートメント分割器
+     * @return a MySQL-dialect statement splitter
      */
     public static StatementSplitter splitter() {
         SqlParser region = SqlParsers.or(quoteOrComment(), block());

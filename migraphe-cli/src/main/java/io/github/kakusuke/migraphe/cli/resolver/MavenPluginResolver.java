@@ -25,19 +25,41 @@ import org.eclipse.aether.transport.file.FileTransporterFactory;
 import org.eclipse.aether.transport.http.HttpTransporterFactory;
 import org.eclipse.aether.util.artifact.JavaScopes;
 
-/** Maven Resolver を使用してプラグインの依存を解決する。 */
+/**
+ * Resolves plugin artifacts and their transitive dependencies using Maven Resolver (Aether).
+ *
+ * <p>Given the {@link PluginDeclaration}s from {@code migraphe.yaml}, this resolver downloads (or
+ * locates in the local {@code ~/.m2} cache) each plugin JAR and its runtime-scoped dependency
+ * closure, returning the JAR paths as {@link ResolvedArtifact}s. {@link PluginResolver} then turns
+ * those paths into the plugin {@link java.net.URLClassLoader URLClassLoader}, and {@code migraphe
+ * pin} uses {@link #resolveGroups(List)} to record SHA-256 pins per plugin. A declaration's {@link
+ * PluginDeclaration#repositoryRef() repositoryRef} restricts resolution to a single named
+ * repository; otherwise every repository in the {@link RepositoryRegistry} is queried.
+ */
 public final class MavenPluginResolver {
 
     private final Path localRepoPath;
     private final List<RemoteRepository> remoteRepositories;
     private final RepositoryRegistry registry;
 
-    /** Maven Central を含むデフォルトコンストラクタ。 */
+    /**
+     * Creates a resolver using the default local repository and a registry containing only Maven
+     * Central.
+     *
+     * <p>The local repository defaults to the {@code maven.repo.local} system property if set,
+     * otherwise {@code ~/.m2/repository}.
+     */
     public MavenPluginResolver() {
         this(defaultLocalRepo(), RepositoryRegistry.defaults());
     }
 
-    /** RepositoryRegistry ベースのコンストラクタ。 */
+    /**
+     * Creates a resolver over an explicit local repository and repository registry.
+     *
+     * @param localRepoPath the local Maven repository directory used both as a cache and a
+     *     resolution source
+     * @param registry the repositories to query, in priority order
+     */
     public MavenPluginResolver(Path localRepoPath, RepositoryRegistry registry) {
         this.localRepoPath = localRepoPath;
         this.registry = registry;
@@ -45,8 +67,17 @@ public final class MavenPluginResolver {
     }
 
     /**
-     * PluginDeclaration のリストを解決し、ResolvedArtifact のリストを返す。 各宣言の repositoryRef
-     * を考慮して問い合わせ先のリポジトリを絞り込む。
+     * Resolves the given plugin declarations into a flat, de-duplicated list of artifacts.
+     *
+     * <p>Each declaration's {@link PluginDeclaration#repositoryRef() repositoryRef} narrows the
+     * repositories queried for that plugin. The root artifact and all transitive dependencies are
+     * flattened together, and artifacts that resolve to the same JAR path (shared across plugins)
+     * are included only once.
+     *
+     * @param plugins the plugin declarations to resolve, in declaration order
+     * @return the resolved artifacts (roots and transitive dependencies), de-duplicated by JAR path
+     * @throws IllegalArgumentException if a declaration references an unknown repository id
+     * @throws IllegalStateException if Maven resolution fails for any declaration
      */
     public List<ResolvedArtifact> resolve(List<PluginDeclaration> plugins) {
         Set<Path> seenJars = new LinkedHashSet<>();
@@ -65,6 +96,16 @@ public final class MavenPluginResolver {
     /**
      * Resolves each plugin separately and groups its root artifact and transitive dependencies into
      * a {@link ResolvedPluginGroup}.
+     *
+     * <p>Unlike {@link #resolve(List)}, this keeps each plugin's dependency closure distinct, which
+     * is what lets {@code migraphe pin} produce one lockfile entry per declared plugin while still
+     * recording every transitive JAR.
+     *
+     * @param plugins the plugin declarations to resolve, in declaration order
+     * @return one {@link ResolvedPluginGroup} per declaration, in declaration order
+     * @throws IllegalArgumentException if a declaration references an unknown repository id
+     * @throws IllegalStateException if Maven resolution fails, or if Maven does not return the
+     *     requested root artifact for a declaration
      */
     public List<ResolvedPluginGroup> resolveGroups(List<PluginDeclaration> plugins) {
         List<ResolvedPluginGroup> groups = new ArrayList<>();

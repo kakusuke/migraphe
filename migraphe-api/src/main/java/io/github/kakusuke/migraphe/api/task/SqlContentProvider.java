@@ -1,12 +1,20 @@
 package io.github.kakusuke.migraphe.api.task;
 
 /**
- * SQL内容を提供するタスクのマーカーインターフェース。
+ * A capability interface for {@link Task tasks} that can expose the SQL they execute.
  *
- * <p>失敗時の詳細表示等でSQL内容を取得するために使用。
+ * <p>Implemented by SQL-based tasks so that tooling can surface the underlying statement, for
+ * example when rendering a failure with the offending SQL. Migraphe checks for this capability via
+ * {@code instanceof} and ignores tasks that do not implement it.
+ *
+ * @see Task
  */
 public interface SqlContentProvider {
 
-    /** 実行されるSQL内容を取得する。 */
+    /**
+     * Returns the SQL content this task executes.
+     *
+     * @return the SQL statement(s) that the task runs
+     */
     String sqlContent();
 }

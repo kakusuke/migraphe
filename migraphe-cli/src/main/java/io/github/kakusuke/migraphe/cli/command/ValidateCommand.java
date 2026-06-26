@@ -19,18 +19,36 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-/** 設定ファイルをオフラインで検証するコマンド。 DB接続なしで全エラーを蓄積して一括表示。 */
+/**
+ * The {@code validate} command, which checks the project configuration offline.
+ *
+ * <p>Runs without any database connection: it validates the project file, targets, tasks,
+ * dependencies, graph structure, and the plugin lockfile, accumulating every error and printing
+ * them as grouped per-step results. Exits with {@code 0} only when all checks pass.
+ */
 public class ValidateCommand implements Command {
 
     private final Path baseDir;
     private final PluginRegistry pluginRegistry;
     private final boolean colorEnabled;
 
+    /**
+     * Creates the validate command with color support auto-detected.
+     *
+     * @param baseDir the project base directory containing {@code migraphe.yaml}
+     * @param pluginRegistry the registry of loaded plugins used to validate plugin-typed entries
+     */
     public ValidateCommand(Path baseDir, PluginRegistry pluginRegistry) {
         this(baseDir, pluginRegistry, AnsiColor.isColorEnabled());
     }
 
-    /** テスト用コンストラクタ。 */
+    /**
+     * Full constructor exposing the color flag, intended primarily for testing.
+     *
+     * @param baseDir the project base directory containing {@code migraphe.yaml}
+     * @param pluginRegistry the registry of loaded plugins used to validate plugin-typed entries
+     * @param colorEnabled {@code true} to colorize console output
+     */
     public ValidateCommand(Path baseDir, PluginRegistry pluginRegistry, boolean colorEnabled) {
         this.baseDir = baseDir;
         this.pluginRegistry = pluginRegistry;
@@ -44,14 +62,14 @@ public class ValidateCommand implements Command {
         ConfigValidator validator = new ConfigValidator(pluginRegistry);
         ValidationOutput result = validator.validate(baseDir);
 
-        // 各チェックステップを表示
+        // Display each check step.
         displayCheckResults(result);
 
         // 6. Plugin lockfile (declared plugins only)
         List<String> lockErrors = checkLockfile();
         printCheckResult("Checking plugin lockfile...", lockErrors.isEmpty(), lockErrors);
 
-        // サマリーを表示
+        // Display the summary.
         boolean valid = result.isValid() && lockErrors.isEmpty();
         if (valid) {
             System.out.println();
@@ -113,7 +131,7 @@ public class ValidateCommand implements Command {
         printCheckResult(
                 "Checking project configuration...", projectErrors.isEmpty(), projectErrors);
 
-        // 早期終了（migraphe.yaml がない場合）
+        // Early exit when migraphe.yaml is missing.
         if (!projectErrors.isEmpty() && errors.stream().anyMatch(e -> e.contains("not found"))) {
             return;
         }

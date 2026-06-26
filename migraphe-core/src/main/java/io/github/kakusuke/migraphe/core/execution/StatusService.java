@@ -8,18 +8,37 @@ import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
-/** マイグレーションのステータスを取得するサービス。 */
+/**
+ * Computes the applied/pending status of every node in a migration graph.
+ *
+ * <p>Used by the {@code status} command (CLI and Gradle) to report, for each node, whether it has
+ * been applied and what its latest execution record was. It reads state from a {@link
+ * HistoryRepository} but performs no mutation.
+ */
 public final class StatusService {
 
     private final MigrationGraph graph;
     private final HistoryRepository historyRepository;
 
+    /**
+     * Creates a status service over a graph and its history.
+     *
+     * @param graph the migration graph whose nodes are inspected
+     * @param historyRepository the repository consulted for applied state and latest records
+     */
     public StatusService(MigrationGraph graph, HistoryRepository historyRepository) {
         this.graph = graph;
         this.historyRepository = historyRepository;
     }
 
-    /** ステータス情報を取得する。 */
+    /**
+     * Computes the current status of all nodes in the graph.
+     *
+     * <p>For each node, queries the history repository for whether it has been applied and, if so,
+     * its latest execution record, accumulating overall executed and pending counts.
+     *
+     * @return a {@link StatusInfo} holding per-node statuses and aggregate counts
+     */
     public StatusInfo getStatus() {
         List<NodeStatus> nodeStatuses = new ArrayList<>();
         int executedCount = 0;
@@ -43,14 +62,31 @@ public final class StatusService {
         return new StatusInfo(nodeStatuses, executedCount, pendingCount);
     }
 
-    /** ノードのステータス情報。 */
+    /**
+     * Status of a single migration node.
+     *
+     * @param node the migration node
+     * @param executed {@code true} if the node has been successfully applied (UP)
+     * @param latestRecord the node's most recent execution record, or {@code null} if it has never
+     *     been executed
+     */
     public record NodeStatus(
             MigrationNode node, boolean executed, @Nullable ExecutionRecord latestRecord) {}
 
-    /** 全体のステータス情報。 */
+    /**
+     * Aggregate status across all nodes in the graph.
+     *
+     * @param nodes the per-node statuses
+     * @param executedCount the number of nodes that have been applied
+     * @param pendingCount the number of nodes not yet applied
+     */
     public record StatusInfo(List<NodeStatus> nodes, int executedCount, int pendingCount) {
 
-        /** 総ノード数を返す。 */
+        /**
+         * Returns the total number of nodes (executed plus pending).
+         *
+         * @return the total node count
+         */
         public int totalCount() {
             return executedCount + pendingCount;
         }

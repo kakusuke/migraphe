@@ -6,22 +6,34 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import java.util.Set;
 
 /**
- * MigrationNode を生成する Provider インターフェース。
+ * Provider that constructs {@link MigrationNode} instances from task configuration.
  *
- * <p>プラグインはタスク定義から MigrationNode インスタンスを生成する責任を持つ。 依存関係（dependencies）はフレームワークが解決し、引数として渡す。
+ * <p>This is one of the providers a {@link MigraphePlugin} exposes (via {@link
+ * MigraphePlugin#migrationNodeProvider()}). The runtime binds a task's YAML to the plugin's {@link
+ * TaskDefinition} subtype, resolves the task's dependencies into a set of {@link NodeId}s, and then
+ * calls {@link #createNode(NodeId, TaskDefinition, Set, Environment)} to build the node that will
+ * participate in the migration graph.
  *
- * @param <T> TaskDefinition の UP/DOWN アクション型
+ * <p>Implementors turn a {@link TaskDefinition} into a concrete {@link MigrationNode}, wiring up
+ * its UP and DOWN tasks. The framework has already resolved the dependency set, so implementors
+ * should simply attach it to the node rather than re-deriving it.
+ *
+ * @param <T> the type of the UP/DOWN action carried by the {@link TaskDefinition}
+ * @see MigraphePlugin#migrationNodeProvider()
+ * @see MigrationNode
+ * @see TaskDefinition
  */
 public interface MigrationNodeProvider<T> {
 
     /**
-     * タスク定義から MigrationNode を生成する。
+     * Creates a {@link MigrationNode} from a task definition.
      *
-     * @param nodeId ノードID
-     * @param task タスク定義（name, target, up, down）
-     * @param dependencies このノードが依存するノードID（フレームワークが解決済み）
-     * @param environment ノードが属する環境
-     * @return MigrationNode インスタンス
+     * @param nodeId the unique identifier to assign to the created node
+     * @param task the plugin-specific task definition (name, target, UP/DOWN actions, etc.)
+     * @param dependencies the IDs of the nodes this node depends on, already resolved by the
+     *     framework
+     * @param environment the environment this node belongs to
+     * @return the constructed {@link MigrationNode} instance
      */
     MigrationNode createNode(
             NodeId nodeId,

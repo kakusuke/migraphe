@@ -15,32 +15,42 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * TaskDefinition から MigrationNode を生成する汎用ファクトリ。
+ * Generic factory that builds {@link MigrationNode}s from {@link TaskDefinition}s via plugins.
  *
- * <p>プラグインを使用して MigrationNode を生成する。
+ * <p>For each task definition, the factory looks up the target's {@code type} in the configuration,
+ * resolves the matching {@link MigraphePlugin} from the {@link PluginRegistry}, resolves the task's
+ * declared dependencies into {@link NodeId}s (a framework responsibility, not the plugin's), and
+ * delegates node creation to the plugin's {@link
+ * io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider}.
  */
 public class MigrationNodeFactory {
 
     private final PluginRegistry pluginRegistry;
     private final SmallRyeConfig config;
 
+    /**
+     * Creates a node factory.
+     *
+     * @param pluginRegistry the registry used to resolve plugins by target type
+     * @param config the configuration used to read each target's {@code type}
+     */
     public MigrationNodeFactory(PluginRegistry pluginRegistry, SmallRyeConfig config) {
         this.pluginRegistry = pluginRegistry;
         this.config = config;
     }
 
     /**
-     * TaskDefinition から MigrationNode を生成する。
+     * Builds a single {@link MigrationNode} from a task definition.
      *
-     * @param taskDef タスク定義
-     * @param nodeId ノードID
-     * @param environment 実行環境
-     * @return MigrationNode
+     * @param taskDef the task definition describing the node's target, dependencies, and payload
+     * @param nodeId the ID to assign to the created node
+     * @param environment the environment in which the node will run
+     * @return the created migration node
      */
     public MigrationNode createNode(
             TaskDefinition<?> taskDef, NodeId nodeId, Environment environment) {
 
-        // ターゲットの type を取得してプラグインを特定
+        // Read the target's type to select the plugin.
         String targetId = taskDef.target();
         String type = config.getValue("target." + targetId + ".type", String.class);
 
@@ -49,10 +59,10 @@ public class MigrationNodeFactory {
         @SuppressWarnings("unchecked")
         MigraphePlugin<Object> typedPlugin = (MigraphePlugin<Object>) plugin;
 
-        // 依存関係を解決（フレームワークの責務）
+        // Resolve dependencies (a framework responsibility).
         Set<NodeId> dependencies = resolveDependencies(taskDef);
 
-        // プラグインの MigrationNodeProvider で MigrationNode を生成
+        // Create the node via the plugin's MigrationNodeProvider.
         @SuppressWarnings("unchecked")
         TaskDefinition<Object> typedTaskDef = (TaskDefinition<Object>) taskDef;
         return typedPlugin
@@ -61,12 +71,12 @@ public class MigrationNodeFactory {
     }
 
     /**
-     * 複数の TaskDefinition から MigrationNode のリストを生成する。
+     * Builds a list of {@link MigrationNode}s from multiple task definitions.
      *
-     * @param taskDefinitions NodeId → TaskDefinition のマップ
-     * @param environments ターゲットID → Environment のマップ
-     * @return MigrationNode のリスト
-     * @throws ConfigurationException ターゲットに対応する Environment が見つからない場合
+     * @param taskDefinitions map of node ID to its task definition
+     * @param environments map of target ID to its {@link Environment}
+     * @return the list of created migration nodes
+     * @throws ConfigurationException if a task's target has no corresponding {@link Environment}
      */
     public List<MigrationNode> createNodes(
             Map<NodeId, TaskDefinition<?>> taskDefinitions, Map<String, Environment> environments) {
@@ -77,7 +87,7 @@ public class MigrationNodeFactory {
             NodeId nodeId = entry.getKey();
             TaskDefinition<?> taskDef = entry.getValue();
 
-            // ターゲットIDからEnvironmentを取得
+            // Look up the Environment by target ID.
             String targetId = taskDef.target();
             Environment environment = environments.get(targetId);
 
@@ -93,10 +103,10 @@ public class MigrationNodeFactory {
     }
 
     /**
-     * TaskDefinition から依存関係を解決する。
+     * Resolves a task definition's declared dependency names into {@link NodeId}s.
      *
-     * @param taskDef タスク定義
-     * @return 依存ノードID のセット
+     * @param taskDef the task definition whose dependencies are resolved
+     * @return the set of dependency node IDs, or an empty set when none are declared
      */
     private Set<NodeId> resolveDependencies(TaskDefinition<?> taskDef) {
         return taskDef.dependencies()

@@ -8,10 +8,23 @@ import java.util.List;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.work.DisableCachingByDefault;
 
-/** マイグレーションの実行状況を表示する Gradle タスク。 */
-@DisableCachingByDefault(because = "migraphe タスクは副作用を伴い出力をキャッシュできない")
+/**
+ * Gradle task that displays the migration execution status.
+ *
+ * <p>Registered as {@code migrapheStatus} by {@link MigrapheGradlePlugin}, the task renders the
+ * migration graph and, for each node, shows whether it has already been executed (with its latest
+ * duration and timestamp) or is still pending, followed by a summary count.
+ */
+@DisableCachingByDefault(
+        because = "Migraphe tasks have side effects and their output cannot be cached")
 public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
 
+    /**
+     * Task action that prints the execution status of every migration node.
+     *
+     * <p>Loads the execution context, initializes the history repository, and renders the graph
+     * annotating each node as executed or pending, with a closing total/executed/pending summary.
+     */
     @TaskAction
     public void status() {
         withExecutionContext(
@@ -78,7 +91,7 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                 });
     }
 
-    /** 副作用のあるタスクはキャッシュしない。 */
+    /** Creates the task and marks it as never up to date, since it has side effects. */
     public MigrapheStatusTask() {
         getOutputs().upToDateWhen(task -> false);
     }

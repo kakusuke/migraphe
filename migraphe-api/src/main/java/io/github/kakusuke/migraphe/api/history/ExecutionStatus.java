@@ -1,8 +1,17 @@
 package io.github.kakusuke.migraphe.api.history;
 
-/** マイグレーション実行ステータス。 */
+/**
+ * The outcome status recorded for a single migration execution.
+ *
+ * @see ExecutionRecord
+ */
 public enum ExecutionStatus {
-    SUCCESS, // 実行成功
-    FAILURE, // 実行失敗
-    SKIPPED // スキップ（既に実行済みなど）
+    /** The execution completed successfully. */
+    SUCCESS,
+
+    /** The execution failed; the record carries an error message. */
+    FAILURE,
+
+    /** The execution was skipped, for example because the node had already been applied. */
+    SKIPPED
 }

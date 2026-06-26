@@ -4,22 +4,33 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** マイグレーション実行のインターフェース。 */
+/**
+ * Contract for running a set of migration nodes over a {@link
+ * io.github.kakusuke.migraphe.core.graph.MigrationGraph}.
+ *
+ * <p>The canonical implementation is {@link DagExecutor}, which unifies UP/DOWN and
+ * sequential/parallel execution behind this interface. A typical caller first computes the target
+ * node set with {@link #determineTargetNodes} (or, for rollbacks, {@link
+ * DagExecutor#determineRollbackTargets}) and then passes it to {@link #execute}.
+ */
 public interface Executor {
 
     /**
-     * 実行対象ノードを決定する。
+     * Determines the set of nodes to execute.
      *
-     * @param targetId 特定のターゲットID（null の場合は全ノード）
-     * @return 未実行のノードIDセット
+     * <p>Implementations typically expand {@code targetId} to include its transitive dependencies
+     * and filter out nodes already in their target state.
+     *
+     * @param targetId a specific target node, or {@code null} to consider all nodes in the graph
+     * @return the set of node IDs that still need to be executed
      */
     Set<NodeId> determineTargetNodes(@Nullable NodeId targetId);
 
     /**
-     * マイグレーションを実行する。
+     * Executes the given set of target nodes.
      *
-     * @param targetNodes 実行対象ノード
-     * @return 実行結果
+     * @param targetNodes the node IDs to execute, in this executor's configured direction
+     * @return the {@link ExecutionResult} summarizing the run
      */
     ExecutionResult execute(Set<NodeId> targetNodes);
 }

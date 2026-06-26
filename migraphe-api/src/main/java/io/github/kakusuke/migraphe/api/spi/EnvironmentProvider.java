@@ -3,18 +3,29 @@ package io.github.kakusuke.migraphe.api.spi;
 import io.github.kakusuke.migraphe.api.environment.Environment;
 
 /**
- * Environment を生成する Provider インターフェース。
+ * Provider that constructs {@link Environment} instances from configuration.
  *
- * <p>プラグインは設定から Environment インスタンスを生成する責任を持つ。
+ * <p>This is one of the providers a {@link MigraphePlugin} exposes (via {@link
+ * MigraphePlugin#environmentProvider()}). The runtime binds a target's YAML to the plugin's {@link
+ * EnvironmentDefinition} subtype and then calls {@link #createEnvironment(String,
+ * EnvironmentDefinition)} to turn that configuration into a usable {@link Environment}.
+ *
+ * <p>Implementors are responsible for interpreting the plugin-specific {@link
+ * EnvironmentDefinition} (for example reading JDBC URL, username, and password) and producing the
+ * concrete {@link Environment} their plugin operates on.
+ *
+ * @see MigraphePlugin#environmentProvider()
+ * @see Environment
+ * @see EnvironmentDefinition
  */
 public interface EnvironmentProvider {
 
     /**
-     * 環境定義から Environment を生成する。
+     * Creates an {@link Environment} from an environment definition.
      *
-     * @param name 環境名（target ID）
-     * @param definition 環境定義（プラグイン固有の設定）
-     * @return Environment インスタンス
+     * @param name the environment name, which is the target ID from configuration
+     * @param definition the plugin-specific environment configuration to interpret
+     * @return the constructed {@link Environment} instance
      */
     Environment createEnvironment(String name, EnvironmentDefinition definition);
 }

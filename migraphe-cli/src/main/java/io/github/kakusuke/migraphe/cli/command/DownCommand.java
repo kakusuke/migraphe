@@ -20,7 +20,16 @@ import java.util.Scanner;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** DOWN（ロールバック）マイグレーションを実行するコマンド。 */
+/**
+ * The {@code down} command, which rolls back (DOWN) previously executed migrations.
+ *
+ * <p>Determines the rollback set either from a target version (all executed nodes that transitively
+ * depend on it) or, when {@code --all} is given, every executed node. The plan is rendered as a
+ * reversed graph, confirmation is requested unless skipped, and the rollback is run via a {@link
+ * DagExecutor} in the {@link ExecutionDirection#DOWN} direction. DOWN execution is always
+ * sequential (parallelism of {@code 1}). In dry-run mode the plan is displayed but nothing is
+ * executed.
+ */
 public class DownCommand implements Command {
 
     private final ExecutionContext context;
@@ -31,6 +40,17 @@ public class DownCommand implements Command {
     private final InputStream inputStream;
     private final boolean colorEnabled;
 
+    /**
+     * Creates a command with the given options, reading confirmation from {@link System#in} and
+     * auto-detecting color support.
+     *
+     * @param context the loaded execution context (graph, config, history)
+     * @param targetVersion the node version to roll back (together with everything depending on
+     *     it), or {@code null} when {@code allMigrations} is {@code true}
+     * @param allMigrations {@code true} to roll back every executed migration
+     * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
+     * @param dryRun {@code true} to display the plan without executing any rollback
+     */
     public DownCommand(
             ExecutionContext context,
             @Nullable NodeId targetVersion,
@@ -47,7 +67,19 @@ public class DownCommand implements Command {
                 AnsiColor.isColorEnabled());
     }
 
-    /** テスト用コンストラクタ。 */
+    /**
+     * Full constructor exposing the confirmation input stream and color flag, intended primarily
+     * for testing.
+     *
+     * @param context the loaded execution context (graph, config, history)
+     * @param targetVersion the node version to roll back (together with everything depending on
+     *     it), or {@code null} when {@code allMigrations} is {@code true}
+     * @param allMigrations {@code true} to roll back every executed migration
+     * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
+     * @param dryRun {@code true} to display the plan without executing any rollback
+     * @param inputStream the stream from which the confirmation answer is read
+     * @param colorEnabled {@code true} to colorize console output
+     */
     public DownCommand(
             ExecutionContext context,
             @Nullable NodeId targetVersion,
@@ -68,7 +100,7 @@ public class DownCommand implements Command {
     @Override
     public int execute() {
         try {
-            // 1. 引数のバリデーション
+            // 1. Validate the arguments.
             if (!allMigrations) {
                 if (targetVersion == null) {
                     System.err.println("Error: Either --all or target version must be specified.");
@@ -80,17 +112,17 @@ public class DownCommand implements Command {
                 }
             }
 
-            // 2. HistoryRepository を取得
+            // 2. Obtain the HistoryRepository.
             HistoryRepository historyRepo = context.createHistoryRepository();
             historyRepo.initialize();
 
-            // 3. Executor と Listener を作成
+            // 3. Create the executor and listener.
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
             DagExecutor executor =
                     new DagExecutor(
                             context.graph(), historyRepo, listener, ExecutionDirection.DOWN, 1);
 
-            // 4. ロールバック対象ノードを決定
+            // 4. Determine the nodes to roll back.
             Set<NodeId> targetNodes =
                     executor.determineRollbackTargets(targetVersion, allMigrations);
 
@@ -99,25 +131,25 @@ public class DownCommand implements Command {
                 return 0;
             }
 
-            // 5. 逆順実行プラン生成してグラフ表示
+            // 5. Build the reverse execution plan and display the graph.
             ExecutionPlan plan =
                     TopologicalSort.createReverseExecutionPlanFor(context.graph(), targetNodes);
             displayRollbackPlan(context, plan, historyRepo);
 
-            // 6. dry-run の場合はここで終了
+            // 6. Stop here in dry-run mode.
             if (dryRun) {
                 System.out.println();
                 System.out.println("No changes made (dry run).");
                 return 0;
             }
 
-            // 7. 確認プロンプト（-y でスキップ）
+            // 7. Confirmation prompt (skipped with -y).
             if (!skipConfirmation && !confirmRollback()) {
                 System.out.println("Rollback cancelled.");
                 return 0;
             }
 
-            // 8. ロールバック実行
+            // 8. Execute the rollback.
             System.out.println();
             System.out.println("Executing rollback...");
             System.out.println();
@@ -132,7 +164,7 @@ public class DownCommand implements Command {
         }
     }
 
-    /** ロールバック対象を表示する。 */
+    /** Renders the rollback plan as a reversed ASCII graph with per-node status markers. */
     private void displayRollbackPlan(
             ExecutionContext context, ExecutionPlan plan, HistoryRepository historyRepo) {
         String prefix = dryRun ? "[DRY RUN] " : "";
@@ -142,10 +174,10 @@ public class DownCommand implements Command {
         System.out.println(prefix + "Migrations to rollback:");
         System.out.println();
 
-        // プランのノードを DFS 順でフィルタ
+        // Filter the plan's nodes into DFS order.
         List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
-        // ExecutionGraphView を使用してグラフ表示（逆順モード）
+        // Render the graph using ExecutionGraphView (reversed mode).
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, true);
         List<String> lines =
                 graphView.renderLines(
@@ -166,7 +198,7 @@ public class DownCommand implements Command {
                 total + " migration" + (total == 1 ? "" : "s") + " " + verb + " rolled back.");
     }
 
-    /** 確認プロンプトを表示する。 */
+    /** Displays the confirmation prompt and returns whether the user approved the rollback. */
     private boolean confirmRollback() {
         System.out.println();
         System.out.print("Proceed with rollback? [y/N]: ");

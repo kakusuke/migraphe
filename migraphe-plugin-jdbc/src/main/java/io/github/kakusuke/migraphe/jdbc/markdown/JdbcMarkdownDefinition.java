@@ -7,41 +7,73 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * JDBC Markdown ドキュメント生成の定義。
+ * Configuration for the JDBC Markdown documentation generator.
  *
- * <p>YAML ファイルからマッピングされ、スキーマ情報を Markdown 形式で出力する設定を保持する。
+ * <p>This is a SmallRye {@code @ConfigMapping} interface mapped from the project's YAML; it
+ * supplies the settings that {@link JdbcMarkdownPlugin} uses when rendering JDBC schema information
+ * into Markdown. It extends {@link GeneratorDefinition} so the runtime can materialize it through
+ * {@code OutputContext.definitionAs(...)} when the generator {@code type} resolves to {@code
+ * "jdbc-markdown"}. PostgreSQL and MySQL Markdown generators reuse the same configuration shape.
  */
 @ConfigMapping(prefix = "")
 public interface JdbcMarkdownDefinition extends GeneratorDefinition {
 
+    /**
+     * Returns the generator type identifier from configuration.
+     *
+     * @return the configured generator {@code type} value (for example {@code "jdbc-markdown"})
+     */
     @Override
     String type();
 
-    /** データベース名。 */
+    /**
+     * Returns the database name used to title the generated documentation and to namespace the
+     * output directory layout.
+     *
+     * @return the database name from configuration
+     */
     String name();
 
     /**
-     * 出力ディレクトリ。
+     * Returns the directory into which the Markdown files are written.
      *
-     * @return 出力先ディレクトリパス（デフォルト: "docs/schema"）
+     * @return the output directory path, defaulting to {@code "docs/schema"}
      */
     @WithDefault("docs/schema")
     String outputDir();
 
     /**
-     * 除外パターンのリスト。
+     * Returns the schema/table exclusion patterns to skip during generation.
      *
-     * @return 除外パターン、指定なしの場合は空
+     * @return the exclusion patterns, or an empty {@link Optional} when none are configured
      */
     Optional<List<ExcludePattern>> excludes();
 
-    /** スキーマまたはテーブルの除外パターン。 */
+    /**
+     * A single exclusion rule matching schemas and/or tables to omit from the generated
+     * documentation.
+     *
+     * <p>The {@link #schema()} and {@link #table()} values are treated as case-insensitive regular
+     * expressions by {@link JdbcMarkdownGenerator}. A rule with only {@link #schema()} present
+     * excludes whole schemas; a rule with {@link #table()} present excludes matching tables,
+     * optionally scoped to a matching {@link #schema()}.
+     */
     interface ExcludePattern {
 
-        /** 除外対象のスキーマ名。 */
+        /**
+         * Returns the schema-name pattern to exclude.
+         *
+         * @return the schema pattern, or an empty {@link Optional} if the rule is not scoped to a
+         *     schema
+         */
         Optional<String> schema();
 
-        /** 除外対象のテーブル名。 */
+        /**
+         * Returns the table-name pattern to exclude.
+         *
+         * @return the table pattern, or an empty {@link Optional} if the rule targets a whole
+         *     schema rather than specific tables
+         */
         Optional<String> table();
     }
 }

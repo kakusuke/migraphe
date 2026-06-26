@@ -4,21 +4,35 @@ import io.github.kakusuke.migraphe.jdbc.statement.SqlParser;
 import io.github.kakusuke.migraphe.jdbc.statement.SqlParsers;
 import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
 
-/** PostgreSQL 方言の SQL 分割文法を提供するファクトリー。 */
+/**
+ * Factory for the PostgreSQL-dialect SQL splitting grammar.
+ *
+ * <p>Builds the {@link SqlParser} and {@link StatementSplitter} used by {@link
+ * io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment} to split SQL scripts into
+ * individual statements. The distinguishing feature versus the generic JDBC grammar is recognition
+ * of PostgreSQL dollar-quoted bodies ({@code $tag$ ... $tag$}), which may contain semicolons and
+ * newlines without splitting the statement. This is a stateless utility class and cannot be
+ * instantiated.
+ */
 public final class PostgreSqlGrammar {
 
     private PostgreSqlGrammar() {}
 
     /**
-     * PostgreSQL のドル引用符 {@code $tag$ ... $tag$} を 1 領域として消費するパーサーを返す。
+     * Returns a parser that consumes a PostgreSQL dollar-quoted region {@code $tag$ ... $tag$} as a
+     * single unit.
      *
-     * <p>開始位置が {@code $} で始まり、{@code $}〜{@code $} の間がタグ（{@code [A-Za-z_][A-Za-z0-9_]*} もしくは空タグ
-     * {@code $$}）として解釈できる場合のみマッチする。開始タグと同一の閉じタグが現れるまで、 タグ内の任意文字・改行・{@code ;} をすべて含めて消費し、閉じタグ直後の pos
-     * を返す。閉じタグが 見つからなければ {@code sql.length()}（未終端は終端まで 1 領域とみなす）。
+     * <p>It matches only when the start position is a {@code $} and the text between two {@code $}
+     * characters forms a valid tag ({@code [A-Za-z_][A-Za-z0-9_]*} or the empty tag {@code $$}). It
+     * then consumes everything — including arbitrary characters, newlines, and {@code ;} — up to
+     * the first occurrence of an identical closing tag, returning the position immediately after
+     * that closing tag. If no closing tag is found, it returns {@code sql.length()} (an
+     * unterminated body is treated as one region running to the end of input).
      *
-     * <p>{@code $1} のような数字始まりのパラメータプレースホルダはドルタグではないため -1 を返し、他の パーサーへ委ねる。
+     * <p>A numeric placeholder such as {@code $1} is not a dollar tag, so the parser returns {@code
+     * -1} to defer to other parsers.
      *
-     * @return ドル引用符パーサー
+     * @return a dollar-quote {@link SqlParser}
      */
     public static SqlParser dollarQuoted() {
         return (sql, pos) -> {
@@ -36,12 +50,15 @@ public final class PostgreSqlGrammar {
         };
     }
 
-    /** pos の {@code '$'} から始まるドルタグの終端（閉じ {@code '$'} の次の位置）を返す。 ドルタグとして解釈できなければ -1。 */
+    /**
+     * Returns the end of the dollar tag starting at the {@code '$'} at {@code pos} (the position
+     * just after the closing {@code '$'}), or {@code -1} if it cannot be read as a dollar tag.
+     */
     private static int readTag(String sql, int pos) {
         int len = sql.length();
-        // pos は '$' であることが呼び出し側で保証されている。
+        // The caller guarantees that the character at pos is '$'.
         int i = pos + 1;
-        // 空タグ $$ を許容する。
+        // Allow the empty tag $$.
         while (i < len) {
             char c = sql.charAt(i);
             if (c == '$') {
@@ -61,12 +78,15 @@ public final class PostgreSqlGrammar {
     }
 
     /**
-     * PostgreSQL 方言の {@link StatementSplitter} を返す。
+     * Returns the PostgreSQL-dialect {@link StatementSplitter}.
      *
-     * <p>領域はドル引用符と標準引用・コメント領域、区切り文字は {@code ';'}。手続き本体は常にドル引用符／文字列内に 収まるため、キーワードブロックや DELIMITER
-     * 文法は含めない。先頭コメントは後続文に付随して保持される。
+     * <p>Its protected regions are dollar-quoted bodies plus the standard string/comment regions
+     * (from {@link SqlParsers#standardRegion()}), and the statement delimiter is {@code ';'}.
+     * Because procedure bodies always live inside a dollar-quoted or string region, no
+     * keyword-block or {@code DELIMITER} grammar is needed (unlike the MySQL dialect). A leading
+     * comment is kept attached to the statement that follows it.
      *
-     * @return PostgreSQL 用ステートメント分割器
+     * @return the PostgreSQL statement splitter
      */
     public static StatementSplitter splitter() {
         SqlParser region = SqlParsers.or(dollarQuoted(), SqlParsers.standardRegion());

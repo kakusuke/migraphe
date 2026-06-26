@@ -12,7 +12,15 @@ import java.util.Collections;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
-/** ジェネレーターを実行するコマンド。 */
+/**
+ * The {@code generate} command, which runs the configured generators.
+ *
+ * <p>Loads the project configuration, gathers the {@code generators:} section, and executes each
+ * generator (for example schema documentation or migration-tree output) through a {@link
+ * GeneratorExecutor} backed by a {@link GeneratorRegistry}. The registry pulls source and output
+ * plugins from the classpath, the Maven-resolved plugin class loader, and the {@code plugins/}
+ * directory. An optional name filter restricts execution to a single generator.
+ */
 public class GenerateCommand implements Command {
 
     private final Path baseDir;
@@ -22,6 +30,18 @@ public class GenerateCommand implements Command {
     private final Path pluginsDir;
     private final boolean colorEnabled;
 
+    /**
+     * Creates the generate command with color support auto-detected.
+     *
+     * @param baseDir the project base directory containing {@code migraphe.yaml}
+     * @param pluginRegistry the registry of loaded migration plugins, used to build the execution
+     *     context
+     * @param pluginClassLoader the class loader holding Maven-resolved generator plugins, or {@code
+     *     null} if no external plugins were resolved
+     * @param nameFilter the name of the single generator to run, or {@code null} to run all
+     *     configured generators
+     * @param pluginsDir the {@code plugins/} directory scanned for additional generator plugins
+     */
     public GenerateCommand(
             Path baseDir,
             PluginRegistry pluginRegistry,
@@ -37,7 +57,19 @@ public class GenerateCommand implements Command {
                 AnsiColor.isColorEnabled());
     }
 
-    /** テスト用コンストラクタ。 */
+    /**
+     * Full constructor exposing the color flag, intended primarily for testing.
+     *
+     * @param baseDir the project base directory containing {@code migraphe.yaml}
+     * @param pluginRegistry the registry of loaded migration plugins, used to build the execution
+     *     context
+     * @param pluginClassLoader the class loader holding Maven-resolved generator plugins, or {@code
+     *     null} if no external plugins were resolved
+     * @param nameFilter the name of the single generator to run, or {@code null} to run all
+     *     configured generators
+     * @param pluginsDir the {@code plugins/} directory scanned for additional generator plugins
+     * @param colorEnabled {@code true} to colorize console output
+     */
     public GenerateCommand(
             Path baseDir,
             PluginRegistry pluginRegistry,

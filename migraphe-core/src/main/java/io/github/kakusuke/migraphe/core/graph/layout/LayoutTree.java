@@ -15,7 +15,19 @@ import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** DAG をストリームツリーに分解する。 */
+/**
+ * Decomposes a DAG into a spanning tree of {@link LayoutStream}s plus the leftover non-tree edges.
+ *
+ * <p>This is the second stage of the ASCII layout pipeline ({@code MigrationGraph -> LayoutSort ->
+ * LayoutTree -> GridCanvas -> ExecutionGraphView}). Given a topological {@link
+ * LayoutSort.LayoutOrder}, it attaches each node to a single chosen parent — either extending that
+ * parent's stream trunk or forking a new child stream — and collects every remaining parent edge as
+ * a {@link NonTreeEdge}. All streams hang off a synthetic {@link VirtualNode virtual root}, so the
+ * resulting tree always has exactly one root stream.
+ *
+ * <p>Instances are immutable and created only through {@link #build(MigrationGraph,
+ * LayoutSort.LayoutOrder)}.
+ */
 public final class LayoutTree {
 
     private final LayoutStream rootStream;
@@ -31,14 +43,34 @@ public final class LayoutTree {
         this.nodeToStream = Map.copyOf(nodeToStream);
     }
 
+    /**
+     * Returns the single root stream, whose trunk holds only the synthetic virtual root node.
+     *
+     * @return the root {@link LayoutStream} of this tree
+     */
     public LayoutStream rootStream() {
         return rootStream;
     }
 
+    /**
+     * Returns the DAG edges that could not be represented as tree edges.
+     *
+     * <p>The list is sorted so that shorter, lower edges are drawn first; it is rendered by {@link
+     * GridCanvas#addNonTreeEdge(NodeId, NodeId)}.
+     *
+     * @return an immutable list of non-tree edges
+     */
     public List<NonTreeEdge> nonTreeEdges() {
         return nonTreeEdges;
     }
 
+    /**
+     * Returns the stream that contains the given node.
+     *
+     * @param nodeId the node to look up
+     * @return the {@link LayoutStream} whose trunk contains the node
+     * @throws IllegalArgumentException if the node is not part of this tree
+     */
     public LayoutStream streamOf(NodeId nodeId) {
         LayoutStream stream = nodeToStream.get(nodeId);
         if (stream == null) {
@@ -48,17 +80,23 @@ public final class LayoutTree {
     }
 
     /**
-     * トポロジカル順に走査してストリームツリーをフォワード構築する。
+     * Builds the stream tree by a single forward pass over the topological order.
      *
-     * <p>各ノードを順に処理し、(1) 親なしなら VR 直下に新規ルートストリーム、(2) 親 stream の末尾なら trunk extension、(3) そうでなければ親
-     * stream の child stream として fork、を選ぶ。残った親エッジは非ツリーエッジ。
+     * <p>Each node is processed in order and attached in one of three ways: (1) if it has no
+     * parents, a new root stream is created directly under the virtual root; (2) if its chosen
+     * parent is the tail of that parent's stream, the node extends the trunk; (3) otherwise it
+     * forks a new child stream off the chosen parent. The chosen parent is the parent with the
+     * greatest current DFS draw position, so the node is drawn below all of its parents. Every
+     * other parent edge becomes a {@link NonTreeEdge}.
      *
-     * <p>不変条件: 全ての依存 parent → child について、最終的な描画上で row(parent) &lt; row(child) を満たす。これにより {@code
-     * GridCanvas.addNonTreeEdge} の上向きスキップガードに引っかかるエッジが構造的に発生しない。
+     * <p>Invariant: for every dependency {@code parent -> child}, the final rendering satisfies
+     * {@code row(parent) < row(child)}. This guarantees no non-tree edge ever points upward, so the
+     * upward-skip guard in {@link GridCanvas#addNonTreeEdge(NodeId, NodeId)} is never structurally
+     * triggered.
      *
-     * @param graph マイグレーショングラフ
-     * @param order レイアウト用トポロジカルソート結果
-     * @return LayoutTree
+     * @param graph the migration graph being laid out
+     * @param order the topological layout order produced by {@link LayoutSort#sort(MigrationGraph)}
+     * @return the constructed layout tree
      */
     public static LayoutTree build(MigrationGraph graph, LayoutSort.LayoutOrder order) {
         MigrationNode virtualRoot = new VirtualNode();
@@ -82,8 +120,9 @@ public final class LayoutTree {
                 continue;
             }
 
-            // 現時点のツリーで DFS 順位置を計算し、もっとも後ろの親を attach 先に選ぶ。
-            // これにより node は最後の親より後ろに描画され、残りの親は上向きにならない。
+            // Compute DFS draw positions in the current tree and pick the latest parent as the
+            // attach target. This way the node is drawn below its last parent and the remaining
+            // parents never point upward.
             Map<NodeId, Integer> dfsPos = computeDfsPositions(rootChildren);
             NodeId chosenParent =
                     parents.stream()
@@ -96,11 +135,11 @@ public final class LayoutTree {
                             "parent stream missing for attach target");
 
             if (chosenStream.tail().equals(chosenParent)) {
-                // 親が stream の末尾なら trunk 拡張
+                // If the parent is the tail of the stream, extend its trunk
                 chosenStream.appendTrunk(node);
                 nodeToMutable.put(node.id(), chosenStream);
             } else {
-                // 親が末尾でなければ、親で新規 child stream を fork
+                // If the parent is not the tail, fork a new child stream at the parent
                 MutableStream newStream = new MutableStream(chosenParent);
                 newStream.appendTrunk(node);
                 chosenStream.children.add(newStream);
@@ -133,8 +172,9 @@ public final class LayoutTree {
     }
 
     /**
-     * 現時点のツリーを DFS 走査して各ノードの描画順位置を返す。{@link GridCanvas} の drawStream と同じ traversal: trunk 内の
-     * ノードを順番に出し、各ノードの直後にその fork-children を順に再帰展開する。
+     * Walks the current tree depth-first and returns each node's draw-order position. This uses the
+     * same traversal as {@code GridCanvas.drawStream}: emit the trunk nodes in order and,
+     * immediately after each node, recursively expand its fork children in order.
      */
     private static Map<NodeId, Integer> computeDfsPositions(List<MutableStream> rootChildren) {
         Map<NodeId, Integer> pos = new HashMap<>();
@@ -161,7 +201,10 @@ public final class LayoutTree {
         }
     }
 
-    /** 構築中の可変ストリーム表現。{@link #freeze} で {@link LayoutStream} に変換される。 */
+    /**
+     * Mutable, under-construction representation of a stream, converted to an immutable {@link
+     * LayoutStream} by {@link #freeze}.
+     */
     private static final class MutableStream {
         final @Nullable NodeId forkNode;
         final List<MigrationNode> trunk = new ArrayList<>();
@@ -192,7 +235,13 @@ public final class LayoutTree {
         }
     }
 
-    /** Virtual Root ノード。レイアウトツリーの内部でのみ使用する。 */
+    /**
+     * The synthetic virtual root node used only inside the layout tree.
+     *
+     * <p>Every real root stream is attached beneath this single node so that the tree always has
+     * one root; the virtual node carries no real task and is filtered out before rendering by
+     * {@link ExecutionGraphView#lines()} and {@link ExecutionGraphView#renderLines}.
+     */
     static final class VirtualNode implements MigrationNode {
 
         private static final NodeId VIRTUAL_ROOT_ID = NodeId.of("__virtual_root__");
@@ -234,6 +283,12 @@ public final class LayoutTree {
             return Set.of();
         }
 
+        /**
+         * Always throws, because the virtual root has no executable task.
+         *
+         * @return never returns normally
+         * @throws UnsupportedOperationException always
+         */
         @Override
         public Task upTask() {
             throw new UnsupportedOperationException("VirtualNode has no tasks");

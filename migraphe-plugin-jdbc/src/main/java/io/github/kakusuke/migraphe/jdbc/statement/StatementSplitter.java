@@ -4,7 +4,24 @@ import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
-/** セミコロン区切りの SQL テキストを個々のステートメントに分割するクラス。 */
+/**
+ * Splits a body of SQL text into individual statements at a delimiter, ignoring delimiters that
+ * fall inside quotes, comments, or other dialect-specific regions.
+ *
+ * <p>This is the driver of Migraphe's parser-combinator statement-splitting toolkit. It is
+ * configured with a <em>region parser</em> — a {@link SqlParser} built from the combinators in
+ * {@link SqlParsers} — that recognizes spans (string literals, quoted identifiers, line and block
+ * comments, and dialect features such as PostgreSQL dollar-quoting or MySQL {@code BEGIN}/{@code
+ * END} blocks) within which the delimiter must not be treated as a statement boundary. The splitter
+ * scans character by character: at each position it first tries the region parser and, on a match,
+ * jumps past the entire region; otherwise it checks for the delimiter and, when found, emits the
+ * accumulated text as one statement.
+ *
+ * <p>Optionally a {@link DelimiterDirective} may be supplied to support in-stream delimiter changes
+ * (for example MySQL's {@code DELIMITER} command), allowing the active delimiter to switch between
+ * statements. Construct the common case via {@link #standard()}; dialect plugins build their own
+ * instances with a richer region parser and, where needed, a delimiter directive.
+ */
 public final class StatementSplitter {
 
     private final SqlParser region;
@@ -12,21 +29,27 @@ public final class StatementSplitter {
     private final @Nullable DelimiterDirective directive;
 
     /**
-     * 区切り文字・領域パーサーを指定してインスタンスを構築する。 方言が独自の領域（例: PostgreSQL のドル引用符）を組み込む際に使用する。
+     * Constructs a splitter with a single-character delimiter and no delimiter directive.
      *
-     * @param region スキップする領域（クォート・コメント等）を消費するパーサー
-     * @param delimiter ステートメントの区切り文字
+     * <p>Use this when a dialect contributes custom regions (for example PostgreSQL dollar-quoting)
+     * but keeps a fixed single-character delimiter.
+     *
+     * @param region the parser that consumes regions (quotes, comments, etc.) to skip over
+     * @param delimiter the character that separates statements
      */
     public StatementSplitter(SqlParser region, char delimiter) {
         this(region, String.valueOf(delimiter), null);
     }
 
     /**
-     * 区切り文字列・領域パーサー・区切り変更ディレクティブを指定して構築する。 多文字区切りや実行中の区切り変更（例: MySQL の {@code DELIMITER}）に対応する。
+     * Constructs a splitter with a string delimiter and an optional delimiter-change directive.
      *
-     * @param region スキップする領域（クォート・コメント等）を消費するパーサー
-     * @param delimiter ステートメントの初期区切り文字列
-     * @param directive 区切り変更指示の検出器（不要なら {@code null}）
+     * <p>This form supports multi-character delimiters and runtime delimiter changes (for example
+     * MySQL's {@code DELIMITER} command, detected via {@code directive}).
+     *
+     * @param region the parser that consumes regions (quotes, comments, etc.) to skip over
+     * @param delimiter the initial string used to separate statements
+     * @param directive the detector for in-stream delimiter changes, or {@code null} if not needed
      */
     public StatementSplitter(
             SqlParser region, String delimiter, @Nullable DelimiterDirective directive) {
@@ -35,17 +58,37 @@ public final class StatementSplitter {
         this.directive = directive;
     }
 
-    /** 標準的な引用・コメント領域を認識し、{@code ';'} を区切りとするインスタンスを返す。 */
+    /**
+     * Creates a splitter recognizing the standard SQL regions and using {@code ';'} as the
+     * delimiter.
+     *
+     * <p>The region parser is {@link SqlParsers#standardRegion()}, which covers single-quoted
+     * strings, double-quoted identifiers, {@code --} line comments, and {@code /*}...{@code
+     * *}{@code /} block comments. No delimiter directive is configured.
+     *
+     * @return a splitter for plain semicolon-delimited SQL with standard quote and comment handling
+     */
     public static StatementSplitter standard() {
         return new StatementSplitter(SqlParsers.standardRegion(), ';');
     }
 
     /**
-     * SQL テキストを区切り文字で分割し、各ステートメントを外側のみ trim して返す。 trim 後に空になったセグメントは除外する。区切り文字自体は結果に含まれない。
+     * Splits the given SQL text into statements at the configured delimiter.
      *
-     * <p>先頭のコメント（トリビア）はスキップせず、各セグメントを生のまま保持する。よって先頭の行/ブロックコメントは 後続の文に付随したまま残る（{@code --}
-     * 行コメントの改行は文内部に残るため後続文がコメント化されない）。 区切り変更ディレクティブが指定された場合、セグメント先頭（先頭の空白のみスキップ後）で検出された指示は出力に含めず、
-     * 以降の区切り文字を切り替える。
+     * <p>Each emitted statement is trimmed at its outer edges; segments that are empty after
+     * trimming are omitted, and the delimiter itself is never included in the output. Regions
+     * recognized by the region parser are skipped wholesale, so delimiters inside strings,
+     * comments, or dialect blocks are not treated as boundaries.
+     *
+     * <p>Leading trivia is not stripped: each segment is kept verbatim, so a leading line or block
+     * comment stays attached to the statement that follows it (and because a {@code --} line
+     * comment's terminating newline is retained inside the segment, the following statement is not
+     * accidentally commented out). When a {@link DelimiterDirective} is configured, a directive
+     * detected at the start of a segment (after skipping only leading whitespace) is consumed
+     * without being emitted, and the active delimiter is switched for subsequent statements.
+     *
+     * @param sql the SQL text to split
+     * @return a list of trimmed, non-empty statements in source order
      */
     public List<String> split(String sql) {
         List<String> result = new ArrayList<>();
@@ -83,8 +126,17 @@ public final class StatementSplitter {
     }
 
     /**
-     * {@code pos} で区切り変更ディレクティブを連続適用し、確定した区切り文字と次セグメント先頭位置を返す。
-     * 検出のための位置探索では先頭の空白のみをスキップし、コメントはスキップしない。
+     * Repeatedly applies the delimiter directive at {@code pos}, returning the resolved delimiter
+     * and the position at which the next segment begins.
+     *
+     * <p>If no directive is configured, the input delimiter and position are returned unchanged.
+     * When probing for a directive, only leading whitespace is skipped — comments are not skipped —
+     * and detection loops so that consecutive directives are all consumed.
+     *
+     * @param sql the SQL text being split
+     * @param pos the position at which the next segment begins
+     * @param delim the currently active delimiter
+     * @return the resolved delimiter and the next segment's start position
      */
     private Directive applyDirective(String sql, int pos, String delim) {
         if (directive == null) {
@@ -103,7 +155,14 @@ public final class StatementSplitter {
         }
     }
 
-    /** {@code pos} から空白（{@link Character#isWhitespace}）の連続を読み飛ばした位置を返す。 */
+    /**
+     * Returns the position after skipping a run of whitespace starting at {@code pos}.
+     *
+     * @param sql the SQL text being scanned
+     * @param pos the position at which to start skipping
+     * @return the index of the first non-{@linkplain Character#isWhitespace whitespace} character
+     *     at or after {@code pos}, or {@code sql.length()} if only whitespace remains
+     */
     private int skipWhitespace(String sql, int pos) {
         int i = pos;
         int len = sql.length();
@@ -113,6 +172,12 @@ public final class StatementSplitter {
         return i;
     }
 
-    /** 区切り変更ディレクティブ適用後の区切り文字と位置を保持する内部レコード。 */
+    /**
+     * Internal carrier for the delimiter and segment-start position after applying delimiter
+     * directives.
+     *
+     * @param delimiter the active delimiter after directive resolution
+     * @param pos the position at which the next segment begins
+     */
     private record Directive(String delimiter, int pos) {}
 }

@@ -7,10 +7,30 @@ import io.github.kakusuke.migraphe.mysql.schema.MySQLSchemaInfo;
 import java.nio.file.Path;
 import java.util.List;
 
+/**
+ * Markdown generator specialized for MySQL schema information.
+ *
+ * <p>Extends {@link JdbcMarkdownGenerator} and overrides its Template Method hooks to enrich the
+ * generated documentation with MySQL-specific details: a server-wide storage-engine table on the
+ * index page, a view {@code Definer} column, per-table properties/triggers/partitions, and
+ * per-schema routines, triggers, events, and partitions. The base class drives the overall document
+ * layout and calls these hooks at the appropriate points.
+ *
+ * @see JdbcMarkdownGenerator
+ * @see MySQLSchemaInfo
+ */
 public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
 
     private final MySQLSchemaInfo mysqlInfo;
 
+    /**
+     * Creates a MySQL Markdown generator.
+     *
+     * @param name the database name used as the documentation title and as the root directory for
+     *     generated files
+     * @param schemaInfo the MySQL schema information to render
+     * @param excludes schema/table exclusion patterns applied during generation
+     */
     public MySQLMarkdownGenerator(
             String name,
             MySQLSchemaInfo schemaInfo,
@@ -19,11 +39,25 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
         this.mysqlInfo = schemaInfo;
     }
 
+    /**
+     * Adds a {@code Definer} column to the view index when any view has a recorded definer.
+     *
+     * @return a single-element list {@code ["Definer"]} when view definers are present, otherwise
+     *     an empty list
+     */
     @Override
     protected List<String> extraViewIndexHeaders() {
         return mysqlInfo.viewDefiners().isEmpty() ? List.of() : List.of("Definer");
     }
 
+    /**
+     * Supplies the {@code Definer} cell for a view row in the view index.
+     *
+     * @param schemaName the name of the schema the view belongs to
+     * @param view the view being rendered
+     * @return a single-element list with the view's definer (empty string if unknown), or an empty
+     *     list when no view has a definer (matching {@link #extraViewIndexHeaders()})
+     */
     @Override
     protected List<String> extraViewIndexCells(String schemaName, JdbcViewInfo view) {
         if (mysqlInfo.viewDefiners().isEmpty()) {
@@ -33,6 +67,13 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
         return List.of(definer);
     }
 
+    /**
+     * Appends a {@code Definer:} line to an individual view's documentation page when one is known.
+     *
+     * @param sb the buffer accumulating the view page Markdown
+     * @param schemaName the name of the schema the view belongs to
+     * @param view the view being rendered
+     */
     @Override
     protected void appendViewFileHeader(StringBuilder sb, String schemaName, JdbcViewInfo view) {
         String definer = mysqlInfo.viewDefiners().get(schemaName + "." + view.name());
@@ -41,6 +82,15 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Appends a server-wide "Storage Engines" table to the documentation index page.
+     *
+     * <p>The table lists each available storage engine with its support level and transaction, XA,
+     * and savepoint capabilities. Nothing is appended when no storage-engine information is
+     * available.
+     *
+     * @param sb the buffer accumulating the index page Markdown
+     */
     @Override
     protected void appendIndexHeader(StringBuilder sb) {
         if (!mysqlInfo.storageEngines().isEmpty()) {
@@ -64,6 +114,17 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Appends MySQL-specific sections to an individual table's documentation page.
+     *
+     * <p>For the named table this emits, when present, a "Table Properties" table (engine,
+     * collation, row format, and optional comment), a "Triggers" table, and a "Partition Info"
+     * table.
+     *
+     * @param sb the buffer accumulating the table page Markdown
+     * @param schemaName the name of the schema the table belongs to
+     * @param tableName the name of the table being rendered
+     */
     @Override
     protected void appendTableSections(StringBuilder sb, String schemaName, String tableName) {
         var meta =
@@ -141,6 +202,17 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Appends per-schema MySQL sections to the documentation index and writes detail files.
+     *
+     * <p>For the named schema this emits index sections for routines, triggers, events, and
+     * partitions (each only when present). Routines additionally get their own detail Markdown file
+     * written under {@code <outputDir>/<name>/<schema>/routines/<routine>.md}.
+     *
+     * @param sb the buffer accumulating the index page Markdown
+     * @param schemaName the name of the schema being rendered
+     * @param outputDir the root output directory under which routine detail files are written
+     */
     @Override
     protected void appendSchemaIndexSections(StringBuilder sb, String schemaName, Path outputDir) {
         var routines =

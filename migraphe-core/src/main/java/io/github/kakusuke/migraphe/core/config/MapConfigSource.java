@@ -6,10 +6,15 @@ import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Map をラップする ConfigSource。
+ * A {@link ConfigSource} backed by an in-memory {@link Map}.
  *
- * <p>Gradle DSL の variables など外部から注入された変数を SmallRye Config に差し込むために使用する。 ordinal 600
- * により、環境ファイル（500）や YAML 設定（100）より高い優先度を持つ。
+ * <p>Used to inject externally-supplied values into the SmallRye Config layering — for example
+ * Gradle DSL {@code variables}, OS environment variables (namespaced under {@code env.}), and
+ * system properties. The ordinal controls precedence relative to the other sources; the default
+ * {@code 600} places explicitly-passed variables above the environment file ({@code 500}) and the
+ * YAML configuration ({@code 100}), while {@link ConfigLoader} uses lower ordinals (300 for OS env,
+ * 400 for system properties) when registering those sources. The wrapped map is defensively copied
+ * so the source is immutable.
  */
 public class MapConfigSource implements ConfigSource {
 
@@ -20,19 +25,20 @@ public class MapConfigSource implements ConfigSource {
     private final int ordinal;
 
     /**
-     * コンストラクタ。
+     * Creates a source at the default ordinal ({@code 600}), the highest precedence used by
+     * Migraphe.
      *
-     * @param properties 変数マップ
+     * @param properties the key/value pairs to expose (copied defensively)
      */
     public MapConfigSource(Map<String, String> properties) {
         this(properties, ORDINAL);
     }
 
     /**
-     * ordinal 指定付きコンストラクタ。
+     * Creates a source at an explicit ordinal.
      *
-     * @param properties 変数マップ
-     * @param ordinal 優先度
+     * @param properties the key/value pairs to expose (copied defensively)
+     * @param ordinal the precedence of this source; higher values win over lower ones
      */
     public MapConfigSource(Map<String, String> properties, int ordinal) {
         this.properties = Map.copyOf(properties);

@@ -22,7 +22,14 @@ import java.util.Scanner;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** UP（前進）マイグレーションを実行するコマンド。 */
+/**
+ * The {@code up} command, which executes forward (UP) migrations.
+ *
+ * <p>Resolves the set of pending nodes (optionally bounded by a target node id), renders the
+ * execution plan as a graph, prompts for confirmation unless skipped, and then runs the migrations
+ * via a {@link DagExecutor} in the {@link ExecutionDirection#UP} direction. In dry-run mode the
+ * plan is displayed but nothing is executed.
+ */
 public class UpCommand implements Command {
 
     private final ExecutionContext context;
@@ -32,10 +39,28 @@ public class UpCommand implements Command {
     private final InputStream inputStream;
     private final boolean colorEnabled;
 
+    /**
+     * Creates a command that migrates the entire graph with confirmation enabled.
+     *
+     * <p>Equivalent to no target id, no confirmation skipping, and no dry run, reading confirmation
+     * input from {@link System#in} and auto-detecting color support.
+     *
+     * @param context the loaded execution context (graph, config, history)
+     */
     public UpCommand(ExecutionContext context) {
         this(context, null, false, false, System.in, AnsiColor.isColorEnabled());
     }
 
+    /**
+     * Creates a command with the given options, reading confirmation from {@link System#in} and
+     * auto-detecting color support.
+     *
+     * @param context the loaded execution context (graph, config, history)
+     * @param targetId the highest node to migrate up to and including, or {@code null} to migrate
+     *     all pending nodes
+     * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
+     * @param dryRun {@code true} to display the plan without executing any migration
+     */
     public UpCommand(
             ExecutionContext context,
             @Nullable NodeId targetId,
@@ -44,7 +69,18 @@ public class UpCommand implements Command {
         this(context, targetId, skipConfirmation, dryRun, System.in, AnsiColor.isColorEnabled());
     }
 
-    /** テスト用コンストラクタ。 */
+    /**
+     * Full constructor exposing the confirmation input stream and color flag, intended primarily
+     * for testing.
+     *
+     * @param context the loaded execution context (graph, config, history)
+     * @param targetId the highest node to migrate up to and including, or {@code null} to migrate
+     *     all pending nodes
+     * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
+     * @param dryRun {@code true} to display the plan without executing any migration
+     * @param inputStream the stream from which the confirmation answer is read
+     * @param colorEnabled {@code true} to colorize console output
+     */
     public UpCommand(
             ExecutionContext context,
             @Nullable NodeId targetId,
@@ -63,21 +99,21 @@ public class UpCommand implements Command {
     @Override
     public int execute() {
         try {
-            // 1. ターゲット指定の場合、ノードの存在を確認
+            // 1. When a target is specified, verify the node exists.
             if (targetId != null && context.graph().getNode(targetId).isEmpty()) {
                 System.err.println("Error: Target not found: " + targetId.value());
                 return 1;
             }
 
-            // 2. HistoryRepository を取得
+            // 2. Obtain the HistoryRepository.
             HistoryRepository historyRepo = context.createHistoryRepository();
             historyRepo.initialize();
 
-            // 3. Executor と Listener を作成
+            // 3. Create the executor and listener.
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
             Executor executor = createExecutor(context, historyRepo, listener);
 
-            // 4. 実行対象ノードを決定
+            // 4. Determine the nodes to execute.
             Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
 
             if (targetNodes.isEmpty()) {
@@ -85,25 +121,25 @@ public class UpCommand implements Command {
                 return 0;
             }
 
-            // 5. ExecutionPlan を生成してグラフ表示
+            // 5. Build the ExecutionPlan and display the graph.
             ExecutionPlan plan =
                     TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
             displayMigrationGraph(context, plan, historyRepo);
 
-            // 6. dry-run の場合はここで終了
+            // 6. Stop here in dry-run mode.
             if (dryRun) {
                 System.out.println();
                 System.out.println("No changes made (dry run).");
                 return 0;
             }
 
-            // 7. 確認プロンプト（-y でスキップ）
+            // 7. Confirmation prompt (skipped with -y).
             if (!skipConfirmation && !confirmExecution()) {
                 System.out.println("Migration cancelled.");
                 return 0;
             }
 
-            // 8. マイグレーション実行
+            // 8. Execute the migrations.
             System.out.println();
             System.out.println("Executing migrations...");
             System.out.println();
@@ -118,7 +154,7 @@ public class UpCommand implements Command {
         }
     }
 
-    /** 設定に基づいて Executor を作成する。 */
+    /** Creates the executor according to the project's execution configuration. */
     private Executor createExecutor(
             ExecutionContext context,
             HistoryRepository historyRepo,
@@ -130,7 +166,7 @@ public class UpCommand implements Command {
                 context.graph(), historyRepo, listener, ExecutionDirection.UP, maxParallelism);
     }
 
-    /** マイグレーショングラフを表示する。 */
+    /** Renders the migration execution plan as an ASCII graph with per-node status markers. */
     private void displayMigrationGraph(
             ExecutionContext context, ExecutionPlan plan, HistoryRepository historyRepo) {
         String prefix = dryRun ? "[DRY RUN] " : "";
@@ -140,10 +176,10 @@ public class UpCommand implements Command {
         System.out.println(prefix + "Migrations to execute:");
         System.out.println();
 
-        // プランのノードを DFS 順でフィルタ
+        // Filter the plan's nodes into DFS order.
         List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
 
-        // ExecutionGraphView を使用してグラフ表示
+        // Render the graph using ExecutionGraphView.
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes);
         List<String> lines =
                 graphView.renderLines(
@@ -164,7 +200,7 @@ public class UpCommand implements Command {
                 total + " migration" + (total == 1 ? "" : "s") + " " + verb + " executed.");
     }
 
-    /** 確認プロンプトを表示する。 */
+    /** Displays the confirmation prompt and returns whether the user approved execution. */
     private boolean confirmExecution() {
         System.out.println();
         System.out.print("Proceed? [y/N]: ");

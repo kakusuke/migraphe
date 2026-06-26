@@ -3,15 +3,25 @@ package io.github.kakusuke.migraphe.core.plugin;
 import java.util.Set;
 
 /**
- * 指定されたタイプのプラグインが見つからない場合にスローされる例外。
+ * Unchecked exception thrown when no plugin is registered for a requested type.
  *
- * <p>利用可能なプラグイン一覧と解決方法を含む詳細なエラーメッセージを提供する。
+ * <p>Thrown by {@link PluginRegistry#getRequiredPlugin(String)}. Its detail message lists the
+ * currently available plugin types and explains how to make the requested plugin available.
  */
 public final class PluginNotFoundException extends RuntimeException {
 
+    /** The plugin type that was requested but not found. */
     private final String requestedType;
+
+    /** The plugin types that were registered when this exception was created. */
     private final Set<String> availableTypes;
 
+    /**
+     * Creates an exception for a missing plugin type.
+     *
+     * @param requestedType the plugin type that was requested but not found
+     * @param availableTypes the plugin types currently registered; copied defensively
+     */
     public PluginNotFoundException(String requestedType, Set<String> availableTypes) {
         super(buildMessage(requestedType, availableTypes));
         this.requestedType = requestedType;
@@ -38,10 +48,20 @@ public final class PluginNotFoundException extends RuntimeException {
         return sb.toString();
     }
 
+    /**
+     * Returns the plugin type that was requested but not found.
+     *
+     * @return the requested plugin type identifier
+     */
     public String requestedType() {
         return requestedType;
     }
 
+    /**
+     * Returns the plugin types that were registered when this exception was created.
+     *
+     * @return an immutable set of the available plugin type identifiers
+     */
     public Set<String> availableTypes() {
         return availableTypes;
     }

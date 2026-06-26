@@ -14,9 +14,43 @@ import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
-/** JDBC DatabaseMetaData を使用してスキーマ情報を取得するプロバイダ。 */
+/**
+ * Extracts schema information from a JDBC environment using {@link DatabaseMetaData}.
+ *
+ * <p>This is the generic JDBC implementation of {@link SchemaInfoProvider}. It opens a {@link
+ * Connection} from the supplied {@link JdbcEnvironment}, walks the standard JDBC metadata API
+ * ({@link DatabaseMetaData#getSchemas()}, {@code getTables}, {@code getColumns}, {@code
+ * getPrimaryKeys}, {@code getImportedKeys}/{@code getExportedKeys}, {@code getIndexInfo}), and
+ * assembles the result into a {@link JdbcSchemaInfo} snapshot composed of {@link JdbcSchemaDetail}
+ * entries. The {@code INFORMATION_SCHEMA} schema is skipped during discovery.
+ *
+ * <p>The collected snapshot is typically consumed by generator plugins (for example, {@code
+ * jdbc-markdown}) to render schema documentation. Dialect-specific providers (PostgreSQL, MySQL)
+ * extend or delegate to this base provider to add catalog features that the portable JDBC metadata
+ * API does not expose.
+ *
+ * @see SchemaInfoProvider
+ * @see JdbcSchemaInfo
+ * @see JdbcSchemaDetail
+ */
 public class JdbcSchemaInfoProvider implements SchemaInfoProvider<JdbcSchemaInfo> {
 
+    /** Creates a new {@code JdbcSchemaInfoProvider}. */
+    public JdbcSchemaInfoProvider() {}
+
+    /**
+     * Extracts schema information from the given environment via JDBC metadata.
+     *
+     * <p>The environment must be a {@link JdbcEnvironment}; a connection is opened and closed
+     * within this call. All non-system schemas are discovered and, for each, its tables (with
+     * columns, primary key, imported/exported foreign keys and indexes) and views (with columns)
+     * are collected.
+     *
+     * @param environment the environment to introspect; must be a {@link JdbcEnvironment}
+     * @return the JDBC schema information extracted from {@code environment}
+     * @throws JdbcException if {@code environment} is not a {@link JdbcEnvironment}, or if reading
+     *     the database metadata fails
+     */
     @Override
     public JdbcSchemaInfo getSchemaInfo(Environment environment) {
         if (!(environment instanceof JdbcEnvironment jdbcEnv)) {

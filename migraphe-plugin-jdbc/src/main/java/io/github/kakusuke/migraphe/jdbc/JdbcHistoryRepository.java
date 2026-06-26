@@ -17,7 +17,17 @@ import java.util.*;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
-/** JDBC でマイグレーション履歴を永続化する汎用実装。 */
+/**
+ * Generic {@link HistoryRepository} that persists migration execution history in a relational
+ * database via JDBC.
+ *
+ * <p>All records are stored in a single {@code migraphe_history} table whose schema is created by
+ * {@link #initialize()} from a SQL resource on the classpath. Each query opens a short-lived
+ * connection from the supplied {@link JdbcEnvironment}, so the repository keeps the migration
+ * history in the same database the migrations run against. "Latest" lookups order by {@code
+ * executed_at} and a node is considered applied only when its most recent record is a successful
+ * {@code UP}.
+ */
 public final class JdbcHistoryRepository implements HistoryRepository {
 
     private static final String DEFAULT_SCHEMA_RESOURCE =
@@ -26,16 +36,39 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     private final JdbcEnvironment environment;
     private final String schemaResourcePath;
 
+    /**
+     * Creates a repository using the bundled default schema resource.
+     *
+     * @param environment the environment whose database stores the history
+     */
     public JdbcHistoryRepository(JdbcEnvironment environment) {
         this(environment, DEFAULT_SCHEMA_RESOURCE);
     }
 
+    /**
+     * Creates a repository with a custom schema-initialization resource.
+     *
+     * <p>Database-specific subclasses or callers can point this at a dialect-tuned DDL script used
+     * by {@link #initialize()}.
+     *
+     * @param environment the environment whose database stores the history
+     * @param schemaResourcePath the classpath path of the SQL resource that creates the history
+     *     table
+     */
     public JdbcHistoryRepository(JdbcEnvironment environment, String schemaResourcePath) {
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
         this.schemaResourcePath =
                 Objects.requireNonNull(schemaResourcePath, "schemaResourcePath must not be null");
     }
 
+    /**
+     * Creates the {@code migraphe_history} table by executing the configured schema resource.
+     *
+     * <p>Safe to call repeatedly when the schema script is idempotent (for example uses {@code
+     * CREATE TABLE IF NOT EXISTS}).
+     *
+     * @throws JdbcException if the schema resource cannot be loaded or executed
+     */
     @Override
     public void initialize() {
         try (Connection conn = environment.createConnection();
@@ -49,6 +82,13 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         }
     }
 
+    /**
+     * Inserts an execution record into the history table.
+     *
+     * @param record the execution record to persist
+     * @throws NullPointerException if {@code record} is {@code null}
+     * @throws JdbcException if the insert fails
+     */
     @Override
     public void record(ExecutionRecord record) {
         Objects.requireNonNull(record, "record must not be null");
@@ -81,6 +121,18 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         }
     }
 
+    /**
+     * Returns whether the node has been successfully applied in the given environment.
+     *
+     * <p>A node counts as applied only when its most recent record (by {@code executed_at}) is a
+     * successful {@code UP}.
+     *
+     * @param nodeId the node to check
+     * @param environmentId the environment to check within
+     * @return {@code true} if the latest record is a successful UP, otherwise {@code false}
+     * @throws NullPointerException if {@code nodeId} or {@code environmentId} is {@code null}
+     * @throws JdbcException if the query fails
+     */
     @Override
     public boolean wasExecuted(NodeId nodeId, EnvironmentId environmentId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
@@ -113,6 +165,17 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         }
     }
 
+    /**
+     * Returns the identifiers of all nodes currently applied in the given environment.
+     *
+     * <p>For each node only its most recent record is considered; a node is included when that
+     * latest record is a successful {@code UP}. The result is ordered by node identifier.
+     *
+     * @param environmentId the environment to query
+     * @return the identifiers of nodes whose latest record is a successful UP
+     * @throws NullPointerException if {@code environmentId} is {@code null}
+     * @throws JdbcException if the query fails
+     */
     @Override
     public List<NodeId> executedNodes(EnvironmentId environmentId) {
         Objects.requireNonNull(environmentId, "environmentId must not be null");
@@ -146,6 +209,16 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         }
     }
 
+    /**
+     * Returns the most recent execution record for the node in the given environment.
+     *
+     * @param nodeId the node to look up
+     * @param environmentId the environment to look up within
+     * @return the latest {@link ExecutionRecord}, or {@code null} if the node has no history in
+     *     this environment
+     * @throws NullPointerException if {@code nodeId} or {@code environmentId} is {@code null}
+     * @throws JdbcException if the query fails
+     */
     @Override
     public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, EnvironmentId environmentId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
@@ -176,6 +249,14 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         }
     }
 
+    /**
+     * Returns every execution record for the given environment, oldest first.
+     *
+     * @param environmentId the environment to query
+     * @return all {@link ExecutionRecord}s ordered by {@code executed_at} ascending
+     * @throws NullPointerException if {@code environmentId} is {@code null}
+     * @throws JdbcException if the query fails
+     */
     @Override
     public List<ExecutionRecord> allRecords(EnvironmentId environmentId) {
         Objects.requireNonNull(environmentId, "environmentId must not be null");

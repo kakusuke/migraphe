@@ -14,28 +14,45 @@ import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 
 /**
- * プラグインレジストリ - ServiceLoader でプラグインを読み込み、管理する。
+ * Registry that discovers, loads, and looks up {@link MigraphePlugin} implementations.
  *
- * <p>読み込み優先順位:
+ * <p>Plugins are discovered through the {@link ServiceLoader} mechanism and indexed by their {@link
+ * MigraphePlugin#type() type} identifier. The runtime resolves a configuration {@code type} value
+ * to a plugin instance through this registry. Plugins can be loaded from several sources, typically
+ * in this order:
  *
  * <ol>
- *   <li>クラスパス（testImplementation など）
- *   <li>個別 JAR ファイル（{@code loadFromJar()}）
- *   <li>plugins/ ディレクトリ（{@code loadFromDirectory()}）
+ *   <li>the classpath (for example {@code testImplementation} dependencies)
+ *   <li>individual JAR files ({@link #loadFromJar(Path)})
+ *   <li>a {@code plugins/} directory ({@link #loadFromDirectory(Path)})
  * </ol>
  *
- * <p>同じ type のプラグインが複数見つかった場合、後から読み込まれたものが優先される。
+ * <p>When more than one plugin declares the same {@code type}, the most recently loaded one wins
+ * (last-write-wins).
  *
- * <p>{@link #loadFromJar(Path)} / {@link #loadFromDirectory(Path)} で内部生成した {@link URLClassLoader}
- * は本レジストリの所有物として保持され、{@link #close()} で解放される。 Gradle daemon のような長時間プロセスでは try-with-resources
- * でラップしてリソースリークを防ぐこと。
+ * <p>Any {@link URLClassLoader} created internally by {@link #loadFromJar(Path)} or {@link
+ * #loadFromDirectory(Path)} is owned by this registry and released by {@link #close()}. In
+ * long-lived processes (such as the Gradle daemon), wrap the registry in a try-with-resources block
+ * to avoid leaking class loaders.
+ *
+ * <p>This class is thread-safe: plugins are stored in a {@link ConcurrentHashMap} and owned class
+ * loaders in a {@link CopyOnWriteArrayList}.
  */
 public final class PluginRegistry implements AutoCloseable {
+
+    /** Creates a new {@code PluginRegistry}. */
+    public PluginRegistry() {}
 
     private final Map<String, MigraphePlugin<?>> plugins = new ConcurrentHashMap<>();
     private final List<URLClassLoader> ownedClassLoaders = new CopyOnWriteArrayList<>();
 
-    /** クラスパスから ServiceLoader を使用してプラグインを読み込む。 */
+    /**
+     * Loads all plugins discoverable on the current thread's context classpath via {@link
+     * ServiceLoader}.
+     *
+     * <p>Each discovered plugin is registered under its {@link MigraphePlugin#type() type},
+     * replacing any previously registered plugin with the same type.
+     */
     @SuppressWarnings("rawtypes")
     public void loadFromClasspath() {
         ServiceLoader<MigraphePlugin> loader = ServiceLoader.load(MigraphePlugin.class);
@@ -45,11 +62,12 @@ public final class PluginRegistry implements AutoCloseable {
     }
 
     /**
-     * 指定された ClassLoader を使用してプラグインを読み込む。
+     * Loads all plugins discoverable via {@link ServiceLoader} from the given class loader.
      *
-     * <p>Gradle plugin 等、独自の ClassLoader からプラグインをロードする場合に使用する。
+     * <p>Use this when plugins must be discovered from a custom class loader, such as the isolated
+     * class loader used by the Gradle plugin.
      *
-     * @param classLoader プラグインを探索する ClassLoader
+     * @param classLoader the class loader to scan for plugins
      */
     @SuppressWarnings("rawtypes")
     public void loadFromClassLoader(ClassLoader classLoader) {
@@ -61,10 +79,17 @@ public final class PluginRegistry implements AutoCloseable {
     }
 
     /**
-     * 指定された JAR ファイルからプラグインを読み込む。
+     * Loads plugins from a single JAR file.
      *
-     * @param jarPath JAR ファイルのパス
-     * @throws PluginLoadException 読み込みに失敗した場合
+     * <p>A dedicated {@link URLClassLoader} is created for the JAR (parented to the class loader of
+     * {@link MigraphePlugin}), the JAR is scanned via {@link ServiceLoader}, and every discovered
+     * plugin is registered. The created class loader becomes owned by this registry and is closed
+     * by {@link #close()}. If no plugins are found, the class loader is closed immediately and an
+     * exception is thrown.
+     *
+     * @param jarPath the path to the JAR file to load
+     * @throws PluginLoadException if the path does not exist, is not a {@code .jar} file, contains
+     *     no plugins, or cannot be read
      */
     @SuppressWarnings("rawtypes")
     public void loadFromJar(Path jarPath) {
@@ -94,7 +119,7 @@ public final class PluginRegistry implements AutoCloseable {
                 try {
                     classLoader.close();
                 } catch (IOException ignored) {
-                    // 閉じる際の I/O エラーは握りつぶす
+                    // I/O errors while closing the class loader are swallowed.
                 }
                 throw new PluginLoadException("No plugins found in JAR: " + jarPath);
             }
@@ -106,7 +131,7 @@ public final class PluginRegistry implements AutoCloseable {
                 try {
                     classLoader.close();
                 } catch (IOException ignored) {
-                    // 閉じる際の I/O エラーは握りつぶす
+                    // I/O errors while closing the class loader are swallowed.
                 }
             }
             throw new PluginLoadException("Failed to load plugin from JAR: " + jarPath, e);
@@ -114,8 +139,12 @@ public final class PluginRegistry implements AutoCloseable {
     }
 
     /**
-     * 本レジストリが {@link #loadFromJar(Path)} で生成した {@link URLClassLoader} を全て閉じる。 外部から渡された ClassLoader
-     * は所有していないので閉じない。
+     * Closes every {@link URLClassLoader} this registry created via {@link #loadFromJar(Path)} or
+     * {@link #loadFromDirectory(Path)}.
+     *
+     * <p>Class loaders supplied externally (for example to {@link
+     * #loadFromClassLoader(ClassLoader)}) are not owned by this registry and are therefore not
+     * closed.
      */
     @Override
     public void close() {
@@ -123,21 +152,28 @@ public final class PluginRegistry implements AutoCloseable {
             try {
                 cl.close();
             } catch (IOException ignored) {
-                // 閉じる際の I/O エラーは握りつぶす（既にクラスは JVM に保持されているため）
+                // I/O errors while closing are swallowed; the loaded classes are already retained
+                // by
+                // the JVM.
             }
         }
         ownedClassLoaders.clear();
     }
 
     /**
-     * 指定されたディレクトリ内の全 JAR ファイルからプラグインを読み込む。
+     * Loads plugins from every JAR file directly inside the given directory.
      *
-     * @param pluginsDir プラグインディレクトリのパス
-     * @throws PluginLoadException 読み込みに失敗した場合
+     * <p>If the directory does not exist, this method does nothing. Each JAR is loaded via {@link
+     * #loadFromJar(Path)}; a failure to load an individual JAR is logged to {@code System.err} and
+     * does not abort the scan of the remaining JARs.
+     *
+     * @param pluginsDir the directory to scan for plugin JAR files
+     * @throws PluginLoadException if {@code pluginsDir} exists but is not a directory, or if the
+     *     directory cannot be listed
      */
     public void loadFromDirectory(Path pluginsDir) {
         if (!Files.exists(pluginsDir)) {
-            return; // ディレクトリが存在しない場合は何もしない
+            return; // Nothing to do when the directory does not exist.
         }
 
         if (!Files.isDirectory(pluginsDir)) {
@@ -153,7 +189,7 @@ public final class PluginRegistry implements AutoCloseable {
                 try {
                     loadFromJar(jarFile);
                 } catch (PluginLoadException e) {
-                    // 個別の JAR 読み込みエラーはログに記録して続行
+                    // Log and continue: an error loading one JAR must not abort the others.
                     System.err.println("Warning: " + e.getMessage());
                     if (e.getCause() != null) {
                         System.err.println("  Caused by: " + e.getCause());
@@ -166,11 +202,14 @@ public final class PluginRegistry implements AutoCloseable {
     }
 
     /**
-     * プラグインを登録する。
+     * Registers a plugin under its {@link MigraphePlugin#type() type}.
      *
-     * <p>同じ type のプラグインが既に存在する場合、上書きする（後勝ち）。
+     * <p>If a plugin with the same type is already registered, it is overwritten (last-write-wins).
      *
-     * @param plugin 登録するプラグイン
+     * @param plugin the plugin to register
+     * @throws NullPointerException if {@code plugin} or its {@link MigraphePlugin#type() type} is
+     *     {@code null}
+     * @throws PluginLoadException if the plugin's type is blank
      */
     void register(MigraphePlugin<?> plugin) {
         Objects.requireNonNull(plugin, "plugin must not be null");
@@ -185,33 +224,35 @@ public final class PluginRegistry implements AutoCloseable {
     }
 
     /**
-     * 指定された型のプラグインが登録されているか確認する。
+     * Returns whether a plugin is registered for the given type.
      *
-     * @param type プラグインの型識別子
-     * @return 登録されている場合は true
+     * @param type the plugin type identifier to check
+     * @return {@code true} if a plugin is registered under {@code type}, {@code false} otherwise
      */
     public boolean hasPlugin(String type) {
         return plugins.containsKey(type);
     }
 
     /**
-     * 指定された型のプラグインを取得する。
+     * Returns the plugin registered for the given type, or {@code null} if none is registered.
      *
-     * @param type プラグインの型識別子
-     * @return プラグイン（存在しない場合は null）
+     * @param type the plugin type identifier to look up
+     * @return the registered plugin, or {@code null} if no plugin is registered under {@code type}
      */
     public @Nullable MigraphePlugin<?> getPlugin(String type) {
         return plugins.get(type);
     }
 
     /**
-     * 指定された型のプラグインを取得する（必須）。
+     * Returns the plugin registered for the given type, failing if none is registered.
      *
-     * <p>プラグインが見つからない場合、利用可能なプラグイン一覧と解決方法を含む詳細なエラーメッセージを持つ {@link PluginNotFoundException} をスローする。
+     * <p>When no plugin is found, the thrown {@link PluginNotFoundException} carries a detailed
+     * message that lists the {@linkplain #supportedTypes() available types} and explains how to
+     * make the requested plugin available.
      *
-     * @param type プラグインの型識別子
-     * @return プラグイン
-     * @throws PluginNotFoundException 指定された型のプラグインが見つからない場合
+     * @param type the plugin type identifier to look up
+     * @return the registered plugin
+     * @throws PluginNotFoundException if no plugin is registered under {@code type}
      */
     public MigraphePlugin<?> getRequiredPlugin(String type) {
         MigraphePlugin<?> plugin = plugins.get(type);
@@ -222,24 +263,24 @@ public final class PluginRegistry implements AutoCloseable {
     }
 
     /**
-     * サポートされているプラグインの型一覧を取得する。
+     * Returns the set of plugin types currently registered.
      *
-     * @return プラグインの型識別子のセット
+     * @return an immutable copy of the registered plugin type identifiers
      */
     public Set<String> supportedTypes() {
         return Set.copyOf(plugins.keySet());
     }
 
     /**
-     * 登録されているプラグインの数を取得する。
+     * Returns the number of registered plugins.
      *
-     * @return プラグイン数
+     * @return the count of registered plugins
      */
     public int size() {
         return plugins.size();
     }
 
-    /** 全てのプラグインをクリアする（テスト用）。 */
+    /** Removes all registered plugins. Intended for tests. */
     void clear() {
         plugins.clear();
     }

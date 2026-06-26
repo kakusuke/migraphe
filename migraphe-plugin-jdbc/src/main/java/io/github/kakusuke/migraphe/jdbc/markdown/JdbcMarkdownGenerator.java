@@ -17,7 +17,20 @@ import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-/** JDBC スキーマ情報から Markdown ドキュメントを生成する。 */
+/**
+ * Renders JDBC schema information into a set of Markdown documents.
+ *
+ * <p>Given a {@link JdbcSchemaInfo}, this generator produces an {@code index.md} listing every
+ * (non-excluded) schema with its tables and views, plus one Markdown file per table and per view
+ * describing columns, primary keys, foreign and exported keys, indexes, and view definitions.
+ * Output is laid out beneath a per-database directory named after {@link #name()}.
+ *
+ * <p>The class is a Template Method base: dialect-specific generators (such as the PostgreSQL and
+ * MySQL Markdown generators) subclass it and override the protected {@code append*} and {@code
+ * extra*} hooks to inject extra index columns and document sections without re-implementing the
+ * core traversal. Schemas and tables can be filtered out via the exclusion patterns supplied at
+ * construction; {@code information_schema} is always excluded by default.
+ */
 public class JdbcMarkdownGenerator {
 
     private static final Pattern DEFAULT_SCHEMA_EXCLUDE =
@@ -27,10 +40,23 @@ public class JdbcMarkdownGenerator {
     private final JdbcSchemaInfo schemaInfo;
     private final List<JdbcMarkdownDefinition.ExcludePattern> excludes;
 
+    /**
+     * Returns the database name used to title the output and to namespace the per-database output
+     * directory.
+     *
+     * @return the database name supplied at construction
+     */
     protected String name() {
         return name;
     }
 
+    /**
+     * Constructs a generator for the given database.
+     *
+     * @param name the database name used in titles, links, and the output directory layout
+     * @param schemaInfo the schema information to render
+     * @param excludes the schema/table exclusion patterns to apply (may be empty)
+     */
     public JdbcMarkdownGenerator(
             String name,
             JdbcSchemaInfo schemaInfo,
@@ -40,6 +66,16 @@ public class JdbcMarkdownGenerator {
         this.excludes = excludes;
     }
 
+    /**
+     * Generates the full set of Markdown documentation under the given directory.
+     *
+     * <p>Writes an {@code index.md} summarizing all non-excluded schemas (with their tables and
+     * views) and emits one file per table and per view. Excluded schemas and tables are skipped,
+     * and subclass hooks contribute any extra index columns and sections.
+     *
+     * @param outputDir the directory into which the Markdown files are written
+     * @throws java.io.UncheckedIOException if writing any file fails
+     */
     public void generate(Path outputDir) {
         var indexBuilder = new StringBuilder();
         indexBuilder.append("# Database: ").append(name).append("\n\n");
@@ -114,6 +150,17 @@ public class JdbcMarkdownGenerator {
         return false;
     }
 
+    /**
+     * Reports whether a table should be omitted from the documentation.
+     *
+     * <p>A table is excluded when an {@link JdbcMarkdownDefinition.ExcludePattern} with a {@code
+     * table} pattern matches the table name (case-insensitively) and either has no {@code schema}
+     * pattern or has one that matches {@code schemaName}.
+     *
+     * @param schemaName the name of the schema containing the table
+     * @param tableName the table name to test
+     * @return {@code true} if the table matches an exclusion rule, otherwise {@code false}
+     */
     protected boolean isTableExcluded(String schemaName, String tableName) {
         for (JdbcMarkdownDefinition.ExcludePattern exclude : excludes) {
             if (exclude.table().isEmpty()) {
@@ -379,33 +426,127 @@ public class JdbcMarkdownGenerator {
         }
     }
 
+    /**
+     * Returns extra column headers to append to the table index table.
+     *
+     * <p>Subclasses override this to add dialect-specific columns; the returned headers must align
+     * one-to-one with the cells from {@link #extraTableIndexCells(String, JdbcTableInfo)}. The base
+     * implementation returns an empty list.
+     *
+     * @return the extra table-index header labels, empty by default
+     */
     protected List<String> extraTableIndexHeaders() {
         return List.of();
     }
 
+    /**
+     * Returns extra index-row cells for a single table.
+     *
+     * <p>The returned cells must align one-to-one with {@link #extraTableIndexHeaders()}; a
+     * mismatch raises an {@link IllegalStateException} during generation. The base implementation
+     * returns an empty list.
+     *
+     * @param schemaName the schema containing the table
+     * @param table the table whose extra index cells are requested
+     * @return the extra cell values for this table's index row, empty by default
+     */
     protected List<String> extraTableIndexCells(String schemaName, JdbcTableInfo table) {
         return List.of();
     }
 
+    /**
+     * Returns extra column headers to append to the view index table.
+     *
+     * <p>The returned headers must align one-to-one with {@link #extraViewIndexCells(String,
+     * JdbcViewInfo)}. The base implementation returns an empty list.
+     *
+     * @return the extra view-index header labels, empty by default
+     */
     protected List<String> extraViewIndexHeaders() {
         return List.of();
     }
 
+    /**
+     * Returns extra index-row cells for a single view.
+     *
+     * <p>The returned cells must align one-to-one with {@link #extraViewIndexHeaders()}; a mismatch
+     * raises an {@link IllegalStateException} during generation. The base implementation returns an
+     * empty list.
+     *
+     * @param schemaName the schema containing the view
+     * @param view the view whose extra index cells are requested
+     * @return the extra cell values for this view's index row, empty by default
+     */
     protected List<String> extraViewIndexCells(String schemaName, JdbcViewInfo view) {
         return List.of();
     }
 
+    /**
+     * Appends extra content directly below the index document's top-level heading.
+     *
+     * <p>Invoked once while building {@code index.md}, before any schema sections. The base
+     * implementation does nothing.
+     *
+     * @param sb the index document builder to append to
+     */
     protected void appendIndexHeader(StringBuilder sb) {}
 
+    /**
+     * Appends extra content to a table's document, just below its title and remarks.
+     *
+     * <p>The base implementation does nothing.
+     *
+     * @param sb the table document builder to append to
+     * @param schemaName the schema containing the table
+     * @param table the table being documented
+     */
     protected void appendTableFileHeader(
             StringBuilder sb, String schemaName, JdbcTableInfo table) {}
 
+    /**
+     * Appends extra content to a view's document, just below its title and remarks.
+     *
+     * <p>The base implementation does nothing.
+     *
+     * @param sb the view document builder to append to
+     * @param schemaName the schema containing the view
+     * @param view the view being documented
+     */
     protected void appendViewFileHeader(StringBuilder sb, String schemaName, JdbcViewInfo view) {}
 
+    /**
+     * Appends extra index sections for a schema (for example sequences, functions, or other
+     * dialect-specific objects) and may emit additional files.
+     *
+     * <p>Invoked once per non-excluded schema while building {@code index.md}, after its tables and
+     * views have been listed. The base implementation does nothing.
+     *
+     * @param sb the index document builder to append to
+     * @param schemaName the schema being documented
+     * @param outputDir the root output directory, available for writing any additional files
+     */
     protected void appendSchemaIndexSections(StringBuilder sb, String schemaName, Path outputDir) {}
 
+    /**
+     * Appends extra sections to a table's document, after the standard sections.
+     *
+     * <p>The base implementation does nothing.
+     *
+     * @param sb the table document builder to append to
+     * @param schemaName the schema containing the table
+     * @param tableName the name of the table being documented
+     */
     protected void appendTableSections(StringBuilder sb, String schemaName, String tableName) {}
 
+    /**
+     * Writes a file's content, creating parent directories as needed.
+     *
+     * <p>Overridable so tests or alternative generators can intercept file output.
+     *
+     * @param path the destination file path
+     * @param content the text content to write
+     * @throws java.io.UncheckedIOException if the directories cannot be created or the write fails
+     */
     protected void writeFile(Path path, String content) {
         try {
             Files.createDirectories(path.getParent());

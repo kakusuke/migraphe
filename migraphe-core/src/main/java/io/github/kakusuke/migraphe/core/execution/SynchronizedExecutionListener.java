@@ -7,10 +7,24 @@ import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Thread-safe {@link ExecutionListener} decorator that serializes all callbacks on the delegate.
+ *
+ * <p>{@link DagExecutor} runs nodes on many concurrent virtual threads, all of which emit listener
+ * events. This wrapper guards every callback with {@code synchronized (delegate)} so that the
+ * underlying listener — which typically writes to a console or log and may not be thread-safe —
+ * never observes interleaved or concurrent invocations. {@code DagExecutor} applies this wrapper
+ * automatically unless the supplied listener is already an instance of this class.
+ */
 public final class SynchronizedExecutionListener implements ExecutionListener {
 
     private final ExecutionListener delegate;
 
+    /**
+     * Wraps a listener so that all of its callbacks are mutually exclusive.
+     *
+     * @param delegate the listener to which all calls are forwarded under synchronization
+     */
     public SynchronizedExecutionListener(ExecutionListener delegate) {
         this.delegate = delegate;
     }

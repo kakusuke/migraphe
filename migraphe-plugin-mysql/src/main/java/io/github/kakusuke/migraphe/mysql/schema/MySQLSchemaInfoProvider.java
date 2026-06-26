@@ -23,8 +23,36 @@ import java.util.List;
 import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Extracts a {@link MySQLSchemaInfo} snapshot from a connected MySQL environment.
+ *
+ * <p>This is the MySQL implementation of {@link SchemaInfoProvider}. It opens a connection through
+ * the supplied {@link MySQLEnvironment}, reads the portable structure (tables, views, columns,
+ * primary/foreign keys, indexes) through {@link DatabaseMetaData}, and supplements it with
+ * MySQL-only objects queried directly from {@code information_schema}: storage engines, table
+ * metadata, triggers, stored routines, scheduled events, table partitions, and view definers. The
+ * combined result is the typed data object consumed by the {@code mysql-schema} generator source
+ * (see {@link MySQLSchemaSourcePlugin}).
+ *
+ * <p>All extraction is scoped to the connection's current catalog (the active database), so the
+ * returned snapshot describes a single MySQL database.
+ *
+ * @see MySQLSchemaSourcePlugin
+ * @see MySQLSchemaInfo
+ */
 public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaInfo> {
 
+    /** Creates a new {@code MySQLSchemaInfoProvider}. */
+    public MySQLSchemaInfoProvider() {}
+
+    /**
+     * Connects to the given environment and extracts a complete MySQL schema snapshot.
+     *
+     * @param environment the environment to introspect; must be a {@link MySQLEnvironment}
+     * @return the extracted MySQL schema information for the connection's current database
+     * @throws MySQLException if {@code environment} is not a {@link MySQLEnvironment}, or if a
+     *     {@link SQLException} occurs while reading metadata or {@code information_schema}
+     */
     @Override
     public MySQLSchemaInfo getSchemaInfo(Environment environment) {
         if (!(environment instanceof MySQLEnvironment mysqlEnv)) {

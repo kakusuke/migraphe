@@ -5,18 +5,48 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 
-/** migraphe Gradle プラグインのエントリポイント。 */
+/**
+ * Entry point of the Migraphe Gradle plugin.
+ *
+ * <p>Applied via {@code apply plugin: "io.github.kakusuke.migraphe"} (or the corresponding {@code
+ * plugins { }} block), this {@link Plugin} bootstraps the Migraphe integration for a Gradle
+ * project. On application it:
+ *
+ * <ul>
+ *   <li>creates the {@link MigrapheExtension} ({@code migraphe { ... }}) and installs default
+ *       conventions for {@link MigrapheExtension#getBaseDir() baseDir} and {@link
+ *       MigrapheExtension#getVariables() variables};
+ *   <li>creates the resolvable {@code migraphePlugin} configuration, used to declare
+ *       database/plugin JAR dependencies whose classpath is handed to every task;
+ *   <li>lazily registers the {@code migrapheValidate}, {@code migrapheStatus}, {@code
+ *       migrapheGenerate}, {@code migrapheUp} and {@code migrapheDown} tasks in the {@code
+ *       migraphe} group, wiring the extension properties and the plugin classpath onto each.
+ * </ul>
+ *
+ * <p>For tasks that also accept command-line options, configuration-time fallbacks are read from
+ * Gradle project properties (for example {@code -Pmigraphe.up.target=...}) and applied as task
+ * conventions, so values can be supplied either via {@code --option} or via {@code -P} properties.
+ */
 public class MigrapheGradlePlugin implements Plugin<Project> {
 
+    /** Creates a new {@code MigrapheGradlePlugin}. */
+    public MigrapheGradlePlugin() {}
+
+    /**
+     * Applies the plugin to the given project, creating the {@code migraphe} extension, the {@code
+     * migraphePlugin} configuration and the five Migraphe tasks.
+     *
+     * @param project the Gradle project the plugin is applied to
+     */
     @Override
     public void apply(Project project) {
-        // 1. Extension 作成 + デフォルト設定
+        // 1. Create the extension and install default conventions.
         MigrapheExtension extension =
                 project.getExtensions().create("migraphe", MigrapheExtension.class);
         extension.getBaseDir().convention(project.getLayout().getProjectDirectory());
         extension.getVariables().convention(Collections.emptyMap());
 
-        // 2. カスタム configuration
+        // 2. Custom configuration.
         Configuration migraphePluginConfig =
                 project.getConfigurations()
                         .create(
@@ -27,7 +57,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                                     config.setCanBeResolved(true);
                                 });
 
-        // 3. タスク登録（lazy）
+        // 3. Register tasks (lazily).
         project.getTasks()
                 .register(
                         "migrapheValidate",
@@ -62,7 +92,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
-                            // -P プロパティによるフォールバック (configuration time)
+                            // Fallback from -P properties (at configuration time).
                             Object nameProp = project.findProperty("migraphe.generate.name");
                             if (nameProp != null) {
                                 task.getGeneratorName().convention(nameProp.toString());
@@ -79,7 +109,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
-                            // -P プロパティによるフォールバック (configuration time)
+                            // Fallback from -P properties (at configuration time).
                             Object targetProp = project.findProperty("migraphe.up.target");
                             if (targetProp != null) {
                                 task.getTarget().convention(targetProp.toString());
@@ -100,7 +130,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
-                            // -P プロパティによるフォールバック (configuration time)
+                            // Fallback from -P properties (at configuration time).
                             Object targetProp = project.findProperty("migraphe.down.target");
                             if (targetProp != null) {
                                 task.getTarget().convention(targetProp.toString());

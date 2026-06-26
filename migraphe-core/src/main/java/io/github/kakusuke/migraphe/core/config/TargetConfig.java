@@ -5,41 +5,45 @@ import io.smallrye.config.WithName;
 import java.util.Optional;
 
 /**
- * ターゲット（データベース接続など）の設定。
+ * Configuration for a single target, such as a database connection.
  *
- * <p>YAMLファイル（targets/*.yaml）からMicroProfile Configで読み込まれる。
+ * <p>A SmallRye {@code @ConfigMapping} interface (empty prefix) read from a {@code targets/*.yaml}
+ * file. It captures the JDBC connection settings common to the built-in JDBC-based plugins;
+ * plugin-specific environment definitions are mapped separately via their own
+ * {@code @ConfigMapping} types in {@link ConfigLoader#loadEnvironmentDefinition}.
  */
 @ConfigMapping(prefix = "")
 public interface TargetConfig {
 
     /**
-     * ターゲットのタイプ（例: "postgresql", "mysql"）。
+     * The target type, identifying the plugin to use (for example {@code "postgresql"} or {@code
+     * "mysql"}).
      *
-     * @return ターゲットタイプ
+     * @return the target type identifier
      */
     String type();
 
     /**
-     * JDBC URL。
+     * The JDBC connection URL.
      *
-     * <p>YAML内では {@code jdbc_url} として定義される。
+     * <p>Bound to the {@code jdbc_url} key in YAML (snake-case), via {@link WithName}.
      *
-     * @return JDBC URL
+     * @return the JDBC URL
      */
     @WithName("jdbc_url")
     String jdbcUrl();
 
     /**
-     * ユーザー名。
+     * The database user name used to connect.
      *
-     * @return ユーザー名
+     * @return the user name
      */
     String username();
 
     /**
-     * パスワード。
+     * The database password.
      *
-     * @return パスワード（未設定または空文字列の場合は empty）
+     * @return the password, or an empty {@link Optional} if unset or blank
      */
     Optional<String> password();
 }

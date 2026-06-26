@@ -6,27 +6,71 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * マイグレーション履歴の永続化を抽象化するインターフェース。
+ * Abstraction over the persistence of migration execution history.
  *
- * <p>複数の実装方式（メモリ内、PostgreSQL、ファイル、S3など）に対応するため、 履歴の保存・取得方法を抽象化します。
+ * <p>Migraphe consults a {@code HistoryRepository} to decide which nodes have already run (so they
+ * can be skipped on a subsequent up) and to retrieve the serialized down task needed for a
+ * rollback. History is always partitioned by {@link EnvironmentId}, so the same migration can be
+ * tracked independently across environments.
+ *
+ * <p>Plugins implement this interface to support different backends (in-memory, JDBC/PostgreSQL/
+ * MySQL, files, object storage, and so on). Implementations are not required to be thread-safe;
+ * Migraphe wraps a repository in a synchronized decorator when running migrations in parallel.
+ *
+ * @see ExecutionRecord
+ * @see EnvironmentId
+ * @see NodeId
  */
 public interface HistoryRepository {
 
-    /** 履歴リポジトリを初期化する。 実装によっては、スキーマ作成、ファイル作成、バケット確認などを行う。 */
+    /**
+     * Prepares the repository for use.
+     *
+     * <p>Depending on the backend this may create the history schema or table, create a file,
+     * verify a bucket, or perform any other one-time setup. It is called before any other method.
+     */
     void initialize();
 
-    /** 実行記録を追加する。 */
+    /**
+     * Persists an execution record.
+     *
+     * @param record the execution record to store
+     */
     void record(ExecutionRecord record);
 
-    /** 指定された環境で、指定されたノードが成功実行済みかどうかを判定する。 */
+    /**
+     * Reports whether the given node has already been executed successfully in the given
+     * environment.
+     *
+     * @param nodeId the identifier of the node to check
+     * @param environmentId the environment whose history is consulted
+     * @return {@code true} if a successful execution is recorded for the node in the environment,
+     *     {@code false} otherwise
+     */
     boolean wasExecuted(NodeId nodeId, EnvironmentId environmentId);
 
-    /** 指定された環境で成功実行済みノードのIDリストを取得する。 */
+    /**
+     * Returns the identifiers of nodes that have executed successfully in the given environment.
+     *
+     * @param environmentId the environment whose history is consulted
+     * @return the list of successfully executed node identifiers, possibly empty
+     */
     List<NodeId> executedNodes(EnvironmentId environmentId);
 
-    /** 指定された環境で、指定されたノードの最新の実行記録を取得する。見つからない場合は null を返す。 */
+    /**
+     * Returns the most recent execution record for the given node in the given environment.
+     *
+     * @param nodeId the identifier of the node whose latest record is requested
+     * @param environmentId the environment whose history is consulted
+     * @return the latest {@link ExecutionRecord}, or {@code null} if none exists
+     */
     @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, EnvironmentId environmentId);
 
-    /** 指定された環境の全ての実行記録を取得する。 */
+    /**
+     * Returns every execution record for the given environment.
+     *
+     * @param environmentId the environment whose history is consulted
+     * @return the list of all execution records for the environment, possibly empty
+     */
     List<ExecutionRecord> allRecords(EnvironmentId environmentId);
 }

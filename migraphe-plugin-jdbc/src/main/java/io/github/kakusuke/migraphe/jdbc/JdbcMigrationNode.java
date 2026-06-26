@@ -13,7 +13,16 @@ import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
-/** JDBC マイグレーションノードの実装。Builder パターンで SQL ファイルまたは文字列から構築する。 */
+/**
+ * JDBC implementation of {@link MigrationNode}, built through its {@link Builder} from SQL strings,
+ * files, or classpath resources.
+ *
+ * <p>A node ties together an identifier, an owning {@link JdbcEnvironment}, its dependency set, and
+ * the UP/DOWN SQL plus the {@code autocommit} flag. It is an immutable structural record of the
+ * migration; the actual execution logic is produced on demand by {@link #upTask()} (always present)
+ * and {@link #downTask()} (present only when {@code downSql} was supplied). Node identity is
+ * defined solely by {@link #id()} for use in the migration graph.
+ */
 public final class JdbcMigrationNode implements MigrationNode {
 
     private final NodeId id;
@@ -66,11 +75,22 @@ public final class JdbcMigrationNode implements MigrationNode {
         return dependencies;
     }
 
+    /**
+     * Creates the forward task that applies this node's UP SQL.
+     *
+     * @return a {@link JdbcUpTask} carrying the UP SQL, optional rollback SQL, and autocommit flag
+     */
     @Override
     public Task upTask() {
         return JdbcUpTask.create(environment, upSql, downSql, autocommit);
     }
 
+    /**
+     * Creates the rollback task that applies this node's DOWN SQL, if any.
+     *
+     * @return a {@link JdbcDownTask} when {@code downSql} was supplied, or {@code null} when the
+     *     node is not reversible
+     */
     @Override
     public @Nullable Task downTask() {
         if (downSql != null) {
@@ -79,11 +99,27 @@ public final class JdbcMigrationNode implements MigrationNode {
         return null;
     }
 
+    /**
+     * Returns a new builder for {@link JdbcMigrationNode}.
+     *
+     * @return a fresh {@link Builder}
+     */
     public static Builder builder() {
         return new Builder();
     }
 
+    /**
+     * Fluent builder for {@link JdbcMigrationNode}.
+     *
+     * <p>The identifier, name, environment, and UP SQL are required; the description, dependencies,
+     * DOWN SQL, and autocommit flag are optional. UP/DOWN SQL may be supplied as a literal string,
+     * read from a file, or loaded from a classpath resource.
+     */
     public static class Builder {
+
+        /** Creates a new {@code Builder}. */
+        public Builder() {}
+
         private @Nullable NodeId id;
         private @Nullable String name;
         private @Nullable String description;
@@ -93,76 +129,173 @@ public final class JdbcMigrationNode implements MigrationNode {
         private @Nullable String downSql;
         private boolean autocommit = false;
 
+        /**
+         * Sets the node identifier from a string value.
+         *
+         * @param id the identifier string, converted via {@link NodeId#of(String)}
+         * @return this builder
+         */
         public Builder id(String id) {
             this.id = NodeId.of(id);
             return this;
         }
 
+        /**
+         * Sets the node identifier.
+         *
+         * @param id the node identifier
+         * @return this builder
+         */
         public Builder id(NodeId id) {
             this.id = id;
             return this;
         }
 
+        /**
+         * Sets the human readable node name.
+         *
+         * @param name the node name
+         * @return this builder
+         */
         public Builder name(String name) {
             this.name = name;
             return this;
         }
 
+        /**
+         * Sets the optional node description.
+         *
+         * @param description the description, or {@code null} for none
+         * @return this builder
+         */
         public Builder description(@Nullable String description) {
             this.description = description;
             return this;
         }
 
+        /**
+         * Sets the owning JDBC environment.
+         *
+         * @param environment the environment the node runs against
+         * @return this builder
+         */
         public Builder environment(JdbcEnvironment environment) {
             this.environment = environment;
             return this;
         }
 
+        /**
+         * Sets the dependency set, replacing any previously configured dependencies.
+         *
+         * @param dependencies the node identifiers this node depends on
+         * @return this builder
+         */
         public Builder dependencies(Set<NodeId> dependencies) {
             this.dependencies = dependencies;
             return this;
         }
 
+        /**
+         * Sets the dependencies from a varargs array, replacing any previously configured
+         * dependencies.
+         *
+         * @param dependencies the node identifiers this node depends on
+         * @return this builder
+         */
         public Builder dependencies(NodeId... dependencies) {
             this.dependencies = Set.of(dependencies);
             return this;
         }
 
+        /**
+         * Sets the forward (UP) migration SQL from a literal string.
+         *
+         * @param sql the UP SQL
+         * @return this builder
+         */
         public Builder upSql(String sql) {
             this.upSql = sql;
             return this;
         }
 
+        /**
+         * Sets the forward (UP) migration SQL by reading it from a file.
+         *
+         * @param path the file to read the UP SQL from
+         * @return this builder
+         * @throws IOException if the file cannot be read
+         */
         public Builder upSqlFromFile(Path path) throws IOException {
             this.upSql = Files.readString(path);
             return this;
         }
 
+        /**
+         * Sets the forward (UP) migration SQL by loading it from a classpath resource.
+         *
+         * @param resourcePath the classpath resource path
+         * @return this builder
+         * @throws IOException if the resource cannot be found or read
+         */
         public Builder upSqlFromResource(String resourcePath) throws IOException {
             this.upSql = loadResource(resourcePath);
             return this;
         }
 
+        /**
+         * Sets the rollback (DOWN) migration SQL from a literal string.
+         *
+         * @param sql the DOWN SQL, or {@code null} to make the node non-reversible
+         * @return this builder
+         */
         public Builder downSql(@Nullable String sql) {
             this.downSql = sql;
             return this;
         }
 
+        /**
+         * Sets the rollback (DOWN) migration SQL by reading it from a file.
+         *
+         * @param path the file to read the DOWN SQL from
+         * @return this builder
+         * @throws IOException if the file cannot be read
+         */
         public Builder downSqlFromFile(Path path) throws IOException {
             this.downSql = Files.readString(path);
             return this;
         }
 
+        /**
+         * Sets the rollback (DOWN) migration SQL by loading it from a classpath resource.
+         *
+         * @param resourcePath the classpath resource path
+         * @return this builder
+         * @throws IOException if the resource cannot be found or read
+         */
         public Builder downSqlFromResource(String resourcePath) throws IOException {
             this.downSql = loadResource(resourcePath);
             return this;
         }
 
+        /**
+         * Sets whether the node's tasks run in autocommit mode.
+         *
+         * @param autocommit {@code true} to run without an enclosing transaction
+         * @return this builder
+         */
         public Builder autocommit(boolean autocommit) {
             this.autocommit = autocommit;
             return this;
         }
 
+        /**
+         * Builds the immutable {@link JdbcMigrationNode}.
+         *
+         * @return a new {@link JdbcMigrationNode}
+         * @throws NullPointerException if a required attribute (id, name, environment, or UP SQL)
+         *     was not set
+         * @throws IllegalArgumentException if the UP SQL is blank
+         */
         public JdbcMigrationNode build() {
             return new JdbcMigrationNode(this);
         }

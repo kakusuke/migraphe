@@ -11,8 +11,18 @@ import java.util.Map;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
-/** Writes {@link LockFile} as YAML to {@code migraphe.lock.yaml}. */
+/**
+ * Writes a {@link LockFile} as YAML to a {@code migraphe.lock.yaml} file.
+ *
+ * <p>Emits a fixed "do not edit" header followed by block-style YAML containing the {@code
+ * lockfile-version} and a {@code plugins} list, where each plugin records its flattened {@code
+ * groupId:artifactId:version} coordinate, its {@code sha256} pin, and a nested {@code dependencies}
+ * list. The output is round-trippable by {@link LockFileReader}.
+ */
 public final class LockFileWriter {
+
+    /** Creates a new {@code LockFileWriter}. */
+    public LockFileWriter() {}
 
     private static final String HEADER =
             """
@@ -20,6 +30,13 @@ public final class LockFileWriter {
             # Commit this file to lock plugin versions and SHA-256 hashes.
             """;
 
+    /**
+     * Serializes the lockfile to the given path, overwriting any existing file.
+     *
+     * @param lockFilePath the path to write the {@code migraphe.lock.yaml} file to
+     * @param lockFile the lockfile model to serialize
+     * @throws IOException if the file cannot be written
+     */
     public void write(Path lockFilePath, LockFile lockFile) throws IOException {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("lockfile-version", lockFile.version());

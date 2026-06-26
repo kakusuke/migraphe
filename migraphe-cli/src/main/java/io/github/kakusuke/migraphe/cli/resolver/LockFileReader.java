@@ -11,9 +11,30 @@ import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.Yaml;
 
-/** Reads {@link LockFile} from {@code migraphe.lock.yaml}. */
+/**
+ * Reads a {@link LockFile} from a {@code migraphe.lock.yaml} file.
+ *
+ * <p>Parses the YAML produced by {@link LockFileWriter} back into the typed model, validating the
+ * structure as it goes: the {@code lockfile-version} key must be a present integer, {@code plugins}
+ * must be a list of maps, and each plugin map must carry a {@code coordinate}, a {@code sha256},
+ * and an optional {@code dependencies} list. Structural problems surface as {@link
+ * IllegalArgumentException} with a message identifying the offending entry.
+ */
 public final class LockFileReader {
 
+    /** Creates a new {@code LockFileReader}. */
+    public LockFileReader() {}
+
+    /**
+     * Reads and parses the lockfile at the given path.
+     *
+     * @param lockFilePath the path to the {@code migraphe.lock.yaml} file
+     * @return the parsed {@link LockFile}, or {@link Optional#empty()} if the file does not exist
+     * @throws IOException if the file cannot be read
+     * @throws IllegalArgumentException if the file content is malformed (missing or non-integer
+     *     {@code lockfile-version}, non-list {@code plugins}, or a plugin/dependency entry with a
+     *     missing or wrong-typed required key)
+     */
     public Optional<LockFile> read(Path lockFilePath) throws IOException {
         if (!Files.exists(lockFilePath)) {
             return Optional.empty();

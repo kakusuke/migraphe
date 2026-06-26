@@ -26,6 +26,19 @@ subprojects {
         toolchain {
             languageVersion.set(JavaLanguageVersion.of(21))
         }
+        // Maven Central requires javadoc and sources jars alongside the main artifact.
+        withJavadocJar()
+        withSourcesJar()
+    }
+
+    tasks.withType<Javadoc>().configureEach {
+        (options as StandardJavadocDocletOptions).apply {
+            encoding = "UTF-8"
+            // Surface all doclint categories (missing comments, broken refs, bad HTML)
+            // so javadoc warnings act as a documentation-quality gate.
+            addStringOption("Xdoclint:all", "-quiet")
+            addBooleanOption("Werror", false)
+        }
     }
 
     dependencies {

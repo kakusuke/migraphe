@@ -7,11 +7,22 @@ import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
 import java.util.List;
 
-/** マイグレーションの実行状況を表示するコマンド。 */
+/**
+ * The {@code status} command, which reports the execution state of every migration.
+ *
+ * <p>Renders the whole migration graph and, for each node, marks whether it has been executed
+ * against its environment. Executed nodes additionally show the most recent run's duration and
+ * timestamp. A summary line tallies the total, executed, and pending counts.
+ */
 public class StatusCommand implements Command {
 
     private final ExecutionContext context;
 
+    /**
+     * Creates the status command.
+     *
+     * @param context the loaded execution context (graph, config, history)
+     */
     public StatusCommand(ExecutionContext context) {
         this.context = context;
     }
@@ -23,11 +34,11 @@ public class StatusCommand implements Command {
             System.out.println("================");
             System.out.println();
 
-            // HistoryRepository を取得
+            // Obtain the HistoryRepository.
             HistoryRepository historyRepo = context.createHistoryRepository();
             historyRepo.initialize();
 
-            // グラフをレンダリング
+            // Render the graph.
             ExecutionGraphView graphView = new ExecutionGraphView(context.graph());
 
             int[] executedCount = {0};
@@ -72,7 +83,7 @@ public class StatusCommand implements Command {
 
             System.out.println();
 
-            // サマリー
+            // Summary.
             int total = executedCount[0] + pendingCount[0];
             System.out.println(
                     "Summary: Total: "
@@ -82,12 +93,12 @@ public class StatusCommand implements Command {
                             + " | Pending: "
                             + pendingCount[0]);
 
-            return 0; // 成功
+            return 0; // success
 
         } catch (Exception e) {
             System.err.println("Failed to get migration status: " + e.getMessage());
             e.printStackTrace();
-            return 1; // エラー終了
+            return 1; // error exit
         }
     }
 }
