@@ -762,6 +762,8 @@ generators:
   - `type`: ソースプラグインのタイプ（例: `jdbc-schema`、`migration-tree`）
   - `target`（オプション）: データベース接続が必要なソースプラグイン用のターゲット名
 - `output-dir`（オプション、デフォルト: `docs/schema`）: 生成ファイルの出力先ディレクトリ
+- `er-diagram`（オプション、デフォルト: `true`）: Markdown アウトプットプラグインで、`index.md` に Mermaid ER 図を埋め込みます。`false` にすると ER 図セクションを抑制します。
+- `er-diagram-keys-only`（オプション、デフォルト: `false`）: `true` にすると、ER 図の各エンティティは主キー・外部キーのカラムのみを表示します（リレーションには影響しません）。デフォルト `false` は全カラムを表示します。
 - `excludes`（オプション）: 除外フィルタのリスト（正規表現パターン）
   - `schema`: スキーマ名にマッチする正規表現パターン
   - `table`: テーブル名にマッチする正規表現パターン（`schema` と組み合わせて使用）
@@ -800,6 +802,8 @@ migraphe generate --name mydb
 
 Markdown アウトプットプラグイン（`jdbc-markdown`、`postgresql-markdown`、`mysql-markdown`）はスキーマごとに 1 ディレクトリを生成し、それぞれに `index.md`、`tables/` ディレクトリ、`views/` ディレクトリを書き出します。各テーブルページには、カラム定義（名前、型、NULL 許可、デフォルト値）、主キー/ユニークキー、相互リンク付きの外部キー（**Foreign Keys**（imported key）と **Referenced By**（exported key）の両視点）、インデックスが含まれます。正確なディレクトリ構造と imported/exported 外部キーのレンダリングは [`migraphe-plugin-jdbc` の README](../migraphe-plugin-jdbc/README.ja.md) に記載しています。
 
+デフォルトでは、`index.md` にはデータベース全体の **ER 図** も Mermaid の `erDiagram` 記法（```mermaid コードフェンス。GitHub や多くの Markdown ビューアがインラインでレンダリング）で 1 枚埋め込まれます。各テーブルはカラム（型と PK/FK 印付き。主キーかつ外部キーのカラムは `PK, FK` と併記）を持つエンティティとなり、外部キーはリレーション（`||--o{`）として描かれます。図はスキーマを考慮します。別スキーマの同名テーブルもそれぞれ別エンティティになり、スキーマをまたぐ外部キーも描画され、テーブルページ内のスキーマ跨ぎのリンクは参照先スキーマのディレクトリへ解決されます。カラムの型は基底の型名で表示されます（例: PostgreSQL の列挙型はスキーマ修飾・引用符付きではなく `user_account_status` と表示）。図は 1 枚に統合されます。Mermaid の `erDiagram` にはグルーピング構文が無いため、スキーマ単位でテーブルを枠囲いすることはしません。ジェネレータに `er-diagram: false` を指定するとこのセクションを抑制でき、`er-diagram-keys-only: true` を指定すると各エンティティを主キー・外部キーのカラムのみに絞って図をコンパクトにできます。
+
 ### データベース固有のドキュメント
 
 PostgreSQL および MySQL プラグインは専用のソース／アウトプットの組み合わせを提供しており、標準的な JDBC スキーマ（テーブル、ビュー、カラム、キー、インデックス）を超えたデータベース固有のオブジェクトで生成 Markdown を拡充します。
@@ -814,6 +818,8 @@ generators:
       type: postgresql-schema
       target: db1
     output-dir: docs/schema
+    er-diagram: false            # オプション。省略または true で Mermaid ER 図を埋め込む
+    # er-diagram-keys-only: true # オプション。ER 図に主キー・外部キーのカラムのみ表示
 ```
 
 データベース固有オブジェクトの完全な一覧、所有者／DEFINER の表示、テーブルごとに含まれる内容については、各プラグインの README に記載されています:

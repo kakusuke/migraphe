@@ -10,12 +10,22 @@ import io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Types;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Renders JDBC schema information into a set of Markdown documents.
@@ -36,9 +46,34 @@ public class JdbcMarkdownGenerator {
     private static final Pattern DEFAULT_SCHEMA_EXCLUDE =
             Pattern.compile("information_schema", Pattern.CASE_INSENSITIVE);
 
+    private static final Pattern MERMAID_SANITIZE_PATTERN = Pattern.compile("[^A-Za-z0-9_]");
+
     private final String name;
     private final JdbcSchemaInfo schemaInfo;
-    private final List<JdbcMarkdownDefinition.ExcludePattern> excludes;
+    private final List<CompiledExclude> excludes;
+    private final boolean erDiagram;
+    private final boolean erDiagramKeysOnly;
+
+    /** Exact schema name -&gt; the first {@link JdbcSchemaDetail} with that name, built once. */
+    private final Map<String, JdbcSchemaDetail> schemaByExactName;
+
+    /**
+     * Lower-cased (case-insensitive) schema name -&gt; matching {@link JdbcSchemaDetail}s, in
+     * {@link JdbcSchemaInfo#schemas()} order, built once.
+     */
+    private final Map<String, List<JdbcSchemaDetail>> schemasByLowerName;
+
+    /**
+     * Table name -&gt; the {@link JdbcSchemaDetail}s that contain a table with that name, in {@link
+     * JdbcSchemaInfo#schemas()} order, built once.
+     */
+    private final Map<String, List<JdbcSchemaDetail>> schemasByTableName;
+
+    /**
+     * Memoizes {@link #erEntityId(String, String)} results keyed by {@link #erIdKey(String,
+     * String)}.
+     */
+    private final Map<String, String> erEntityIdCache = new HashMap<>();
 
     /**
      * Returns the database name used to title the output and to namespace the per-database output
@@ -61,9 +96,79 @@ public class JdbcMarkdownGenerator {
             String name,
             JdbcSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes) {
+        this(name, schemaInfo, excludes, true);
+    }
+
+    /**
+     * Constructs a generator for the given database.
+     *
+     * @param name the database name used in titles, links, and the output directory layout
+     * @param schemaInfo the schema information to render
+     * @param excludes the schema/table exclusion patterns to apply (may be empty)
+     * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
+     */
+    public JdbcMarkdownGenerator(
+            String name,
+            JdbcSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram) {
+        this(name, schemaInfo, excludes, erDiagram, false);
+    }
+
+    /**
+     * Constructs a generator for the given database.
+     *
+     * @param name the database name used in titles, links, and the output directory layout
+     * @param schemaInfo the schema information to render
+     * @param excludes the schema/table exclusion patterns to apply (may be empty)
+     * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER Diagram limits entity columns to primary-key and
+     *     foreign-key columns
+     */
+    public JdbcMarkdownGenerator(
+            String name,
+            JdbcSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly) {
         this.name = name;
         this.schemaInfo = schemaInfo;
-        this.excludes = excludes;
+        this.excludes = excludes.stream().map(JdbcMarkdownGenerator::compileExclude).toList();
+        this.erDiagram = erDiagram;
+        this.erDiagramKeysOnly = erDiagramKeysOnly;
+
+        this.schemaByExactName = new HashMap<>();
+        this.schemasByLowerName = new HashMap<>();
+        this.schemasByTableName = new HashMap<>();
+        for (JdbcSchemaDetail schema : schemaInfo.schemas()) {
+            schemaByExactName.putIfAbsent(schema.name(), schema);
+            schemasByLowerName
+                    .computeIfAbsent(schema.name().toLowerCase(Locale.ROOT), k -> new ArrayList<>())
+                    .add(schema);
+            for (JdbcTableInfo table : schema.tables()) {
+                schemasByTableName
+                        .computeIfAbsent(table.name(), k -> new ArrayList<>())
+                        .add(schema);
+            }
+        }
+    }
+
+    /**
+     * An {@link JdbcMarkdownDefinition.ExcludePattern} with its regular expressions precompiled
+     * once at construction, so repeated calls to {@link #isSchemaExcluded(String)} and {@link
+     * #isTableExcluded(String, String)} do not recompile the same pattern.
+     */
+    private record CompiledExclude(
+            @Nullable Pattern schemaPattern, @Nullable Pattern tablePattern) {}
+
+    private static CompiledExclude compileExclude(JdbcMarkdownDefinition.ExcludePattern exclude) {
+        Pattern schemaPattern =
+                exclude.schema()
+                        .map(p -> Pattern.compile(p, Pattern.CASE_INSENSITIVE))
+                        .orElse(null);
+        Pattern tablePattern =
+                exclude.table().map(p -> Pattern.compile(p, Pattern.CASE_INSENSITIVE)).orElse(null);
+        return new CompiledExclude(schemaPattern, tablePattern);
     }
 
     /**
@@ -80,6 +185,7 @@ public class JdbcMarkdownGenerator {
         var indexBuilder = new StringBuilder();
         indexBuilder.append("# Database: ").append(name).append("\n\n");
         appendIndexHeader(indexBuilder);
+        appendErDiagram(indexBuilder);
 
         for (JdbcSchemaDetail schema : schemaInfo.schemas()) {
             if (isSchemaExcluded(schema.name())) {
@@ -139,10 +245,9 @@ public class JdbcMarkdownGenerator {
         if (DEFAULT_SCHEMA_EXCLUDE.matcher(schemaName).matches()) {
             return true;
         }
-        for (JdbcMarkdownDefinition.ExcludePattern exclude : excludes) {
-            if (exclude.schema().isPresent() && exclude.table().isEmpty()) {
-                Pattern pattern = Pattern.compile(exclude.schema().get(), Pattern.CASE_INSENSITIVE);
-                if (pattern.matcher(schemaName).matches()) {
+        for (CompiledExclude exclude : excludes) {
+            if (exclude.schemaPattern() != null && exclude.tablePattern() == null) {
+                if (exclude.schemaPattern().matcher(schemaName).matches()) {
                     return true;
                 }
             }
@@ -162,20 +267,17 @@ public class JdbcMarkdownGenerator {
      * @return {@code true} if the table matches an exclusion rule, otherwise {@code false}
      */
     protected boolean isTableExcluded(String schemaName, String tableName) {
-        for (JdbcMarkdownDefinition.ExcludePattern exclude : excludes) {
-            if (exclude.table().isEmpty()) {
+        for (CompiledExclude exclude : excludes) {
+            if (exclude.tablePattern() == null) {
                 continue;
             }
-            Pattern tablePattern = Pattern.compile(exclude.table().get(), Pattern.CASE_INSENSITIVE);
-            if (!tablePattern.matcher(tableName).matches()) {
+            if (!exclude.tablePattern().matcher(tableName).matches()) {
                 continue;
             }
-            if (exclude.schema().isEmpty()) {
+            if (exclude.schemaPattern() == null) {
                 return true;
             }
-            Pattern schemaPattern =
-                    Pattern.compile(exclude.schema().get(), Pattern.CASE_INSENSITIVE);
-            if (schemaPattern.matcher(schemaName).matches()) {
+            if (exclude.schemaPattern().matcher(schemaName).matches()) {
                 return true;
             }
         }
@@ -230,11 +332,7 @@ public class JdbcMarkdownGenerator {
                         .append(" | ")
                         .append(String.join(", ", fk.columns()))
                         .append(" | ")
-                        .append("[")
-                        .append(fk.referencedTable())
-                        .append("](../tables/")
-                        .append(fk.referencedTable())
-                        .append(".md)")
+                        .append(referencedTableLink(schemaName, fk))
                         .append("(")
                         .append(String.join(", ", fk.referencedColumns()))
                         .append(")")
@@ -258,11 +356,7 @@ public class JdbcMarkdownGenerator {
                         .append(" | ")
                         .append(String.join(", ", ek.columns()))
                         .append(" | ")
-                        .append("[")
-                        .append(ek.referencedTable())
-                        .append("](../tables/")
-                        .append(ek.referencedTable())
-                        .append(".md)")
+                        .append(referencedTableLink(schemaName, ek))
                         .append(" | ")
                         .append(ek.updateRule())
                         .append(" | ")
@@ -345,11 +439,110 @@ public class JdbcMarkdownGenerator {
         writeFile(filePath, sb.toString());
     }
 
-    private String formatType(JdbcColumnInfo col) {
-        if (isVarcharLike(col.dataType()) && col.size() > 0) {
-            return col.typeName() + "(" + col.size() + ")";
+    /**
+     * Resolves the schema in which a foreign key's referenced table lives.
+     *
+     * <p>{@link JdbcForeignKeyInfo#referencedSchema()} is empty when the JDBC driver does not
+     * report a cross-schema reference, in which case the referenced table is assumed to live in the
+     * same schema as the table declaring the foreign key.
+     *
+     * @param schemaName the schema containing the table that declares the foreign key
+     * @param fk the foreign key being rendered
+     * @return {@code fk.referencedSchema()} if non-empty, otherwise {@code schemaName}
+     */
+    private String resolveReferencedSchema(String schemaName, JdbcForeignKeyInfo fk) {
+        String refSchema = fk.referencedSchema();
+        String refTable = fk.referencedTable();
+        if (refSchema.isEmpty()) {
+            if (schemaContainsTable(schemaName, refTable)) {
+                return schemaName;
+            }
+            List<JdbcSchemaDetail> owning = schemasContainingTable(refTable);
+            if (owning.size() == 1) {
+                return owning.get(0).name();
+            }
+            return schemaName;
         }
-        return col.typeName();
+        JdbcSchemaDetail exactMatch = schemaByExactName.get(refSchema);
+        if (exactMatch != null) {
+            return exactMatch.name();
+        }
+        List<JdbcSchemaDetail> caseInsensitiveMatches =
+                schemasByLowerName.getOrDefault(refSchema.toLowerCase(Locale.ROOT), List.of());
+        for (JdbcSchemaDetail schema : caseInsensitiveMatches) {
+            if (schemaContainsTable(schema, refTable)) {
+                return schema.name();
+            }
+        }
+        if (!caseInsensitiveMatches.isEmpty()) {
+            return caseInsensitiveMatches.get(0).name();
+        }
+        return refSchema;
+    }
+
+    private List<JdbcSchemaDetail> schemasContainingTable(String tableName) {
+        return schemasByTableName.getOrDefault(tableName, List.of());
+    }
+
+    private boolean schemaContainsTable(String schemaName, String tableName) {
+        JdbcSchemaDetail schema = schemaByExactName.get(schemaName);
+        return schema != null && schemaContainsTable(schema, tableName);
+    }
+
+    private boolean schemaContainsTable(JdbcSchemaDetail schema, String tableName) {
+        for (JdbcTableInfo table : schema.tables()) {
+            if (table.name().equals(tableName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Builds a Markdown link to a foreign or exported key's referenced table document.
+     *
+     * <p>Used identically by both the Foreign Keys and Exported Keys sections of a table's
+     * document; the link target is {@code ../../<referencedSchema>/tables/<referencedTable>.md}.
+     *
+     * @param schemaName the schema containing the table that declares the key
+     * @param fk the foreign or exported key being rendered
+     * @return a Markdown link of the form {@code [referencedTable](../../schema/tables/table.md)}
+     */
+    private String referencedTableLink(String schemaName, JdbcForeignKeyInfo fk) {
+        return "["
+                + fk.referencedTable()
+                + "](../../"
+                + resolveReferencedSchema(schemaName, fk)
+                + "/tables/"
+                + fk.referencedTable()
+                + ".md)";
+    }
+
+    private String formatType(JdbcColumnInfo col) {
+        String typeName = cleanTypeName(col.typeName());
+        if (isVarcharLike(col.dataType()) && col.size() > 0 && col.size() < Integer.MAX_VALUE) {
+            return typeName + "(" + col.size() + ")";
+        }
+        return typeName;
+    }
+
+    private static String cleanTypeName(String rawTypeName) {
+        String unquoted = rawTypeName.replace("\"", "");
+        int lastDot = unquoted.lastIndexOf('.');
+        if (lastDot >= 0) {
+            String base = unquoted.substring(lastDot + 1);
+            if (!base.isEmpty()) {
+                return base;
+            }
+            String trimmed = unquoted;
+            while (trimmed.endsWith(".")) {
+                trimmed = trimmed.substring(0, trimmed.length() - 1);
+            }
+            if (!trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+        return unquoted;
     }
 
     private boolean isVarcharLike(int dataType) {
@@ -490,6 +683,205 @@ public class JdbcMarkdownGenerator {
      * @param sb the index document builder to append to
      */
     protected void appendIndexHeader(StringBuilder sb) {}
+
+    /**
+     * Appends the ER Diagram section to the index document, directly below the top-level heading.
+     *
+     * <p>Invoked once while building {@code index.md}, after {@link
+     * #appendIndexHeader(StringBuilder)} and before any schema sections. Does nothing if {@code
+     * erDiagram} was disabled at construction.
+     *
+     * @param sb the index document builder to append to
+     */
+    protected void appendErDiagram(StringBuilder sb) {
+        if (!erDiagram) {
+            return;
+        }
+        List<SchemaTable> tables = nonExcludedTables();
+        if (tables.isEmpty()) {
+            return;
+        }
+        sb.append("## ER Diagram\n\n```mermaid\nerDiagram\n");
+        Set<String> entityIds =
+                tables.stream()
+                        .map(st -> erEntityId(st.schemaName(), st.table().name()))
+                        .collect(Collectors.toSet());
+        for (SchemaTable st : tables) {
+            appendErEntity(sb, st.schemaName(), st.table());
+        }
+        for (SchemaTable st : tables) {
+            String entityId = erEntityId(st.schemaName(), st.table().name());
+            for (JdbcForeignKeyInfo fk : st.table().foreignKeys()) {
+                String refSchema = resolveReferencedSchema(st.schemaName(), fk);
+                String refEntityId = erEntityId(refSchema, fk.referencedTable());
+                if (entityIds.contains(refEntityId)) {
+                    appendErRelationship(sb, refEntityId, entityId, fk);
+                }
+            }
+        }
+        sb.append("```\n\n");
+    }
+
+    private record SchemaTable(String schemaName, JdbcTableInfo table) {}
+
+    private List<SchemaTable> nonExcludedTables() {
+        List<SchemaTable> result = new ArrayList<>();
+        for (JdbcSchemaDetail schema : schemaInfo.schemas()) {
+            if (isSchemaExcluded(schema.name())) {
+                continue;
+            }
+            for (JdbcTableInfo table : schema.tables()) {
+                if (isTableExcluded(schema.name(), table.name())) {
+                    continue;
+                }
+                result.add(new SchemaTable(schema.name(), table));
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Builds the qualified Mermaid entity identifier for a table, combining its schema and table
+     * name so that same-named tables in different schemas do not collide in the ER diagram.
+     *
+     * @param schemaName the schema containing the table
+     * @param tableName the table name
+     * @return the sanitized {@code <schema>_<table>_<hash>} entity identifier
+     */
+    private String erEntityId(String schemaName, String tableName) {
+        return erEntityIdCache.computeIfAbsent(
+                erIdKey(schemaName, tableName),
+                k ->
+                        sanitizeMermaid(schemaName)
+                                + "_"
+                                + sanitizeMermaid(tableName)
+                                + "_"
+                                + erIdHash(schemaName, tableName));
+    }
+
+    /**
+     * Builds the injective {@code schemaName}/{@code tableName} combination shared by {@link
+     * #erEntityId(String, String)}'s cache key and {@link #erIdHash(String, String)}'s hash input,
+     * so both stay in sync and a change to one cannot silently break the other's uniqueness
+     * guarantee.
+     *
+     * <p>The schema length is prefixed so that inputs are combined unambiguously (injectively),
+     * rather than simply concatenating schema and table names.
+     */
+    private static String erIdKey(String schemaName, String tableName) {
+        return schemaName.length() + ":" + schemaName + tableName;
+    }
+
+    /**
+     * Computes a short hash suffix distinguishing entity identifiers whose sanitized {@code
+     * <schema>_<table>} prefix would otherwise collide (e.g. {@code "a_b", "c"} vs. {@code "a",
+     * "b_c"}).
+     */
+    private static String erIdHash(String schemaName, String tableName) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest =
+                    md.digest(erIdKey(schemaName, tableName).getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, 8);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
+    }
+
+    private void appendErEntity(StringBuilder sb, String schemaName, JdbcTableInfo table) {
+        sb.append("  ")
+                .append(erEntityId(schemaName, table.name()))
+                .append("[\"")
+                .append(sanitizeMermaidLabel(table.name()))
+                .append("\"] {\n");
+        for (JdbcColumnInfo col : table.columns()) {
+            boolean pk = isPrimaryKeyColumn(table, col.name());
+            boolean fk = isForeignKeyColumn(table, col.name());
+            if (erDiagramKeysOnly && !pk && !fk) {
+                continue;
+            }
+            sb.append("    ")
+                    .append(sanitizeMermaid(cleanTypeName(col.typeName())))
+                    .append(" ")
+                    .append(sanitizeMermaid(col.name()));
+            List<String> markers = new ArrayList<>();
+            if (pk) {
+                markers.add("PK");
+            }
+            if (fk) {
+                markers.add("FK");
+            }
+            if (!markers.isEmpty()) {
+                sb.append(" ").append(String.join(", ", markers));
+            }
+            sb.append("\n");
+        }
+        sb.append("  }\n");
+    }
+
+    private static boolean isPrimaryKeyColumn(JdbcTableInfo table, String columnName) {
+        return table.primaryKey() != null && table.primaryKey().columns().contains(columnName);
+    }
+
+    private static boolean isForeignKeyColumn(JdbcTableInfo table, String columnName) {
+        for (JdbcForeignKeyInfo fk : table.foreignKeys()) {
+            if (fk.columns().contains(columnName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void appendErRelationship(
+            StringBuilder sb, String refEntityId, String entityId, JdbcForeignKeyInfo fk) {
+        String label = sanitizeMermaidLabel(fk.name());
+        if (label.isEmpty()) {
+            label = "fk";
+        }
+        sb.append("  ")
+                .append(refEntityId)
+                .append(" ||--o{ ")
+                .append(entityId)
+                .append(" : \"")
+                .append(label)
+                .append("\"\n");
+    }
+
+    /**
+     * Normalizes an identifier or type name into a Mermaid-safe token.
+     *
+     * <p>Mermaid's {@code erDiagram} entity names and attribute type/name tokens must be bare
+     * identifiers; whitespace, quotes, parentheses, dots and other punctuation (common in
+     * schema-qualified or parameterized SQL type names such as {@code character varying(255)} or
+     * {@code "app"."language_code"}) would break parsing. Every character outside {@code
+     * [A-Za-z0-9_]} is replaced with an underscore. Applied consistently to both entity definitions
+     * and relationship endpoints so the endpoints match the defined entities.
+     *
+     * @param token the raw identifier or type name
+     * @return the sanitized token containing only letters, digits, and underscores
+     */
+    private static String sanitizeMermaid(String token) {
+        return MERMAID_SANITIZE_PATTERN.matcher(token).replaceAll("_");
+    }
+
+    /**
+     * Sanitizes a table or foreign-key name for use inside a Mermaid entity/relationship label
+     * (which is wrapped in double quotes), removing characters that would otherwise break out of
+     * the quoted string or the surrounding {@code ["..."]} alias syntax: double quotes, newlines
+     * and carriage returns (collapsed to a single space), square brackets, and backslashes.
+     *
+     * @param tableName the raw table or foreign-key name
+     * @return the name with quote-breaking and bracket/backslash characters removed
+     */
+    private static String sanitizeMermaidLabel(String tableName) {
+        return tableName
+                .replace("\"", "")
+                .replace("\n", " ")
+                .replace("\r", " ")
+                .replace("[", "")
+                .replace("]", "")
+                .replace("\\", "");
+    }
 
     /**
      * Appends extra content to a table's document, just below its title and remarks.

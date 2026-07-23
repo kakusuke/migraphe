@@ -72,7 +72,13 @@ public final class MySQLMarkdownPlugin implements GeneratorOutputPlugin {
         var schemaInfo = (MySQLSchemaInfo) data;
         var definition = context.definitionAs(JdbcMarkdownDefinition.class);
         var excludes = definition.excludes().orElse(List.of());
-        var generator = new MySQLMarkdownGenerator(definition.name(), schemaInfo, excludes);
+        var generator =
+                new MySQLMarkdownGenerator(
+                        definition.name(),
+                        schemaInfo,
+                        excludes,
+                        definition.erDiagram(),
+                        definition.erDiagramKeysOnly());
         generator.generate(context.outputDir());
     }
 }

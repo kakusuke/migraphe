@@ -119,6 +119,16 @@ class PostgreSQLMarkdownPluginTest {
                     }
 
                     @Override
+                    public boolean erDiagram() {
+                        return true;
+                    }
+
+                    @Override
+                    public boolean erDiagramKeysOnly() {
+                        return false;
+                    }
+
+                    @Override
                     public Optional<List<ExcludePattern>> excludes() {
                         return Optional.empty();
                     }
@@ -140,5 +150,90 @@ class PostgreSQLMarkdownPluginTest {
 
         Path tableFile = tempDir.resolve("testdb/public/tables/users.md");
         assertThat(tableFile).exists();
+    }
+
+    @Test
+    void outputOmitsErDiagramWhenDefinitionDisablesIt(@TempDir Path tempDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var usersPk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(idColumn),
+                        usersPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(usersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(new PostgreSQLExtensionInfo("plpgsql", "1.0")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of());
+        JdbcMarkdownDefinition definition =
+                new JdbcMarkdownDefinition() {
+                    @Override
+                    public String type() {
+                        return "postgresql-markdown";
+                    }
+
+                    @Override
+                    public String name() {
+                        return "testdb";
+                    }
+
+                    @Override
+                    public String outputDir() {
+                        return "docs/schema";
+                    }
+
+                    @Override
+                    public boolean erDiagram() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean erDiagramKeysOnly() {
+                        return false;
+                    }
+
+                    @Override
+                    public Optional<List<ExcludePattern>> excludes() {
+                        return Optional.empty();
+                    }
+                };
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
+        var outputContext = new OutputContext(resolver, tempDir);
+
+        plugin.output(schemaInfo, outputContext);
+
+        Path indexFile = tempDir.resolve("index.md");
+        assertThat(indexFile).exists();
+        assertThat(Files.readString(indexFile)).doesNotContain("## ER Diagram");
     }
 }

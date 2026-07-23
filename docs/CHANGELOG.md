@@ -2,6 +2,33 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-07-23 (Session 63)
+- **Markdown ER 図 / スキーマ出力のマルチスキーマ対応強化 + enum 型表示修正 + 実 PostgreSQL E2E テスト追加(コードレビュー起点)**
+  - **クロススキーマ FK/exported-key リンク修正**: Foreign Keys / Exported Keys のリンクが `../tables/<t>.md`(同一スキーマ固定)で別スキーマ参照時に 404 だったのを `../../<referencedSchema>/tables/<t>.md` に修正。参照スキーマ名は `schemaInfo.schemas()` の既知名へ正規化(大小/綴り不一致対策)。
+  - **ER 図エンティティ ID の単射化**: 旧 `sanitize(schema)_sanitize(table)` は連結が非単射で別スキーマ同名テーブルが衝突。`sanitize(schema)_sanitize(table)_<sha256(schema.length() + ":" + schema + table) 先頭8桁>` の純関数エンコードに変更(長さプレフィックスで単射)。表示は Mermaid エイリアス `id["table"]`(ラベル=テーブル名)。ER 図は 1 枚統合を維持し、スキーマの grouping は Mermaid `erDiagram` がサブグラフ非対応のため行わない。
+  - **ER 図の細部修正**: 対象テーブル 0 件のスキーマでは空の erDiagram フェンスを出さない / リレーションラベル `fk.name()` をサニタイズし空名は `fk` にフォールバック / PK かつ FK のカラムに `PK, FK` を併記。
+  - **enum/UDT 型の基底名表示**: PostgreSQL enum 列は JDBC が `"schema"."type"` + `COLUMN_SIZE=Integer.MAX_VALUE` を返すため、テーブル別 doc は `(2147483647)`、ER 図は `_schema___type_` に潰れていた。`cleanTypeName`(クォート除去 + 最後のドット以降 = 基底名)を導入し、番兵サイズ `Integer.MAX_VALUE` のときは `(...)` を付与しない。結果、実テーブル定義と同じ `user_account_status` 表示。
+  - **cleanup**: `sanitizeMermaid` の正規表現を `static final Pattern` に precompile、除外判定の regex コンパイルをコンストラクタで 1 回だけにキャッシュ。
+  - **実装**: すべて `migraphe-plugin-jdbc` の `JdbcMarkdownGenerator`(postgresql/mysql は継承で波及)。`/tdd-cycle` を複数サイクル(各 Red→Green→regression→tidy)。
+  - **E2E**: `migraphe-plugin-postgresql` に Testcontainers PostgreSQL 16 の E2E テスト `PostgreSQLSchemaDocE2ETest` を追加。複数スキーマ + enum 列 + クロススキーマ FK + PK 兼 FK + 同名テーブルを実 DB に作り、抽出 → 生成 → 検証を通しで確認(全 Green)。
+  - **検証**: clean build 成功・ErrorProne/NullAway 警告ゼロ・全モジュール green。wrs-japan で `~/.m2` の v0.4.2 jar をローカルビルドで再オーバーレイ + `migraphe pin`/`validate` OK。
+
+### 2026-07-22 (Session 62)
+- **ER 図に「PK/FK カラムのみ表示」オプションを追加 + ドキュメントの YAML キー修正 + wrs-japan での実地確認**
+  - **新オプション**: `JdbcMarkdownDefinition` に `erDiagramKeysOnly`（boolean, `@WithDefault false`、YAML キー `er-diagram-keys-only`）を追加。`true` で ER 図の各エンティティを主キー・外部キーのカラムのみに絞る（リレーションは不変）。デフォルト `false` は全カラム表示。jdbc/postgresql/mysql の各 generator を 5 引数コンストラクタ化（3/4 引数は委譲オーバーロードで温存）し、各 plugin で `definition.erDiagramKeysOnly()` を配線。テスト 2 本追加（keys-only で非キー列が消える / デフォルト全カラム維持）。全モジュール green、clean build + ErrorProne/NullAway クリーン。
+  - **ドキュメント修正**: USER_GUIDE(en/ja) が ER 図オプションの YAML キーを camelCase（`erDiagram`）で記載していたが、SmallRye `@ConfigMapping` は kebab-case（`output-dir` と同じ規約）のため `erDiagram: false` は認識されず無視される既存バグを修正。正しくは `er-diagram` / `er-diagram-keys-only`。
+  - **wrs-japan での実地確認**: ローカルビルドの `migraphe-plugin-jdbc` / `migraphe-plugin-postgresql` jar を `~/.m2` の JitPack キャッシュ（`com.github.kakusuke.migraphe:...:v0.4.2`）に上書きし、`migraphe.lock.yaml` を `migraphe pin` で再ピン。実 DB で `migraphe generate` が ER 図付き Markdown を生成することを確認（デフォルト全カラム、スキーマ修飾型 `"app"."language_code"` のサニタイズも実証）。
+  - **補足**: Session 61 の一部編集（識別子サニタイズ = Step 5、および PostgreSQL/MySQL 配線 = Step 7）がツール出力障害でディスクに未反映だったことを clean build で検出し、直接編集で再実装・grep 永続化確認・再検証した。
+
+### 2026-07-22 (Session 61)
+- **DB スキーマ出力 generator に ER 図（Mermaid）出力を追加（3方言すべて）**
+  - **概要**: Markdown 系アウトプットプラグイン（`jdbc-markdown` / `postgresql-markdown` / `mysql-markdown`）が、DB 全体で 1 枚の ER 図を Mermaid 記法（```mermaid `erDiagram`）で `index.md` に埋め込むようにした。SVG ファイルは生成しない。
+  - **仕様**: エンティティ = 各テーブル（カラム行に型・PK/FK 印。PK かつ FK のカラムは Mermaid の制約により PK 優先表示）。ビューは対象外。リレーション = 外部キー（imported）から `参照先 ||--o{ FK保持テーブル : "FK名"`。カーディナリティは現状一律 1 対多（`||--o{`）固定。参照先テーブルが出力対象に存在しない（exclude 等）FK はリレーションを描かない（空エンティティ防止）。テーブル名・カラム名・型名は Mermaid 安全な識別子にサニタイズ（非英数字を `_` に置換。例 `character varying(255)` → `character_varying_255_`）。単一スキーマ前提の割り切り。
+  - **新オプション**: generator 定義（`JdbcMarkdownDefinition`）に `erDiagram`（boolean, `@WithDefault true`）を追加。`erDiagram: false` で ER 図セクションを抑制できる。
+  - **実装（`/tdd-cycle` を 7 サイクル）**: erDiagram フラグ → エンティティ生成 → FK/リレーション → 参照先スキップ → 識別子サニタイズ → `false` 配線 → PostgreSQL/MySQL への波及。`JdbcMarkdownGenerator.appendErDiagram`（+ サニタイズ/参照先ガード）、`JdbcMarkdownDefinition.erDiagram()`、jdbc/postgresql/mysql 各 plugin で `definition.erDiagram()` を配線、各 generator に 4 引数コンストラクタを追加。
+  - **検証**: 全モジュール green、spotless clean。
+  - **将来課題**: カーディナリティ精緻化（NULL 許容 / 複合キー）、複数スキーマの厳密対応。
+
 ### 2026-06-26 (Session 60)
 - **Maven Central 登録に向けた全モジュール Javadoc 整備（英語・javadoc 警告ゼロ化）**
   - **Motivation**: Maven Central は javadoc jar / sources jar を必須要求し、公開 API はプラグイン開発者が直接参照する。調査の結果、204 main ソースファイル中 Javadoc があるのは 72（35%）のみで、特に public API（`migraphe-api`）のコア SPI 9 インターフェースが完全に未文書化、PostgreSQL/MySQL プラグインは約 5% しか整備されていなかった。
