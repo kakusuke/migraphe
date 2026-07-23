@@ -12,7 +12,7 @@ import java.util.Properties;
  * the build and bundled on the classpath. They back the {@code -v}/{@code --version} command in
  * {@link Main}.
  *
- * @param version the release version string (e.g. {@code "0.4.2"}), or {@code "unknown"} if the
+ * @param version the release version string (e.g. {@code "0.4.3"}), or {@code "unknown"} if the
  *     version resource is absent or omits the property
  * @param commit the source-control commit identifier the artifact was built from, or {@code
  *     "unknown"} if the version resource is absent or omits the property

@@ -10,7 +10,7 @@ package io.github.kakusuke.migraphe.cli.resolver;
  *
  * @param groupId the Maven group identifier (for example {@code io.github.kakusuke})
  * @param artifactId the Maven artifact identifier (for example {@code migraphe-plugin-postgresql})
- * @param version the artifact version (for example {@code 0.4.2})
+ * @param version the artifact version (for example {@code 0.4.3})
  */
 public record MavenArtifactCoordinate(String groupId, String artifactId, String version) {
 
