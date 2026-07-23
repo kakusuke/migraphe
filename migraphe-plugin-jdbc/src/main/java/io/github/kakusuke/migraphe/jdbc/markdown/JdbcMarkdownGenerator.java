@@ -70,7 +70,8 @@ public class JdbcMarkdownGenerator {
     private final Map<String, List<JdbcSchemaDetail>> schemasByTableName;
 
     /**
-     * Memoizes {@link #erEntityId(String, String)} results keyed by the {@link #erIdHash} input.
+     * Memoizes {@link #erEntityId(String, String)} results keyed by {@link #erIdKey(String,
+     * String)}.
      */
     private final Map<String, String> erEntityIdCache = new HashMap<>();
 
@@ -473,7 +474,7 @@ public class JdbcMarkdownGenerator {
                 return schema.name();
             }
         }
-        if (caseInsensitiveMatches.size() == 1) {
+        if (!caseInsensitiveMatches.isEmpty()) {
             return caseInsensitiveMatches.get(0).name();
         }
         return refSchema;
@@ -532,6 +533,13 @@ public class JdbcMarkdownGenerator {
             String base = unquoted.substring(lastDot + 1);
             if (!base.isEmpty()) {
                 return base;
+            }
+            String trimmed = unquoted;
+            while (trimmed.endsWith(".")) {
+                trimmed = trimmed.substring(0, trimmed.length() - 1);
+            }
+            if (!trimmed.isEmpty()) {
+                return trimmed;
             }
         }
         return unquoted;
@@ -741,10 +749,8 @@ public class JdbcMarkdownGenerator {
      * @return the sanitized {@code <schema>_<table>_<hash>} entity identifier
      */
     private String erEntityId(String schemaName, String tableName) {
-        // Same injective combination as erIdHash's hash input, safe to reuse as a cache key.
-        String cacheKey = schemaName.length() + ":" + schemaName + tableName;
         return erEntityIdCache.computeIfAbsent(
-                cacheKey,
+                erIdKey(schemaName, tableName),
                 k ->
                         sanitizeMermaid(schemaName)
                                 + "_"
@@ -754,18 +760,28 @@ public class JdbcMarkdownGenerator {
     }
 
     /**
+     * Builds the injective {@code schemaName}/{@code tableName} combination shared by {@link
+     * #erEntityId(String, String)}'s cache key and {@link #erIdHash(String, String)}'s hash input,
+     * so both stay in sync and a change to one cannot silently break the other's uniqueness
+     * guarantee.
+     *
+     * <p>The schema length is prefixed so that inputs are combined unambiguously (injectively),
+     * rather than simply concatenating schema and table names.
+     */
+    private static String erIdKey(String schemaName, String tableName) {
+        return schemaName.length() + ":" + schemaName + tableName;
+    }
+
+    /**
      * Computes a short hash suffix distinguishing entity identifiers whose sanitized {@code
      * <schema>_<table>} prefix would otherwise collide (e.g. {@code "a_b", "c"} vs. {@code "a",
      * "b_c"}).
-     *
-     * <p>The schema length is prefixed to the hash input so that inputs are combined unambiguously
-     * (injectively), rather than simply concatenating schema and table names.
      */
     private static String erIdHash(String schemaName, String tableName) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            String hashInput = schemaName.length() + ":" + schemaName + tableName;
-            byte[] digest = md.digest(hashInput.getBytes(StandardCharsets.UTF_8));
+            byte[] digest =
+                    md.digest(erIdKey(schemaName, tableName).getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest).substring(0, 8);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available", e);
@@ -849,12 +865,13 @@ public class JdbcMarkdownGenerator {
     }
 
     /**
-     * Minimally sanitizes a table name for use inside a Mermaid entity label (which is wrapped in
-     * double quotes), removing any double quotes so the label cannot break out of its quoted
-     * string. Ordinary table names are returned unchanged.
+     * Sanitizes a table or foreign-key name for use inside a Mermaid entity/relationship label
+     * (which is wrapped in double quotes), removing characters that would otherwise break out of
+     * the quoted string or the surrounding {@code ["..."]} alias syntax: double quotes, newlines
+     * and carriage returns (collapsed to a single space), square brackets, and backslashes.
      *
-     * @param tableName the raw table name
-     * @return the table name with double quotes removed
+     * @param tableName the raw table or foreign-key name
+     * @return the name with quote-breaking and bracket/backslash characters removed
      */
     private static String sanitizeMermaidLabel(String tableName) {
         return tableName

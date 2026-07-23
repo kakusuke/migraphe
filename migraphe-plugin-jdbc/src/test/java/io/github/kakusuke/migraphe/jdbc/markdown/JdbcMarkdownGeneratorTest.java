@@ -1858,4 +1858,117 @@ class JdbcMarkdownGeneratorTest {
         String indexContent = Files.readString(outputDir.resolve("index.md"));
         assertThat(indexContent).contains("weird");
     }
+
+    @Test
+    void columnTypeWithTrailingDotDropsTrailingDot(@TempDir Path outputDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "bigint", Types.BIGINT, 19, 0, false, null, false, false, null, 1);
+        var cColumn =
+                new JdbcColumnInfo(
+                        "c", "weird.", Types.OTHER, 0, 0, false, null, false, false, null, 2);
+        var pk = new JdbcPrimaryKeyInfo("pk_t", List.of("id"));
+        var tTable =
+                new JdbcTableInfo(
+                        "t",
+                        "",
+                        List.of(idColumn, cColumn),
+                        pk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(tTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String tableContent = Files.readString(outputDir.resolve("mydb/public/tables/t.md"));
+        assertThat(tableContent).contains("| c | weird | NO |  | NO |  |\n");
+        assertThat(tableContent).doesNotContain("weird.");
+
+        String indexContent = Files.readString(outputDir.resolve("index.md"));
+        assertThat(indexContent).contains("    weird c\n");
+        assertThat(indexContent).doesNotContain("weird.");
+    }
+
+    @Test
+    void referencedSchemaFallsBackToMatchedSchemaCasingWhenTableNotFound(@TempDir Path outputDir)
+            throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var extIdColumn =
+                new JdbcColumnInfo(
+                        "ext_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var ordersPk = new JdbcPrimaryKeyInfo("pk_orders", List.of("id"));
+        var fkOrdersExt =
+                new JdbcForeignKeyInfo(
+                        "fk_orders_ext",
+                        List.of("ext_id"),
+                        "PUBLIC",
+                        "ext_things",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var ordersTable =
+                new JdbcTableInfo(
+                        "orders",
+                        "",
+                        List.of(idColumn, extIdColumn),
+                        ordersPk,
+                        List.of(fkOrdersExt),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var publicSchemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(ordersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var capitalizedPublicSchemaDetail =
+                new JdbcSchemaDetail(
+                        "Public",
+                        List.of(),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new DefaultJdbcSchemaInfo(
+                        List.of(publicSchemaDetail, capitalizedPublicSchemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/public/tables/orders.md"));
+        assertThat(content).contains("../../public/tables/ext_things.md");
+        assertThat(content).doesNotContain("../../PUBLIC/tables/ext_things.md");
+    }
 }

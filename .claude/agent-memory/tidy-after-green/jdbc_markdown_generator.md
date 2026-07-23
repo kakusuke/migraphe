@@ -140,3 +140,21 @@ metadata:
   compound (fields from #7 make #6/#8's hot-path calls cheap even before memoization, and the
   memoization in #8 makes the remaining redundant calls in #6's call site near-free either way) — 26
   tests (`JdbcMarkdownGeneratorTest` + `JdbcMarkdownPluginTest`) stayed green, output byte-identical.
+- 2026-07-23 (findings #859/#745, third review pass): #859 — `sanitizeMermaidLabel`'s Javadoc said
+  "removing any double quotes" / "ordinary table names are returned unchanged," but the method body
+  actually strips `"`, `\n`, `\r`, `[`, `]`, and `\` (needed because entities are written as
+  `id["label"]` — backslashes/brackets/newlines would break the Mermaid alias syntax, not just the
+  quotes). Javadoc-only fix, no code change: rewrote the description to list all five stripped
+  character classes and why (`["..."]` alias breakage), and reworded `@return` to match. #745 — the
+  same injective key expression `schemaName.length() + ":" + schemaName + tableName` was duplicated
+  verbatim in `erEntityId`'s `cacheKey` local and `erIdHash`'s `hashInput` local (previously connected
+  only by a comment: "Same injective combination as erIdHash's hash input"). Extracted a `private
+  static String erIdKey(String schemaName, String tableName)` returning that expression; both call
+  sites now call it, and the field Javadoc on `erEntityIdCache` was updated from "keyed by the {@link
+  #erIdHash} input" to "keyed by {@link #erIdKey(String, String)}" for accuracy. General lesson: when
+  two methods share an injective/derived key formula connected only by a prose comment ("same as X"),
+  that's a real duplication-of-truth risk (one could drift without the other) even though the
+  expression itself is trivial (one line) — extracting a tiny private static helper is still worth it
+  specifically because a future edit to either copy could silently break cache-key/hash-input parity.
+  All 19+7 tests (`JdbcMarkdownGeneratorTest`+`JdbcMarkdownPluginTest`) stayed green; spotless only
+  rewrapped the `md.digest(erIdKey(...).getBytes(...))` line, no semantic diff.
