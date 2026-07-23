@@ -2,6 +2,17 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-07-23 (Session 63)
+- **Markdown ER 図 / スキーマ出力のマルチスキーマ対応強化 + enum 型表示修正 + 実 PostgreSQL E2E テスト追加(コードレビュー起点)**
+  - **クロススキーマ FK/exported-key リンク修正**: Foreign Keys / Exported Keys のリンクが `../tables/<t>.md`(同一スキーマ固定)で別スキーマ参照時に 404 だったのを `../../<referencedSchema>/tables/<t>.md` に修正。参照スキーマ名は `schemaInfo.schemas()` の既知名へ正規化(大小/綴り不一致対策)。
+  - **ER 図エンティティ ID の単射化**: 旧 `sanitize(schema)_sanitize(table)` は連結が非単射で別スキーマ同名テーブルが衝突。`sanitize(schema)_sanitize(table)_<sha256(schema.length() + ":" + schema + table) 先頭8桁>` の純関数エンコードに変更(長さプレフィックスで単射)。表示は Mermaid エイリアス `id["table"]`(ラベル=テーブル名)。ER 図は 1 枚統合を維持し、スキーマの grouping は Mermaid `erDiagram` がサブグラフ非対応のため行わない。
+  - **ER 図の細部修正**: 対象テーブル 0 件のスキーマでは空の erDiagram フェンスを出さない / リレーションラベル `fk.name()` をサニタイズし空名は `fk` にフォールバック / PK かつ FK のカラムに `PK, FK` を併記。
+  - **enum/UDT 型の基底名表示**: PostgreSQL enum 列は JDBC が `"schema"."type"` + `COLUMN_SIZE=Integer.MAX_VALUE` を返すため、テーブル別 doc は `(2147483647)`、ER 図は `_schema___type_` に潰れていた。`cleanTypeName`(クォート除去 + 最後のドット以降 = 基底名)を導入し、番兵サイズ `Integer.MAX_VALUE` のときは `(...)` を付与しない。結果、実テーブル定義と同じ `user_account_status` 表示。
+  - **cleanup**: `sanitizeMermaid` の正規表現を `static final Pattern` に precompile、除外判定の regex コンパイルをコンストラクタで 1 回だけにキャッシュ。
+  - **実装**: すべて `migraphe-plugin-jdbc` の `JdbcMarkdownGenerator`(postgresql/mysql は継承で波及)。`/tdd-cycle` を複数サイクル(各 Red→Green→regression→tidy)。
+  - **E2E**: `migraphe-plugin-postgresql` に Testcontainers PostgreSQL 16 の E2E テスト `PostgreSQLSchemaDocE2ETest` を追加。複数スキーマ + enum 列 + クロススキーマ FK + PK 兼 FK + 同名テーブルを実 DB に作り、抽出 → 生成 → 検証を通しで確認(全 Green)。
+  - **検証**: clean build 成功・ErrorProne/NullAway 警告ゼロ・全モジュール green。wrs-japan で `~/.m2` の v0.4.2 jar をローカルビルドで再オーバーレイ + `migraphe pin`/`validate` OK。
+
 ### 2026-07-22 (Session 62)
 - **ER 図に「PK/FK カラムのみ表示」オプションを追加 + ドキュメントの YAML キー修正 + wrs-japan での実地確認**
   - **新オプション**: `JdbcMarkdownDefinition` に `erDiagramKeysOnly`（boolean, `@WithDefault false`、YAML キー `er-diagram-keys-only`）を追加。`true` で ER 図の各エンティティを主キー・外部キーのカラムのみに絞る（リレーションは不変）。デフォルト `false` は全カラム表示。jdbc/postgresql/mysql の各 generator を 5 引数コンストラクタ化（3/4 引数は委譲オーバーロードで温存）し、各 plugin で `definition.erDiagramKeysOnly()` を配線。テスト 2 本追加（keys-only で非キー列が消える / デフォルト全カラム維持）。全モジュール green、clean build + ErrorProne/NullAway クリーン。

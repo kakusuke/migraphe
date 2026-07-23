@@ -161,6 +161,27 @@ class JdbcMarkdownGeneratorTest {
         return new DefaultJdbcSchemaInfo(List.of(schemaDetail));
     }
 
+    private static String expectedErId(String schema, String table) {
+        return sanitize(schema) + "_" + sanitize(table) + "_" + shortHash(schema, table);
+    }
+
+    private static String sanitize(String s) {
+        return s.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    private static String shortHash(String schema, String table) {
+        try {
+            var md = java.security.MessageDigest.getInstance("SHA-256");
+            String hashInput = schema.length() + ":" + schema + table;
+            byte[] d = md.digest(hashInput.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            var sb = new StringBuilder();
+            for (byte b : d) sb.append(String.format("%02x", b));
+            return sb.substring(0, 8);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new AssertionError(e);
+        }
+    }
+
     private static JdbcMarkdownDefinition.ExcludePattern excludeSchema(String schemaName) {
         return new JdbcMarkdownDefinition.ExcludePattern() {
             @Override
@@ -592,8 +613,8 @@ class JdbcMarkdownGeneratorTest {
         String content = Files.readString(outputDir.resolve("index.md"));
         assertThat(content)
                 .contains("## ER Diagram\n\n```mermaid\nerDiagram\n")
-                .contains("  users {\n")
-                .contains("  orders {\n");
+                .contains("  " + expectedErId("PUBLIC", "users") + "[\"users\"] {\n")
+                .contains("  " + expectedErId("PUBLIC", "orders") + "[\"orders\"] {\n");
     }
 
     @Test
@@ -673,8 +694,14 @@ class JdbcMarkdownGeneratorTest {
 
         String content = Files.readString(outputDir.resolve("index.md"));
         assertThat(content)
-                .contains("  users {\n    bigint id PK\n    varchar email\n  }")
-                .contains("  orders {\n    bigint id PK\n    bigint user_id\n  }");
+                .contains(
+                        "  "
+                                + expectedErId("PUBLIC", "users")
+                                + "[\"users\"] {\n    bigint id PK\n    varchar email\n  }")
+                .contains(
+                        "  "
+                                + expectedErId("PUBLIC", "orders")
+                                + "[\"orders\"] {\n    bigint id PK\n    bigint user_id\n  }");
     }
 
     @Test
@@ -751,7 +778,93 @@ class JdbcMarkdownGeneratorTest {
         String content = Files.readString(outputDir.resolve("index.md"));
         assertThat(content)
                 .contains("    bigint user_id FK")
-                .contains("  users ||--o{ orders : \"fk_orders_users\"");
+                .contains(
+                        "  "
+                                + expectedErId("PUBLIC", "users")
+                                + " ||--o{ "
+                                + expectedErId("PUBLIC", "orders")
+                                + " : \"fk_orders_users\"");
+    }
+
+    @Test
+    void erDiagramRelationshipLabelIsSanitized(@TempDir Path outputDir) throws Exception {
+        var usersPk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "bigint", Types.BIGINT, 19, 0, false, null, false, false, null, 1);
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(idColumn),
+                        usersPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var ordersPk = new JdbcPrimaryKeyInfo("pk_orders", List.of("id"));
+        var orderIdColumn =
+                new JdbcColumnInfo(
+                        "id", "bigint", Types.BIGINT, 19, 0, false, null, false, false, null, 1);
+        var userIdColumn =
+                new JdbcColumnInfo(
+                        "user_id",
+                        "bigint",
+                        Types.BIGINT,
+                        19,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var fkOrdersUsers =
+                new JdbcForeignKeyInfo(
+                        "fk_\"weird\"",
+                        List.of("user_id"),
+                        "PUBLIC",
+                        "users",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var ordersTable =
+                new JdbcTableInfo(
+                        "orders",
+                        "",
+                        List.of(orderIdColumn, userIdColumn),
+                        ordersPk,
+                        List.of(fkOrdersUsers),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(usersTable, ordersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content)
+                .contains(
+                        expectedErId("PUBLIC", "users")
+                                + " ||--o{ "
+                                + expectedErId("PUBLIC", "orders")
+                                + " : \"");
+        assertThat(content).doesNotContain("fk_\"weird\"");
     }
 
     @Test
@@ -795,7 +908,7 @@ class JdbcMarkdownGeneratorTest {
         generator.generate(outputDir);
 
         String content = Files.readString(outputDir.resolve("index.md"));
-        assertThat(content).doesNotContain("  users {");
+        assertThat(content).doesNotContain(expectedErId("PUBLIC", "users") + "[");
         assertThat(content).doesNotContain("||--o{");
     }
 
@@ -806,7 +919,7 @@ class JdbcMarkdownGeneratorTest {
         generator.generate(outputDir);
 
         String content = Files.readString(outputDir.resolve("index.md"));
-        assertThat(content).doesNotContain("  active_users {");
+        assertThat(content).doesNotContain("_active_users[");
     }
 
     @Test
@@ -871,7 +984,7 @@ class JdbcMarkdownGeneratorTest {
         String content = Files.readString(outputDir.resolve("index.md"));
         // Sanitized tokens are emitted (non [A-Za-z0-9_] replaced with '_').
         assertThat(content).contains("    character_varying_255_ price");
-        assertThat(content).contains("    _app___language_code_ lang");
+        assertThat(content).contains("    language_code lang");
         // Raw Mermaid-breaking forms must not leak through.
         assertThat(content).doesNotContain("character varying(255)");
         assertThat(content).doesNotContain("\"app\".\"language_code\"");
@@ -1069,5 +1182,390 @@ class JdbcMarkdownGeneratorTest {
 
         String content = Files.readString(outputDir.resolve("mydb/AUTH/tables/users.md"));
         assertThat(content).contains("[orders](../../SALES/tables/orders.md)");
+    }
+
+    @Test
+    void erDiagramOmittedWhenNoTables(@TempDir Path outputDir) throws Exception {
+        var viewIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var activeUsersView =
+                new JdbcViewInfo(
+                        "active_users",
+                        "",
+                        List.of(viewIdColumn),
+                        "SELECT id FROM users WHERE name IS NOT NULL");
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(),
+                        List.of(activeUsersView),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).doesNotContain("## ER Diagram").doesNotContain("erDiagram");
+    }
+
+    @Test
+    void erDiagramQualifiesSameNamedTablesAcrossSchemas(@TempDir Path outputDir) throws Exception {
+        var authItemsIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var authItemsPk = new JdbcPrimaryKeyInfo("pk_items_auth", List.of("id"));
+        var authItemsTable =
+                new JdbcTableInfo(
+                        "items",
+                        "",
+                        List.of(authItemsIdColumn),
+                        authItemsPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var authSchemaDetail =
+                new JdbcSchemaDetail(
+                        "AUTH",
+                        List.of(authItemsTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+
+        var salesItemsIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var refIdColumn =
+                new JdbcColumnInfo(
+                        "ref_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var salesItemsPk = new JdbcPrimaryKeyInfo("pk_items_sales", List.of("id"));
+        var fkSalesItemsAuthItems =
+                new JdbcForeignKeyInfo(
+                        "fk_sales_items_auth_items",
+                        List.of("ref_id"),
+                        "AUTH",
+                        "items",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var salesItemsTable =
+                new JdbcTableInfo(
+                        "items",
+                        "",
+                        List.of(salesItemsIdColumn, refIdColumn),
+                        salesItemsPk,
+                        List.of(fkSalesItemsAuthItems),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var salesSchemaDetail =
+                new JdbcSchemaDetail(
+                        "SALES",
+                        List.of(salesItemsTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(authSchemaDetail, salesSchemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).contains("  " + expectedErId("AUTH", "items") + "[\"items\"] {");
+        assertThat(content).contains("  " + expectedErId("SALES", "items") + "[\"items\"] {");
+        assertThat(content)
+                .contains(
+                        "  "
+                                + expectedErId("AUTH", "items")
+                                + " ||--o{ "
+                                + expectedErId("SALES", "items")
+                                + " : \"fk_sales_items_auth_items\"");
+        assertThat(content).doesNotContain("  items ||--o{ items");
+    }
+
+    @Test
+    void foreignKeyLinkNormalizesReferencedSchemaCase(@TempDir Path outputDir) throws Exception {
+        var usersIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var usersPk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(usersIdColumn),
+                        usersPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var ordersIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var userIdColumn =
+                new JdbcColumnInfo(
+                        "user_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var ordersPk = new JdbcPrimaryKeyInfo("pk_orders", List.of("id"));
+        var fkUserId =
+                new JdbcForeignKeyInfo(
+                        "fk_orders_user",
+                        List.of("user_id"),
+                        "public",
+                        "users",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var ordersTable =
+                new JdbcTableInfo(
+                        "orders",
+                        "",
+                        List.of(ordersIdColumn, userIdColumn),
+                        ordersPk,
+                        List.of(fkUserId),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(usersTable, ordersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        assertThat(content).contains("[users](../../PUBLIC/tables/users.md)");
+        assertThat(content).doesNotContain("../../public/tables/users.md");
+    }
+
+    @Test
+    void erDiagramDisambiguatesCollidingEntityIds(@TempDir Path outputDir) throws Exception {
+        var cIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var cPk = new JdbcPrimaryKeyInfo("pk_c", List.of("id"));
+        var cTable =
+                new JdbcTableInfo(
+                        "c",
+                        "",
+                        List.of(cIdColumn),
+                        cPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var aBSchemaDetail =
+                new JdbcSchemaDetail(
+                        "a_b",
+                        List.of(cTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+
+        var bCIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var bCPk = new JdbcPrimaryKeyInfo("pk_b_c", List.of("id"));
+        var bCTable =
+                new JdbcTableInfo(
+                        "b_c",
+                        "",
+                        List.of(bCIdColumn),
+                        bCPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var aSchemaDetail =
+                new JdbcSchemaDetail(
+                        "a",
+                        List.of(bCTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(aBSchemaDetail, aSchemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(expectedErId("a_b", "c")).isNotEqualTo(expectedErId("a", "b_c"));
+        assertThat(content).contains("  " + expectedErId("a_b", "c") + "[\"c\"] {");
+        assertThat(content).contains("  " + expectedErId("a", "b_c") + "[\"b_c\"] {");
+    }
+
+    @Test
+    void erDiagramMarksColumnAsBothPrimaryAndForeignKey(@TempDir Path outputDir) throws Exception {
+        var usersIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var usersPk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(usersIdColumn),
+                        usersPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var userIdColumn =
+                new JdbcColumnInfo(
+                        "user_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        1);
+        var membershipsPk = new JdbcPrimaryKeyInfo("pk_memberships", List.of("user_id"));
+        var fkMembershipsUser =
+                new JdbcForeignKeyInfo(
+                        "fk_memberships_user",
+                        List.of("user_id"),
+                        "PUBLIC",
+                        "users",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var membershipsTable =
+                new JdbcTableInfo(
+                        "memberships",
+                        "",
+                        List.of(userIdColumn),
+                        membershipsPk,
+                        List.of(fkMembershipsUser),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(usersTable, membershipsTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).contains("    INTEGER user_id PK, FK");
+    }
+
+    @Test
+    void enumColumnTypeShownAsBaseName(@TempDir Path outputDir) throws Exception {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "bigint", Types.BIGINT, 19, 0, false, null, false, false, null, 1);
+        var statusColumn =
+                new JdbcColumnInfo(
+                        "status",
+                        "\"account\".\"user_account_status\"",
+                        Types.VARCHAR,
+                        Integer.MAX_VALUE,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var pk = new JdbcPrimaryKeyInfo("pk_user_accounts", List.of("id"));
+        var userAccountsTable =
+                new JdbcTableInfo(
+                        "user_accounts",
+                        "",
+                        List.of(idColumn, statusColumn),
+                        pk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "account",
+                        List.of(userAccountsTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+        var generator = new JdbcMarkdownGenerator("mydb", schemaInfo, List.of());
+
+        generator.generate(outputDir);
+
+        String tableContent =
+                Files.readString(outputDir.resolve("mydb/account/tables/user_accounts.md"));
+        assertThat(tableContent).contains("| status | user_account_status | NO |  | NO |  |\n");
+        assertThat(tableContent).doesNotContain("\"account\".\"user_account_status\"");
+        assertThat(tableContent).doesNotContain("(2147483647)");
+
+        String indexContent = Files.readString(outputDir.resolve("index.md"));
+        assertThat(indexContent).contains("    user_account_status status");
+        assertThat(indexContent).doesNotContain("_account___user_account_status_");
     }
 }

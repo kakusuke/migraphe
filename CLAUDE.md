@@ -7,7 +7,7 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: Mermaid ER-diagram output in the Markdown generators, with `er-diagram` (default true) and `er-diagram-keys-only` (default false) options (Session 61–62)
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: hardened the Markdown ER-diagram / schema output for multi-schema DBs (cross-schema FK links, injective schema-qualified+hash entity IDs, enum/UDT base-name type display, PK+FK markers) plus a real-PostgreSQL E2E test (Session 63)
 **Tests**: 968, 100% passing
 
 ## Module Structure
@@ -212,10 +212,10 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-07-22 (Session 62)
-- Added a `er-diagram-keys-only` option to the Markdown ER diagram (Session 61 feature). `JdbcMarkdownDefinition.erDiagramKeysOnly()` (boolean, `@WithDefault false`; YAML key `er-diagram-keys-only`, kebab-case per SmallRye `@ConfigMapping`, same as `output-dir`): when `true` each entity lists only PK/FK columns (relationships unaffected); default `false` shows all columns. jdbc/postgresql/mysql generators grew a 5-arg constructor (3/4-arg retained as delegating overloads); each plugin wires `definition.erDiagramKeysOnly()`. 2 tests added; all modules green, clean build + ErrorProne/NullAway clean. Also fixed a USER_GUIDE (en/ja) doc bug: the ER-diagram YAML key was written camelCase (`erDiagram`) but the kebab-case config mapping means only `er-diagram` is honored. Verified end-to-end in the `wrs-japan` project by overlaying locally-built `migraphe-plugin-jdbc`/`-postgresql` jars into the `~/.m2` JitPack cache (`com.github.kakusuke.migraphe:…:v0.4.2`), re-pinning `migraphe.lock.yaml`, and regenerating schema docs against a live DB. Note: some Session 61 edits (identifier sanitization, PG/MySQL wiring) had not actually persisted to disk due to a tool-output fault; this was caught by `clean build` and re-applied via direct edits with grep-verified persistence. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-07-23 (Session 63)
+- Hardened the Markdown ER-diagram / schema output for multi-schema databases and fixed enum type display (code-review driven). Cross-schema FK/exported-key links now emit `../../<referencedSchema>/tables/<t>.md` with the referenced schema normalized to a known schema name; ER-diagram entity IDs use an injective `sanitize(schema)_sanitize(table)_<sha256(len+":"+schema+table)[:8]>` with Mermaid alias labels (single combined diagram; no schema grouping — `erDiagram` has no subgraphs); empty schemas omit the erDiagram fence; relationship labels are sanitized (empty → `fk`); PK+FK columns render `PK, FK`; enum/UDT column types show the base name (quotes/schema qualifier and the `Integer.MAX_VALUE` sentinel size stripped). Regex in `sanitizeMermaid`/exclusion is precompiled/cached. Added a Testcontainers PostgreSQL E2E test (`PostgreSQLSchemaDocE2ETest`). All in `JdbcMarkdownGenerator` (postgresql/mysql inherit). Clean build + ErrorProne/NullAway clean; verified in wrs-japan via `~/.m2` jar overlay + lockfile re-pin. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-07-22
-**Current Work**: Markdown ER diagram gained an `er-diagram-keys-only` option (default `false` = all columns; `true` = PK/FK columns only) across `jdbc`/`postgresql`/`mysql-markdown`; fixed the ER-diagram YAML key docs to kebab-case (`er-diagram`), and verified the feature end-to-end in the wrs-japan project via `~/.m2` jar overlay + lockfile re-pin (Session 62). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Last Updated**: 2026-07-23
+**Current Work**: Multi-schema hardening of the Markdown ER-diagram/schema output — cross-schema FK links, injective schema-qualified+hash ER entity IDs (single combined diagram; no grouping — Mermaid erDiagram lacks subgraphs), enum/UDT base-name type display, PK+FK markers, empty-schema fence guard, sanitized relationship labels; plus a Testcontainers PostgreSQL E2E test. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.

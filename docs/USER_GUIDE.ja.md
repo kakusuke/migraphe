@@ -802,7 +802,7 @@ migraphe generate --name mydb
 
 Markdown アウトプットプラグイン（`jdbc-markdown`、`postgresql-markdown`、`mysql-markdown`）はスキーマごとに 1 ディレクトリを生成し、それぞれに `index.md`、`tables/` ディレクトリ、`views/` ディレクトリを書き出します。各テーブルページには、カラム定義（名前、型、NULL 許可、デフォルト値）、主キー/ユニークキー、相互リンク付きの外部キー（**Foreign Keys**（imported key）と **Referenced By**（exported key）の両視点）、インデックスが含まれます。正確なディレクトリ構造と imported/exported 外部キーのレンダリングは [`migraphe-plugin-jdbc` の README](../migraphe-plugin-jdbc/README.ja.md) に記載しています。
 
-デフォルトでは、`index.md` にはデータベース全体の **ER 図** も Mermaid の `erDiagram` 記法（```mermaid コードフェンス。GitHub や多くの Markdown ビューアがインラインでレンダリング）で 1 枚埋め込まれます。各テーブルはカラム（型と PK/FK 印付き）を持つエンティティとなり、外部キーはリレーション（`||--o{`）として描かれます。ジェネレータに `er-diagram: false` を指定するとこのセクションを抑制でき、`er-diagram-keys-only: true` を指定すると各エンティティを主キー・外部キーのカラムのみに絞って図をコンパクトにできます。
+デフォルトでは、`index.md` にはデータベース全体の **ER 図** も Mermaid の `erDiagram` 記法（```mermaid コードフェンス。GitHub や多くの Markdown ビューアがインラインでレンダリング）で 1 枚埋め込まれます。各テーブルはカラム（型と PK/FK 印付き。主キーかつ外部キーのカラムは `PK, FK` と併記）を持つエンティティとなり、外部キーはリレーション（`||--o{`）として描かれます。図はスキーマを考慮します。別スキーマの同名テーブルもそれぞれ別エンティティになり、スキーマをまたぐ外部キーも描画され、テーブルページ内のスキーマ跨ぎのリンクは参照先スキーマのディレクトリへ解決されます。カラムの型は基底の型名で表示されます（例: PostgreSQL の列挙型はスキーマ修飾・引用符付きではなく `user_account_status` と表示）。図は 1 枚に統合されます。Mermaid の `erDiagram` にはグルーピング構文が無いため、スキーマ単位でテーブルを枠囲いすることはしません。ジェネレータに `er-diagram: false` を指定するとこのセクションを抑制でき、`er-diagram-keys-only: true` を指定すると各エンティティを主キー・外部キーのカラムのみに絞って図をコンパクトにできます。
 
 ### データベース固有のドキュメント
 
