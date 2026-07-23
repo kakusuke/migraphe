@@ -35,7 +35,43 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
             String name,
             MySQLSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes) {
-        super(name, schemaInfo, excludes);
+        this(name, schemaInfo, excludes, true);
+    }
+
+    /**
+     * Creates a MySQL Markdown generator.
+     *
+     * @param name the database name used as the documentation title and as the root directory for
+     *     generated files
+     * @param schemaInfo the MySQL schema information to render
+     * @param excludes schema/table exclusion patterns applied during generation
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     */
+    public MySQLMarkdownGenerator(
+            String name,
+            MySQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram) {
+        this(name, schemaInfo, excludes, erDiagram, false);
+    }
+
+    /**
+     * Creates a MySQL Markdown generator.
+     *
+     * @param name the database name used as the documentation title and as the root directory for
+     *     generated files
+     * @param schemaInfo the MySQL schema information to render
+     * @param excludes schema/table exclusion patterns applied during generation
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     */
+    public MySQLMarkdownGenerator(
+            String name,
+            MySQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly) {
+        super(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly);
         this.mysqlInfo = schemaInfo;
     }
 

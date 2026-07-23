@@ -52,3 +52,45 @@
 ## Java Type Inference Gotcha
 - `Comparator.comparingInt(T::field).reversed()` inside `.thenComparing(...)` can lose type parameter
   — always use `Comparator.<T>comparingInt(T::field).reversed()` (explicit type witness) to be safe
+
+## JdbcMarkdownGenerator / JdbcMarkdownDefinition (migraphe-plugin-jdbc)
+- Template Method base class: `protected void append*(...)` hooks are no-ops in the base, overridden
+  by PostgreSQL/MySQL subclasses. New optional features (e.g. `erDiagram` toggle, Session ~2026-07-22)
+  fit this pattern cleanly: config field on `JdbcMarkdownDefinition` (`@WithDefault`) + boolean field
+  on the generator + telescoping constructor (old N-arg delegates to new N+1-arg with the default) +
+  a guarded `append*` hook. When a cycle's diff already follows this shape with full Javadoc, there is
+  usually nothing to tidy — confirmed skip in that case is correct, don't force a change.
+- Known gap as of 2026-07-22: `JdbcMarkdownPlugin.output()` still calls the 3-arg
+  `JdbcMarkdownGenerator` constructor and never reads `definition.erDiagram()` — the config flag is
+  not actually wired to production behavior yet (tests pass because the default is `true` and test
+  doubles hardcode `true`). This is a Green-phase feature gap, not a tidy concern — do not "fix" it
+  during tidy (that would add new behavior, not preserve it). Flag it if asked for a broader review.
+- Spotless commonly rewraps Javadoc `<p>` lines that cross the column limit purely from documentation
+  reordering/insertion (e.g. `{@link #appendIndexHeader(StringBuilder)}` wrapping) — this is expected,
+  behavior-preserving noise, not a sign something is wrong.
+- Tidy applied (2026-07-22): `appendErDiagram()`'s manual `for` loop building `tableNames` (a
+  `HashSet<String>` populated one `.add()` per table) was replaced with
+  `tables.stream().map(JdbcTableInfo::name).collect(Collectors.toSet())`, removing the now-unused
+  `HashSet` import. `Collectors` was already imported/used elsewhere in the file (`Collectors.joining`
+  for index columns), so the stream form matches existing file style. Good general pattern in this
+  file: a loop that only populates a `Set`/`List` from one field of each element is a safe
+  stream-collect tidy target as long as the collector import is already present or trivially added.
+- Tidy applied (2026-07-22, later same session): Foreign Keys section in `generateTableFile()` had
+  the referenced-schema fallback ternary (`fk.referencedSchema().isEmpty() ? schemaName :
+  fk.referencedSchema()`) inline inside a long `sb.append(...)` chain. Extracted to a private static
+  helper `resolveReferencedSchema(String schemaName, JdbcForeignKeyInfo fk)` (placed just above
+  `formatType`). Deliberately did NOT touch the Exported Keys section (`ek` loop, ~line 299) even
+  though it will need an analogous fix in a future cycle — the two loops use different local variable
+  names (`fk` vs `ek`) so there was no duplication to unify yet, and the task explicitly scoped this
+  tidy to Foreign Keys only. General lesson: when a bugfix touches one of two structurally similar
+  but not-yet-identical loops, extracting a helper for the fixed loop only (rather than trying to
+  share it preemptively with the unfixed loop) keeps the tidy diff minimal and avoids coupling to a
+  not-yet-written future change.
+- Tidy applied (2026-07-22, follow-up cycle after Exported Keys got the same fallback fix): once both
+  the Foreign Keys (`fk`) and Exported Keys (`ek`) loops built the identical Markdown link fragment
+  (`"[" + refTable + "](../../" + resolveReferencedSchema(...) + "/tables/" + refTable + ".md)"`), the
+  duplication became real and was extracted into `referencedTableLink(String schemaName,
+  JdbcForeignKeyInfo fk)`, placed directly below `resolveReferencedSchema`. `JdbcForeignKeyInfo` is
+  the shared type for both FK and exported-key rows, so one helper serves both loops without any
+  generics or overloads. This confirms the earlier "don't preemptively unify" note: the right time to
+  extract shared logic is once the second occurrence actually exists, not before.

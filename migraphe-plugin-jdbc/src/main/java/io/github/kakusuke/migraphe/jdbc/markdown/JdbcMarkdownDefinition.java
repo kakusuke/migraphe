@@ -43,6 +43,26 @@ public interface JdbcMarkdownDefinition extends GeneratorDefinition {
     String outputDir();
 
     /**
+     * Returns whether the ER Diagram section is emitted in the generated {@code index.md}.
+     *
+     * @return {@code true} to include the ER Diagram section, defaulting to {@code true}
+     */
+    @WithDefault("true")
+    boolean erDiagram();
+
+    /**
+     * Returns whether the ER Diagram limits entity columns to primary-key and foreign-key columns.
+     *
+     * <p>When {@code false} (the default) every column is rendered; when {@code true} only columns
+     * that participate in a primary key or a foreign key are shown, yielding a more compact
+     * diagram.
+     *
+     * @return {@code true} to show only PK/FK columns, defaulting to {@code false} (all columns)
+     */
+    @WithDefault("false")
+    boolean erDiagramKeysOnly();
+
+    /**
      * Returns the schema/table exclusion patterns to skip during generation.
      *
      * @return the exclusion patterns, or an empty {@link Optional} when none are configured

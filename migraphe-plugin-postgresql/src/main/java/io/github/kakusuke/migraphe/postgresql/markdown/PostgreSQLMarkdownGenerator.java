@@ -36,7 +36,41 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
             String name,
             PostgreSQLSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes) {
-        super(name, schemaInfo, excludes);
+        this(name, schemaInfo, excludes, true);
+    }
+
+    /**
+     * Creates a PostgreSQL Markdown generator.
+     *
+     * @param name the generator name, used as the root subdirectory for generated files
+     * @param schemaInfo the PostgreSQL schema information to render
+     * @param excludes patterns identifying tables/objects to omit from the output
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     */
+    public PostgreSQLMarkdownGenerator(
+            String name,
+            PostgreSQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram) {
+        this(name, schemaInfo, excludes, erDiagram, false);
+    }
+
+    /**
+     * Creates a PostgreSQL Markdown generator.
+     *
+     * @param name the generator name, used as the root subdirectory for generated files
+     * @param schemaInfo the PostgreSQL schema information to render
+     * @param excludes patterns identifying tables/objects to omit from the output
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     */
+    public PostgreSQLMarkdownGenerator(
+            String name,
+            PostgreSQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly) {
+        super(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly);
         this.pgInfo = schemaInfo;
     }
 

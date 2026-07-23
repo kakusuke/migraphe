@@ -66,6 +66,16 @@ class JdbcMarkdownPluginTest {
                     }
 
                     @Override
+                    public boolean erDiagram() {
+                        return true;
+                    }
+
+                    @Override
+                    public boolean erDiagramKeysOnly() {
+                        return false;
+                    }
+
+                    @Override
                     public Optional<List<ExcludePattern>> excludes() {
                         return Optional.empty();
                     }
@@ -85,6 +95,57 @@ class JdbcMarkdownPluginTest {
         var indexMd = tempDir.resolve("index.md");
         assertThat(indexMd).exists();
         assertThat(Files.readString(indexMd)).startsWith("# Database: testdb");
+    }
+
+    @Test
+    void outputOmitsErDiagramWhenDefinitionDisablesIt() throws IOException {
+        var schemaInfo = new DefaultJdbcSchemaInfo(List.of());
+        JdbcMarkdownDefinition definition =
+                new JdbcMarkdownDefinition() {
+                    @Override
+                    public String type() {
+                        return "jdbc-markdown";
+                    }
+
+                    @Override
+                    public String name() {
+                        return "testdb";
+                    }
+
+                    @Override
+                    public String outputDir() {
+                        return tempDir.toString();
+                    }
+
+                    @Override
+                    public boolean erDiagram() {
+                        return false;
+                    }
+
+                    @Override
+                    public boolean erDiagramKeysOnly() {
+                        return false;
+                    }
+
+                    @Override
+                    public Optional<List<ExcludePattern>> excludes() {
+                        return Optional.empty();
+                    }
+                };
+        DefinitionResolver resolver =
+                new DefinitionResolver() {
+                    @Override
+                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                        return klass.cast(definition);
+                    }
+                };
+        var context = new OutputContext(resolver, tempDir);
+        var outputPlugin = (GeneratorOutputPlugin) plugin;
+
+        outputPlugin.output(schemaInfo, context);
+
+        var indexMd = tempDir.resolve("index.md");
+        assertThat(Files.readString(indexMd)).doesNotContain("## ER Diagram");
     }
 
     @Test
@@ -128,6 +189,16 @@ class JdbcMarkdownPluginTest {
                     }
 
                     @Override
+                    public boolean erDiagram() {
+                        return true;
+                    }
+
+                    @Override
+                    public boolean erDiagramKeysOnly() {
+                        return false;
+                    }
+
+                    @Override
                     public Optional<List<ExcludePattern>> excludes() {
                         return Optional.empty();
                     }
@@ -150,7 +221,8 @@ class JdbcMarkdownPluginTest {
                         .resolve(schemaName)
                         .resolve("tables")
                         .resolve("USERS.md");
-        assertThat(Files.readString(usersMd)).contains("[ORDERS](../tables/ORDERS.md)");
+        assertThat(Files.readString(usersMd))
+                .contains("[ORDERS](../../" + schemaName + "/tables/ORDERS.md)");
     }
 
     @Test

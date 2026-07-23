@@ -73,7 +73,11 @@ public final class JdbcMarkdownPlugin implements GeneratorOutputPlugin {
         var definition = context.definitionAs(JdbcMarkdownDefinition.class);
         var generator =
                 new JdbcMarkdownGenerator(
-                        definition.name(), schemaInfo, resolveExcludes(definition));
+                        definition.name(),
+                        schemaInfo,
+                        resolveExcludes(definition),
+                        definition.erDiagram(),
+                        definition.erDiagramKeysOnly());
         generator.generate(context.outputDir());
     }
 

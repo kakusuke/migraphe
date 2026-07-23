@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: Maven-Central-readiness Javadoc pass — full English Javadoc, zero `javadoc` warnings, javadoc/sources jars (Session 60)
-**Tests**: 956, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: Mermaid ER-diagram output in the Markdown generators, with `er-diagram` (default true) and `er-diagram-keys-only` (default false) options (Session 61–62)
+**Tests**: 968, 100% passing
 
 ## Module Structure
 
@@ -131,7 +131,7 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`; `Cell` sealed interface (13 variants)
 13. **Unified DAG Execution (Phase 16 → unified Session 54)**: single `DagExecutor(graph, history, listener, direction, maxParallelism)` for all UP/DOWN + sequential/parallel; vthreads + `ReadyNodeTracker(direction)`; **fail-soft** on failure; auto-wraps sync repository/listener
 14. **JDBC Plugin Extraction (Phase 17)**: generic `migraphe-plugin-jdbc`; `postgresql`/`mysql` extend `JdbcEnvironment` with fixed driver/DDL
-15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`
+15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`. Markdown output embeds a Mermaid ER diagram in `index.md` (YAML `er-diagram`, default true; `er-diagram-keys-only`, default false = all columns / true = PK+FK columns only; tables=entities, FKs=`||--o{`) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: `GeneratorSourcePlugin<T>` (data) decoupled from `GeneratorOutputPlugin` (render); `SourceContext`/`OutputContext`; JSON output module
 17. **CLI Maven Resolver (Phase 20)**: `plugins:` Maven coordinates resolved via Maven Resolver from `~/.m2` + Central into a URLClassLoader
 18. **PostgreSQL Generator Plugins**: `postgresql-schema` source (pg_catalog extras) + `postgresql-markdown` output via Template Method hooks
@@ -212,16 +212,10 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-06-26 (Session 60)
-- Maven-Central-readiness Javadoc pass: added English Javadoc to every type and public/protected member across all 204 main source files (was 35% covered), rewrote all remaining Japanese Javadoc/inline comments to English (main java is now Japanese-free), and drove `javadoc` to **zero warnings/errors** under `Xdoclint:all`. Added `withJavadocJar()`/`withSourcesJar()` (all 8 modules now emit `*-javadoc.jar`/`*-sources.jar`) and a UTF-8 + `Xdoclint:all` Javadoc config in `build.gradle.kts` as a docs-quality gate. Orchestrated via Explore (coverage map) → 2 agents to set the `migraphe-api` style baseline → 17 edit-only agents (gradle-free, package-scoped) with central serialized javadoc verification → 1 cleanup agent for the last warnings. Cleanup notes: FQN-ified a cross-package `{@link Main}`, converted `{@code …&#42;&#42;/*.yaml}` to `<code>` (EscapedEntity), and resolved ~40 implicit default-constructor warnings (private ctor for static utils, public+Javadoc for instantiated types/Builders/providers, protected for abstract types). Regression fix: `MigrapheExtension` ctor reverted `protected`→`public` so Gradle's ObjectFactory can instantiate the managed type (TestKit). `clean build` green, ErrorProne/NullAway clean. Remaining for Central: POM metadata + GPG signing + OSSRH/Portal wiring. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
-
-### 2026-06-25 (Session 59)
-- Fixed a bug where `${VAR}` expansion never resolved from env/sysprop on the CLI path (`SRCFG00011 Could not expand`): `ConfigLoader.loadConfig` built `SmallRyeConfigBuilder` with `addDefaultInterceptors()` only — no env/sysprop ConfigSource was ever registered. Rather than `addDefaultSources()` (whose `EnvConfigSource` normalizes `TARGET_FOO`→`target.foo` and pollutes the `extractTargetIds` key space), namespaced OS env under an `env.` prefix: `System.getenv()` → `MapConfigSource(env.<NAME>, 300)` referenced as `${env.VAR}` only; system properties → `MapConfigSource(raw, 400)` as `${VAR}` (trusted explicit input, same tier as profiles/variables). Added an ordinal-accepting `MapConfigSource` constructor. 4 `/tdd-cycle` passes; 3 new `ConfigLoaderTest` cases (env. expansion / bare-key isolation / sysprop raw-key). Updated USER_GUIDE en/ja, ARCHITECTURE decision 5, and `sample/*/targets/*.yaml` to `${env.VAR:default}`. ErrorProne clean, full `clean build` green.
-
-### 2026-06-25 (Session 58)
-- Implemented the `--env <name>` CLI option (up/down/status) so deployment-environment profiles (`environments/<name>.yaml`) actually apply. Done via 4 `/tdd-cycle` passes wiring `ExecutionContext.load` envName → `loadConfig`, `Main.parseEnvOption`/`loadContext`, and a `firstPositionalArg` fix for `--env <value>` mis-parsing; added `--env` to printUsage. Updated USER_GUIDE en/ja. `validate`/`generate` and the Gradle plugin remain follow-ups. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for full detail.
+### 2026-07-22 (Session 62)
+- Added a `er-diagram-keys-only` option to the Markdown ER diagram (Session 61 feature). `JdbcMarkdownDefinition.erDiagramKeysOnly()` (boolean, `@WithDefault false`; YAML key `er-diagram-keys-only`, kebab-case per SmallRye `@ConfigMapping`, same as `output-dir`): when `true` each entity lists only PK/FK columns (relationships unaffected); default `false` shows all columns. jdbc/postgresql/mysql generators grew a 5-arg constructor (3/4-arg retained as delegating overloads); each plugin wires `definition.erDiagramKeysOnly()`. 2 tests added; all modules green, clean build + ErrorProne/NullAway clean. Also fixed a USER_GUIDE (en/ja) doc bug: the ER-diagram YAML key was written camelCase (`erDiagram`) but the kebab-case config mapping means only `er-diagram` is honored. Verified end-to-end in the `wrs-japan` project by overlaying locally-built `migraphe-plugin-jdbc`/`-postgresql` jars into the `~/.m2` JitPack cache (`com.github.kakusuke.migraphe:…:v0.4.2`), re-pinning `migraphe.lock.yaml`, and regenerating schema docs against a live DB. Note: some Session 61 edits (identifier sanitization, PG/MySQL wiring) had not actually persisted to disk due to a tool-output fault; this was caught by `clean build` and re-applied via direct edits with grep-verified persistence. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-06-26
-**Current Work**: Maven-Central-readiness Javadoc pass — English Javadoc on all 204 main files, `javadoc` warnings/errors driven to zero under `Xdoclint:all`, `withJavadocJar()`/`withSourcesJar()` added; remaining for Central = POM metadata + GPG signing + OSSRH/Portal wiring (Session 60). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Last Updated**: 2026-07-22
+**Current Work**: Markdown ER diagram gained an `er-diagram-keys-only` option (default `false` = all columns; `true` = PK/FK columns only) across `jdbc`/`postgresql`/`mysql-markdown`; fixed the ER-diagram YAML key docs to kebab-case (`er-diagram`), and verified the feature end-to-end in the wrs-japan project via `~/.m2` jar overlay + lockfile re-pin (Session 62). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.

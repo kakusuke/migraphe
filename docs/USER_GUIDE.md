@@ -763,6 +763,8 @@ generators:
   - `type`: Source plugin type (e.g., `jdbc-schema`, `migration-tree`)
   - `target` (optional): Target name for source plugins that need a database connection
 - `output-dir` (optional, default: `docs/schema`): Directory where generated files are written
+- `er-diagram` (optional, default: `true`): For Markdown output plugins, embed a Mermaid ER diagram in `index.md`. Set to `false` to suppress the ER diagram section.
+- `er-diagram-keys-only` (optional, default: `false`): When `true`, each ER-diagram entity lists only its primary-key and foreign-key columns (relationships are unaffected). The default `false` shows all columns.
 - `excludes` (optional): List of exclusion filters (regex patterns)
   - `schema`: Regex pattern to match schema names
   - `table`: Regex pattern to match table names (used with `schema`)
@@ -801,6 +803,8 @@ migraphe generate --name mydb
 
 Markdown output plugins (`jdbc-markdown`, `postgresql-markdown`, `mysql-markdown`) write one directory per schema, each with an `index.md`, a `tables/` directory, and a `views/` directory. Every table page lists column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links — both the **Foreign Keys** (imported keys) and **Referenced By** (exported keys) perspectives — and indexes. The exact directory layout and the imported-vs-exported foreign-key rendering are documented in the [`migraphe-plugin-jdbc` README](../migraphe-plugin-jdbc/README.md).
 
+By default, `index.md` also embeds a single database-wide **ER diagram** in Mermaid `erDiagram` notation (a fenced ```mermaid block, rendered inline by GitHub and most Markdown viewers). Each table becomes an entity with its columns (type plus PK/FK markers), and foreign keys become relationships (`||--o{`). Set `er-diagram: false` on the generator to suppress this section, or `er-diagram-keys-only: true` to keep the diagram compact by showing only primary-key and foreign-key columns for each entity.
+
 ### Database-Specific Documentation
 
 The PostgreSQL and MySQL plugins ship dedicated source/output pairs that enrich the generated Markdown with database-specific objects beyond the standard JDBC schema (tables, views, columns, keys, indexes).
@@ -815,6 +819,8 @@ generators:
       type: postgresql-schema
       target: db1
     output-dir: docs/schema
+    er-diagram: false            # optional; omit or set true to embed the Mermaid ER diagram
+    # er-diagram-keys-only: true # optional; show only PK/FK columns in the ER diagram
 ```
 
 The full list of database-specific objects, ownership/definer attribution, and per-table content is documented in each plugin's README:
