@@ -106,3 +106,37 @@ metadata:
   lesson: before "simplifying" byte-array-to-hex loops using `String.format("%02x", b)`, check
   whether `b` is a raw `int`/widened primitive (risk of the 8-f bug, do NOT touch) vs. an autoboxed
   `Byte`/`Short` (safe, masks correctly, `HexFormat` is a behavior-identical simplification).
+- 2026-07-23 (code-review findings #6/#7/#8, second review pass): three more findings in the same
+  file. #8: `erEntityId(String, String)` was `private static`, recomputing `MessageDigest.getInstance`
+  + hex formatting every call even though it's called multiple times per (schema, table) across the
+  entity-rendering and relationship-rendering loops. Dropped `static` (it's only ever called from
+  instance methods in this class, so removing `static` is a safe private-method-scope change) and
+  added an instance field `private final Map<String, String> erEntityIdCache = new HashMap<>()`,
+  memoizing on the exact same cache key formula already used as the hash input
+  (`schemaName.length() + ":" + schemaName + tableName` — already proven injective, see the erIdHash
+  javadoc from an earlier session), via `computeIfAbsent`. #7: `resolveReferencedSchema` and its
+  helpers (`schemaContainsTable(String,String)`, `schemasContainingTable`) repeated full
+  `schemaInfo.schemas()` traversals per FK (exact-name loop, case-insensitive-collect loop, per-schema
+  table scan) — added three instance fields built **once**, in the constructor, by a single pass over
+  `schemaInfo.schemas()`: `Map<String, JdbcSchemaDetail> schemaByExactName` (first-match-wins via
+  `putIfAbsent`, preserving original first-occurrence semantics), `Map<String, List<JdbcSchemaDetail>>
+  schemasByLowerName` (keyed by `schema.name().toLowerCase(Locale.ROOT)` — used `Locale.ROOT`
+  explicitly since the original used locale-independent `String.equalsIgnoreCase`, and an unqualified
+  `.toLowerCase()` risks Turkish-locale `i` mismatches that `equalsIgnoreCase` wouldn't have), and
+  `Map<String, List<JdbcSchemaDetail>> schemasByTableName` (built via a nested loop over each schema's
+  `tables()`). Every list preserves `schemas()` iteration order because it's built by appending during
+  a single forward pass, matching the original loops' first-match/only-match semantics exactly. #6:
+  `appendErDiagram`'s relationship loop already computed `refSchema` (previous session) but
+  `appendErRelationship` still recomputed both `refEntityId` and `entityId` internally from raw
+  schemaName/table/fk arguments. Changed `appendErRelationship`'s signature from `(StringBuilder,
+  String schemaName, JdbcTableInfo table, JdbcForeignKeyInfo fk)` to `(StringBuilder, String
+  refEntityId, String entityId, JdbcForeignKeyInfo fk)` (private method, single call site — safe),
+  and hoisted `entityId = erEntityId(st.schemaName(), st.table().name())` computation above the inner
+  `for (fk : foreignKeys())` loop in `appendErDiagram` since it doesn't depend on `fk`. General lesson
+  reinforcing the 2026-07-23 (#1) entry above: once a "pass the already-computed value through"
+  opportunity is found, check whether *further* values computed downstream from it (here: the two
+  entity IDs derived from the schema) are *also* recomputed by the callee — worth doing a second pass
+  once the first fix's pattern is understood. All three fixes kept together in one cycle since they
+  compound (fields from #7 make #6/#8's hot-path calls cheap even before memoization, and the
+  memoization in #8 makes the remaining redundant calls in #6's call site near-free either way) — 26
+  tests (`JdbcMarkdownGeneratorTest` + `JdbcMarkdownPluginTest`) stayed green, output byte-identical.
