@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: wired the `--env` overlay into every configuration-reading command (CLI + Gradle) and made a missing `environments/<name>.yaml` a hard error instead of a silent no-op (Session 72)
-**Tests**: 1,121, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: `/tdd-cycle` redesigned (main-context cycle + `cycle-verifier` audit) and the same `buildKeyInfo` FK-aggregation bug fixed in `MySQLSchemaInfoProvider`, keyed on `(FKTABLE_CAT, FKTABLE_NAME, FK_NAME)` (Session 73)
+**Tests**: 1,031, 100% passing
 
 ## Module Structure
 
@@ -219,14 +219,13 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-08-20 (Session 72)
-- Wired the `environments/<name>.yaml` overlay (`--env`) into every configuration-reading entry point. `generate` was calling the `(baseDir, registry, variables)` overload of `ExecutionContext.load` — there are two 3-arg overloads and it grabbed the wrong one — so it silently ignored `--env`; `ConfigValidator.validate(Path)` had no `envName` parameter at all; the Gradle plugin had no notion of the overlay.
-- A named overlay that does not exist is now a **hard error** (`ConfigurationException`) listing the path searched and the available overlay names, instead of being silently ignored — `--env prodction` used to run against the base config and report success. `--env` omitted entirely keeps the old behavior. **Breaking**: projects that passed `--env` without a matching file now fail.
-- `validate` reports the missing overlay as a validation error (it accumulates rather than aborts) and resolves each target's *effective* `type` through the overlay, so it no longer passes a configuration that `up` would reject.
-- Gradle: `MigrapheExtension.env` + `@Option(option = "env")` on `AbstractMigrapheTask` (inherited by all five tasks). Precedence: extension < `-Pmigraphe.env` < `--env`; the extension is bound as a *convention* so an unset value still allows the `-P` fallback.
-- **Deliberately not done**: history stays partitioned by target name. A `profile` column would mis-split the legitimate "two overlays, one database" case, and the hazard it guards against only exists when `history.target` names a database shared across deployment environments — now documented as unsupported. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-08-21 (Session 73)
+- Redesigned `/tdd-cycle`: `Plan → Red → Green → Tidy` now run **in the main context**, with only `cycle-verifier` (Opus, fresh context) delegated. Measurement drove this — 7 of 8 minutes per cycle went to five subagents re-exploring the same two files, while Gradle took 60s. Discipline is carried by the **Red gate** (an observed non-zero `run_test` exit before the first production edit, evidenced by `log_path`) plus an independent post-cycle audit. A gate violation is reported, not repaired: "fix and re-verify" would only teach replaying a red whose answer is already known.
+- Deleted the five old phase agents; distilled the tidy notes 1,093 → 188 lines with per-class notes gated on the paths a diff touches. Two independent subagents reviewed the result (10 design findings, 9 factual errors in 61 claims — all corrected).
+- Fixed `MySQLSchemaInfoProvider.buildKeyInfo`, which carried the same defect as Session 65's JDBC fix and had been missed: keyed on bare `FK_NAME`, so two child tables in *different databases* sharing a constraint name collapsed into one entry and one child vanished. Now keyed on `BuilderKey(fkTableCat, fkTableName, fkName)` — `FKTABLE_CAT`, not `SCHEM`, because MySQL reports the database in the catalog column.
+- **Release notes**: bugfix (patch bump). Output changes only where children in different databases share FK constraint names — the `## Exported Keys` section gains the previously missing rows. Known follow-ups: those cross-database rows render a dangling Markdown link, and `FKTABLE_CAT` is only load-bearing when the two children share a *table name* (untested). See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-08-20
-**Current Work**: `--env` overlay completeness — the overlay now reaches `up`/`down`/`status`/`validate`/`generate` on both the CLI and Gradle, and a missing `environments/<name>.yaml` fails loudly with the searched path plus the available names. The `target` (connection) vs `environment` (config overlay) distinction is documented in `docs/USER_GUIDE.md`, including why migration history is keyed by target name and why the history database must not be shared across deployment environments. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+**Last Updated**: 2026-07-29
+**Current Work**: `/tdd-cycle` redesigned around a main-context cycle plus an independent `cycle-verifier` audit, and the MySQL counterpart of the Session 65 FK-aggregation bug fixed (found while fact-checking the redesigned skill's own notes, then closed by dogfooding one cycle through it). See [docs/CHANGELOG.md](docs/CHANGELOG.md).

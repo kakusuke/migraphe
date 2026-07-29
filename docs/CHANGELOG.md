@@ -18,6 +18,15 @@ Claude session records. Newest entries first. The latest session summary also li
   - **削除**: `micro-plan` / `test-writer` / `minimal-fix` / `regression-guard` / `tidy-after-green` の 5 agent。
   - **CLAUDE.md**: 指示 #5(委譲は独立性と広さのため。同じファイルを繰り返し読む作業はメイン)、#6(`jdtls-lsp` → `LSP`)、Development Process の TDD 表を更新。
 
+- **`MySQLSchemaInfoProvider.buildKeyInfo` に Session 65 と同型のバグを発見・修正 — exported keys で子テーブルが静かに消える**(新 `/tdd-cycle` の実タスク検証を兼ねて 1 サイクル完走)
+  - **発見の経緯**: Session 66 のドキュメント事実照合の副産物。Session 65 で `JdbcSchemaInfoProvider` を修正した際、**MySQL 側の近似コピーは手つかずのまま**だった。集約マップが `Map<String, ForeignKeyBuilder>` で素の `FK_NAME` をキーにしており、`buildExportedKeys` は `getExportedKeys(catalog, null, tableName)` を呼ぶため結果セットに複数の子テーブルの行が混ざる。
+  - **MySQL 固有の到達条件**: MySQL は FK 制約名の一意性を**データベース単位**で担保するため、同一 DB 内の子テーブル同士は衝突しない。衝突するのは**異なるデータベースにある 2 つの子テーブルが同名制約を持つ**場合(MySQL はクロス DB の FK を許可するため正当な構成)。実測失敗は `["fk_child_remote"]` vs 期待 `["fk_child_local", "fk_child_remote"]` で、**`fk_child_local` が丸ごと消えていた**。
+  - **修正**: `private record BuilderKey(String fkTableCat, String fkTableName, String fkName)` を導入。JDBC 版は `FKTABLE_SCHEM` をキーの第 1 要素にしているが、**MySQL はデータベース名をカタログ列に入れ `FKTABLE_SCHEM` を null にする**ため、そのまま移植すると第 1 要素が常に `""` になり意味を成さない。よって `FKTABLE_CAT` に機械的に読み替えた。併せて `if (fkName == null) fkName = "";` を既存の `nullToEmpty(...)` に寄せた(`BuilderKey` が NullAway 下で非 null を要求するため)。
+  - **`""` バケット問題は MySQL では到達しない**: JDBC 側に残る「同一子テーブル上の複数の無名 FK 制約がマージされる」課題は、**InnoDB が FK 名を必ず `<table>_ibfk_N` で自動生成する**ため MySQL では再現しない。
+  - **テスト**(`MySQLSchemaInfoProviderTest`、Testcontainers MySQL 8.0、計 10 本 green): `shouldReportOneExportedKeyPerChildTableWhenConstraintNamesCollide`。**root 接続が必須** — Testcontainers の `test` ユーザーは 2 つ目のデータベースを作成できず、かつ `information_schema` は権限でフィルタされるため、非 root で provider を走らせるとクロス DB の子テーブルがそもそも見えない。
+  - **⚠️ リリース時の注意点**: **bugfix(patch bump 相当)**。Session 65 と同様、クロス DB で同名 FK 制約を持つ構成では `## Exported Keys` セクションの行数が増える(欠落していた子テーブルが現れる)。
+  - **既知の残課題**: (1) クロス DB の子テーブルへの Markdown リンクが切れる — `referencedSchema` が `""` になり `JdbcMarkdownGenerator.resolveReferencedSchema` が現在スキーマにフォールバックするため、存在しないページを指す。この形は修正前から存在したが、修正により該当行が増える。ER 図は `known` に無いターゲットを除外するので無傷。(2) `FKTABLE_CAT` が `FKTABLE_NAME` より効くのは「異なる DB に**同名**のテーブルがある」場合のみで、現テストはそれを区別していない。
+
 ### 2026-08-20 (Session 72)
 - **`--env`(`environments/<name>.yaml` オーバーレイ)を全コマンドに適用し、存在しないオーバーレイ名をエラーにした**
   - **動機**: 利用者報告 #5「`--env` を変えても履歴の `environment_id` が変わらない」の切り分け過程で、`--env` 自体が**一部の経路にしか繋がっていない**ことが判明した。migraphe には直交する 2 系統があり、**target 系統**(`targets/*.yaml`。Java の `Environment`/`EnvironmentId` はこの系統を指す。名前は歴史的経緯)が「接続先そのもの」、**environment 系統**(`environments/*.yaml` + `--env`)は「設定値のオーバーレイ」でしかない。target は `--env` によって**中身が変わるが名前は変わらない**。この用語の衝突が誤解の温床になっていた。
