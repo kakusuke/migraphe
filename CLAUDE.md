@@ -161,8 +161,8 @@ Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`
 2. **Keep CLAUDE.md compact**: Maintain brevity. Use tables, bullet points, concise descriptions. No verbose prose. Record new design-decision *detail* in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and keep only a one-line summary (+ link) here.
 3. **Respond in Japanese**: All user-facing output must be in Japanese. Internal reasoning may be in English.
 4. **Changelog maintenance**: Append every new session record to [docs/CHANGELOG.md](docs/CHANGELOG.md) (full history lives there). In CLAUDE.md keep only the latest session as a short summary + link.
-5. **Subagent delegation**: Main agent = orchestrator. Delegate broad exploration to `Explore` subagent; use `Glob`/`Grep`/`Read` only for targeted lookup of known locations. Do not duplicate subagent research.
-6. **jdtls-lsp first**: For Java symbol lookup (class/method definitions, cross-references), prefer jdtls-lsp tools over `Read`/`Grep`.
+5. **Subagent delegation**: Delegate broad exploration to `Explore`, and independent judgment (e.g. `cycle-verifier`) to a fresh context. Do *not* delegate work that reads the same few files repeatedly — TDD cycles run in the main context (see `/tdd-cycle`). Do not duplicate subagent research.
+6. **LSP first**: For Java symbol lookup (definitions, references, hover), prefer the `LSP` tool over `Read`/`Grep`. Note that subagents do not have it — another reason to keep file-level work in the main context.
 7. **Large output**: Commands producing many lines — always limit with `sed -n 'X,Yp'`, `grep -n pattern | head -N`, or `wc -l`. Never consume full large output in main context.
 
 ## Development Process
@@ -171,17 +171,21 @@ Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`
 
 **Every code change MUST go through the `/tdd-cycle` skill, one cycle at a time.**
 
-The `/tdd-cycle` skill runs: `micro-plan → test-writer → minimal-fix → regression-guard → tidy-after-green`
+The `/tdd-cycle` skill runs: `Plan → Red → Green → Tidy` **in the main context**, then `cycle-verifier` (Opus, fresh context) audits the finished cycle.
 
 Call it repeatedly to advance implementation incrementally. Never write production code outside this cycle.
 
-Each phase subagent verifies through the `migraphe-build` MCP server (`mcp__migraphe-build__run_test` / `run_spotless` / `run_errorprone_check`) — the parent orchestrates and does **not** invoke `./gradlew` directly. The skill is scoped to incremental changes; net-new classes ≥200 lines or multi-file scaffolding are out of scope and route to `general-purpose` instead.
-
 | Phase | Rule |
 |-------|------|
-| **Red** | Write a failing test first. No production code yet. |
+| **Plan** | Name one observable behavior + concrete expected values. |
+| **Red** | Write a failing test first. **Gate**: a non-zero `run_test` exit must be observed *before* the first production edit. |
 | **Green** | Write the minimum code to make the test pass. |
-| **Refactor** | Remove duplication, improve readability. Tests must stay green. Never skip this phase. |
+| **Tidy** | Remove duplication, improve readability, behavior identical. Tests stay green. Never skip — report explicitly if nothing to do. |
+| **Verify** | `cycle-verifier` subagent audits: gate / test-validity / over-implementation / scope / regression. |
+
+Tests run through the `migraphe-build` MCP server (`run_test` / `run_spotless`) — never `./gradlew` directly. Scope every run with `module` + `test_filter`. `run_errorprone_check` is session-end only (12+ min clean build).
+
+The first four phases share one context because they touch the same two files; splitting them across subagents only re-reads those files. What that gives up in structural enforcement is recovered by the Red gate (verifiable evidence, not a promise) and the independent Verify audit. The skill is scoped to incremental changes; net-new classes ≥200 lines or multi-file scaffolding route to `general-purpose` instead.
 
 All tests MUST pass at 100% before committing.
 
