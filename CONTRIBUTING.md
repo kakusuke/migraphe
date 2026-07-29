@@ -133,11 +133,11 @@ We use [Spotless](https://github.com/diffplug/spotless) with Google Java Format.
 
 ## Distribution & JitPack operational notes
 
-エンドユーザー向けの導入手順は [README](README.md) と [USER_GUIDE](docs/USER_GUIDE.md) を参照してください。Migraphe のプラグイン JAR と Gradle プラグインは現在 JitPack (`com.github.kakusuke.migraphe:<module>:<git-tag>`、現行は `v0.4.3`) 経由で配布されています。Maven Central 公開後は groupId が `io.github.kakusuke.migraphe` に切り替わる予定です。
+エンドユーザー向けの導入手順は [README](README.md) と [USER_GUIDE](docs/USER_GUIDE.md) を参照してください。Migraphe のプラグイン JAR と Gradle プラグインは現在 JitPack (`com.github.kakusuke.migraphe:<module>:<git-tag>`、現行は `v0.5.0`) 経由で配布されています。Maven Central 公開後は groupId が `io.github.kakusuke.migraphe` に切り替わる予定です。
 
 コントリビューター向けの運用上の留意点:
 
-- **タグ vs `main-SNAPSHOT`**: エンドユーザー向けドキュメントは安定 Git タグ (`v0.4.3` 等) を案内しています。最新 `main` を動作確認したい場合は `main-SNAPSHOT` を使えますが、JitPack は `main-SNAPSHOT` を `main-<tag>-<commit>-<n>` のような具体バージョンに解決するため、現状の `LockSyncChecker` は yaml と lock のバージョン文字列ミスマッチで失敗します（既知の不具合）。`main-SNAPSHOT` を試すときは、毎回 `migraphe.lock.yaml` を削除して `migraphe pin` で再生成する運用が必要です。
+- **タグ vs `main-SNAPSHOT`**: エンドユーザー向けドキュメントは安定 Git タグ (`v0.5.0` 等) を案内しています。最新 `main` を動作確認したい場合は `main-SNAPSHOT` を使えますが、JitPack は `main-SNAPSHOT` を `main-<tag>-<commit>-<n>` のような具体バージョンに解決するため、現状の `LockSyncChecker` は yaml と lock のバージョン文字列ミスマッチで失敗します（既知の不具合）。`main-SNAPSHOT` を試すときは、毎回 `migraphe.lock.yaml` を削除して `migraphe pin` で再生成する運用が必要です。
 - **`main-SNAPSHOT` の SHA は不安定**: JitPack は `main` ブランチへのコミット毎に再ビルドを行い、その都度 JAR の SHA-256 が変わります。`migraphe pin` で記録したロック値が `ChecksumMismatchException` を起こした場合は、`migraphe pin` を再実行してコミットし直してください。
 - **JitPack ビルドキャッシュのリフレッシュ**: 古いビルドが返る場合は <https://jitpack.io/#kakusuke/migraphe> で対象バージョンを "Look up" → "Get it" して再ビルドを促せます。
 - **ローカル publish の groupId 切り替え**: デフォルトの `./gradlew publishToMavenLocal` は `io.github.kakusuke.migraphe` 配下に発行されます。JitPack 互換 artefact（`com.github.kakusuke.migraphe`）をローカルに置きたい場合は `./gradlew -PpublishGroup=com.github.kakusuke.migraphe publishToMavenLocal` を使ってください。両 groupId は `~/.m2/` で共存します。
