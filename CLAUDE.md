@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: ER-diagram layout engine (`er-diagram-layout`, default `elk`), per-table neighborhood ER diagrams (`er-diagram-per-table`, default true) and an entity-count cap (`er-diagram-per-table-max-entities`, default 60) across all three Markdown plugins (Session 64)
-**Tests**: 1,028, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: fixed `JdbcSchemaInfoProvider.buildKeyInfo` silently dropping child tables from `getExportedKeys()` when two child tables share an FK constraint name — the aggregation map is now keyed on `(FKTABLE_SCHEM, FKTABLE_NAME, FK_NAME)` (Session 65)
+**Tests**: 1,030, 100% passing
 
 ## Module Structure
 
@@ -212,15 +212,12 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-07-28 (Session 64)
-- Added three ER-diagram settings, wired end-to-end through all three Markdown plugins (`jdbc-markdown` / `postgresql-markdown` / `mysql-markdown`):
-  - **`er-diagram-layout`** (default `elk`) — emits Mermaid frontmatter (`---\nconfig:\n  layout: elk\n---`) inside the fence; only `[A-Za-z0-9_-]+` values are emitted, anything else (incl. empty/null) omits the frontmatter.
-  - **`er-diagram-per-table`** (default `true`) — a neighborhood ER diagram on each table page, before `## Columns`. Neighborhood = `{T} ∪ ancestors*(T) ∪ descendants*(T)`, **not** the undirected component; descendants come from inverting every table's imported `foreignKeys()` (never `exportedKeys()`); `fkGraph()` is lazily built (constructor build would trip `ConstructorInvokesOverridable`); `collectReachable()` keeps a call-local `visited` set so the two directions cannot mix.
-  - **`er-diagram-per-table-max-entities`** (default `60`, `<=0` = unlimited) — render-stage fallback: over the cap, an omission message + link to `../../../index.md` replaces the diagram (transitive closure can reach ~200 entities, and GitHub refuses Mermaid past ~50K chars).
-- Generators unified on an 8-arg telescoping constructor with a single terminal constructor; `appendErDiagramSection` shared with `index.md`, keeping its two-pass (entities, then relationships) shape. Many edge-case tests added (self-reference, cycles, cross-schema traversal + schema-case normalization, exclusion-severed paths, boundary/unlimited caps, keys-only combination); also closed a no-coverage gap in the MySQL plugin's `output()`. Clean build with zero ErrorProne/NullAway warnings.
-- **Release notes**: minor-bump-worthy (unchanged configs now produce different output), frontmatter needs Mermaid 9.4+, GitHub falls back to dagre for `layout: elk`, entity count is only a proxy for Mermaid's character limit, and `JdbcMarkdownDefinition` gained three abstract methods. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-07-29 (Session 65)
+- Fixed the latent `JdbcSchemaInfoProvider.buildKeyInfo` bug (Session 64's future-work item 2): the multi-column-FK aggregation map was keyed on `FK_NAME` alone, so rows for *different* child tables in a `getExportedKeys()` result set merged whenever two children shared a constraint name — columns were duplicated and `referencedTable` overwritten, silently dropping a child. Now keyed on a `BuilderKey(fkTableSchem, fkTableName, fkName)` record. No-op for the imported direction (single-table call ⇒ those two columns are constant per JDBC contract); affects only the `## Exported Keys` section, never the ER diagram (descendants come from inverted imported FKs).
+- Two H2-backed tests added (8 total in `JdbcSchemaInfoProviderTest`): a reproduction using child tables in *separate* schemas (H2 scopes constraint names per schema, so a same-schema name clash is not constructible) and a characterization test pinning multi-column FK aggregation in both directions.
+- **Release notes**: bugfix (patch bump), but output changes where children share FK constraint names — the `## Exported Keys` section gains the previously missing rows. Remaining known issue: multiple *unnamed* FK constraints on the same child table still merge. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-07-28
-**Current Work**: ER-diagram enhancements for the Markdown generators — `er-diagram-layout` (default `elk`, Mermaid frontmatter), `er-diagram-per-table` (default true, ancestors+descendants neighborhood per table page), and `er-diagram-per-table-max-entities` (default 60, render-stage size guard); all three wired through jdbc/postgresql/mysql Markdown plugins via a single 8-arg terminal constructor. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details and release caveats.
+**Last Updated**: 2026-07-29
+**Current Work**: Bug fix in `JdbcSchemaInfoProvider.buildKeyInfo` — the FK aggregation map is now keyed on `(FKTABLE_SCHEM, FKTABLE_NAME, FK_NAME)` instead of `FK_NAME` alone, so child tables sharing an FK constraint name no longer collapse into one entry on the `getExportedKeys()` path (`## Exported Keys` section only; ER diagrams unaffected). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the test strategy and the remaining unnamed-constraint edge case.

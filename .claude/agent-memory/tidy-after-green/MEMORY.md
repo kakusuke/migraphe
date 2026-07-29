@@ -19,3 +19,4 @@
 ## Topic Files
 - [graphcanvas.md](graphcanvas.md) — GraphCanvas/ExecutionGraphView naming, dead-code removal history, Row/Cell architecture notes
 - [jdbc_markdown_generator.md](jdbc_markdown_generator.md) — JdbcMarkdownGenerator/Definition Template Method pattern, ER diagram feature tidy history (Sessions 2026-07-22/23), regex precompilation, hex-formatting gotcha
+- [jdbc_schema_info_provider.md](jdbc_schema_info_provider.md) — `buildKeyInfo` composite-key FK aggregation design, `nullToEmpty`-collapse-over-effectively-final-workaround pattern, test flatMap-lookup extraction

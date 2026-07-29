@@ -2,6 +2,19 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-07-29 (Session 65)
+- **`JdbcSchemaInfoProvider.buildKeyInfo` の潜在バグを修正 — exported keys で子テーブルが静かに消える問題**(Session 64 の将来課題 2 を消化)
+  - **バグの本質**: `buildKeyInfo(ResultSet, boolean imported)` は `DatabaseMetaData.getImportedKeys()` と `getExportedKeys()` の**両方向を処理する共通ヘルパー**で、複合列 FK を 1 つの `JdbcForeignKeyInfo` に集約するための builder マップを **`FK_NAME` のみ**でキーイングしていた。`getExportedKeys()` の結果セットには**複数の異なる子テーブルの行が混ざる**ため、異なる子テーブルが同名の FK 制約を持つと同じ builder にマージされ、列が二重に追加されたうえ `referencedTable` が後続行で上書きされ、**子テーブルが 1 つ静かに消えていた**。「両方向を 1 つのヘルパーで扱う」構造ゆえに、集約キーが imported 側の前提(単一テーブル)のままで exported 側だけが壊れていた形。
+  - **修正**: builder マップのキーを `private record BuilderKey(String fkTableSchem, String fkTableName, String fkName)` の複合キーに変更。`FKTABLE_SCHEM` / `FKTABLE_NAME` を `imported` 分岐の**外側**で `nullToEmpty(...)` 経由で読む。`ForeignKeyBuilder` クラス自体は未変更。
+  - **imported 方向は no-op である根拠**: `getImportedKeys` は単一テーブルに対する呼び出しなので、JDBC 仕様上の契約として全行で `FKTABLE_SCHEM`/`FKTABLE_NAME` が同一値になる。スキーマ未対応 DB で `FKTABLE_SCHEM` が NULL のケースでも `nullToEmpty` で全行一様に `""` へ正規化されるため、複合キーは行をまたいで一致し集約挙動は変わらない。
+  - **影響範囲は `exportedKeys()` を消費する箇所のみ** = Markdown ジェネレータの `## Exported Keys` セクション。**ER 図には影響しない** — 子孫方向の走査は imported FK の逆インデックスを使っており `exportedKeys()` を読まない(Session 64 の設計判断どおり)。
+  - **テスト**(`JdbcSchemaInfoProviderTest`、H2 実 DB ベース、計 8 本 green):
+    1. `getSchemaInfoReturnsExportedKeysForChildTablesInDifferentSchemasWithSameConstraintName` — バグ再現テスト。**H2 は制約名をスキーマスコープでユニーク管理するため同一スキーマ内に同名 FK 制約を作れない**。よって子テーブルを別スキーマ(`s1.child_a` / `s2.child_b`)に置き、共通の親 `PUBLIC.parent` を同名 `fk_shared` で参照させることで、スキーマ横断で返る `getExportedKeys` 上に `FK_NAME` 衝突を作った。修正前の実測失敗は `Expected size: 2 but was: 1` で、残った 1 件は `columns=[ID, ID]` / `referencedColumns=[PARENT_ID, PARENT_ID]` と列が二重化し `referencedTable=CHILD_B` に上書きされていた。
+    2. `getSchemaInfoAggregatesMultiColumnForeignKeyIntoSingleEntry` — characterization テスト。複合主キー `parent_composite(a, b)` を 2 列で参照する `child_composite` を作り、複合キー化後も imported / exported 両方向で 2 行が 1 エントリに集約されることを固定。H2 は複合 FK の列を KEY_SEQ(宣言順)で返すため `containsExactly` で順序も固定。
+  - **tidy**: `if (fkName == null) fkName = "";` の手書き正規化を既存の `nullToEmpty(...)` ヘルパーに寄せ、effectively-final のための `String finalFkName` 中間変数を削除(`k -> new ForeignKeyBuilder(k.fkName())`)。テスト側で 3 箇所重複していた全スキーマ横断のテーブル検索を private static ヘルパー `findTable(JdbcSchemaInfo, String)` に抽出。
+  - **⚠️ リリース時の注意点**: **bugfix(patch bump 相当)**。ただし**同名 FK 制約を持つ複数の子テーブルが存在するスキーマでは `## Exported Keys` セクションの行数が増える**ため、設定を変更していない既存ユーザーでも生成される Markdown が変わる(これまで欠落していた子テーブルが正しく現れる)。
+  - **既知の残課題(今回のスコープ外、別軸のバグ)**: `FK_NAME` が NULL(`""` に正規化される)で、**同一子テーブルに複数の無名 FK 制約**が存在する場合、複合キー化後も依然として 1 つの builder にマージされ列が混ざる。今回修正した「子テーブル跨ぎのマージ」とは別軸の問題。H2 は無名制約に自動でユニーク名を割り当てるため H2 では再現困難。
+
 ### 2026-07-28 (Session 64)
 - **Markdown ER 図に (A) レイアウトエンジン指定 `er-diagram-layout`、(B) テーブル別近傍 ER 図 `er-diagram-per-table`、(C) サイズ安全弁 `er-diagram-per-table-max-entities` を追加**
   - **(A) `er-diagram-layout`(既定 `elk`)**: `index.md` の Mermaid ER 図フェンス冒頭に YAML frontmatter(`---\nconfig:\n  layout: elk\n---`)を出力してレイアウトエンジンを指定する。**動機**: ER 図が横長になり線が交差して読み難く、Mermaid 公式ドキュメントが ELK を「大きく複雑な図に推奨」としているため。値は `VALID_LAYOUT_NAME_PATTERN`(`[A-Za-z0-9_-]+`)に完全一致するものだけを許可し、それ以外・空文字・null なら frontmatter 自体を省略する(不正な値で図を壊さない)。フィールドは `@Nullable String` + コンストラクタで空文字に正規化(既存の `nullToEmpty` 慣習を踏襲)。
