@@ -28,7 +28,7 @@ dependencyResolutionManagement {
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.github.kakusuke.migraphe:migraphe-api:v0.4.3")
+    implementation("com.github.kakusuke.migraphe:migraphe-api:v0.5.0")
 }
 ```
 

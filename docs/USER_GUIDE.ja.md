@@ -51,16 +51,16 @@ mise use github:kakusuke/migraphe
 ```bash
 # tar.gz — Linux / macOS（bin/ と lib/ を展開先ディレクトリに展開）
 mkdir -p ~/.local/migraphe
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.4.3/migraphe-0.4.3.tar.gz | tar xz -C ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.5.0/migraphe-0.5.0.tar.gz | tar xz -C ~/.local/migraphe
 export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # zip — Windows
-curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.4.3/migraphe-0.4.3.zip
+curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.5.0/migraphe-0.5.0.zip
 unzip migraphe.zip -d ~/.local/migraphe
 export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # fat JAR — 単一ファイル
-curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.4.3/migraphe-0.4.3-all.jar
+curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.5.0/migraphe-0.5.0-all.jar
 alias migraphe="java -jar $PWD/migraphe.jar"
 ```
 
@@ -106,9 +106,9 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.4.3
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.5.0
     repository: jitpack
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.4.3
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.5.0
     repository: jitpack
 
 project:
@@ -131,7 +131,7 @@ repositories:
     url: https://maven.internal.example.com/releases
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.4.3
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.5.0
     repository: jitpack
   - coordinate: com.example:internal-plugin:1.0.0
     repository: my-internal
@@ -218,7 +218,7 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.4.3
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.5.0
     repository: jitpack
 
 project:
@@ -1044,7 +1044,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 plugins {
-    id("io.github.kakusuke.migraphe") version "v0.4.3"
+    id("io.github.kakusuke.migraphe") version "v0.5.0"
 }
 
 migraphe {
@@ -1053,9 +1053,9 @@ migraphe {
 
 dependencies {
     // 使用するデータベースに応じてプラグインを選択:
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.4.3")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.4.3")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.4.3")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.5.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.5.0")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.5.0")
 }
 ```
 
@@ -1112,12 +1112,12 @@ No plugins are currently loaded.
 
 **問題:**
 ```
-Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.4.3
+Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.5.0
 ```
 
 **解決策:**
 - `migraphe.yaml` の Maven 座標と `repository:` 指定が正しいか確認
-- JitPack 側で `v0.4.3` のビルドが成功しているかを <https://jitpack.io/#kakusuke/migraphe> で確認
+- JitPack 側で `v0.5.0` のビルドが成功しているかを <https://jitpack.io/#kakusuke/migraphe> で確認
 - JitPack および Maven Central へのネットワーク接続を確認
 - `migraphe pin` でロックファイルを再生成
 
@@ -1234,7 +1234,7 @@ Migraphe アーティファクトは以下のチャネルで提供されます:
 | JitPack | ✅ 提供中 | `com.github.kakusuke.migraphe` | プラグイン JAR + Gradle プラグイン |
 | Maven Central | 📅 公開予定 | `io.github.kakusuke.migraphe` | プラグイン JAR + Gradle プラグイン |
 
-プラグイン JAR および Gradle プラグインは現在 JitPack 経由で `com.github.kakusuke.migraphe:<module>:v0.4.3` として配布されています。Maven Central への公開は予定中で、その際に groupId が `io.github.kakusuke.migraphe` に切り替わります。
+プラグイン JAR および Gradle プラグインは現在 JitPack 経由で `com.github.kakusuke.migraphe:<module>:v0.5.0` として配布されています。Maven Central への公開は予定中で、その際に groupId が `io.github.kakusuke.migraphe` に切り替わります。
 
 ## 次のステップ
 
