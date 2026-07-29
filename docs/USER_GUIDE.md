@@ -763,8 +763,11 @@ generators:
   - `type`: Source plugin type (e.g., `jdbc-schema`, `migration-tree`)
   - `target` (optional): Target name for source plugins that need a database connection
 - `output-dir` (optional, default: `docs/schema`): Directory where generated files are written
-- `er-diagram` (optional, default: `true`): For Markdown output plugins, embed a Mermaid ER diagram in `index.md`. Set to `false` to suppress the ER diagram section.
+- `er-diagram` (optional, default: `true`): For Markdown output plugins, embed a Mermaid ER diagram in `index.md`. This is the master switch for **all** ER-diagram output: setting it to `false` suppresses the diagram in `index.md` *and* on the individual table pages, regardless of `er-diagram-per-table`.
 - `er-diagram-keys-only` (optional, default: `false`): When `true`, each ER-diagram entity lists only its primary-key and foreign-key columns (relationships are unaffected). The default `false` shows all columns.
+- `er-diagram-layout` (optional, default: `elk`): Mermaid layout engine requested through a YAML frontmatter block emitted at the top of every generated `erDiagram` fence. Mermaid's official layout names are `elk`, `dagre`, `tidy-tree`, and `cose-bilkent`. Only values matching `[A-Za-z0-9_-]+` are honored; a value containing any other character omits the frontmatter entirely, so the fence starts directly with `erDiagram` as before. To opt out, give it a value outside that character set such as `er-diagram-layout: " "` — note that leaving the value blank (`er-diagram-layout:`) is a configuration error, not an opt-out.
+- `er-diagram-per-table` (optional, default: `true`): When `true`, each table page also gets an `## ER Diagram` section (placed right after the page header, before `## Columns`) showing a neighborhood diagram centered on that table. Set to `false` to keep the ER diagram in `index.md` only.
+- `er-diagram-per-table-max-entities` (optional, default: `60`): Upper bound on the number of entities a per-table neighborhood diagram may contain. Table pages whose neighborhood exceeds the limit render a short omission note plus a link to the full `index.md` diagram instead of the diagram itself. A value of `0` or lower means unlimited; a neighborhood of exactly the limit is still rendered.
 - `excludes` (optional): List of exclusion filters (regex patterns)
   - `schema`: Regex pattern to match schema names
   - `table`: Regex pattern to match table names (used with `schema`)
@@ -801,9 +804,45 @@ migraphe generate --name mydb
 
 ### Output Structure
 
-Markdown output plugins (`jdbc-markdown`, `postgresql-markdown`, `mysql-markdown`) write one directory per schema, each with an `index.md`, a `tables/` directory, and a `views/` directory. Every table page lists column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links — both the **Foreign Keys** (imported keys) and **Referenced By** (exported keys) perspectives — and indexes. The exact directory layout and the imported-vs-exported foreign-key rendering are documented in the [`migraphe-plugin-jdbc` README](../migraphe-plugin-jdbc/README.md).
+Markdown output plugins (`jdbc-markdown`, `postgresql-markdown`, `mysql-markdown`) write a single database-wide `index.md` directly under `output-dir`, plus one directory per schema (`<output-dir>/<name>/<schema>/`) containing a `tables/` and a `views/` directory. Every table page lists column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links — both the **Foreign Keys** (imported keys) and **Referenced By** (exported keys) perspectives — and indexes. The exact directory layout and the imported-vs-exported foreign-key rendering are documented in the [`migraphe-plugin-jdbc` README](../migraphe-plugin-jdbc/README.md).
 
 By default, `index.md` also embeds a single database-wide **ER diagram** in Mermaid `erDiagram` notation (a fenced ```mermaid block, rendered inline by GitHub and most Markdown viewers). Each table becomes an entity with its columns (type plus PK/FK markers; a column that is both is marked `PK, FK`), and foreign keys become relationships (`||--o{`). The diagram is schema-aware: tables from different schemas are distinct entities even when they share a name, cross-schema foreign keys are drawn, and cross-schema table links in the per-table pages resolve to the referenced schema's directory. Column types are shown by their base name (e.g. a PostgreSQL enum type is rendered as `user_account_status`, not its quoted schema-qualified form). It stays a single combined diagram — Mermaid `erDiagram` has no grouping construct, so tables are not boxed per schema. Set `er-diagram: false` on the generator to suppress this section, or `er-diagram-keys-only: true` to keep the diagram compact by showing only primary-key and foreign-key columns for each entity.
+
+#### Per-Table ER Diagrams
+
+By default (`er-diagram-per-table: true`) each table page also carries its own `## ER Diagram` section, placed right after the page header and before `## Columns`. Instead of the whole database it shows only the table's **neighborhood**: the table itself, every table transitively reachable by following its foreign keys towards the referenced side (its ancestors, and their ancestors, and so on), and every table that transitively references it (its descendants, and their descendants). Relationships are drawn for every foreign key with both ends inside that set.
+
+The neighborhood is deliberately *not* the whole undirected connected component: sibling branches — "another descendant of an ancestor", or "another ancestor of a descendant" — are not pulled in, which keeps the diagram focused even in densely linked schemas. Circular references, self-references, and cross-schema foreign keys are all handled, and tables removed by `excludes` cut the traversal, so a neighborhood never reaches through an excluded table.
+
+When a neighborhood grows past `er-diagram-per-table-max-entities` (default `60`), the diagram is replaced by a note and a link to the full diagram:
+
+```markdown
+## ER Diagram
+
+ER diagram omitted: this table's neighborhood includes 82 entities, exceeding the configured limit of 60. See the full [ER diagram](../../../index.md) in the database index instead.
+```
+
+#### ER Diagram Rendering Notes
+
+With the default `er-diagram-layout: elk`, every generated diagram fence opens with a Mermaid frontmatter block selecting the layout engine:
+
+````markdown
+## ER Diagram
+
+```mermaid
+---
+config:
+  layout: elk
+---
+erDiagram
+  ...
+```
+````
+
+- **The layout frontmatter requires Mermaid 9.4 or newer.** On older renderers the leading `---` block is parsed as part of the diagram itself and can produce a syntax error. If your renderer predates Mermaid 9.4, set `er-diagram-layout` to a value containing a character outside `[A-Za-z0-9_-]` (for example `er-diagram-layout: " "`) — the fence then starts directly with `erDiagram`, exactly as before this option existed.
+- **GitHub does not register `@mermaid-js/layout-elk`, so `layout: elk` silently falls back to `dagre` there.** The diagrams still render correctly on GitHub — you simply do not get the ELK layout improvements. `elk` takes effect in renderers that load the ELK plugin, such as [mermaid.live](https://mermaid.live) or a VitePress site configured with the ELK layout package.
+- **The default limit of `60` entities is a proxy, not a hard character budget.** Entity count only approximates the rendered size: one entity costs roughly 45 characters plus about 40 characters per column, so for tables with 8–10 columns, 60 entities land around 22,000–28,000 characters — comfortably inside GitHub's roughly 50,000-character limit for a single Mermaid diagram. Schemas dominated by wide tables (20+ columns) can exceed 50,000 characters at only 60 entities. If your diagrams get truncated or rejected, lower `er-diagram-per-table-max-entities` and/or combine it with `er-diagram-keys-only: true`, which cuts each entity down to its PK/FK columns.
+- **Empty or non-numeric YAML values fail fast.** Writing `er-diagram-per-table-max-entities:` with no value, or a non-numeric one such as `er-diagram-per-table-max-entities: abc`, makes SmallRye throw while loading the configuration (`SRCFG00040` / `SRCFG00039`) — it does not silently fall back to the default. The same applies to a blank `er-diagram-layout:`. This matches the behavior of other options such as `execution.max-parallelism`.
 
 ### Database-Specific Documentation
 
@@ -821,6 +860,9 @@ generators:
     output-dir: docs/schema
     er-diagram: false            # optional; omit or set true to embed the Mermaid ER diagram
     # er-diagram-keys-only: true # optional; show only PK/FK columns in the ER diagram
+    # er-diagram-layout: elk     # optional; Mermaid layout engine (elk, dagre, tidy-tree, cose-bilkent)
+    # er-diagram-per-table: true # optional; also emit a neighborhood ER diagram on each table page
+    # er-diagram-per-table-max-entities: 60 # optional; omit the per-table diagram above this size (0 or lower = unlimited)
 ```
 
 The full list of database-specific objects, ownership/definer attribution, and per-table content is documented in each plugin's README:

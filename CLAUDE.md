@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: hardened the Markdown ER-diagram / schema output for multi-schema DBs (cross-schema FK links, injective schema-qualified+hash entity IDs, enum/UDT base-name type display, PK+FK markers) plus a real-PostgreSQL E2E test (Session 63)
-**Tests**: 968, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: ER-diagram layout engine (`er-diagram-layout`, default `elk`), per-table neighborhood ER diagrams (`er-diagram-per-table`, default true) and an entity-count cap (`er-diagram-per-table-max-entities`, default 60) across all three Markdown plugins (Session 64)
+**Tests**: 1,028, 100% passing
 
 ## Module Structure
 
@@ -131,7 +131,7 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`; `Cell` sealed interface (13 variants)
 13. **Unified DAG Execution (Phase 16 → unified Session 54)**: single `DagExecutor(graph, history, listener, direction, maxParallelism)` for all UP/DOWN + sequential/parallel; vthreads + `ReadyNodeTracker(direction)`; **fail-soft** on failure; auto-wraps sync repository/listener
 14. **JDBC Plugin Extraction (Phase 17)**: generic `migraphe-plugin-jdbc`; `postgresql`/`mysql` extend `JdbcEnvironment` with fixed driver/DDL
-15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`. Markdown output embeds a Mermaid ER diagram in `index.md` (YAML `er-diagram`, default true; `er-diagram-keys-only`, default false = all columns / true = PK+FK columns only; tables=entities, FKs=`||--o{`) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`. Markdown output embeds Mermaid ER diagrams (tables=entities, FKs=`||--o{`): database-wide in `index.md`, plus a per-table neighborhood diagram (`{T} ∪ ancestors* ∪ descendants*`) on each table page. YAML keys: `er-diagram` (default true, master switch), `er-diagram-keys-only` (default false = all columns / true = PK+FK only), `er-diagram-layout` (default `elk`, emitted as Mermaid frontmatter), `er-diagram-per-table` (default true), `er-diagram-per-table-max-entities` (default 60, `<=0` = unlimited) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: `GeneratorSourcePlugin<T>` (data) decoupled from `GeneratorOutputPlugin` (render); `SourceContext`/`OutputContext`; JSON output module
 17. **CLI Maven Resolver (Phase 20)**: `plugins:` Maven coordinates resolved via Maven Resolver from `~/.m2` + Central into a URLClassLoader
 18. **PostgreSQL Generator Plugins**: `postgresql-schema` source (pg_catalog extras) + `postgresql-markdown` output via Template Method hooks
@@ -212,10 +212,15 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-07-23 (Session 63)
-- Hardened the Markdown ER-diagram / schema output for multi-schema databases and fixed enum type display (code-review driven). Cross-schema FK/exported-key links now emit `../../<referencedSchema>/tables/<t>.md` with the referenced schema normalized to a known schema name; ER-diagram entity IDs use an injective `sanitize(schema)_sanitize(table)_<sha256(len+":"+schema+table)[:8]>` with Mermaid alias labels (single combined diagram; no schema grouping — `erDiagram` has no subgraphs); empty schemas omit the erDiagram fence; relationship labels are sanitized (empty → `fk`); PK+FK columns render `PK, FK`; enum/UDT column types show the base name (quotes/schema qualifier and the `Integer.MAX_VALUE` sentinel size stripped). Regex in `sanitizeMermaid`/exclusion is precompiled/cached. Added a Testcontainers PostgreSQL E2E test (`PostgreSQLSchemaDocE2ETest`). All in `JdbcMarkdownGenerator` (postgresql/mysql inherit). Clean build + ErrorProne/NullAway clean; verified in wrs-japan via `~/.m2` jar overlay + lockfile re-pin. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-07-28 (Session 64)
+- Added three ER-diagram settings, wired end-to-end through all three Markdown plugins (`jdbc-markdown` / `postgresql-markdown` / `mysql-markdown`):
+  - **`er-diagram-layout`** (default `elk`) — emits Mermaid frontmatter (`---\nconfig:\n  layout: elk\n---`) inside the fence; only `[A-Za-z0-9_-]+` values are emitted, anything else (incl. empty/null) omits the frontmatter.
+  - **`er-diagram-per-table`** (default `true`) — a neighborhood ER diagram on each table page, before `## Columns`. Neighborhood = `{T} ∪ ancestors*(T) ∪ descendants*(T)`, **not** the undirected component; descendants come from inverting every table's imported `foreignKeys()` (never `exportedKeys()`); `fkGraph()` is lazily built (constructor build would trip `ConstructorInvokesOverridable`); `collectReachable()` keeps a call-local `visited` set so the two directions cannot mix.
+  - **`er-diagram-per-table-max-entities`** (default `60`, `<=0` = unlimited) — render-stage fallback: over the cap, an omission message + link to `../../../index.md` replaces the diagram (transitive closure can reach ~200 entities, and GitHub refuses Mermaid past ~50K chars).
+- Generators unified on an 8-arg telescoping constructor with a single terminal constructor; `appendErDiagramSection` shared with `index.md`, keeping its two-pass (entities, then relationships) shape. Many edge-case tests added (self-reference, cycles, cross-schema traversal + schema-case normalization, exclusion-severed paths, boundary/unlimited caps, keys-only combination); also closed a no-coverage gap in the MySQL plugin's `output()`. Clean build with zero ErrorProne/NullAway warnings.
+- **Release notes**: minor-bump-worthy (unchanged configs now produce different output), frontmatter needs Mermaid 9.4+, GitHub falls back to dagre for `layout: elk`, entity count is only a proxy for Mermaid's character limit, and `JdbcMarkdownDefinition` gained three abstract methods. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-07-23
-**Current Work**: Multi-schema hardening of the Markdown ER-diagram/schema output — cross-schema FK links, injective schema-qualified+hash ER entity IDs (single combined diagram; no grouping — Mermaid erDiagram lacks subgraphs), enum/UDT base-name type display, PK+FK markers, empty-schema fence guard, sanitized relationship labels; plus a Testcontainers PostgreSQL E2E test. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Last Updated**: 2026-07-28
+**Current Work**: ER-diagram enhancements for the Markdown generators — `er-diagram-layout` (default `elk`, Mermaid frontmatter), `er-diagram-per-table` (default true, ancestors+descendants neighborhood per table page), and `er-diagram-per-table-max-entities` (default 60, render-stage size guard); all three wired through jdbc/postgresql/mysql Markdown plugins via a single 8-arg terminal constructor. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details and release caveats.

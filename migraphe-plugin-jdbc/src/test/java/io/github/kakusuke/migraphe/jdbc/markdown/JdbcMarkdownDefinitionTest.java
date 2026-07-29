@@ -8,43 +8,44 @@ import org.junit.jupiter.api.Test;
 
 class JdbcMarkdownDefinitionTest {
 
-    @Test
-    void typeIsRead() {
+    private static JdbcMarkdownDefinition defaultDefinition() {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
                         .withMapping(JdbcMarkdownDefinition.class)
                         .withDefaultValue("type", "jdbc-markdown")
                         .withDefaultValue("name", "mydb")
                         .build();
+        return config.getConfigMapping(JdbcMarkdownDefinition.class);
+    }
 
-        JdbcMarkdownDefinition def = config.getConfigMapping(JdbcMarkdownDefinition.class);
-        assertThat(def.type()).isEqualTo("jdbc-markdown");
+    @Test
+    void typeIsRead() {
+        assertThat(defaultDefinition().type()).isEqualTo("jdbc-markdown");
     }
 
     @Test
     void nameIsRead() {
-        SmallRyeConfig config =
-                new SmallRyeConfigBuilder()
-                        .withMapping(JdbcMarkdownDefinition.class)
-                        .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("name", "mydb")
-                        .build();
-
-        JdbcMarkdownDefinition def = config.getConfigMapping(JdbcMarkdownDefinition.class);
-        assertThat(def.name()).isEqualTo("mydb");
+        assertThat(defaultDefinition().name()).isEqualTo("mydb");
     }
 
     @Test
     void outputDirDefaultValue() {
-        SmallRyeConfig config =
-                new SmallRyeConfigBuilder()
-                        .withMapping(JdbcMarkdownDefinition.class)
-                        .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("name", "mydb")
-                        .build();
+        assertThat(defaultDefinition().outputDir()).isEqualTo("docs/schema");
+    }
 
-        JdbcMarkdownDefinition def = config.getConfigMapping(JdbcMarkdownDefinition.class);
-        assertThat(def.outputDir()).isEqualTo("docs/schema");
+    @Test
+    void erDiagramLayoutDefaultValue() {
+        assertThat(defaultDefinition().erDiagramLayout()).isEqualTo("elk");
+    }
+
+    @Test
+    void erDiagramPerTableDefaultValue() {
+        assertThat(defaultDefinition().erDiagramPerTable()).isTrue();
+    }
+
+    @Test
+    void erDiagramPerTableMaxEntitiesDefaultValue() {
+        assertThat(defaultDefinition().erDiagramPerTableMaxEntities()).isEqualTo(60);
     }
 
     @Test
@@ -63,15 +64,7 @@ class JdbcMarkdownDefinitionTest {
 
     @Test
     void canBeBuiltWithoutTarget() {
-        SmallRyeConfig config =
-                new SmallRyeConfigBuilder()
-                        .withMapping(JdbcMarkdownDefinition.class)
-                        .withDefaultValue("type", "jdbc-markdown")
-                        .withDefaultValue("name", "mydb")
-                        .build();
-
-        JdbcMarkdownDefinition def = config.getConfigMapping(JdbcMarkdownDefinition.class);
-        assertThat(def.name()).isEqualTo("mydb");
+        assertThat(defaultDefinition().name()).isEqualTo("mydb");
     }
 
     @Test

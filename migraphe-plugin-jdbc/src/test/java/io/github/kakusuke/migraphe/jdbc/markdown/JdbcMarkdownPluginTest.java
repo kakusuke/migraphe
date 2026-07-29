@@ -27,6 +27,108 @@ class JdbcMarkdownPluginTest {
 
     private final JdbcMarkdownPlugin plugin = new JdbcMarkdownPlugin();
 
+    private JdbcMarkdownDefinition definition(String name, boolean erDiagram) {
+        return definition(name, erDiagram, true);
+    }
+
+    private JdbcMarkdownDefinition definition(
+            String name, boolean erDiagram, boolean erDiagramPerTable) {
+        return definition(name, erDiagram, erDiagramPerTable, 60);
+    }
+
+    private JdbcMarkdownDefinition definition(
+            String name,
+            boolean erDiagram,
+            boolean erDiagramPerTable,
+            int erDiagramPerTableMaxEntities) {
+        return new JdbcMarkdownDefinition() {
+            @Override
+            public String type() {
+                return "jdbc-markdown";
+            }
+
+            @Override
+            public String name() {
+                return name;
+            }
+
+            @Override
+            public String outputDir() {
+                return tempDir.toString();
+            }
+
+            @Override
+            public boolean erDiagram() {
+                return erDiagram;
+            }
+
+            @Override
+            public boolean erDiagramKeysOnly() {
+                return false;
+            }
+
+            @Override
+            public String erDiagramLayout() {
+                return "elk";
+            }
+
+            @Override
+            public boolean erDiagramPerTable() {
+                return erDiagramPerTable;
+            }
+
+            @Override
+            public int erDiagramPerTableMaxEntities() {
+                return erDiagramPerTableMaxEntities;
+            }
+
+            @Override
+            public Optional<List<ExcludePattern>> excludes() {
+                return Optional.empty();
+            }
+        };
+    }
+
+    private Path usersMdPath(String schemaName, JdbcMarkdownDefinition definition) {
+        return tempDir.resolve(definition.name())
+                .resolve(schemaName)
+                .resolve("tables")
+                .resolve("USERS.md");
+    }
+
+    private DefinitionResolver resolverFor(GeneratorDefinition definition) {
+        return new DefinitionResolver() {
+            @Override
+            public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
+                return klass.cast(definition);
+            }
+        };
+    }
+
+    private JdbcSchemaInfo schemaInfoWithUsersAndOrders(String dbName) throws Exception {
+        JdbcEnvironment env =
+                JdbcEnvironment.create(
+                        dbName,
+                        "jdbc:h2:mem:" + dbName + ";DB_CLOSE_DELAY=-1",
+                        "sa",
+                        "",
+                        "org.h2.Driver",
+                        "H2");
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS orders");
+            stmt.execute("DROP TABLE IF EXISTS users");
+            stmt.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name VARCHAR(100))");
+            stmt.execute(
+                    "CREATE TABLE orders ("
+                            + "id INTEGER PRIMARY KEY, "
+                            + "user_id INTEGER, "
+                            + "CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES"
+                            + " users(id))");
+        }
+        return new JdbcSchemaInfoProvider().getSchemaInfo(env);
+    }
+
     @Test
     void typeIsJdbcMarkdown() {
         assertThat(plugin.type()).isEqualTo("jdbc-markdown");
@@ -48,45 +150,8 @@ class JdbcMarkdownPluginTest {
     @Test
     void outputGeneratesIndexMdWithDatabaseName() throws IOException {
         var schemaInfo = new DefaultJdbcSchemaInfo(List.of());
-        JdbcMarkdownDefinition definition =
-                new JdbcMarkdownDefinition() {
-                    @Override
-                    public String type() {
-                        return "jdbc-markdown";
-                    }
-
-                    @Override
-                    public String name() {
-                        return "testdb";
-                    }
-
-                    @Override
-                    public String outputDir() {
-                        return tempDir.toString();
-                    }
-
-                    @Override
-                    public boolean erDiagram() {
-                        return true;
-                    }
-
-                    @Override
-                    public boolean erDiagramKeysOnly() {
-                        return false;
-                    }
-
-                    @Override
-                    public Optional<List<ExcludePattern>> excludes() {
-                        return Optional.empty();
-                    }
-                };
-        DefinitionResolver resolver =
-                new DefinitionResolver() {
-                    @Override
-                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
-                        return klass.cast(definition);
-                    }
-                };
+        JdbcMarkdownDefinition definition = definition("testdb", true);
+        DefinitionResolver resolver = resolverFor(definition);
         var context = new OutputContext(resolver, tempDir);
         var outputPlugin = (GeneratorOutputPlugin) plugin;
 
@@ -100,45 +165,8 @@ class JdbcMarkdownPluginTest {
     @Test
     void outputOmitsErDiagramWhenDefinitionDisablesIt() throws IOException {
         var schemaInfo = new DefaultJdbcSchemaInfo(List.of());
-        JdbcMarkdownDefinition definition =
-                new JdbcMarkdownDefinition() {
-                    @Override
-                    public String type() {
-                        return "jdbc-markdown";
-                    }
-
-                    @Override
-                    public String name() {
-                        return "testdb";
-                    }
-
-                    @Override
-                    public String outputDir() {
-                        return tempDir.toString();
-                    }
-
-                    @Override
-                    public boolean erDiagram() {
-                        return false;
-                    }
-
-                    @Override
-                    public boolean erDiagramKeysOnly() {
-                        return false;
-                    }
-
-                    @Override
-                    public Optional<List<ExcludePattern>> excludes() {
-                        return Optional.empty();
-                    }
-                };
-        DefinitionResolver resolver =
-                new DefinitionResolver() {
-                    @Override
-                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
-                        return klass.cast(definition);
-                    }
-                };
+        JdbcMarkdownDefinition definition = definition("testdb", false);
+        DefinitionResolver resolver = resolverFor(definition);
         var context = new OutputContext(resolver, tempDir);
         var outputPlugin = (GeneratorOutputPlugin) plugin;
 
@@ -150,79 +178,69 @@ class JdbcMarkdownPluginTest {
 
     @Test
     void outputExportedKeyLinksToReferencingTable() throws Exception {
-        JdbcEnvironment env =
-                JdbcEnvironment.create(
-                        "exported_key_link_test",
-                        "jdbc:h2:mem:exported_key_link_test;DB_CLOSE_DELAY=-1",
-                        "sa",
-                        "",
-                        "org.h2.Driver",
-                        "H2");
-        try (Connection conn = env.createConnection();
-                Statement stmt = conn.createStatement()) {
-            stmt.execute("DROP TABLE IF EXISTS orders");
-            stmt.execute("DROP TABLE IF EXISTS users");
-            stmt.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name VARCHAR(100))");
-            stmt.execute(
-                    "CREATE TABLE orders ("
-                            + "id INTEGER PRIMARY KEY, "
-                            + "user_id INTEGER, "
-                            + "CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES"
-                            + " users(id))");
-        }
-        JdbcSchemaInfo schemaInfo = new JdbcSchemaInfoProvider().getSchemaInfo(env);
-        JdbcMarkdownDefinition definition =
-                new JdbcMarkdownDefinition() {
-                    @Override
-                    public String type() {
-                        return "jdbc-markdown";
-                    }
-
-                    @Override
-                    public String name() {
-                        return "exported-key-test";
-                    }
-
-                    @Override
-                    public String outputDir() {
-                        return tempDir.toString();
-                    }
-
-                    @Override
-                    public boolean erDiagram() {
-                        return true;
-                    }
-
-                    @Override
-                    public boolean erDiagramKeysOnly() {
-                        return false;
-                    }
-
-                    @Override
-                    public Optional<List<ExcludePattern>> excludes() {
-                        return Optional.empty();
-                    }
-                };
-        DefinitionResolver resolver =
-                new DefinitionResolver() {
-                    @Override
-                    public <T extends GeneratorDefinition> T resolve(Class<T> klass) {
-                        return klass.cast(definition);
-                    }
-                };
+        JdbcSchemaInfo schemaInfo = schemaInfoWithUsersAndOrders("exported_key_link_test");
+        JdbcMarkdownDefinition definition = definition("exported-key-test", true);
+        DefinitionResolver resolver = resolverFor(definition);
         var context = new OutputContext(resolver, tempDir);
         var outputPlugin = (GeneratorOutputPlugin) plugin;
 
         outputPlugin.output(schemaInfo, context);
 
         String schemaName = schemaInfo.schemas().get(0).name();
-        var usersMd =
-                tempDir.resolve("exported-key-test")
-                        .resolve(schemaName)
-                        .resolve("tables")
-                        .resolve("USERS.md");
+        var usersMd = usersMdPath(schemaName, definition);
         assertThat(Files.readString(usersMd))
                 .contains("[ORDERS](../../" + schemaName + "/tables/ORDERS.md)");
+    }
+
+    @Test
+    void outputOmitsErDiagramOnTablePageWhenPerTableDisabled() throws Exception {
+        JdbcSchemaInfo schemaInfo = schemaInfoWithUsersAndOrders("er_diagram_per_table_test");
+        JdbcMarkdownDefinition definition = definition("er-diagram-per-table-test", true, false);
+        DefinitionResolver resolver = resolverFor(definition);
+        var context = new OutputContext(resolver, tempDir);
+        var outputPlugin = (GeneratorOutputPlugin) plugin;
+
+        outputPlugin.output(schemaInfo, context);
+
+        String schemaName = schemaInfo.schemas().get(0).name();
+        var usersMd = usersMdPath(schemaName, definition);
+        assertThat(Files.readString(usersMd)).doesNotContain("## ER Diagram");
+
+        var indexMd = tempDir.resolve("index.md");
+        assertThat(Files.readString(indexMd)).contains("## ER Diagram");
+    }
+
+    @Test
+    void outputPassesErDiagramLayoutToGenerator() throws Exception {
+        JdbcSchemaInfo schemaInfo = schemaInfoWithUsersAndOrders("er_diagram_layout_test");
+        JdbcMarkdownDefinition definition = definition("er-diagram-layout-test", true);
+        DefinitionResolver resolver = resolverFor(definition);
+        var context = new OutputContext(resolver, tempDir);
+        var outputPlugin = (GeneratorOutputPlugin) plugin;
+
+        outputPlugin.output(schemaInfo, context);
+
+        var indexMd = tempDir.resolve("index.md");
+        assertThat(Files.readString(indexMd))
+                .contains("---\nconfig:\n  layout: elk\n---\nerDiagram\n");
+    }
+
+    @Test
+    void outputOmitsPerTableErDiagramWhenNeighborhoodExceedsMaxEntities() throws Exception {
+        JdbcSchemaInfo schemaInfo = schemaInfoWithUsersAndOrders("er_diagram_max_entities_test");
+        JdbcMarkdownDefinition definition =
+                definition("er-diagram-max-entities-test", true, true, 1);
+        DefinitionResolver resolver = resolverFor(definition);
+        var context = new OutputContext(resolver, tempDir);
+        var outputPlugin = (GeneratorOutputPlugin) plugin;
+
+        outputPlugin.output(schemaInfo, context);
+
+        String schemaName = schemaInfo.schemas().get(0).name();
+        var usersMd = usersMdPath(schemaName, definition);
+        String content = Files.readString(usersMd);
+        assertThat(content).contains("## ER Diagram");
+        assertThat(content).doesNotContain("```mermaid");
     }
 
     @Test

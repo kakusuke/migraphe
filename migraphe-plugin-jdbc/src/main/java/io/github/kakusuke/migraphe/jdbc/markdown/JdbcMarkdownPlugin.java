@@ -71,18 +71,17 @@ public final class JdbcMarkdownPlugin implements GeneratorOutputPlugin {
     public void output(Object data, OutputContext context) {
         var schemaInfo = (JdbcSchemaInfo) data;
         var definition = context.definitionAs(JdbcMarkdownDefinition.class);
+        var excludes = definition.excludes().orElse(List.of());
         var generator =
                 new JdbcMarkdownGenerator(
                         definition.name(),
                         schemaInfo,
-                        resolveExcludes(definition),
+                        excludes,
                         definition.erDiagram(),
-                        definition.erDiagramKeysOnly());
+                        definition.erDiagramKeysOnly(),
+                        definition.erDiagramLayout(),
+                        definition.erDiagramPerTable(),
+                        definition.erDiagramPerTableMaxEntities());
         generator.generate(context.outputDir());
-    }
-
-    private static List<JdbcMarkdownDefinition.ExcludePattern> resolveExcludes(
-            JdbcMarkdownDefinition definition) {
-        return definition.excludes().orElse(List.of());
     }
 }

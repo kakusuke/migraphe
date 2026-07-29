@@ -63,6 +63,38 @@ public interface JdbcMarkdownDefinition extends GeneratorDefinition {
     boolean erDiagramKeysOnly();
 
     /**
+     * Returns the Mermaid ER Diagram layout engine to request via the diagram frontmatter.
+     *
+     * @return the layout engine name, defaulting to {@code "elk"}
+     */
+    @WithDefault("elk")
+    String erDiagramLayout();
+
+    /**
+     * Returns whether a per-table neighborhood ER Diagram is emitted on each table's page.
+     *
+     * @return {@code true} to include a per-table ER Diagram, defaulting to {@code true}
+     */
+    @WithDefault("true")
+    boolean erDiagramPerTable();
+
+    /**
+     * Returns the maximum number of entities allowed in a per-table neighborhood ER Diagram.
+     *
+     * <p>Table pages whose neighborhood exceeds this limit render an omission message instead of
+     * the diagram. A value of {@code 0} or lower means unlimited.
+     *
+     * <p>Note: this default must be kept in sync with {@code
+     * JdbcMarkdownGenerator.DEFAULT_ER_DIAGRAM_PER_TABLE_MAX_ENTITIES}, since
+     * {@code @WithDefault}'s argument must be a compile-time constant string and cannot reference
+     * that constant directly.
+     *
+     * @return the per-table entity limit, defaulting to {@code 60}
+     */
+    @WithDefault("60")
+    int erDiagramPerTableMaxEntities();
+
+    /**
      * Returns the schema/table exclusion patterns to skip during generation.
      *
      * @return the exclusion patterns, or an empty {@link Optional} when none are configured

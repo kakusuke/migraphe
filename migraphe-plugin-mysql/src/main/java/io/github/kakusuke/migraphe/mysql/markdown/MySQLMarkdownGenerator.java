@@ -6,6 +6,7 @@ import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLSchemaInfo;
 import java.nio.file.Path;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Markdown generator specialized for MySQL schema information.
@@ -71,7 +72,99 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram,
             boolean erDiagramKeysOnly) {
-        super(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly);
+        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, "");
+    }
+
+    /**
+     * Creates a MySQL Markdown generator.
+     *
+     * @param name the database name used as the documentation title and as the root directory for
+     *     generated files
+     * @param schemaInfo the MySQL schema information to render
+     * @param excludes schema/table exclusion patterns applied during generation
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     */
+    public MySQLMarkdownGenerator(
+            String name,
+            MySQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout) {
+        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, erDiagramLayout, true);
+    }
+
+    /**
+     * Creates a MySQL Markdown generator.
+     *
+     * @param name the database name used as the documentation title and as the root directory for
+     *     generated files
+     * @param schemaInfo the MySQL schema information to render
+     * @param excludes schema/table exclusion patterns applied during generation
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     * @param erDiagramPerTable whether a neighborhood ER Diagram section is emitted on each table's
+     *     own Markdown document
+     */
+    public MySQLMarkdownGenerator(
+            String name,
+            MySQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout,
+            boolean erDiagramPerTable) {
+        this(
+                name,
+                schemaInfo,
+                excludes,
+                erDiagram,
+                erDiagramKeysOnly,
+                erDiagramLayout,
+                erDiagramPerTable,
+                DEFAULT_ER_DIAGRAM_PER_TABLE_MAX_ENTITIES);
+    }
+
+    /**
+     * Creates a MySQL Markdown generator.
+     *
+     * @param name the database name used as the documentation title and as the root directory for
+     *     generated files
+     * @param schemaInfo the MySQL schema information to render
+     * @param excludes schema/table exclusion patterns applied during generation
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     * @param erDiagramPerTable whether a neighborhood ER Diagram section is emitted on each table's
+     *     own Markdown document
+     * @param erDiagramPerTableMaxEntities the maximum number of entities a table's neighborhood may
+     *     contain before its per-table ER Diagram is omitted in favor of a link to the full
+     *     diagram; {@code 0} or less means unlimited
+     */
+    public MySQLMarkdownGenerator(
+            String name,
+            MySQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout,
+            boolean erDiagramPerTable,
+            int erDiagramPerTableMaxEntities) {
+        super(
+                name,
+                schemaInfo,
+                excludes,
+                erDiagram,
+                erDiagramKeysOnly,
+                erDiagramLayout,
+                erDiagramPerTable,
+                erDiagramPerTableMaxEntities);
         this.mysqlInfo = schemaInfo;
     }
 

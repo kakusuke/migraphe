@@ -16,9 +16,13 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Types;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,11 +52,24 @@ public class JdbcMarkdownGenerator {
 
     private static final Pattern MERMAID_SANITIZE_PATTERN = Pattern.compile("[^A-Za-z0-9_]");
 
+    private static final Pattern VALID_LAYOUT_NAME_PATTERN = Pattern.compile("[A-Za-z0-9_-]+");
+
+    /**
+     * Default value for the telescoping constructor's {@code erDiagramPerTableMaxEntities}
+     * parameter. Must be kept in sync with {@link
+     * JdbcMarkdownDefinition#erDiagramPerTableMaxEntities()}'s {@code @WithDefault("60")} so that
+     * config-driven and directly-constructed generators behave identically by default.
+     */
+    protected static final int DEFAULT_ER_DIAGRAM_PER_TABLE_MAX_ENTITIES = 60;
+
     private final String name;
     private final JdbcSchemaInfo schemaInfo;
     private final List<CompiledExclude> excludes;
     private final boolean erDiagram;
     private final boolean erDiagramKeysOnly;
+    private final String erDiagramLayout;
+    private final boolean erDiagramPerTable;
+    private final int erDiagramPerTableMaxEntities;
 
     /** Exact schema name -&gt; the first {@link JdbcSchemaDetail} with that name, built once. */
     private final Map<String, JdbcSchemaDetail> schemaByExactName;
@@ -131,11 +148,98 @@ public class JdbcMarkdownGenerator {
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram,
             boolean erDiagramKeysOnly) {
+        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, "");
+    }
+
+    /**
+     * Constructs a generator for the given database.
+     *
+     * @param name the database name used in titles, links, and the output directory layout
+     * @param schemaInfo the schema information to render
+     * @param excludes the schema/table exclusion patterns to apply (may be empty)
+     * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER Diagram limits entity columns to primary-key and
+     *     foreign-key columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     */
+    public JdbcMarkdownGenerator(
+            String name,
+            JdbcSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout) {
+        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, erDiagramLayout, true);
+    }
+
+    /**
+     * Constructs a generator for the given database.
+     *
+     * @param name the database name used in titles, links, and the output directory layout
+     * @param schemaInfo the schema information to render
+     * @param excludes the schema/table exclusion patterns to apply (may be empty)
+     * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER Diagram limits entity columns to primary-key and
+     *     foreign-key columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     * @param erDiagramPerTable whether a neighborhood ER Diagram section is emitted on each table's
+     *     own Markdown document
+     */
+    public JdbcMarkdownGenerator(
+            String name,
+            JdbcSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout,
+            boolean erDiagramPerTable) {
+        this(
+                name,
+                schemaInfo,
+                excludes,
+                erDiagram,
+                erDiagramKeysOnly,
+                erDiagramLayout,
+                erDiagramPerTable,
+                DEFAULT_ER_DIAGRAM_PER_TABLE_MAX_ENTITIES);
+    }
+
+    /**
+     * Constructs a generator for the given database.
+     *
+     * @param name the database name used in titles, links, and the output directory layout
+     * @param schemaInfo the schema information to render
+     * @param excludes the schema/table exclusion patterns to apply (may be empty)
+     * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER Diagram limits entity columns to primary-key and
+     *     foreign-key columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     * @param erDiagramPerTable whether a neighborhood ER Diagram section is emitted on each table's
+     *     own Markdown document
+     * @param erDiagramPerTableMaxEntities the maximum number of entities a table's neighborhood may
+     *     contain before its per-table ER Diagram is omitted in favor of a link to the full
+     *     diagram; {@code 0} or less means unlimited
+     */
+    public JdbcMarkdownGenerator(
+            String name,
+            JdbcSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout,
+            boolean erDiagramPerTable,
+            int erDiagramPerTableMaxEntities) {
         this.name = name;
         this.schemaInfo = schemaInfo;
         this.excludes = excludes.stream().map(JdbcMarkdownGenerator::compileExclude).toList();
         this.erDiagram = erDiagram;
         this.erDiagramKeysOnly = erDiagramKeysOnly;
+        this.erDiagramLayout = erDiagramLayout != null ? erDiagramLayout : "";
+        this.erDiagramPerTable = erDiagramPerTable;
+        this.erDiagramPerTableMaxEntities = erDiagramPerTableMaxEntities;
 
         this.schemaByExactName = new HashMap<>();
         this.schemasByLowerName = new HashMap<>();
@@ -289,6 +393,7 @@ public class JdbcMarkdownGenerator {
         sb.append("# ").append(table.name()).append("\n\n");
         appendRemarksParagraph(sb, table.remarks());
         appendTableFileHeader(sb, schemaName, table);
+        appendTableErDiagram(sb, schemaName, table);
 
         // Columns section
         sb.append("## Columns\n\n");
@@ -701,7 +806,165 @@ public class JdbcMarkdownGenerator {
         if (tables.isEmpty()) {
             return;
         }
-        sb.append("## ER Diagram\n\n```mermaid\nerDiagram\n");
+        appendErDiagramSection(sb, tables);
+    }
+
+    /**
+     * Appends the ER Diagram section for a single table to its Markdown document, showing the table
+     * itself plus every table transitively reachable by following foreign keys in either direction
+     * (its ancestors and descendants).
+     *
+     * <p>Does nothing if {@code erDiagram} (the master switch) or {@code erDiagramPerTable} was
+     * disabled at construction.
+     *
+     * @param sb the table document builder to append to
+     * @param schemaName the schema containing the table
+     * @param table the table being documented
+     */
+    protected void appendTableErDiagram(StringBuilder sb, String schemaName, JdbcTableInfo table) {
+        if (!erDiagram || !erDiagramPerTable) {
+            return;
+        }
+        List<SchemaTable> subset = neighborhoodOf(new TableRef(schemaName, table.name()));
+        if (subset.isEmpty()) {
+            return;
+        }
+        if (erDiagramPerTableMaxEntities > 0 && subset.size() > erDiagramPerTableMaxEntities) {
+            appendErDiagramOmittedSection(sb, subset.size());
+            return;
+        }
+        appendErDiagramSection(sb, subset);
+    }
+
+    /**
+     * Appends an ER Diagram heading with a plain-text explanation in place of the Mermaid fence,
+     * used when a table's neighborhood exceeds {@code erDiagramPerTableMaxEntities}.
+     *
+     * @param sb the table document builder to append to
+     * @param entityCount the number of entities the omitted neighborhood would have contained
+     */
+    private void appendErDiagramOmittedSection(StringBuilder sb, int entityCount) {
+        sb.append("## ER Diagram\n\n");
+        sb.append("ER diagram omitted: this table's neighborhood includes ")
+                .append(entityCount)
+                .append(" entities, exceeding the configured limit of ")
+                .append(erDiagramPerTableMaxEntities)
+                .append(
+                        ". See the full [ER diagram](../../../index.md) in the database index"
+                                + " instead.\n\n");
+    }
+
+    /**
+     * Collects {@code root} together with every table transitively reachable from it by following
+     * foreign keys in either direction (its ancestors and descendants), in the same canonical order
+     * as {@link #fkGraph()}'s {@code orderedTables}.
+     *
+     * @param root the table to center the neighborhood on
+     * @return the neighborhood tables, in canonical order
+     */
+    private List<SchemaTable> neighborhoodOf(TableRef root) {
+        Set<TableRef> members = new LinkedHashSet<>();
+        collectReachable(root, fkGraph().forward(), members);
+        collectReachable(root, fkGraph().backward(), members);
+        return fkGraph().orderedTables().stream()
+                .filter(st -> members.contains(refOf(st)))
+                .toList();
+    }
+
+    /**
+     * Adds {@code start} and every {@link TableRef} transitively reachable from it via {@code
+     * adjacency} to {@code result}.
+     *
+     * <p>Uses its own, call-local {@code visited} set, so two calls sharing the same {@code result}
+     * (e.g. one over the forward adjacency, one over the backward adjacency) traverse independently
+     * without cross-contaminating each other's direction.
+     *
+     * @param start the table to start the traversal from; always included in {@code result}
+     * @param adjacency the adjacency map to traverse (forward or backward FK edges)
+     * @param result the set to add {@code start} and every reachable table to
+     */
+    private void collectReachable(
+            TableRef start, Map<TableRef, Set<TableRef>> adjacency, Set<TableRef> result) {
+        Set<TableRef> visited = new HashSet<>();
+        visited.add(start);
+        result.add(start);
+        Deque<TableRef> queue = new ArrayDeque<>();
+        queue.add(start);
+        while (!queue.isEmpty()) {
+            TableRef cur = queue.remove();
+            for (TableRef next : adjacency.getOrDefault(cur, Set.of())) {
+                if (visited.add(next)) {
+                    result.add(next);
+                    queue.add(next);
+                }
+            }
+        }
+    }
+
+    private record TableRef(String schemaName, String tableName) {}
+
+    private static TableRef refOf(SchemaTable st) {
+        return new TableRef(st.schemaName(), st.table().name());
+    }
+
+    private record FkGraph(
+            List<SchemaTable> orderedTables,
+            Map<TableRef, Set<TableRef>> forward,
+            Map<TableRef, Set<TableRef>> backward) {}
+
+    private @Nullable FkGraph fkGraph;
+
+    private FkGraph fkGraph() {
+        FkGraph g = fkGraph;
+        if (g == null) {
+            g = buildFkGraph();
+            fkGraph = g;
+        }
+        return g;
+    }
+
+    private FkGraph buildFkGraph() {
+        List<SchemaTable> ordered = nonExcludedTables();
+        Set<TableRef> known =
+                ordered.stream().map(JdbcMarkdownGenerator::refOf).collect(Collectors.toSet());
+        Map<TableRef, Set<TableRef>> forward = new HashMap<>();
+        Map<TableRef, Set<TableRef>> backward = new HashMap<>();
+        for (SchemaTable st : ordered) {
+            TableRef src = refOf(st);
+            for (JdbcForeignKeyInfo fk : st.table().foreignKeys()) {
+                String refSchema = resolveReferencedSchema(st.schemaName(), fk);
+                TableRef dst = new TableRef(refSchema, fk.referencedTable());
+                if (!known.contains(dst)) {
+                    continue;
+                }
+                forward.computeIfAbsent(src, k -> new LinkedHashSet<>()).add(dst);
+                backward.computeIfAbsent(dst, k -> new LinkedHashSet<>()).add(src);
+            }
+        }
+        return new FkGraph(ordered, forward, backward);
+    }
+
+    /**
+     * Appends a Mermaid ER diagram section (heading, code fence, optional layout frontmatter,
+     * entities, then relationships, then the closing fence) for the given tables.
+     *
+     * <p>Entities are rendered in one pass over {@code tables} before relationships are rendered in
+     * a second, separate pass; a foreign key is only rendered as a relationship if its referenced
+     * table is also present in {@code tables}. This two-pass shape must be preserved even though a
+     * single-table caller could fuse both passes into one: for {@code index.md} (multiple tables),
+     * fusing entity and relationship rendering into one pass would silently change the relative
+     * order in which entities and relationships appear whenever a later table's entity is
+     * referenced by an earlier table's foreign key.
+     *
+     * @param sb the document builder to append to
+     * @param tables the tables to render as ER-diagram entities
+     */
+    private void appendErDiagramSection(StringBuilder sb, List<SchemaTable> tables) {
+        sb.append("## ER Diagram\n\n```mermaid\n");
+        if (VALID_LAYOUT_NAME_PATTERN.matcher(erDiagramLayout).matches()) {
+            sb.append("---\nconfig:\n  layout: ").append(erDiagramLayout).append("\n---\n");
+        }
+        sb.append("erDiagram\n");
         Set<String> entityIds =
                 tables.stream()
                         .map(st -> erEntityId(st.schemaName(), st.table().name()))

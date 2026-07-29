@@ -5,6 +5,7 @@ import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.OutputContext;
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownDefinition;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSchemaInfo;
+import java.util.List;
 
 /**
  * {@link GeneratorOutputPlugin} that renders PostgreSQL schema information to Markdown ({@code
@@ -67,14 +68,17 @@ public final class PostgreSQLMarkdownPlugin implements GeneratorOutputPlugin {
     public void output(Object data, OutputContext context) {
         var schemaInfo = (PostgreSQLSchemaInfo) data;
         var definition = context.definitionAs(JdbcMarkdownDefinition.class);
-        var excludes = definition.excludes().orElse(java.util.List.of());
+        var excludes = definition.excludes().orElse(List.of());
         var generator =
                 new PostgreSQLMarkdownGenerator(
                         definition.name(),
                         schemaInfo,
                         excludes,
                         definition.erDiagram(),
-                        definition.erDiagramKeysOnly());
+                        definition.erDiagramKeysOnly(),
+                        definition.erDiagramLayout(),
+                        definition.erDiagramPerTable(),
+                        definition.erDiagramPerTableMaxEntities());
         generator.generate(context.outputDir());
     }
 }

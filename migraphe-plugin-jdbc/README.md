@@ -172,6 +172,11 @@ For the `jdbc-markdown` output type:
 | `source.type` | Yes | — | Source plugin type; `jdbc-schema` for this plugin |
 | `source.target` | Yes | — | Target name the source reads schema metadata from |
 | `output-dir` | No | `docs/schema` | Directory where generated Markdown files are written |
+| `er-diagram` | No | `true` | Embed a Mermaid ER diagram in `index.md`. Master switch for **all** ER-diagram output — `false` also suppresses the per-table diagrams |
+| `er-diagram-keys-only` | No | `false` | Show only primary-key and foreign-key columns in each entity (relationships unaffected) |
+| `er-diagram-layout` | No | `elk` | Mermaid layout engine requested via YAML frontmatter at the top of each `erDiagram` fence (`elk`, `dagre`, `tidy-tree`, `cose-bilkent`). A value containing a character outside `[A-Za-z0-9_-]` omits the frontmatter; a blank value is a configuration error |
+| `er-diagram-per-table` | No | `true` | Also emit an `## ER Diagram` section on each table page (after the header, before `## Columns`) showing that table's neighborhood |
+| `er-diagram-per-table-max-entities` | No | `60` | Maximum entities in a per-table neighborhood diagram; larger neighborhoods render an omission note linking to `index.md`. `0` or lower means unlimited |
 | `excludes` | No | — | List of exclusion filters applied to extracted schemas/tables |
 | `excludes[].schema` | No | — | Regex matching schema names to exclude |
 | `excludes[].table` | No | — | Regex matching table names to exclude (used together with `schema`) |
@@ -184,9 +189,9 @@ The `jdbc-markdown` generator produces:
 
 ```
 docs/schema/
-└── mydb/
-    └── public/
-        ├── index.md              # Schema overview (table/view listing)
+├── index.md                      # Database overview (all schemas, tables/views, ER diagram)
+└── mydb/                         # `name` of the generator
+    └── public/                   # one directory per schema
         ├── tables/
         │   ├── users.md          # Table details (columns, keys, indexes)
         │   └── posts.md
@@ -194,7 +199,9 @@ docs/schema/
             └── recent_posts.md   # View details
 ```
 
-Each table page includes column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links (both **Foreign Keys** via imported keys and **Referenced By** via exported keys), and indexes.
+The single `index.md` sits directly under `output-dir` (there is no per-schema `index.md`); schema directories hold only `tables/` and `views/`.
+
+Each table page includes column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links (both **Foreign Keys** via imported keys and **Referenced By** via exported keys), and indexes. Unless `er-diagram-per-table` is disabled, it also opens with an `## ER Diagram` section covering the table's neighborhood — the table plus every table transitively reachable by following foreign keys towards the referenced side (ancestors) and every table transitively referencing it (descendants). Sibling branches are not included, `excludes` cut the traversal, and neighborhoods larger than `er-diagram-per-table-max-entities` are replaced by a note linking to the full diagram in `index.md`.
 
 ## Configuration Fields
 
