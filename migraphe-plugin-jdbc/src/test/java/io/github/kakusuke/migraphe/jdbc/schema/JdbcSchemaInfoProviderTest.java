@@ -146,6 +146,89 @@ class JdbcSchemaInfoProviderTest {
     }
 
     @Test
+    void getSchemaInfoReturnsExportedKeysForChildTablesInDifferentSchemasWithSameConstraintName()
+            throws Exception {
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP SCHEMA IF EXISTS s1 CASCADE");
+            stmt.execute("DROP SCHEMA IF EXISTS s2 CASCADE");
+            stmt.execute("DROP TABLE IF EXISTS parent");
+            stmt.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)");
+            stmt.execute("CREATE SCHEMA s1");
+            stmt.execute(
+                    "CREATE TABLE s1.child_a ("
+                            + "id INTEGER PRIMARY KEY, "
+                            + "parent_id INTEGER, "
+                            + "CONSTRAINT fk_shared FOREIGN KEY (parent_id) REFERENCES"
+                            + " PUBLIC.parent(id))");
+            stmt.execute("CREATE SCHEMA s2");
+            stmt.execute(
+                    "CREATE TABLE s2.child_b ("
+                            + "id INTEGER PRIMARY KEY, "
+                            + "parent_id INTEGER, "
+                            + "CONSTRAINT fk_shared FOREIGN KEY (parent_id) REFERENCES"
+                            + " PUBLIC.parent(id))");
+
+            try {
+                JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+
+                JdbcTableInfo parentTable = findTable(schemaInfo, "parent");
+                assertThat(parentTable.exportedKeys()).hasSize(2);
+                assertThat(parentTable.exportedKeys())
+                        .extracting(JdbcForeignKeyInfo::referencedTable)
+                        .map(String::toUpperCase)
+                        .containsExactlyInAnyOrder("CHILD_A", "CHILD_B");
+            } finally {
+                stmt.execute("DROP SCHEMA IF EXISTS s1 CASCADE");
+                stmt.execute("DROP SCHEMA IF EXISTS s2 CASCADE");
+                stmt.execute("DROP TABLE IF EXISTS parent");
+            }
+        }
+    }
+
+    @Test
+    void getSchemaInfoAggregatesMultiColumnForeignKeyIntoSingleEntry() throws Exception {
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS child_composite");
+            stmt.execute("DROP TABLE IF EXISTS parent_composite");
+            stmt.execute(
+                    "CREATE TABLE parent_composite (a INTEGER, b INTEGER, PRIMARY KEY (a, b))");
+            stmt.execute(
+                    "CREATE TABLE child_composite ("
+                            + "id INTEGER PRIMARY KEY, "
+                            + "pa INTEGER, "
+                            + "pb INTEGER, "
+                            + "CONSTRAINT fk_composite FOREIGN KEY (pa, pb) REFERENCES"
+                            + " parent_composite(a, b))");
+
+            try {
+                JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+
+                JdbcTableInfo childTable = findTable(schemaInfo, "child_composite");
+                assertThat(childTable.foreignKeys()).hasSize(1);
+                JdbcForeignKeyInfo fk = childTable.foreignKeys().get(0);
+                assertThat(fk.columns()).map(String::toUpperCase).containsExactly("PA", "PB");
+                assertThat(fk.referencedTable().toUpperCase(java.util.Locale.ROOT))
+                        .isEqualTo("PARENT_COMPOSITE");
+                assertThat(fk.referencedColumns())
+                        .map(String::toUpperCase)
+                        .containsExactly("A", "B");
+
+                JdbcTableInfo parentTable = findTable(schemaInfo, "parent_composite");
+                assertThat(parentTable.exportedKeys()).hasSize(1);
+                JdbcForeignKeyInfo exportedKey = parentTable.exportedKeys().get(0);
+                assertThat(exportedKey.referencedTable().toUpperCase(java.util.Locale.ROOT))
+                        .isEqualTo("CHILD_COMPOSITE");
+                assertThat(exportedKey.referencedColumns()).hasSize(2);
+            } finally {
+                stmt.execute("DROP TABLE IF EXISTS child_composite");
+                stmt.execute("DROP TABLE IF EXISTS parent_composite");
+            }
+        }
+    }
+
+    @Test
     void getSchemaInfoReturnsIndexes() {
         JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
 
@@ -189,5 +272,13 @@ class JdbcSchemaInfoProviderTest {
                 .extracting(JdbcColumnInfo::name)
                 .map(String::toUpperCase)
                 .containsExactlyInAnyOrder("ID", "NAME");
+    }
+
+    private static JdbcTableInfo findTable(JdbcSchemaInfo schemaInfo, String tableName) {
+        return schemaInfo.schemas().stream()
+                .flatMap(schema -> schema.tables().stream())
+                .filter(t -> t.name().equalsIgnoreCase(tableName))
+                .findFirst()
+                .orElseThrow();
     }
 }

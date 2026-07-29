@@ -78,7 +78,10 @@ public final class MySQLMarkdownPlugin implements GeneratorOutputPlugin {
                         schemaInfo,
                         excludes,
                         definition.erDiagram(),
-                        definition.erDiagramKeysOnly());
+                        definition.erDiagramKeysOnly(),
+                        definition.erDiagramLayout(),
+                        definition.erDiagramPerTable(),
+                        definition.erDiagramPerTableMaxEntities());
         generator.generate(context.outputDir());
     }
 }

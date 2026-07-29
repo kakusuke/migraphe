@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: hardened the Markdown ER-diagram / schema output for multi-schema DBs (cross-schema FK links, injective schema-qualified+hash entity IDs, enum/UDT base-name type display, PK+FK markers) plus a real-PostgreSQL E2E test (Session 63)
-**Tests**: 968, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: fixed `JdbcSchemaInfoProvider.buildKeyInfo` silently dropping child tables from `getExportedKeys()` when two child tables share an FK constraint name — the aggregation map is now keyed on `(FKTABLE_SCHEM, FKTABLE_NAME, FK_NAME)` (Session 65)
+**Tests**: 1,030, 100% passing
 
 ## Module Structure
 
@@ -131,7 +131,7 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`; `Cell` sealed interface (13 variants)
 13. **Unified DAG Execution (Phase 16 → unified Session 54)**: single `DagExecutor(graph, history, listener, direction, maxParallelism)` for all UP/DOWN + sequential/parallel; vthreads + `ReadyNodeTracker(direction)`; **fail-soft** on failure; auto-wraps sync repository/listener
 14. **JDBC Plugin Extraction (Phase 17)**: generic `migraphe-plugin-jdbc`; `postgresql`/`mysql` extend `JdbcEnvironment` with fixed driver/DDL
-15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`. Markdown output embeds a Mermaid ER diagram in `index.md` (YAML `er-diagram`, default true; `er-diagram-keys-only`, default false = all columns / true = PK+FK columns only; tables=entities, FKs=`||--o{`) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`. Markdown output embeds Mermaid ER diagrams (tables=entities, FKs=`||--o{`): database-wide in `index.md`, plus a per-table neighborhood diagram (`{T} ∪ ancestors* ∪ descendants*`) on each table page. YAML keys: `er-diagram` (default true, master switch), `er-diagram-keys-only` (default false = all columns / true = PK+FK only), `er-diagram-layout` (default `elk`, emitted as Mermaid frontmatter), `er-diagram-per-table` (default true), `er-diagram-per-table-max-entities` (default 60, `<=0` = unlimited) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: `GeneratorSourcePlugin<T>` (data) decoupled from `GeneratorOutputPlugin` (render); `SourceContext`/`OutputContext`; JSON output module
 17. **CLI Maven Resolver (Phase 20)**: `plugins:` Maven coordinates resolved via Maven Resolver from `~/.m2` + Central into a URLClassLoader
 18. **PostgreSQL Generator Plugins**: `postgresql-schema` source (pg_catalog extras) + `postgresql-markdown` output via Template Method hooks
@@ -212,10 +212,12 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-07-23 (Session 63)
-- Hardened the Markdown ER-diagram / schema output for multi-schema databases and fixed enum type display (code-review driven). Cross-schema FK/exported-key links now emit `../../<referencedSchema>/tables/<t>.md` with the referenced schema normalized to a known schema name; ER-diagram entity IDs use an injective `sanitize(schema)_sanitize(table)_<sha256(len+":"+schema+table)[:8]>` with Mermaid alias labels (single combined diagram; no schema grouping — `erDiagram` has no subgraphs); empty schemas omit the erDiagram fence; relationship labels are sanitized (empty → `fk`); PK+FK columns render `PK, FK`; enum/UDT column types show the base name (quotes/schema qualifier and the `Integer.MAX_VALUE` sentinel size stripped). Regex in `sanitizeMermaid`/exclusion is precompiled/cached. Added a Testcontainers PostgreSQL E2E test (`PostgreSQLSchemaDocE2ETest`). All in `JdbcMarkdownGenerator` (postgresql/mysql inherit). Clean build + ErrorProne/NullAway clean; verified in wrs-japan via `~/.m2` jar overlay + lockfile re-pin. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-07-29 (Session 65)
+- Fixed the latent `JdbcSchemaInfoProvider.buildKeyInfo` bug (Session 64's future-work item 2): the multi-column-FK aggregation map was keyed on `FK_NAME` alone, so rows for *different* child tables in a `getExportedKeys()` result set merged whenever two children shared a constraint name — columns were duplicated and `referencedTable` overwritten, silently dropping a child. Now keyed on a `BuilderKey(fkTableSchem, fkTableName, fkName)` record. No-op for the imported direction (single-table call ⇒ those two columns are constant per JDBC contract); affects only the `## Exported Keys` section, never the ER diagram (descendants come from inverted imported FKs).
+- Two H2-backed tests added (8 total in `JdbcSchemaInfoProviderTest`): a reproduction using child tables in *separate* schemas (H2 scopes constraint names per schema, so a same-schema name clash is not constructible) and a characterization test pinning multi-column FK aggregation in both directions.
+- **Release notes**: bugfix (patch bump), but output changes where children share FK constraint names — the `## Exported Keys` section gains the previously missing rows. Remaining known issue: multiple *unnamed* FK constraints on the same child table still merge. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-07-23
-**Current Work**: Multi-schema hardening of the Markdown ER-diagram/schema output — cross-schema FK links, injective schema-qualified+hash ER entity IDs (single combined diagram; no grouping — Mermaid erDiagram lacks subgraphs), enum/UDT base-name type display, PK+FK markers, empty-schema fence guard, sanitized relationship labels; plus a Testcontainers PostgreSQL E2E test. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for details.
+**Last Updated**: 2026-07-29
+**Current Work**: Bug fix in `JdbcSchemaInfoProvider.buildKeyInfo` — the FK aggregation map is now keyed on `(FKTABLE_SCHEM, FKTABLE_NAME, FK_NAME)` instead of `FK_NAME` alone, so child tables sharing an FK constraint name no longer collapse into one entry on the `getExportedKeys()` path (`## Exported Keys` section only; ER diagrams unaffected). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the test strategy and the remaining unnamed-constraint edge case.

@@ -161,6 +161,348 @@ class JdbcMarkdownGeneratorTest {
         return new DefaultJdbcSchemaInfo(List.of(schemaDetail));
     }
 
+    private static JdbcSchemaInfo buildFkChainSchemaInfo() {
+        var usersIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var usersPk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(usersIdColumn),
+                        usersPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var productsIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var productsPk = new JdbcPrimaryKeyInfo("pk_products", List.of("id"));
+        var productsTable =
+                new JdbcTableInfo(
+                        "products",
+                        "",
+                        List.of(productsIdColumn),
+                        productsPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var ordersIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var ordersUserIdColumn =
+                new JdbcColumnInfo(
+                        "user_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var ordersPk = new JdbcPrimaryKeyInfo("pk_orders", List.of("id"));
+        var fkOrdersUserId =
+                new JdbcForeignKeyInfo(
+                        "fk_orders_user_id",
+                        List.of("user_id"),
+                        "PUBLIC",
+                        "users",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var ordersTable =
+                new JdbcTableInfo(
+                        "orders",
+                        "",
+                        List.of(ordersIdColumn, ordersUserIdColumn),
+                        ordersPk,
+                        List.of(fkOrdersUserId),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var orderItemsIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var orderItemsOrderIdColumn =
+                new JdbcColumnInfo(
+                        "order_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var orderItemsProductIdColumn =
+                new JdbcColumnInfo(
+                        "product_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        3);
+        var orderItemsPk = new JdbcPrimaryKeyInfo("pk_order_items", List.of("id"));
+        var fkOrderItemsOrderId =
+                new JdbcForeignKeyInfo(
+                        "fk_order_items_order_id",
+                        List.of("order_id"),
+                        "PUBLIC",
+                        "orders",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var fkOrderItemsProductId =
+                new JdbcForeignKeyInfo(
+                        "fk_order_items_product_id",
+                        List.of("product_id"),
+                        "PUBLIC",
+                        "products",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var orderItemsTable =
+                new JdbcTableInfo(
+                        "order_items",
+                        "",
+                        List.of(
+                                orderItemsIdColumn,
+                                orderItemsOrderIdColumn,
+                                orderItemsProductIdColumn),
+                        orderItemsPk,
+                        List.of(fkOrderItemsOrderId, fkOrderItemsProductId),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(usersTable, ordersTable, orderItemsTable, productsTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+
+        return new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+    }
+
+    private static JdbcSchemaInfo buildSelfReferencingSchemaInfo() {
+        var idColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var managerIdColumn =
+                new JdbcColumnInfo(
+                        "manager_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        true,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var employeesPk = new JdbcPrimaryKeyInfo("pk_employees", List.of("id"));
+        var fkManagerId =
+                new JdbcForeignKeyInfo(
+                        "fk_employees_manager_id",
+                        List.of("manager_id"),
+                        "PUBLIC",
+                        "employees",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var employeesTable =
+                new JdbcTableInfo(
+                        "employees",
+                        "",
+                        List.of(idColumn, managerIdColumn),
+                        employeesPk,
+                        List.of(fkManagerId),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(employeesTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        return new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+    }
+
+    private static JdbcSchemaInfo buildMutualReferenceSchemaInfo() {
+        var aIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var aBIdColumn =
+                new JdbcColumnInfo(
+                        "b_id", "INTEGER", Types.INTEGER, 10, 0, true, null, false, false, null, 2);
+        var aPk = new JdbcPrimaryKeyInfo("pk_a", List.of("id"));
+        var fkAB =
+                new JdbcForeignKeyInfo(
+                        "fk_a_b_id",
+                        List.of("b_id"),
+                        "PUBLIC",
+                        "b",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var aTable =
+                new JdbcTableInfo(
+                        "a",
+                        "",
+                        List.of(aIdColumn, aBIdColumn),
+                        aPk,
+                        List.of(fkAB),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var bIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var bAIdColumn =
+                new JdbcColumnInfo(
+                        "a_id", "INTEGER", Types.INTEGER, 10, 0, true, null, false, false, null, 2);
+        var bPk = new JdbcPrimaryKeyInfo("pk_b", List.of("id"));
+        var fkBA =
+                new JdbcForeignKeyInfo(
+                        "fk_b_a_id",
+                        List.of("a_id"),
+                        "PUBLIC",
+                        "a",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var bTable =
+                new JdbcTableInfo(
+                        "b",
+                        "",
+                        List.of(bIdColumn, bAIdColumn),
+                        bPk,
+                        List.of(fkBA),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "PUBLIC",
+                        List.of(aTable, bTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        return new DefaultJdbcSchemaInfo(List.of(schemaDetail));
+    }
+
+    private static JdbcSchemaInfo buildCrossSchemaFkSchemaInfo() {
+        var usersIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var usersPk = new JdbcPrimaryKeyInfo("pk_users", List.of("id"));
+        var usersTable =
+                new JdbcTableInfo(
+                        "users",
+                        "",
+                        List.of(usersIdColumn),
+                        usersPk,
+                        List.of(),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var authSchemaDetail =
+                new JdbcSchemaDetail(
+                        "AUTH",
+                        List.of(usersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+
+        var ordersIdColumn =
+                new JdbcColumnInfo(
+                        "id", "INTEGER", Types.INTEGER, 10, 0, false, null, false, false, null, 1);
+        var userIdColumn =
+                new JdbcColumnInfo(
+                        "user_id",
+                        "INTEGER",
+                        Types.INTEGER,
+                        10,
+                        0,
+                        false,
+                        null,
+                        false,
+                        false,
+                        null,
+                        2);
+        var ordersPk = new JdbcPrimaryKeyInfo("pk_orders", List.of("id"));
+        var fkUserId =
+                new JdbcForeignKeyInfo(
+                        "fk_orders_user_id",
+                        List.of("user_id"),
+                        "auth",
+                        "users",
+                        List.of("id"),
+                        "NO ACTION",
+                        "CASCADE");
+        var ordersTable =
+                new JdbcTableInfo(
+                        "orders",
+                        "",
+                        List.of(ordersIdColumn, userIdColumn),
+                        ordersPk,
+                        List.of(fkUserId),
+                        List.of(),
+                        List.<JdbcCheckConstraintInfo>of(),
+                        List.of(),
+                        List.of());
+        var salesSchemaDetail =
+                new JdbcSchemaDetail(
+                        "SALES",
+                        List.of(ordersTable),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+
+        return new DefaultJdbcSchemaInfo(List.of(salesSchemaDetail, authSchemaDetail));
+    }
+
     private static String expectedErId(String schema, String table) {
         return sanitize(schema) + "_" + sanitize(table) + "_" + shortHash(schema, table);
     }
@@ -1006,6 +1348,82 @@ class JdbcMarkdownGeneratorTest {
     }
 
     @Test
+    void indexMdErDiagramFenceContainsLayoutFrontmatterWhenConfigured(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of(), true, false, "elk");
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content)
+                .contains(
+                        "## ER Diagram\n\n"
+                                + "```mermaid\n"
+                                + "---\n"
+                                + "config:\n"
+                                + "  layout: elk\n"
+                                + "---\n"
+                                + "erDiagram\n");
+    }
+
+    @Test
+    void indexMdErDiagramFenceOmitsFrontmatterWhenLayoutContainsInvalidCharacters(
+            @TempDir Path outputDir) throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildSchemaInfo(), List.of(), true, false, "elk\n---\nfoo");
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).contains("## ER Diagram\n\n```mermaid\nerDiagram\n");
+        assertThat(content).doesNotContain("---\nconfig:");
+        assertThat(content).doesNotContain("foo");
+    }
+
+    @Test
+    void indexMdErDiagramFenceOmitsFrontmatterWhenLayoutIsNull(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of(), true, false, null);
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).contains("## ER Diagram\n\n```mermaid\nerDiagram\n");
+        assertThat(content).doesNotContain("---\nconfig:");
+    }
+
+    @Test
+    void indexMdErDiagramFenceOmitsFrontmatterWhenLayoutHasTrailingNewline(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildSchemaInfo(), List.of(), true, false, "elk\n");
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).contains("## ER Diagram\n\n```mermaid\nerDiagram\n");
+        assertThat(content).doesNotContain("---\nconfig:");
+    }
+
+    @Test
+    void indexMdErDiagramFenceOmitsFrontmatterWhenLayoutHasTrailingCarriageReturnNewline(
+            @TempDir Path outputDir) throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildSchemaInfo(), List.of(), true, false, "elk\r\n");
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).contains("## ER Diagram\n\n```mermaid\nerDiagram\n");
+        assertThat(content).doesNotContain("---\nconfig:");
+    }
+
+    @Test
     void erDiagramShowsAllColumnsByDefault(@TempDir Path outputDir) throws Exception {
         var generator = new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of());
 
@@ -1377,6 +1795,33 @@ class JdbcMarkdownGeneratorTest {
         String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
         assertThat(content).contains("[users](../../PUBLIC/tables/users.md)");
         assertThat(content).doesNotContain("../../public/tables/users.md");
+    }
+
+    @Test
+    void tablePageErDiagramIncludesTransitiveAncestors(@TempDir Path outputDir) throws Exception {
+        var generator = new JdbcMarkdownGenerator("mydb", buildFkChainSchemaInfo(), List.of());
+        generator.generate(outputDir);
+
+        String orderItems =
+                Files.readString(outputDir.resolve("mydb/PUBLIC/tables/order_items.md"));
+        assertThat(orderItems).contains(expectedErId("PUBLIC", "orders"));
+        assertThat(orderItems).contains(expectedErId("PUBLIC", "users"));
+
+        String orders = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        assertThat(orders).contains(expectedErId("PUBLIC", "users"));
+        assertThat(orders).doesNotContain(expectedErId("PUBLIC", "products"));
+    }
+
+    @Test
+    void tablePageErDiagramIncludesTransitiveDescendantsButNotTheirAncestors(
+            @TempDir Path outputDir) throws Exception {
+        var generator = new JdbcMarkdownGenerator("mydb", buildFkChainSchemaInfo(), List.of());
+        generator.generate(outputDir);
+
+        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(users).contains(expectedErId("PUBLIC", "orders"));
+        assertThat(users).contains(expectedErId("PUBLIC", "order_items"));
+        assertThat(users).doesNotContain(expectedErId("PUBLIC", "products"));
     }
 
     @Test
@@ -1970,5 +2415,190 @@ class JdbcMarkdownGeneratorTest {
         String content = Files.readString(outputDir.resolve("mydb/public/tables/orders.md"));
         assertThat(content).contains("../../public/tables/ext_things.md");
         assertThat(content).doesNotContain("../../PUBLIC/tables/ext_things.md");
+    }
+
+    @Test
+    void tablePageContainsErDiagramSection(@TempDir Path outputDir) throws Exception {
+        var generator = new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(content).contains("## ER Diagram\n\n```mermaid\n");
+        assertThat(content).contains("  " + expectedErId("PUBLIC", "users") + "[\"users\"] {\n");
+        assertThat(content.indexOf("## ER Diagram")).isLessThan(content.indexOf("## Columns"));
+    }
+
+    @Test
+    void tablePageOmitsErDiagramWhenPerTableDisabled(@TempDir Path outputDir) throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildSchemaInfo(), List.of(), true, false, "elk", false);
+        generator.generate(outputDir);
+
+        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(users).doesNotContain("## ER Diagram");
+
+        String index = Files.readString(outputDir.resolve("index.md"));
+        assertThat(index).contains("## ER Diagram");
+    }
+
+    @Test
+    void tablePageOmitsErDiagramWhenErDiagramDisabled(@TempDir Path outputDir) throws Exception {
+        var generator = new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of(), false);
+        generator.generate(outputDir);
+
+        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(users).doesNotContain("## ER Diagram");
+
+        String index = Files.readString(outputDir.resolve("index.md"));
+        assertThat(index).doesNotContain("## ER Diagram");
+    }
+
+    @Test
+    void tablePageOmitsErDiagramWhenNeighborhoodExceedsMaxEntities(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(), true, false, "elk", true, 1);
+        generator.generate(outputDir);
+
+        String orders = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        assertThat(orders).contains("## ER Diagram");
+        assertThat(orders).doesNotContain("```mermaid");
+        assertThat(orders).contains("../../../index.md");
+    }
+
+    @Test
+    void tablePageNeighborhoodIncludesOnlyDescendantNotUnrelatedAncestors(@TempDir Path outputDir)
+            throws Exception {
+        var generator = new JdbcMarkdownGenerator("mydb", buildFkChainSchemaInfo(), List.of());
+        generator.generate(outputDir);
+
+        String products = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/products.md"));
+        assertThat(products).contains(expectedErId("PUBLIC", "products"));
+        assertThat(products).contains(expectedErId("PUBLIC", "order_items"));
+        assertThat(products).doesNotContain(expectedErId("PUBLIC", "users"));
+        assertThat(products).doesNotContain(expectedErId("PUBLIC", "orders"));
+    }
+
+    @Test
+    void selfReferencingForeignKeyProducesSingleEntityAndRelationshipWithoutDuplication(
+            @TempDir Path outputDir) throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildSelfReferencingSchemaInfo(), List.of());
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/employees.md"));
+        String entityId = expectedErId("PUBLIC", "employees");
+        assertThat(content).containsOnlyOnce(entityId + "[\"employees\"]");
+        assertThat(content).containsOnlyOnce(entityId + " ||--o{ " + entityId);
+    }
+
+    @Test
+    void mutuallyReferencingForeignKeysIncludeBothEntitiesWithoutInfiniteLoop(
+            @TempDir Path outputDir) throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildMutualReferenceSchemaInfo(), List.of());
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/a.md"));
+        assertThat(content).contains(expectedErId("PUBLIC", "a"));
+        assertThat(content).contains(expectedErId("PUBLIC", "b"));
+    }
+
+    @Test
+    void crossSchemaForeignKeyNeighborhoodIncludesBothDirectionsWithNormalizedSchemaCase(
+            @TempDir Path outputDir) throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator("mydb", buildCrossSchemaFkSchemaInfo(), List.of());
+        generator.generate(outputDir);
+
+        String orders = Files.readString(outputDir.resolve("mydb/SALES/tables/orders.md"));
+        assertThat(orders).contains(expectedErId("AUTH", "users"));
+
+        String users = Files.readString(outputDir.resolve("mydb/AUTH/tables/users.md"));
+        assertThat(users).contains(expectedErId("SALES", "orders"));
+    }
+
+    @Test
+    void excludedIntermediateTableBreaksAncestorPathAndOmitsItsOwnFile(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(excludeTable("orders")));
+        generator.generate(outputDir);
+
+        assertThat(outputDir.resolve("mydb/PUBLIC/tables/orders.md")).doesNotExist();
+
+        String orderItems =
+                Files.readString(outputDir.resolve("mydb/PUBLIC/tables/order_items.md"));
+        assertThat(orderItems).doesNotContain(expectedErId("PUBLIC", "users"));
+    }
+
+    @Test
+    void tablePageErDiagramRendersWhenNeighborhoodSizeEqualsMaxEntities(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(), true, false, null, true, 2);
+        generator.generate(outputDir);
+
+        String products = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/products.md"));
+        assertThat(products).contains("```mermaid");
+        assertThat(products).doesNotContain("ER diagram omitted");
+    }
+
+    @Test
+    void tablePageErDiagramIsUnlimitedWhenMaxEntitiesIsZero(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(), true, false, null, true, 0);
+        generator.generate(outputDir);
+
+        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(users).contains("```mermaid");
+        assertThat(users).doesNotContain("ER diagram omitted");
+    }
+
+    @Test
+    void tablePageErDiagramIsUnlimitedWhenMaxEntitiesIsNegative(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(), true, false, null, true, -1);
+        generator.generate(outputDir);
+
+        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        assertThat(users).contains("```mermaid");
+        assertThat(users).doesNotContain("ER diagram omitted");
+    }
+
+    @Test
+    void tablePageOmittedErDiagramMessageContainsMarkdownLinkToIndex(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(), true, false, "elk", true, 1);
+        generator.generate(outputDir);
+
+        String orders = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        assertThat(orders).contains("](../../../index.md)");
+    }
+
+    @Test
+    void tablePageErDiagramOmissionIsBasedOnEntityCountEvenWithKeysOnly(@TempDir Path outputDir)
+            throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(), true, true, null, true, 1);
+        generator.generate(outputDir);
+
+        String products = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/products.md"));
+        assertThat(products).contains("## ER Diagram");
+        assertThat(products).doesNotContain("```mermaid");
+        assertThat(products)
+                .contains("ER diagram omitted: this table's neighborhood includes 2 entities");
     }
 }

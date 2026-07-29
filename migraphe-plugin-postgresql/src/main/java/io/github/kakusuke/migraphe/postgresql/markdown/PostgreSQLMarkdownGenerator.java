@@ -8,6 +8,7 @@ import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSchemaInfo;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSequenceInfo;
 import java.nio.file.Path;
 import java.util.List;
+import org.jspecify.annotations.Nullable;
 
 /**
  * PostgreSQL-specific Markdown generator.
@@ -70,7 +71,96 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram,
             boolean erDiagramKeysOnly) {
-        super(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly);
+        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, "");
+    }
+
+    /**
+     * Creates a PostgreSQL Markdown generator.
+     *
+     * @param name the generator name, used as the root subdirectory for generated files
+     * @param schemaInfo the PostgreSQL schema information to render
+     * @param excludes patterns identifying tables/objects to omit from the output
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     */
+    public PostgreSQLMarkdownGenerator(
+            String name,
+            PostgreSQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout) {
+        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, erDiagramLayout, true);
+    }
+
+    /**
+     * Creates a PostgreSQL Markdown generator.
+     *
+     * @param name the generator name, used as the root subdirectory for generated files
+     * @param schemaInfo the PostgreSQL schema information to render
+     * @param excludes patterns identifying tables/objects to omit from the output
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     * @param erDiagramPerTable whether a neighborhood ER Diagram section is emitted on each table's
+     *     own Markdown document
+     */
+    public PostgreSQLMarkdownGenerator(
+            String name,
+            PostgreSQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout,
+            boolean erDiagramPerTable) {
+        this(
+                name,
+                schemaInfo,
+                excludes,
+                erDiagram,
+                erDiagramKeysOnly,
+                erDiagramLayout,
+                erDiagramPerTable,
+                DEFAULT_ER_DIAGRAM_PER_TABLE_MAX_ENTITIES);
+    }
+
+    /**
+     * Creates a PostgreSQL Markdown generator.
+     *
+     * @param name the generator name, used as the root subdirectory for generated files
+     * @param schemaInfo the PostgreSQL schema information to render
+     * @param excludes patterns identifying tables/objects to omit from the output
+     * @param erDiagram whether to emit the ER diagram section in {@code index.md}
+     * @param erDiagramKeysOnly whether the ER diagram limits entity columns to PK/FK columns
+     * @param erDiagramLayout the Mermaid layout engine to configure via a frontmatter block, or
+     *     null or empty to omit the frontmatter
+     * @param erDiagramPerTable whether a neighborhood ER Diagram section is emitted on each table's
+     *     own Markdown document
+     * @param erDiagramPerTableMaxEntities the maximum number of entities a table's neighborhood may
+     *     contain before its per-table ER Diagram is omitted in favor of a link to the full
+     *     diagram; {@code 0} or less means unlimited
+     */
+    public PostgreSQLMarkdownGenerator(
+            String name,
+            PostgreSQLSchemaInfo schemaInfo,
+            List<JdbcMarkdownDefinition.ExcludePattern> excludes,
+            boolean erDiagram,
+            boolean erDiagramKeysOnly,
+            @Nullable String erDiagramLayout,
+            boolean erDiagramPerTable,
+            int erDiagramPerTableMaxEntities) {
+        super(
+                name,
+                schemaInfo,
+                excludes,
+                erDiagram,
+                erDiagramKeysOnly,
+                erDiagramLayout,
+                erDiagramPerTable,
+                erDiagramPerTableMaxEntities);
         this.pgInfo = schemaInfo;
     }
 

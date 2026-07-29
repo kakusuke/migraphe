@@ -2,6 +2,48 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-07-29 (Session 65)
+- **`JdbcSchemaInfoProvider.buildKeyInfo` の潜在バグを修正 — exported keys で子テーブルが静かに消える問題**(Session 64 の将来課題 2 を消化)
+  - **バグの本質**: `buildKeyInfo(ResultSet, boolean imported)` は `DatabaseMetaData.getImportedKeys()` と `getExportedKeys()` の**両方向を処理する共通ヘルパー**で、複合列 FK を 1 つの `JdbcForeignKeyInfo` に集約するための builder マップを **`FK_NAME` のみ**でキーイングしていた。`getExportedKeys()` の結果セットには**複数の異なる子テーブルの行が混ざる**ため、異なる子テーブルが同名の FK 制約を持つと同じ builder にマージされ、列が二重に追加されたうえ `referencedTable` が後続行で上書きされ、**子テーブルが 1 つ静かに消えていた**。「両方向を 1 つのヘルパーで扱う」構造ゆえに、集約キーが imported 側の前提(単一テーブル)のままで exported 側だけが壊れていた形。
+  - **修正**: builder マップのキーを `private record BuilderKey(String fkTableSchem, String fkTableName, String fkName)` の複合キーに変更。`FKTABLE_SCHEM` / `FKTABLE_NAME` を `imported` 分岐の**外側**で `nullToEmpty(...)` 経由で読む。`ForeignKeyBuilder` クラス自体は未変更。
+  - **imported 方向は no-op である根拠**: `getImportedKeys` は単一テーブルに対する呼び出しなので、JDBC 仕様上の契約として全行で `FKTABLE_SCHEM`/`FKTABLE_NAME` が同一値になる。スキーマ未対応 DB で `FKTABLE_SCHEM` が NULL のケースでも `nullToEmpty` で全行一様に `""` へ正規化されるため、複合キーは行をまたいで一致し集約挙動は変わらない。
+  - **影響範囲は `exportedKeys()` を消費する箇所のみ** = Markdown ジェネレータの `## Exported Keys` セクション。**ER 図には影響しない** — 子孫方向の走査は imported FK の逆インデックスを使っており `exportedKeys()` を読まない(Session 64 の設計判断どおり)。
+  - **テスト**(`JdbcSchemaInfoProviderTest`、H2 実 DB ベース、計 8 本 green):
+    1. `getSchemaInfoReturnsExportedKeysForChildTablesInDifferentSchemasWithSameConstraintName` — バグ再現テスト。**H2 は制約名をスキーマスコープでユニーク管理するため同一スキーマ内に同名 FK 制約を作れない**。よって子テーブルを別スキーマ(`s1.child_a` / `s2.child_b`)に置き、共通の親 `PUBLIC.parent` を同名 `fk_shared` で参照させることで、スキーマ横断で返る `getExportedKeys` 上に `FK_NAME` 衝突を作った。修正前の実測失敗は `Expected size: 2 but was: 1` で、残った 1 件は `columns=[ID, ID]` / `referencedColumns=[PARENT_ID, PARENT_ID]` と列が二重化し `referencedTable=CHILD_B` に上書きされていた。
+    2. `getSchemaInfoAggregatesMultiColumnForeignKeyIntoSingleEntry` — characterization テスト。複合主キー `parent_composite(a, b)` を 2 列で参照する `child_composite` を作り、複合キー化後も imported / exported 両方向で 2 行が 1 エントリに集約されることを固定。H2 は複合 FK の列を KEY_SEQ(宣言順)で返すため `containsExactly` で順序も固定。
+  - **tidy**: `if (fkName == null) fkName = "";` の手書き正規化を既存の `nullToEmpty(...)` ヘルパーに寄せ、effectively-final のための `String finalFkName` 中間変数を削除(`k -> new ForeignKeyBuilder(k.fkName())`)。テスト側で 3 箇所重複していた全スキーマ横断のテーブル検索を private static ヘルパー `findTable(JdbcSchemaInfo, String)` に抽出。
+  - **⚠️ リリース時の注意点**: **bugfix(patch bump 相当)**。ただし**同名 FK 制約を持つ複数の子テーブルが存在するスキーマでは `## Exported Keys` セクションの行数が増える**ため、設定を変更していない既存ユーザーでも生成される Markdown が変わる(これまで欠落していた子テーブルが正しく現れる)。
+  - **既知の残課題(今回のスコープ外、別軸のバグ)**: `FK_NAME` が NULL(`""` に正規化される)で、**同一子テーブルに複数の無名 FK 制約**が存在する場合、複合キー化後も依然として 1 つの builder にマージされ列が混ざる。今回修正した「子テーブル跨ぎのマージ」とは別軸の問題。H2 は無名制約に自動でユニーク名を割り当てるため H2 では再現困難。
+
+### 2026-07-28 (Session 64)
+- **Markdown ER 図に (A) レイアウトエンジン指定 `er-diagram-layout`、(B) テーブル別近傍 ER 図 `er-diagram-per-table`、(C) サイズ安全弁 `er-diagram-per-table-max-entities` を追加**
+  - **(A) `er-diagram-layout`(既定 `elk`)**: `index.md` の Mermaid ER 図フェンス冒頭に YAML frontmatter(`---\nconfig:\n  layout: elk\n---`)を出力してレイアウトエンジンを指定する。**動機**: ER 図が横長になり線が交差して読み難く、Mermaid 公式ドキュメントが ELK を「大きく複雑な図に推奨」としているため。値は `VALID_LAYOUT_NAME_PATTERN`(`[A-Za-z0-9_-]+`)に完全一致するものだけを許可し、それ以外・空文字・null なら frontmatter 自体を省略する(不正な値で図を壊さない)。フィールドは `@Nullable String` + コンストラクタで空文字に正規化(既存の `nullToEmpty` 慣習を踏襲)。
+  - **(B) `er-diagram-per-table`(既定 `true`)**: 各テーブルページ(`<outputDir>/<name>/<schema>/tables/<table>.md`)のヘッダ直後・`## Columns` の前に、そのテーブルの**近傍 ER 図**を出力する。
+    - **近傍の定義**: `{T} ∪ 祖先*(T) ∪ 子孫*(T)`。**無向連結成分ではない** — 兄弟方向(「祖先の別の子孫」「子孫の別の祖先」)へは辿らない。
+    - **新規実装**: `TableRef` record、`FkGraph` record(forward/backward の隣接マップ + 正準順テーブル列)、遅延初期化 `fkGraph()`、`buildFkGraph()`、`collectReachable()`、`neighborhoodOf()`。
+    - **遅延初期化が必須の理由**: `nonExcludedTables()` が `protected boolean isTableExcluded(...)` を呼ぶため、コンストラクタから FK グラフを組むと ErrorProne の `ConstructorInvokesOverridable` 警告が出て「警告ゼロ」ゲートを破る。
+    - **`collectReachable()` は呼び出しごとに独立した `visited` を持つ**(critical constraint)。`result`(和集合)を visited として共有すると、祖先側で訪問済みのノードから子孫探索が始まり方向が混ざる。
+    - **`appendErDiagramSection(StringBuilder, List<SchemaTable>)` を抽出**し index.md 用と共有。**2 パス構造(全エンティティ → 全リレーション)を維持**する。1 パスに寄せると、後続テーブルのエンティティが先行テーブルの FK から参照されるケースで index.md の出力順が静かに変わる。
+    - **子孫方向は `exportedKeys()` を使わず、全テーブルの `foreignKeys()`(imported)から逆インデックスを構築**する。理由: (1) 辺の描画元と真実の源を 1 つに保つ (2) 既存テストフィクスチャが exportedKeys を埋めていない (3) `JdbcSchemaInfoProvider.buildKeyInfo` が FK_NAME のみをキーに集約するため exported keys 側は制約名衝突で子が静かに消える潜在バグがある (4) `resolveReferencedSchema` は imported 方向を前提に書かれている。
+    - クロススキーマ名の正規化は `resolveReferencedSchema` でグラフ構築時に一元化。出力順は BFS 発見順ではなく正準順序(`orderedTables()` のフィルタ)= index.md と同じ順序ルール。`er-diagram: false` が全 ER 図出力のマスタスイッチ。
+  - **(C) `er-diagram-per-table-max-entities`(既定 `60`)**: 近傍のエンティティ数が上限を超えたページは、図の代わりに省略メッセージ + 全体 ER 図(`../../../index.md`)へのリンクを出力する。`0` 以下で無制限、ちょうど上限なら図を出す。**動機**: 近傍は推移閉包なのでハブテーブル経由で 200 エンティティ / 1 ページ 800KB に達しうるうえ、**GitHub の Mermaid は約 50,000 文字を超えると描画を拒否する**ため、既定 `true` のまま出荷すると既存ユーザーの図が無言で壊れる。走査の意味論(上限なしで全部辿る)は変更せず、**出力段でのみ働く退避措置**とした。
+  - **配線**: 3 プラグイン(`jdbc-markdown` / `postgresql-markdown` / `mysql-markdown`)すべてで 3 設定が end-to-end で有効。3 つの generator を 8 引数コンストラクタ(telescoping)に統一し、**単一終端コンストラクタ**の形を維持した(`DEFAULT_ER_DIAGRAM_PER_TABLE_MAX_ENTITIES` を `protected static final` にして、サブクラスの 7 引数版が 8 引数版へ委譲できるようにした)。
+  - **テスト**: テーブルページ ER 図・サイズ安全弁・エッジケース回帰テストを多数追加。エッジケース: 自己参照 FK(リレーションを 1 回だけ描く)/ 相互参照(循環)/ クロススキーマ FK の両方向走査 + スキーマ名の大小正規化 / 除外テーブルによる経路切断 / `products.md`(子孫のみの近傍)/ 上限の境界値 / `0`・`-1` で無制限 / 省略メッセージ内の `](../../../index.md)` リンク / `erDiagramKeysOnly` との組み合わせ。副産物として MySQL プラグインの `output()` がノーカバレッジだった穴も塞いだ。
+  - **ユーザードキュメント**: `docs/USER_GUIDE.md` / `.ja.md` / `migraphe-plugin-jdbc/README.md` / `.ja.md` に 3 オプションを追記。あわせて出力ディレクトリ構成の記述誤り(per-schema `index.md` があると書かれていた)も修正。
+  - **検証**: `./gradlew clean build --warning-mode all` で **ErrorProne/NullAway 警告ゼロ**、全モジュール green(1,028 テスト)、spotless 適用済み。
+  - **⚠️ リリース時の注意点**:
+    - **minor bump 相当**: 設定を変更していない既存ユーザーの出力が変わる(index.md に frontmatter が入り、全テーブルページに ER 図セクションが増える)。
+    - frontmatter は **Mermaid 9.4+ 必須**。それ未満のレンダラーでは `---` が図の一部と解釈され構文エラーになりうる。
+    - **GitHub の Mermaid は `@mermaid-js/layout-elk` を登録していないため `layout: elk` は dagre にフォールバック**する。GitHub 上ではレイアウト改善効果は得られない(図は壊れない)。
+    - **既定値 60 の限界**: エンティティ数は文字数の代理指標にすぎない。1 エンティティ ≈ 45 文字 + 40 文字/カラム なので、8–10 カラムなら 60 エンティティ ≈ 22–28K 文字(安全)だが、20 カラムを超えると 50K 文字を超えうる → 値を下げるか `er-diagram-keys-only: true` を併用する。
+    - **公開インターフェース `JdbcMarkdownDefinition` に抽象メソッドが 3 つ増えた**(手書き実装者はコンパイルエラー。SmallRye プロキシ利用なら影響なし)。
+    - 空値/非数値の YAML は SmallRye が設定ロード時に例外を投げる(`SRCFG00040` / `SRCFG00039`)。既定値へのフォールバックはしない。**`er-diagram-layout:` を空値にするのは設定エラー**で、frontmatter を省略したい場合は許可文字集合外の文字を含む値(例 `" "`)を指定する。
+  - **将来課題**:
+    1. **`ErDiagramOptions` record の抽出** — コンストラクタが 8 引数に達した。公開 API の形状変更を伴うので独立したリリースサイクルで扱う。既存コンストラクタを `@Deprecated` で残し新コンストラクタへ委譲する方針案。
+    2. **`JdbcSchemaInfoProvider.buildKeyInfo` の潜在バグ** — `LinkedHashMap` を FK_NAME のみでキーイングしているため、`getExportedKeys` の複数子テーブル行が制約名衝突時にマージされ `referencedTable` が上書きされる(子が静かに消える)。imported 側は 1 テーブル内で FK 名が一意なので実害なし。Exported Keys セクションの表示に影響しうる。
+    3. **`JdbcMarkdownGenerator` が約 1,200 行** — 将来 `ErDiagramRenderer` の抽出を検討。
+    4. サイズ上限をエンティティ数ではなく文字数ベースの判定に変える余地。
+
 ### 2026-07-23 (Session 63)
 - **Markdown ER 図 / スキーマ出力のマルチスキーマ対応強化 + enum 型表示修正 + 実 PostgreSQL E2E テスト追加(コードレビュー起点)**
   - **クロススキーマ FK/exported-key リンク修正**: Foreign Keys / Exported Keys のリンクが `../tables/<t>.md`(同一スキーマ固定)で別スキーマ参照時に 404 だったのを `../../<referencedSchema>/tables/<t>.md` に修正。参照スキーマ名は `schemaInfo.schemas()` の既知名へ正規化(大小/綴り不一致対策)。

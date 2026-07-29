@@ -172,6 +172,11 @@ migraphe generate --name schema-docs
 | `source.type` | はい | — | source プラグインのタイプ。本プラグインでは `jdbc-schema` |
 | `source.target` | はい | — | source がスキーマメタデータを読み取るターゲット名 |
 | `output-dir` | いいえ | `docs/schema` | 生成された Markdown ファイルの出力先ディレクトリ |
+| `er-diagram` | いいえ | `true` | `index.md` に Mermaid ER 図を埋め込みます。**すべての** ER 図出力のマスタスイッチで、`false` にするとテーブルページの ER 図も抑制されます |
+| `er-diagram-keys-only` | いいえ | `false` | 各エンティティに主キー・外部キーのカラムのみを表示します（リレーションには影響しません） |
+| `er-diagram-layout` | いいえ | `elk` | 各 `erDiagram` フェンス冒頭の YAML frontmatter で指定する Mermaid のレイアウトエンジン（`elk`, `dagre`, `tidy-tree`, `cose-bilkent`）。`[A-Za-z0-9_-]` 以外の文字を含む値の場合は frontmatter を出力しません（値を空にすると設定エラー） |
+| `er-diagram-per-table` | いいえ | `true` | 各テーブルページにも、そのテーブルの近傍を示す `## ER Diagram` セクション（ヘッダ直後・`## Columns` の前）を出力します |
+| `er-diagram-per-table-max-entities` | いいえ | `60` | テーブルページの近傍 ER 図に含められるエンティティ数の上限。超えた場合は `index.md` へのリンク付き省略メッセージを出力します。`0` 以下で無制限 |
 | `excludes` | いいえ | — | 抽出スキーマ/テーブルに適用する除外フィルターのリスト |
 | `excludes[].schema` | いいえ | — | 除外するスキーマ名にマッチする正規表現 |
 | `excludes[].table` | いいえ | — | 除外するテーブル名にマッチする正規表現（`schema` と併用） |
@@ -184,9 +189,9 @@ migraphe generate --name schema-docs
 
 ```
 docs/schema/
-└── mydb/
-    └── public/
-        ├── index.md              # スキーマ概要（テーブル/ビュー一覧）
+├── index.md                      # データベース概要（全スキーマのテーブル/ビュー一覧・ER 図）
+└── mydb/                         # ジェネレーターの `name`
+    └── public/                   # スキーマごとに 1 ディレクトリ
         ├── tables/
         │   ├── users.md          # テーブル詳細（カラム・キー・インデックス）
         │   └── posts.md
@@ -194,7 +199,9 @@ docs/schema/
             └── recent_posts.md   # ビュー詳細
 ```
 
-各テーブルページには、カラム定義（名前・型・NULL 可否・デフォルト）、主キー/一意キー、相互リンク付き外部キー（imported key による **Foreign Keys** と exported key による **Referenced By** の両方）、インデックスが含まれます。
+`index.md` は `output-dir` 直下に 1 つだけ生成されます（スキーマごとの `index.md` はありません）。スキーマディレクトリの中には `tables/` と `views/` のみが置かれます。
+
+各テーブルページには、カラム定義（名前・型・NULL 可否・デフォルト）、主キー/一意キー、相互リンク付き外部キー（imported key による **Foreign Keys** と exported key による **Referenced By** の両方）、インデックスが含まれます。`er-diagram-per-table` を無効にしていない限り、ページ冒頭にはそのテーブルの近傍を描いた `## ER Diagram` セクションも出力されます。近傍とは、テーブル自身と、外部キーを参照先方向に推移的に辿って到達できるすべてのテーブル（祖先）、および自身を推移的に参照しているすべてのテーブル（子孫）です。兄弟方向は含めず、`excludes` で除外されたテーブルは経路を切断します。近傍が `er-diagram-per-table-max-entities` を超える場合は、`index.md` の全体 ER 図へのリンク付き省略メッセージに置き換わります。
 
 ## 設定フィールド
 

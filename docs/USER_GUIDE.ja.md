@@ -762,8 +762,11 @@ generators:
   - `type`: ソースプラグインのタイプ（例: `jdbc-schema`、`migration-tree`）
   - `target`（オプション）: データベース接続が必要なソースプラグイン用のターゲット名
 - `output-dir`（オプション、デフォルト: `docs/schema`）: 生成ファイルの出力先ディレクトリ
-- `er-diagram`（オプション、デフォルト: `true`）: Markdown アウトプットプラグインで、`index.md` に Mermaid ER 図を埋め込みます。`false` にすると ER 図セクションを抑制します。
+- `er-diagram`（オプション、デフォルト: `true`）: Markdown アウトプットプラグインで、`index.md` に Mermaid ER 図を埋め込みます。これは **すべての** ER 図出力のマスタスイッチです。`false` にすると、`er-diagram-per-table` の設定にかかわらず `index.md` の ER 図も各テーブルページの ER 図も出力されません。
 - `er-diagram-keys-only`（オプション、デフォルト: `false`）: `true` にすると、ER 図の各エンティティは主キー・外部キーのカラムのみを表示します（リレーションには影響しません）。デフォルト `false` は全カラムを表示します。
+- `er-diagram-layout`（オプション、デフォルト: `elk`）: 生成される `erDiagram` フェンス冒頭に YAML frontmatter を出力して指定する Mermaid のレイアウトエンジンです。Mermaid 公式のレイアウト名は `elk` / `dagre` / `tidy-tree` / `cose-bilkent` です。`[A-Za-z0-9_-]+` にマッチする値のみが有効で、それ以外の文字を含む値の場合は frontmatter を出力せず、従来どおりフェンスは `erDiagram` から始まります。無効化したい場合は、この文字集合の外の値（例: `er-diagram-layout: " "`）を指定してください。値を空にする（`er-diagram-layout:`）のは無効化ではなく設定エラーになります。
+- `er-diagram-per-table`（オプション、デフォルト: `true`）: `true` にすると、各テーブルページにもそのテーブルを中心とした近傍 ER 図の `## ER Diagram` セクション（ページヘッダ直後・`## Columns` の前）を出力します。`false` にすると ER 図は `index.md` のみになります。
+- `er-diagram-per-table-max-entities`（オプション、デフォルト: `60`）: テーブルページの近傍 ER 図に含められるエンティティ数の上限です。近傍がこの上限を超えるテーブルページでは、図の代わりに省略メッセージと `index.md` の全体 ER 図へのリンクを出力します。`0` 以下を指定すると無制限です。ちょうど上限のときは図が出力されます（超過時のみ省略）。
 - `excludes`（オプション）: 除外フィルタのリスト（正規表現パターン）
   - `schema`: スキーマ名にマッチする正規表現パターン
   - `table`: テーブル名にマッチする正規表現パターン（`schema` と組み合わせて使用）
@@ -800,9 +803,45 @@ migraphe generate --name mydb
 
 ### 出力構造
 
-Markdown アウトプットプラグイン（`jdbc-markdown`、`postgresql-markdown`、`mysql-markdown`）はスキーマごとに 1 ディレクトリを生成し、それぞれに `index.md`、`tables/` ディレクトリ、`views/` ディレクトリを書き出します。各テーブルページには、カラム定義（名前、型、NULL 許可、デフォルト値）、主キー/ユニークキー、相互リンク付きの外部キー（**Foreign Keys**（imported key）と **Referenced By**（exported key）の両視点）、インデックスが含まれます。正確なディレクトリ構造と imported/exported 外部キーのレンダリングは [`migraphe-plugin-jdbc` の README](../migraphe-plugin-jdbc/README.ja.md) に記載しています。
+Markdown アウトプットプラグイン（`jdbc-markdown`、`postgresql-markdown`、`mysql-markdown`）は、`output-dir` 直下にデータベース全体の `index.md` を 1 つ書き出し、加えてスキーマごとに 1 ディレクトリ（`<output-dir>/<name>/<schema>/`）を作成してその中に `tables/` と `views/` ディレクトリを生成します。各テーブルページには、カラム定義（名前、型、NULL 許可、デフォルト値）、主キー/ユニークキー、相互リンク付きの外部キー（**Foreign Keys**（imported key）と **Referenced By**（exported key）の両視点）、インデックスが含まれます。正確なディレクトリ構造と imported/exported 外部キーのレンダリングは [`migraphe-plugin-jdbc` の README](../migraphe-plugin-jdbc/README.ja.md) に記載しています。
 
 デフォルトでは、`index.md` にはデータベース全体の **ER 図** も Mermaid の `erDiagram` 記法（```mermaid コードフェンス。GitHub や多くの Markdown ビューアがインラインでレンダリング）で 1 枚埋め込まれます。各テーブルはカラム（型と PK/FK 印付き。主キーかつ外部キーのカラムは `PK, FK` と併記）を持つエンティティとなり、外部キーはリレーション（`||--o{`）として描かれます。図はスキーマを考慮します。別スキーマの同名テーブルもそれぞれ別エンティティになり、スキーマをまたぐ外部キーも描画され、テーブルページ内のスキーマ跨ぎのリンクは参照先スキーマのディレクトリへ解決されます。カラムの型は基底の型名で表示されます（例: PostgreSQL の列挙型はスキーマ修飾・引用符付きではなく `user_account_status` と表示）。図は 1 枚に統合されます。Mermaid の `erDiagram` にはグルーピング構文が無いため、スキーマ単位でテーブルを枠囲いすることはしません。ジェネレータに `er-diagram: false` を指定するとこのセクションを抑制でき、`er-diagram-keys-only: true` を指定すると各エンティティを主キー・外部キーのカラムのみに絞って図をコンパクトにできます。
+
+#### テーブルごとの ER 図
+
+デフォルト（`er-diagram-per-table: true`）では、各テーブルページにもそのページ専用の `## ER Diagram` セクションが、ページヘッダ直後・`## Columns` の前に出力されます。ここに描かれるのはデータベース全体ではなく、そのテーブルの **近傍** だけです。すなわち、テーブル自身と、外部キーを参照先方向に辿って推移的に到達できるすべてのテーブル（祖先、さらにその祖先……）、および自身を推移的に参照しているすべてのテーブル（子孫、さらにその子孫……）です。リレーションは、両端が近傍集合に含まれる外部キーすべてについて描画されます。
+
+近傍は意図的に「無向グラフの連結成分」ではありません。兄弟方向、つまり「祖先の別の子孫」や「子孫の別の祖先」までは辿らないため、リンクが密なスキーマでも図が焦点を保ちます。循環参照・自己参照・スキーマをまたぐ外部キーはいずれも扱えます。また `excludes` で除外されたテーブルは経路を切断するため、近傍が除外テーブルを経由して広がることはありません。
+
+近傍のエンティティ数が `er-diagram-per-table-max-entities`（デフォルト `60`）を超えると、図の代わりに省略メッセージと全体 ER 図へのリンクが出力されます:
+
+```markdown
+## ER Diagram
+
+ER diagram omitted: this table's neighborhood includes 82 entities, exceeding the configured limit of 60. See the full [ER diagram](../../../index.md) in the database index instead.
+```
+
+#### ER 図のレンダリングに関する注意
+
+デフォルトの `er-diagram-layout: elk` では、生成される各 ER 図のフェンス冒頭にレイアウトエンジンを指定する Mermaid の frontmatter が出力されます:
+
+````markdown
+## ER Diagram
+
+```mermaid
+---
+config:
+  layout: elk
+---
+erDiagram
+  ...
+```
+````
+
+- **レイアウトの frontmatter は Mermaid 9.4 以降が必要です。** それ未満のレンダラでは冒頭の `---` ブロックが図の一部として解釈され、構文エラーになる可能性があります。Mermaid 9.4 より古いレンダラを使う場合は、`er-diagram-layout` に `[A-Za-z0-9_-]` 以外の文字を含む値（例: `er-diagram-layout: " "`）を指定してください。そうするとフェンスは `erDiagram` から始まり、このオプションが存在しなかった頃とまったく同じ出力になります。
+- **GitHub は `@mermaid-js/layout-elk` を登録していないため、`layout: elk` は dagre にフォールバックします。** GitHub 上でも図が壊れることはありませんが、ELK によるレイアウト改善の効果は得られません。`elk` が有効になるのは ELK プラグインを読み込んでいるレンダラ、たとえば [mermaid.live](https://mermaid.live) や ELK レイアウトパッケージを設定した VitePress サイトなどです。
+- **デフォルトの上限 `60` エンティティは文字数の代理指標であり、厳密な文字数上限ではありません。** エンティティ数はレンダリングサイズの近似にすぎません。1 エンティティのコストはおよそ 45 文字 + 1 カラムあたり約 40 文字なので、8〜10 カラムのテーブルであれば 60 エンティティで 22,000〜28,000 文字程度、GitHub の Mermaid 図 1 枚あたり約 50,000 文字という制限に対して十分余裕があります。一方、20 カラムを超える幅広テーブルが多いスキーマでは、60 エンティティでも 50,000 文字を超えることがあります。図が切り詰められたり拒否されたりする場合は、`er-diagram-per-table-max-entities` の値を下げる、あるいは各エンティティを PK/FK カラムのみに絞る `er-diagram-keys-only: true` を併用してください。
+- **空値や非数値の YAML は即座にエラーになります。** `er-diagram-per-table-max-entities:` と値を書かない場合や、`er-diagram-per-table-max-entities: abc` のような非数値を書いた場合、SmallRye が設定ロード時に例外（`SRCFG00040` / `SRCFG00039`）を投げます（デフォルト値へ暗黙にフォールバックはしません）。`er-diagram-layout:` を空にした場合も同様です。これは `execution.max-parallelism` など他のオプションと同じ挙動です。
 
 ### データベース固有のドキュメント
 
@@ -820,6 +859,9 @@ generators:
     output-dir: docs/schema
     er-diagram: false            # オプション。省略または true で Mermaid ER 図を埋め込む
     # er-diagram-keys-only: true # オプション。ER 図に主キー・外部キーのカラムのみ表示
+    # er-diagram-layout: elk     # オプション。Mermaid のレイアウトエンジン（elk, dagre, tidy-tree, cose-bilkent）
+    # er-diagram-per-table: true # オプション。各テーブルページにも近傍 ER 図を出力
+    # er-diagram-per-table-max-entities: 60 # オプション。この値を超える近傍ではテーブルページの ER 図を省略（0 以下で無制限）
 ```
 
 データベース固有オブジェクトの完全な一覧、所有者／DEFINER の表示、テーブルごとに含まれる内容については、各プラグインの README に記載されています:
