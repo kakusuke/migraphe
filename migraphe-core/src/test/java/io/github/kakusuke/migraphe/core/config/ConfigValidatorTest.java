@@ -166,6 +166,71 @@ class ConfigValidatorTest {
 
     // Helper methods to create test projects
 
+    @Test
+    void shouldReportMissingEnvironmentOverlayAsValidationError() throws IOException {
+        // Given: environments/ が無い正しいプロジェクト
+        createValidProject(tempDir);
+
+        // When: 存在しないオーバーレイ名で検証（例外ではなく検証エラーとして報告する）
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "prodction");
+
+        // Then
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("prodction"));
+    }
+
+    @Test
+    void shouldValidateTargetTypeIntroducedByEnvironmentOverlay() throws IOException {
+        // Given: ベースは正しいが、オーバーレイが未知のプラグイン型に差し替える
+        createValidProject(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                target:
+                  test-db:
+                    type: not-a-registered-plugin
+                """);
+
+        // 対照群: --env なしならベースの type: postgresql で妥当
+        assertThat(validator.validate(tempDir).isValid()).isTrue();
+
+        // When: オーバーレイ適用時は実際に使われる型を検証する
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("not-a-registered-plugin"));
+    }
+
+    @Test
+    void shouldAcceptTargetTypeFixedByEnvironmentOverlay() throws IOException {
+        // Given: ベースの type は未登録だが、オーバーレイが正しい型へ差し替える
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("targets").resolve("test-db.yaml"),
+                """
+                type: not-a-registered-plugin
+                jdbc_url: jdbc:postgresql://localhost:5432/test
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                target:
+                  test-db:
+                    type: postgresql
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then: オーバーレイが勝つので妥当（ファイル単体の検証で終わっていない証拠）
+        assertThat(result.errors()).noneMatch(e -> e.contains("not-a-registered-plugin"));
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """

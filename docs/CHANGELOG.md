@@ -2,6 +2,18 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-20 (Session 72)
+- **`--env`(`environments/<name>.yaml` オーバーレイ)を全コマンドに適用し、存在しないオーバーレイ名をエラーにした**
+  - **動機**: 利用者報告 #5「`--env` を変えても履歴の `environment_id` が変わらない」の切り分け過程で、`--env` 自体が**一部の経路にしか繋がっていない**ことが判明した。migraphe には直交する 2 系統があり、**target 系統**(`targets/*.yaml`。Java の `Environment`/`EnvironmentId` はこの系統を指す。名前は歴史的経緯)が「接続先そのもの」、**environment 系統**(`environments/*.yaml` + `--env`)は「設定値のオーバーレイ」でしかない。target は `--env` によって**中身が変わるが名前は変わらない**。この用語の衝突が誤解の温床になっていた。
+  - **(1) `generate` / `validate` が `--env` を無視していた**: `GenerateCommand` が `ExecutionContext.load(baseDir, registry, Collections.emptyMap())` を呼んでいた — **3 引数版が 2 つあり、第 3 引数が `variables` の方**を掴んでいたため envName が常に null。`ConfigValidator.validate(Path)` はそもそも envName を受け取っていなかった。`Main.java` の「The generate command loads its own configuration」というコメントも実態を説明していなかったので書き直した。
+  - **(2) タイポが黙殺されていた**: `YamlFileScanner.findEnvironmentFile` はファイル不在時に null を返し、`ConfigLoader` がそれを「オーバーレイなし」として続行していた。`migraphe up --env prodction` がベース設定で**成功してしまう**。→ `ConfigLoader.loadConfig` で `envName != null && envFile == null` を `ConfigurationException` にした。メッセージには探索パスと**利用可能なオーバーレイ名の一覧**を含める(`YamlFileScanner.listEnvironmentNames` を追加)。`envName == null`(`--env` 未指定)は従来どおり。
+  - **(3) Gradle に概念が無かった**: `MigrapheExtension.getEnv()` を追加し、`AbstractMigrapheTask` に `@Input @Optional Property<String> getEnv()` と `@Option(option = "env")` を置いて 5 タスク全部に継承させた。優先順位は extension `env` < `-Pmigraphe.env` < `--env`。**extension は `set` ではなく `convention` で束縛**している — `set` にすると extension 未設定時でも「明示的に設定済み」となり `-P` フォールバックが死ぬため。
+  - **`validate` は例外ではなく検証エラーとして報告する**: validate は問題を積み上げる設計なので、オーバーレイ不在も 1 件の検証エラーにする。加えて**オーバーレイ適用後の実効 `type`** をプラグイン解決に使うようにした(そうしないと `up` が弾く設定を `validate` が通してしまう)。コンソール出力はエラー文字列のパス接頭辞でグルーピングされるため、`environments/<name>.yaml:` 接頭辞と専用チェックステップを追加。
+  - **⚠️ 破壊的な挙動変更**: 存在しない `--env` 名は**エラーで停止**する(従来は黙って無視)。`environments/` を持たないプロジェクトで `--env` を渡していた場合に影響。回避策は `--env` を外すか、該当ファイルを作ること。
+  - **意図的にやらなかったこと**: 履歴の分割キーは **target 名のままにした**。`profile` 列を足すと「2 つのオーバーレイが同じ物理 DB を指す」正当なケースで誤って分割し再適用を招く。そもそも静かな取りこぼしは `history.target` が**環境間で共有された DB** を指す場合にしか起きず、その構成は `docs/USER_GUIDE.md` で非対応として明文化した。
+  - **テスト**(+12、計 1,121 本 green): `ConfigLoaderTest`(不在エラー / 利用可能名の列挙 / `--env` 未指定は従来どおり)、`ConfigValidatorTest`(不在を検証エラーとして報告 / オーバーレイの type で検証 / オーバーレイが type を直すケース)、`GenerateCommandTest`・`ValidateCommandTest`・`MainTest`(配線と実際の値の適用)、`MigrapheValidateTaskFunctionalTest`(`--env` / `-P` / extension の 3 経路)。既存の `MainTest.loadContextShouldPassEnvOptionToExecutionContextLoad` は旧挙動(オーバーレイ不在でも成功)に依存していたため、実ファイルを置いて**値が適用されること**を確認する形に強化した。**手動ミューテーションで検証**: envName を無視する / `typeOverride` を無視する / `-P` 経路を削る、の 3 パターンで対応するテストだけが落ちることを確認。
+  - **ドキュメント**: `docs/USER_GUIDE.md` に「target 系統と environment 系統は別物」の表と、履歴が target 名で分割されること・履歴 DB を環境間で共有しないことを追記。CLI の usage は `--env` を "Common options" に格上げ。
+
 ### 2026-08-20 (Session 71)
 - **実行履歴 ID を UUIDv7 にして順序不定を解消し、`environment_id` 列を `target_id` にリネーム**（PR #55 の機構の上に構築）
   - **順序の背景**: `wasExecuted()` / `findLatestRecord()` は `ORDER BY executed_at DESC LIMIT 1` で「最新」を決めていたが、同一ノードの複数レコードが同じ時刻を持つと勝者が不定になる。そして MariaDB では日常的にそうなる: Connector/J はサーバのバージョン文字列 `5.5.5-10.1.48-MariaDB` を見て「MySQL 5.6.4 未満＝小数秒非対応」と判定し、**クライアント側で小数秒を切り捨てる**。列が `TIMESTAMP(6)` でも実測で `micros=0`。接続プロパティ（`sendFractionalSeconds` / `useServerPrepStmts`）の4通りすべてで回避不可、MariaDB 公式ドライバなら保持されることも確認済みで、**原因はドライバのバージョン判定だけ**。結果、`down` 直後の `up`（CI やローカルの反復）が同一秒に入ると、ロールバック済みのノードを「適用済み」と**静かに**誤判定し得た。

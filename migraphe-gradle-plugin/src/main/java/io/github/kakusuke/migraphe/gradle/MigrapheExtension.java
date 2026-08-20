@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.gradle;
 
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.provider.MapProperty;
+import org.gradle.api.provider.Property;
 
 /**
  * Gradle DSL extension for the Migraphe plugin.
@@ -40,4 +41,17 @@ public abstract class MigrapheExtension {
      * @return the configurable variable map property
      */
     public abstract MapProperty<String, String> getVariables();
+
+    /**
+     * Returns the deployment-environment name whose {@code environments/<env>.yaml} overlay is
+     * applied on top of the base configuration.
+     *
+     * <p>This is the Gradle counterpart of the CLI's {@code --env} option: it selects a set of
+     * configuration overrides, not a target. When unset, only the base configuration is used. A
+     * name that has no matching file under {@code environments/} fails the build rather than being
+     * silently ignored.
+     *
+     * @return the configurable environment-name property
+     */
+    public abstract Property<String> getEnv();
 }

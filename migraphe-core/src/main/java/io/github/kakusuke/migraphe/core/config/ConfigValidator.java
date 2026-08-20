@@ -66,6 +66,24 @@ public class ConfigValidator {
      * @return the accumulated validation result
      */
     public ValidationOutput validate(Path baseDir) {
+        return validate(baseDir, null);
+    }
+
+    /**
+     * Validates the configuration rooted at the given directory, applying an environment overlay.
+     *
+     * <p>Behaves like {@link #validate(Path)} but, when {@code envName} is given, resolves each
+     * target's effective {@code type} through {@code environments/<envName>.yaml}, so the
+     * configuration that would actually be used at run time is the one validated. A requested
+     * overlay that does not exist is reported as a validation error rather than thrown, because
+     * {@code validate} accumulates problems instead of aborting.
+     *
+     * @param baseDir the project base directory
+     * @param envName the deployment-environment name whose overlay is applied, or {@code null} to
+     *     validate the base configuration only
+     * @return the accumulated validation result
+     */
+    public ValidationOutput validate(Path baseDir, @Nullable String envName) {
         List<String> errors = new ArrayList<>();
         YamlFileScanner scanner = new YamlFileScanner();
         TaskIdGenerator idGenerator = new TaskIdGenerator();
@@ -81,6 +99,13 @@ public class ConfigValidator {
         // Resolve the scan root: baseDir/scan-root if project.scan-root is set, otherwise baseDir.
         Path scanRoot = new ConfigLoader().resolveScanRoot(baseDir);
 
+        // Resolve the environment overlay when one was requested, so the effective (run-time)
+        // configuration is what gets validated.
+        Map<String, String> overlay = new HashMap<>();
+        if (envName != null) {
+            errors.addAll(loadOverlay(scanner, scanRoot, envName, overlay));
+        }
+
         // 2. Load and validate each targets/*.yaml individually.
         List<Path> targetFiles = scanner.scanTargetFiles(scanRoot);
         Set<String> validTargetIds = new HashSet<>();
@@ -88,11 +113,12 @@ public class ConfigValidator {
 
         for (Path targetFile : targetFiles) {
             String targetId = targetFile.getFileName().toString().replaceAll("\\.yaml$", "");
-            List<String> targetErrors = validateTargetFile(targetFile, targetId);
+            String typeOverride = overlay.get("target." + targetId + ".type");
+            List<String> targetErrors = validateTargetFile(targetFile, targetId, typeOverride);
             if (targetErrors.isEmpty()) {
                 validTargetIds.add(targetId);
-                // Capture the target type for later plugin-specific task validation.
-                String type = getTargetType(targetFile);
+                // Capture the effective target type for later plugin-specific task validation.
+                String type = typeOverride != null ? typeOverride : getTargetType(targetFile);
                 if (type != null) {
                     targetTypes.put(targetId, type);
                 }
@@ -147,8 +173,48 @@ public class ConfigValidator {
     /** Internal holder for the fields of a task needed during validation. */
     private record TaskInfo(String target, List<String> dependencies) {}
 
-    /** Validates a single target file. */
-    private List<String> validateTargetFile(Path targetFile, String targetId) {
+    /**
+     * Reads {@code environments/<envName>.yaml} into {@code overlay}, returning any problems found.
+     *
+     * <p>A missing or unreadable overlay yields a validation error rather than an exception, so the
+     * rest of the configuration is still checked and every problem is reported in one run.
+     *
+     * @param scanner the scanner used to locate and list overlays
+     * @param scanRoot the scan-root directory (the one containing {@code environments/})
+     * @param envName the requested environment name
+     * @param overlay the map the overlay properties are read into
+     * @return the errors encountered, or an empty list when the overlay loaded cleanly
+     */
+    private List<String> loadOverlay(
+            YamlFileScanner scanner, Path scanRoot, String envName, Map<String, String> overlay) {
+        String relativePath = "environments/" + envName + ".yaml";
+        Path envFile = scanner.findEnvironmentFile(scanRoot, envName);
+
+        if (envFile == null) {
+            List<String> available = scanner.listEnvironmentNames(scanRoot);
+            String availableText = available.isEmpty() ? "(none)" : String.join(", ", available);
+            return List.of(
+                    relativePath
+                            + ": Environment overlay not found for --env "
+                            + envName
+                            + " (available: "
+                            + availableText
+                            + ")");
+        }
+
+        try {
+            overlay.putAll(new YamlConfigSource(envFile.toUri().toURL()).getProperties());
+            return List.of();
+        } catch (IOException e) {
+            return List.of(relativePath + ": Failed to load - " + e.getMessage());
+        } catch (Exception e) {
+            return List.of(relativePath + ": Invalid YAML - " + e.getMessage());
+        }
+    }
+
+    /** Validates a single target file, honouring an overlay-supplied {@code type} when present. */
+    private List<String> validateTargetFile(
+            Path targetFile, String targetId, @Nullable String typeOverride) {
         List<String> errors = new ArrayList<>();
         String relativePath = "targets/" + targetId + ".yaml";
 
@@ -156,15 +222,15 @@ public class ConfigValidator {
             YamlConfigSource source = new YamlConfigSource(targetFile.toUri().toURL());
             Map<String, String> props = source.getProperties();
 
+            // The environment overlay wins over the target file, exactly as it does at run time.
+            String type = typeOverride != null ? typeOverride : props.get("type");
+
             // 'type' is required.
-            if (!props.containsKey("type") || props.get("type") == null) {
+            if (type == null) {
                 errors.add(relativePath + ": Missing required property 'type'");
-            } else {
+            } else if (!pluginRegistry.hasPlugin(type)) {
                 // Ensure 'type' names a registered plugin.
-                String type = props.get("type");
-                if (!pluginRegistry.hasPlugin(type)) {
-                    errors.add(relativePath + ": Unknown plugin type '" + type + "'");
-                }
+                errors.add(relativePath + ": Unknown plugin type '" + type + "'");
             }
         } catch (IOException e) {
             errors.add(relativePath + ": Failed to load - " + e.getMessage());

@@ -68,6 +68,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
                         });
 
         project.getTasks()
@@ -80,6 +81,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
                         });
 
         project.getTasks()
@@ -92,6 +94,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
                             // Fallback from -P properties (at configuration time).
                             Object nameProp = project.findProperty("migraphe.generate.name");
                             if (nameProp != null) {
@@ -109,6 +112,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
                             // Fallback from -P properties (at configuration time).
                             Object targetProp = project.findProperty("migraphe.up.target");
                             if (targetProp != null) {
@@ -130,6 +134,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                             task.getBaseDir().set(extension.getBaseDir());
                             task.getVariables().set(extension.getVariables());
                             task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
                             // Fallback from -P properties (at configuration time).
                             Object targetProp = project.findProperty("migraphe.down.target");
                             if (targetProp != null) {
@@ -144,5 +149,26 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                                 task.getDryRun().convention(true);
                             }
                         });
+    }
+
+    /**
+     * Wires the environment-overlay name onto a task from the extension and {@code -P} properties.
+     *
+     * <p>Precedence, lowest first: the {@code migraphe { env = ... }} block, then {@code
+     * -Pmigraphe.env=...}, then the task's {@code --env} command-line option (applied by Gradle
+     * after configuration). The extension is bound as a <em>convention</em> rather than with {@code
+     * set} so that an unset extension property still leaves room for the {@code -P} fallback.
+     *
+     * @param project the project whose properties supply the {@code -P} fallback
+     * @param extension the Migraphe extension holding the build-script value
+     * @param task the task to configure
+     */
+    private static void applyEnvSources(
+            Project project, MigrapheExtension extension, AbstractMigrapheTask task) {
+        task.getEnv().convention(extension.getEnv());
+        Object envProp = project.findProperty("migraphe.env");
+        if (envProp != null) {
+            task.getEnv().set(envProp.toString());
+        }
     }
 }

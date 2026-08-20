@@ -28,6 +28,7 @@ public class GenerateCommand implements Command {
     private final @Nullable URLClassLoader pluginClassLoader;
     private final @Nullable String nameFilter;
     private final Path pluginsDir;
+    private final @Nullable String envName;
     private final boolean colorEnabled;
 
     /**
@@ -41,19 +42,23 @@ public class GenerateCommand implements Command {
      * @param nameFilter the name of the single generator to run, or {@code null} to run all
      *     configured generators
      * @param pluginsDir the {@code plugins/} directory scanned for additional generator plugins
+     * @param envName the deployment-environment name whose {@code environments/<envName>.yaml}
+     *     overlay is applied, or {@code null} to use the base configuration
      */
     public GenerateCommand(
             Path baseDir,
             PluginRegistry pluginRegistry,
             @Nullable URLClassLoader pluginClassLoader,
             @Nullable String nameFilter,
-            Path pluginsDir) {
+            Path pluginsDir,
+            @Nullable String envName) {
         this(
                 baseDir,
                 pluginRegistry,
                 pluginClassLoader,
                 nameFilter,
                 pluginsDir,
+                envName,
                 AnsiColor.isColorEnabled());
     }
 
@@ -68,6 +73,8 @@ public class GenerateCommand implements Command {
      * @param nameFilter the name of the single generator to run, or {@code null} to run all
      *     configured generators
      * @param pluginsDir the {@code plugins/} directory scanned for additional generator plugins
+     * @param envName the deployment-environment name whose {@code environments/<envName>.yaml}
+     *     overlay is applied, or {@code null} to use the base configuration
      * @param colorEnabled {@code true} to colorize console output
      */
     public GenerateCommand(
@@ -76,12 +83,14 @@ public class GenerateCommand implements Command {
             @Nullable URLClassLoader pluginClassLoader,
             @Nullable String nameFilter,
             Path pluginsDir,
+            @Nullable String envName,
             boolean colorEnabled) {
         this.baseDir = baseDir;
         this.pluginRegistry = pluginRegistry;
         this.pluginClassLoader = pluginClassLoader;
         this.nameFilter = nameFilter;
         this.pluginsDir = pluginsDir;
+        this.envName = envName;
         this.colorEnabled = colorEnabled;
     }
 
@@ -89,7 +98,7 @@ public class GenerateCommand implements Command {
     public int execute() {
         try {
             ExecutionContext context =
-                    ExecutionContext.load(baseDir, pluginRegistry, Collections.emptyMap());
+                    ExecutionContext.load(baseDir, pluginRegistry, envName, Collections.emptyMap());
             ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
 
             List<ProjectConfig.GeneratorSection> generators =
