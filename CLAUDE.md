@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: fixed `JdbcSchemaInfoProvider.buildKeyInfo` silently dropping child tables from `getExportedKeys()` when two child tables share an FK constraint name — the aggregation map is now keyed on `(FKTABLE_SCHEM, FKTABLE_NAME, FK_NAME)` (Session 65)
-**Tests**: 1,030, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: fixed the MySQL statement splitter blowing up exponentially on scripts full of `DROP TABLE IF EXISTS` — the block parser is now memoized via the new `SqlParsers.memoize` combinator (Session 66)
+**Tests**: 1,036, 100% passing
 
 ## Module Structure
 
@@ -138,7 +138,7 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 19. **MySQL Generator Plugins**: `mysql-schema` source (catalog-based, information_schema) + `mysql-markdown` output via the same Template Method pattern
 20. **JitPack + Lockfile Pinning (Phase 21)**: `repositories:` (HTTPS-only), `migraphe.lock.yaml` SHA-256 pinning via `migraphe pin`/`--check`/`validate`
 21. **JitPack Distribution (Phase 22)**: JitPack is the primary distribution channel until Maven Central; `-PpublishGroup` switch, plugin-marker workaround, tag-based user docs
-22. **SQL Statement Splitting (Session 55)**: parser-combinator toolkit in `migraphe-plugin-jdbc` (`...jdbc.statement`); dialect grammars defined per-plugin (PostgreSQL dollar-quote, no keyword blocks; MySQL recursive BEGIN/END blocks + DELIMITER); unified split-and-loop execution in both autocommit/transaction modes; old `SqlStatements` removed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+22. **SQL Statement Splitting (Session 55, memoized in 66)**: parser-combinator toolkit in `migraphe-plugin-jdbc` (`...jdbc.statement`); dialect grammars defined per-plugin (PostgreSQL dollar-quote, no keyword blocks; MySQL recursive BEGIN/END blocks + DELIMITER); the MySQL block parser is wrapped in `SqlParsers.memoize` so keywords that open no block (the `IF` of `DROP TABLE IF EXISTS`) cost O(1) rejections instead of O(2^k); unified split-and-loop execution in both autocommit/transaction modes; old `SqlStatements` removed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## CLI Project Structure
 
@@ -212,12 +212,15 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-07-29 (Session 65)
-- Fixed the latent `JdbcSchemaInfoProvider.buildKeyInfo` bug (Session 64's future-work item 2): the multi-column-FK aggregation map was keyed on `FK_NAME` alone, so rows for *different* child tables in a `getExportedKeys()` result set merged whenever two children shared a constraint name — columns were duplicated and `referencedTable` overwritten, silently dropping a child. Now keyed on a `BuilderKey(fkTableSchem, fkTableName, fkName)` record. No-op for the imported direction (single-table call ⇒ those two columns are constant per JDBC contract); affects only the `## Exported Keys` section, never the ER diagram (descendants come from inverted imported FKs).
-- Two H2-backed tests added (8 total in `JdbcSchemaInfoProviderTest`): a reproduction using child tables in *separate* schemas (H2 scopes constraint names per schema, so a same-schema name clash is not constructible) and a characterization test pinning multi-column FK aggregation in both directions.
-- **Release notes**: bugfix (patch bump), but output changes where children share FK constraint names — the `## Exported Keys` section gains the previously missing rows. Remaining known issue: multiple *unnamed* FK constraints on the same child table still merge. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-08-20 (Session 66)
+- Fixed the MySQL statement splitter hanging on scripts with many `DROP TABLE IF EXISTS` statements (user report: "down hangs on tasks with many statements"). `MySqlGrammar.block()`'s `ifBlock` matches the `IF` of `DROP TABLE IF EXISTS`, and its body scans ahead for an `END` that never arrives; because the body admits nested blocks, that failing scan was repeated for every such keyword it passed over — O(2^k). Measured: 22 statements 9.7s, 83 effectively hung.
+- The grammar's *decisions* were already correct (a false `IF` is properly rejected, and `BEGIN ... DROP TABLE IF EXISTS tmp; ... END` stayed one statement) — **only the cost was wrong**. Fix is therefore a pure performance change: new public combinator `SqlParsers.memoize(SqlParser)` (packrat) wraps the assembled block parser. After: 22 → 2.8ms, 83 → 6.0ms, 300 → 46.4ms, 1000 → 426.7ms.
+- `MemoizingParser` holds one `Memo` (`final String sql` + biased `final int[] results`) for the most recent input, invalidated by `String.equals` (short-circuits on identity; sound to reuse for an equal input since parsers are pure). Published without synchronization — final fields prevent observing a half-built table, purity makes a missed entry cost a recomputation. A `ThreadLocal` variant was dropped because ErrorProne's `ThreadLocalUsage` flagged it; the field-based form is simpler, faster, and needed no suppression.
+- Six tests added: `MySqlGrammarTest.NonBlockIfKeyword` (83-statement DROP/CREATE scripts under `assertTimeoutPreemptively(2s)`, plus a characterization test pinning the false-`IF` rejection) and three `memoize` contract tests in `SqlParsersTest` (delegate results, compute-once, cache invalidation on a changed input).
+- Up migrations shared the same trap (`CREATE TABLE IF NOT EXISTS` × 83 also hung), so this was never down-specific. PostgreSQL is unaffected — its grammar has no keyword blocks by design.
+- **Release notes**: bugfix (patch bump). Split results are unchanged; previously hanging input now returns. One public API addition (`SqlParsers.memoize`); no existing signature changed. Remaining worst case is O(chars × non-opening keywords) — a statement-start restriction on block openers would make it linear and is deferred as a separate grammar change. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
-**Last Updated**: 2026-07-29
-**Current Work**: Bug fix in `JdbcSchemaInfoProvider.buildKeyInfo` — the FK aggregation map is now keyed on `(FKTABLE_SCHEM, FKTABLE_NAME, FK_NAME)` instead of `FK_NAME` alone, so child tables sharing an FK constraint name no longer collapse into one entry on the `getExportedKeys()` path (`## Exported Keys` section only; ER diagrams unaffected). See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the test strategy and the remaining unnamed-constraint edge case.
+**Last Updated**: 2026-08-20
+**Current Work**: Performance fix in the MySQL statement splitter — `MySqlGrammar.block()`'s assembled parser is now wrapped in the new `SqlParsers.memoize` combinator, so block-opening keywords that never close (the `IF` of `DROP TABLE IF EXISTS`) no longer cause O(2^k) re-scanning. Recognized spans are unchanged. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the measurements, the racy-single-check rationale, and the deferred grammar change that would make it linear.

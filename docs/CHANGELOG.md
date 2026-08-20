@@ -2,6 +2,25 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-20 (Session 66)
+- **MySQL 方言の文分割が `DROP TABLE IF EXISTS` を多数含むスクリプトで指数爆発する不具合を修正**(利用者からの報告 #2「down が文数の多いタスクでハングする」)
+  - **症状**: MariaDB 利用者から「83 文の `DROP TABLE IF EXISTS` を持つ down タスクが『Executing rollback...』から返らない」との報告。同タスクの up(83 文の `CREATE TABLE`)は 1.1 秒、7 文の DROP は 77ms、手動実行は 0.14 秒。autocommit の有無・`--all` の有無・MariaDB 5.5/11.4 のいずれでも再現。**DB に到達する前の文分割で詰まっていた**ため、接続設定やサーバ側の要因ではない。
+  - **原因**: `MySqlGrammar.block()` の `ifBlock = seq(keyword("IF"), body, keyword("END"), ws, keyword("IF"))` が `DROP TABLE **IF** EXISTS` の `IF` にマッチし、`body = many(content)` が対応する `END` を探して入力末尾まで走査してから失敗する。ところが `content` に `ref(block)` が含まれるため、**走査中に出会う後続の `IF` ごとに同じ全走査を再帰的にやり直す**。偽 `IF` が k 個あると T(k) = n + ΣT(j) となり **O(2^k)**。実測で 2 文増えるごとに約 4 倍(n=22 で 9.7 秒)、n=83 は事実上ハング。
+  - **重要**: **文法の判定結果自体は正しかった**。`END IF` が無いので偽 `IF` はきちんと棄却され、`BEGIN ... DROP TABLE IF EXISTS tmp; ... END` も 1 文と認識できていた。**壊れていたのはコストのみ**。
+  - **修正**: `SqlParsers.memoize(SqlParser)` を公開コンビネータとして追加し、`MySqlGrammar.block()` が組み立てたブロックパーサ(= `ref` が指す再帰参照そのもの)をラップした。パッカラート方式で位置ごとの結果を 1 度だけ計算する。**判定は定義上まったく同一**(パーサは (入力, 位置) の純関数)なので、認識されるスパンは一切変わらない。
+    - **実装**: `MemoizingParser`(private static final class)が `@Nullable Memo memo` フィールドに直近入力ぶんの表を持つ。`Memo` は `final String sql` + `final int[] results`。`results[pos]` は「未計算 = 0」と区別するため結果に `MEMO_BIAS = 2` を加えて格納する(`-1` → `1`、`0` → `2`)。
+    - **キャッシュ無効化に `String.equals` を使う理由**: 同一オブジェクトなら `String.equals` が内部で `this == other` により短絡するので実質 O(1)。かつ**内容が等しい別インスタンスでキャッシュを再利用しても健全**(パーサは内容の純関数)。`==` による参照比較は ErrorProne の `ReferenceEquality` に触れるため避けた。
+    - **`ThreadLocal` を使わなかった理由**: 当初 `ThreadLocal` 案で実装したが ErrorProne の `ThreadLocalUsage`(ThreadLocal は static フィールドに置くべき)に触れた。`@SuppressWarnings` を使わず根本対応するため、**final フィールドによる安全公開に依拠した良性データ競合(racy single-check)**へ変更した。`Memo` のフィールドが final なので JLS 17.5 により競合読者が半端な表を観測することはなく、委譲先が純関数なのでキャッシュミスは「同じ値の再計算」で済む。結果的に ThreadLocal より単純・高速でメモリも少ない。
+  - **効果(修正後の実測、`DROP TABLE IF EXISTS` × n)**: n=22 が 9,720ms → **2.8ms**、n=83 がハング → **6.0ms**、n=300 が 46.4ms、n=1000 が 426.7ms。
+  - **残存する最悪計算量**: O(文字数 × 偽ブロック開始キーワード数)。指数は消えたが線形ではない(上表の n=1000 が該当)。真に線形化するには「ブロック開始キーワードを文頭に限定する」文法変更(B 案)が必要で、ヒューリスティックの誤判定リスク検証を伴うため**別サイクルに分離**した。
+  - **テスト(計 6 本追加、1,036 テスト green)**:
+    - `MySqlGrammarTest` に `@Nested NonBlockIfKeyword` を追加(3 本)。`DROP TABLE IF EXISTS t0..t82;` が 83 文に分割されること、`CREATE TABLE IF NOT EXISTS` × 83 でも同様であることを `assertTimeoutPreemptively(Duration.ofSeconds(2))` で固定。修正前は 2 本とも `execution timed out after 2000 ms` で失敗。修正後は 16ms / 12ms。
+    - 3 本目は characterization テスト: `CREATE PROCEDURE p() BEGIN DROP TABLE IF EXISTS tmp; SELECT 1; END` が 1 文であること。**偽 `IF` を棄却する既存の正しい挙動**を固定し、memo 化が意味を変えていないことを担保する。
+    - `SqlParsersTest` に `memoize` の契約テストを 3 本追加。委譲先の結果をマッチ/非マッチ両方でそのまま返すこと、同一位置は 1 度しか計算しないこと(呼び出し回数カウンタで検証)、**入力が変わったらキャッシュを破棄すること**(`"BEGIN"` → `"BREAK"` → `"BEGIN"`。同じ長さなので、無効化が壊れると誤って一致を報告する)。
+  - **up 側も同じ地雷を踏んでいた**: `CREATE TABLE IF NOT EXISTS` を 83 文使えば up でもハングする。報告者の up が 1.1 秒で済んでいたのは、その CREATE に `IF NOT EXISTS` が無かったため。down 固有の問題ではない。
+  - **PostgreSQL 方言は無影響**: `PostgreSqlGrammar` はキーワードブロックを持たない(`BEGIN;`/`COMMIT;` を独立した文として分割するための意図的な設計)ため、そもそもこの経路に入らない。`StatementSplitter` / `standardRegion()` も未変更。
+  - **⚠️ リリース時の注意点**: **bugfix(patch bump 相当)**。分割結果は変わらず、これまでハングしていた入力が返るようになるだけ。公開 API に `SqlParsers.memoize(SqlParser)` が 1 つ増えた(既存シグネチャの変更はなく、`SqlParser` インターフェースも未変更)。バージョン bump は session end のスコープ外(`migraphe-version-up` skill で明示的に実施)なので本 PR には含めていない。
+
 ### 2026-07-29 (Session 65)
 - **`JdbcSchemaInfoProvider.buildKeyInfo` の潜在バグを修正 — exported keys で子テーブルが静かに消える問題**(Session 64 の将来課題 2 を消化)
   - **バグの本質**: `buildKeyInfo(ResultSet, boolean imported)` は `DatabaseMetaData.getImportedKeys()` と `getExportedKeys()` の**両方向を処理する共通ヘルパー**で、複合列 FK を 1 つの `JdbcForeignKeyInfo` に集約するための builder マップを **`FK_NAME` のみ**でキーイングしていた。`getExportedKeys()` の結果セットには**複数の異なる子テーブルの行が混ざる**ため、異なる子テーブルが同名の FK 制約を持つと同じ builder にマージされ、列が二重に追加されたうえ `referencedTable` が後続行で上書きされ、**子テーブルが 1 つ静かに消えていた**。「両方向を 1 つのヘルパーで扱う」構造ゆえに、集約キーが imported 側の前提(単一テーブル)のままで exported 側だけが壊れていた形。
