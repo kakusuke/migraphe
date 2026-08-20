@@ -1,5 +1,6 @@
 package io.github.kakusuke.migraphe.jdbc.statement;
 
+import java.util.Arrays;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -190,14 +191,15 @@ public final class SqlParsers {
         return (sql, pos) -> supplier.get().parse(sql, pos);
     }
 
-    /** Marker stored in a memo table for a position whose result has not been computed yet. */
-    private static final int MEMO_UNCOMPUTED = 0;
-
     /**
-     * Bias added to a parse result before storing it in a memo table, so that {@code -1} (no match)
-     * and {@code 0} (matched, consuming nothing) never collide with {@link #MEMO_UNCOMPUTED}.
+     * Marker stored in a memo table for a position whose result has not been computed yet.
+     *
+     * <p>{@link SqlParser#parse(String, int)} returns either {@code -1} (no match) or a position in
+     * {@code [0, sql.length()]}, so {@code -2} can never be a real result and a table pre-filled
+     * with it can store results verbatim. Widening that return contract would break this
+     * assumption.
      */
-    private static final int MEMO_BIAS = 2;
+    private static final int UNCOMPUTED = -2;
 
     /**
      * Creates a parser that caches the delegate's result per input position (packrat memoization).
@@ -258,18 +260,24 @@ public final class SqlParsers {
                 memo = current;
             }
             int cached = current.results[pos];
-            if (cached != MEMO_UNCOMPUTED) {
-                return cached - MEMO_BIAS;
+            if (cached != UNCOMPUTED) {
+                return cached;
             }
             int end = delegate.parse(sql, pos);
-            current.results[pos] = end + MEMO_BIAS;
+            current.results[pos] = end;
             return end;
         }
     }
 
     /**
-     * Memo table for a single input: {@code results[pos]} holds the biased parse result at {@code
-     * pos}, or {@link #MEMO_UNCOMPUTED} while it is still unknown.
+     * Memo table for a single input: {@code results[pos]} holds the parse result at {@code pos}, or
+     * {@link #UNCOMPUTED} while it is still unknown.
+     *
+     * <p>The table is filled inside the constructor deliberately. {@link MemoizingParser} publishes
+     * a {@code Memo} without synchronization and leans on the final-field freeze, which covers the
+     * array contents only as they stood when the constructor returned. Filling after publication
+     * would let a racing reader see a default {@code 0} and mistake it for a cached "matched at
+     * position 0, consumed nothing".
      */
     private static final class Memo {
 
@@ -279,6 +287,7 @@ public final class SqlParsers {
         Memo(String sql) {
             this.sql = sql;
             this.results = new int[sql.length() + 1];
+            Arrays.fill(this.results, UNCOMPUTED);
         }
     }
 
