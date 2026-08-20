@@ -3,6 +3,8 @@ package io.github.kakusuke.migraphe.jdbc;
 import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -15,18 +17,29 @@ import org.jspecify.annotations.Nullable;
  * steps expressible that have no portable conditional form, such as {@code ALTER TABLE ... ADD
  * COLUMN}.
  *
- * <p><strong>Grouping.</strong> {@code --@check} always opens a new step. {@code --@apply} fills
- * the empty apply slot of the step being read, or opens a new step when that slot is already taken.
- * Lines before the first directive are a file header and must be blank or {@code --} comments, so
- * SQL is never silently discarded.
- *
- * <p><strong>Invariants</strong>, verified per step:
+ * <p>Parsing runs in three stages, each with its own responsibility:
  *
  * <ol>
- *   <li>the step has an {@code --@apply} section;
- *   <li>the step declares no two <em>different</em> labels;
- *   <li>a declared detection query is exactly one statement;
- *   <li>the apply section holds at least one statement.
+ *   <li>{@link #sliceByDirective} cuts the text into {@link Chunk}s — one per directive, holding
+ *       the lines up to the next directive. It knows nothing about steps; its only rule is that
+ *       lines before the first directive are a file header and must be blank or {@code --}
+ *       comments, so SQL is never silently discarded.
+ *   <li>{@link #groupIntoSteps} pairs those chunks into {@link Group}s using nothing but their
+ *       kinds: {@code --@check} always opens a new step, and {@code --@apply} takes the pending
+ *       detection query, if any, as its own.
+ *   <li>{@link #buildStep} turns one group into a {@link SchemaStep}, resolving the label and
+ *       splitting the sections into statements. This is the only stage that needs a {@link
+ *       StatementSplitter}.
+ * </ol>
+ *
+ * <p><strong>Invariants</strong>, each verified where the value it constrains comes into being, so
+ * that no malformed step can exist in the first place:
+ *
+ * <ol>
+ *   <li>the step has an {@code --@apply} section — {@link Group};
+ *   <li>the step declares no two <em>different</em> labels — {@link Group};
+ *   <li>a declared detection query is exactly one statement — {@link #buildStep};
+ *   <li>the apply section holds at least one statement — {@link SchemaStep}.
  * </ol>
  *
  * <p>Label uniqueness across steps is deliberately <em>not</em> required: two steps may carry the
@@ -48,17 +61,10 @@ final class SchemaStepParser {
     private static final String CHECK_DIRECTIVE = "--@check";
     private static final String APPLY_DIRECTIVE = "--@apply";
 
-    private SchemaStepParser() {}
+    /** Label given to the implicit step of a resource that carries no directive at all. */
+    private static final String PLAIN_SQL_LABEL = "schema";
 
-    /** Which section of a step the parser is currently reading. */
-    private enum Section {
-        /** No step is open: either the file header, or the gap right after a step was closed. */
-        NONE,
-        /** The detection query of the step being read. */
-        CHECK,
-        /** The apply statements of the step being read. */
-        APPLY
-    }
+    private SchemaStepParser() {}
 
     /** Which directive a line declares. */
     private enum Kind {
@@ -75,6 +81,47 @@ final class SchemaStepParser {
     private record Directive(Kind kind, @Nullable String label) {}
 
     /**
+     * A directive together with the lines it introduces, as cut by {@link #sliceByDirective}.
+     *
+     * @param kind which directive opened this chunk
+     * @param label the label the directive declared, or {@code null} when it was bare
+     * @param body the text between this directive and the next one
+     */
+    private record Chunk(Kind kind, @Nullable String label, String body) {
+
+        static Chunk of(Directive directive, String body) {
+            return new Chunk(directive.kind(), directive.label(), body);
+        }
+    }
+
+    /**
+     * The chunks of one step, as paired by {@link #groupIntoSteps}.
+     *
+     * <p>A group cannot exist in a malformed state: its constructor enforces invariants 1 and 2, so
+     * {@link #groupIntoSteps} reports a detection query left without its apply section simply by
+     * trying to pair it. {@code apply} is declared nullable only so that call sites can express
+     * that absence; a constructed group always has one.
+     *
+     * @param check the chunk opened by {@code --@check}, or {@code null} if the step declared none
+     * @param apply the chunk opened by {@code --@apply}
+     */
+    private record Group(@Nullable Chunk check, @Nullable Chunk apply) {
+
+        Group {
+            if (apply == null) {
+                throw new IllegalArgumentException(checkWithoutApplyMessage(check)); // invariant 1
+            }
+            requireAtMostOneLabel(check, apply); // invariant 2
+        }
+
+        @Nullable String declaredLabel() {
+            @Nullable String fromCheck = check == null ? null : check.label();
+            @Nullable String fromApply = apply == null ? null : apply.label();
+            return fromCheck != null ? fromCheck : fromApply;
+        }
+    }
+
+    /**
      * Parses the given resource text into ordered steps.
      *
      * @param resourceText the full text of the schema resource
@@ -84,148 +131,171 @@ final class SchemaStepParser {
      */
     static List<SchemaStep> parse(String resourceText) {
         StatementSplitter splitter = StatementSplitter.standard();
-        List<SchemaStep> steps = new ArrayList<>();
+        List<Chunk> chunks = sliceByDirective(resourceText);
+        List<Group> groups = groupIntoSteps(chunks);
+        return IntStream.range(0, groups.size())
+                .mapToObj(index -> buildStep(splitter, groups.get(index), index + 1))
+                .toList();
+    }
 
-        Section section = Section.NONE;
+    /**
+     * Stage 1: cuts the resource into one chunk per directive.
+     *
+     * <p>Purely mechanical — a directive line starts a chunk, and every following line belongs to
+     * it until the next directive. The only rule enforced here concerns the text before the first
+     * directive, which must carry no SQL.
+     *
+     * @param resourceText the full text of the schema resource
+     * @return the chunks, in file order; never empty
+     * @throws IllegalArgumentException if SQL precedes the first directive
+     */
+    private static List<Chunk> sliceByDirective(String resourceText) {
+        List<Chunk> chunks = new ArrayList<>();
+        @Nullable Directive open = null;
         StringBuilder body = new StringBuilder();
-        @Nullable StringBuilder check = null;
-        @Nullable String declaredLabel = null;
-        @Nullable String statementBeforeFirstDirective = null;
+        @Nullable String sqlBeforeFirstDirective = null;
 
         for (String line : resourceText.split("\n", -1)) {
             @Nullable Directive directive = parseDirective(line);
-
             if (directive == null) {
-                if (section == Section.NONE
-                        && statementBeforeFirstDirective == null
-                        && !isTrivia(line)) {
-                    statementBeforeFirstDirective = line.trim();
+                if (open == null && sqlBeforeFirstDirective == null && !isTrivia(line)) {
+                    sqlBeforeFirstDirective = line.trim();
                 }
                 body.append(line).append('\n');
                 continue;
             }
-
-            // Close whatever precedes this directive.
-            if (section == Section.NONE) {
-                requireNoStatementBeforeFirstDirective(statementBeforeFirstDirective);
-                body.setLength(0); // drop the header comments
-            } else if (directive.kind() == Kind.CHECK || section == Section.APPLY) {
-                steps.add(
-                        closeStep(
-                                splitter,
-                                labelOrPosition(declaredLabel, steps.size()),
-                                section,
-                                check,
-                                body));
-                section = Section.NONE;
-                check = null;
-                declaredLabel = null;
-                body = new StringBuilder();
-            }
-
-            // Open a step, or fill the current one's apply slot.
-            if (directive.kind() == Kind.CHECK) {
-                declaredLabel = directive.label();
-                section = Section.CHECK;
-            } else if (section == Section.CHECK) {
-                declaredLabel = mergeLabels(declaredLabel, directive.label());
-                check = body;
-                body = new StringBuilder();
-                section = Section.APPLY;
+            if (open == null) {
+                requireNoStatementBeforeFirstDirective(sqlBeforeFirstDirective);
             } else {
-                declaredLabel = directive.label();
-                section = Section.APPLY;
+                chunks.add(Chunk.of(open, body.toString()));
+            }
+            open = directive;
+            body = new StringBuilder();
+        }
+
+        if (open == null) {
+            // No directive anywhere. The whole resource becomes one unconditional apply chunk;
+            // this path deliberately skips the header requirement, because a plain-SQL resource
+            // is nothing but the statements that requirement would otherwise reject. Returning a
+            // chunk rather than an empty list keeps the later stages free of a special case.
+            return List.of(new Chunk(Kind.APPLY, PLAIN_SQL_LABEL, resourceText));
+        }
+        chunks.add(Chunk.of(open, body.toString()));
+        return List.copyOf(chunks);
+    }
+
+    /**
+     * Stage 2: pairs chunks into steps, looking only at their kinds.
+     *
+     * <p>Only the previous chunk matters, so the whole stage is one pending detection query. {@code
+     * --@check} always opens a new step, because a detection query can only precede its apply
+     * section; meeting a second one therefore leaves the first without an apply section, and
+     * pairing it reports that (invariant 1). {@code --@apply} takes the pending detection query, if
+     * any, as its own.
+     *
+     * @param chunks the chunks cut by {@link #sliceByDirective}
+     * @return the groups, in file order
+     * @throws IllegalArgumentException if a detection query has no apply section (invariant 1), or
+     *     a step declares two different labels (invariant 2)
+     */
+    private static List<Group> groupIntoSteps(List<Chunk> chunks) {
+        List<Group> groups = new ArrayList<>();
+        @Nullable Chunk pendingCheck = null;
+
+        for (Chunk chunk : chunks) {
+            if (chunk.kind() == Kind.CHECK) {
+                if (pendingCheck != null) {
+                    groups.add(new Group(pendingCheck, null)); // throws: invariant 1
+                }
+                pendingCheck = chunk;
+            } else {
+                groups.add(new Group(pendingCheck, chunk));
+                pendingCheck = null;
             }
         }
-
-        if (section == Section.NONE) {
-            // No directive anywhere. The whole resource is one unconditional step; this path
-            // deliberately skips the header requirement, because a plain-SQL resource is nothing
-            // but the statements it would otherwise reject.
-            return List.of(new SchemaStep("schema", null, splitter.split(body.toString())));
+        if (pendingCheck != null) {
+            groups.add(new Group(pendingCheck, null)); // throws: invariant 1
         }
-        steps.add(
-                closeStep(
-                        splitter,
-                        labelOrPosition(declaredLabel, steps.size()),
-                        section,
-                        check,
-                        body));
-        return List.copyOf(steps);
+        return List.copyOf(groups);
     }
 
     /**
-     * Closes the step being read.
+     * Stage 3: builds one group's step.
+     *
+     * <p>Invariants 1 and 2 already hold, having been enforced when the group was constructed, and
+     * invariant 4 is enforced by {@link SchemaStep} itself. What is left here is resolving the
+     * label and splitting the sections, which is where invariant 3 belongs: it constrains a count
+     * that only the splitter can produce.
      *
      * @param splitter the splitter separating the sections into statements
-     * @param label the step's label, used in diagnostics
-     * @param section the section the parser stopped in
-     * @param check the accumulated detection query, or {@code null} if the step declared none
-     * @param apply the accumulated apply statements
-     * @return the parsed step
-     * @throws IllegalArgumentException if the step never reached its {@code --@apply} section
-     *     (invariant 1), or {@link #buildStep} rejects its contents
-     */
-    private static SchemaStep closeStep(
-            StatementSplitter splitter,
-            String label,
-            Section section,
-            @Nullable StringBuilder check,
-            StringBuilder apply) {
-        if (section != Section.APPLY) {
-            throw new IllegalArgumentException(
-                    "Step '" + label + "' has no " + APPLY_DIRECTIVE + " section");
-        }
-        return buildStep(
-                splitter, label, check == null ? null : check.toString(), apply.toString());
-    }
-
-    /**
-     * Splits a step's sections into statements and enforces the invariants on their counts.
-     *
-     * @param splitter the splitter separating the sections into statements
-     * @param label the step's label, used in diagnostics
-     * @param checkBody the detection query text, or {@code null} if the step declared none
-     * @param applyBody the apply section's text
+     * @param group the group to build
+     * @param position the group's 1-based position, used for the default label
      * @return the parsed step
      * @throws IllegalArgumentException if a declared detection query is not exactly one statement
      *     (invariant 3), or the apply section holds no statement (invariant 4)
      */
-    private static SchemaStep buildStep(
-            StatementSplitter splitter,
-            String label,
-            @Nullable String checkBody,
-            String applyBody) {
-        @Nullable String checkSql = null;
-        if (checkBody != null) {
-            List<String> checkStatements = splitter.split(checkBody);
-            if (checkStatements.size() != 1) {
-                throw new IllegalArgumentException(
-                        "Step '"
-                                + label
-                                + "' must declare a single detection statement, found "
-                                + checkStatements.size());
-            }
-            checkSql = checkStatements.get(0);
-        }
-        List<String> applyStatements = splitter.split(applyBody);
-        if (applyStatements.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Step '" + label + "' has an empty " + APPLY_DIRECTIVE + " section");
-        }
-        return new SchemaStep(label, checkSql, applyStatements);
+    private static SchemaStep buildStep(StatementSplitter splitter, Group group, int position) {
+        @Nullable String declared = group.declaredLabel();
+        String label = declared == null ? "step " + position : declared;
+
+        @Nullable Chunk check = group.check();
+        @Nullable String checkSql = check == null ? null : singleStatement(splitter, label, check);
+
+        Chunk apply =
+                Objects.requireNonNull(group.apply(), "invariant 1 guarantees an apply chunk");
+        return new SchemaStep(label, checkSql, splitter.split(apply.body()));
     }
 
     /**
-     * Combines the labels declared by a step's two directives.
+     * Returns a detection chunk's sole statement.
      *
-     * @param fromCheck the label declared by {@code --@check}, or {@code null}
-     * @param fromApply the label declared by {@code --@apply}, or {@code null}
-     * @return the single declared label, or {@code null} if neither directive declared one
+     * @param splitter the splitter separating the chunk into statements
+     * @param label the step's label, used in diagnostics
+     * @param check the detection chunk
+     * @return the single detection statement
+     * @throws IllegalArgumentException if the chunk does not hold exactly one statement (invariant
+     *     3)
+     */
+    private static String singleStatement(StatementSplitter splitter, String label, Chunk check) {
+        List<String> statements = splitter.split(check.body());
+        if (statements.size() != 1) {
+            throw new IllegalArgumentException(
+                    "Step '"
+                            + label
+                            + "' must declare a single detection statement, found "
+                            + statements.size());
+        }
+        return statements.get(0);
+    }
+
+    /**
+     * Builds the message rejecting a detection query that never reached its apply section.
+     *
+     * <p>The position that names an otherwise unlabelled step is not known here — steps are
+     * numbered once they are built — so an unlabelled section is described rather than named.
+     *
+     * @param check the chunk left without an apply section, or {@code null}
+     * @return the exception message
+     */
+    private static String checkWithoutApplyMessage(@Nullable Chunk check) {
+        @Nullable String label = check == null ? null : check.label();
+        String subject =
+                label == null
+                        ? "A " + CHECK_DIRECTIVE + " section"
+                        : "A " + CHECK_DIRECTIVE + " section labelled '" + label + "'";
+        return subject + " has no " + APPLY_DIRECTIVE + " section";
+    }
+
+    /**
+     * Rejects a step whose two directives declare different labels.
+     *
+     * @param check the chunk opened by {@code --@check}, or {@code null}
+     * @param apply the chunk opened by {@code --@apply}
      * @throws IllegalArgumentException if the two directives declare different labels (invariant 2)
      */
-    private static @Nullable String mergeLabels(
-            @Nullable String fromCheck, @Nullable String fromApply) {
+    private static void requireAtMostOneLabel(@Nullable Chunk check, Chunk apply) {
+        @Nullable String fromCheck = check == null ? null : check.label();
+        @Nullable String fromApply = apply.label();
         if (fromCheck != null && fromApply != null && !fromCheck.equals(fromApply)) {
             throw new IllegalArgumentException(
                     "A step must declare at most one label, but "
@@ -238,18 +308,6 @@ final class SchemaStepParser {
                             + fromApply
                             + "'");
         }
-        return fromCheck != null ? fromCheck : fromApply;
-    }
-
-    /**
-     * Returns the declared label, or the positional default when the step declared none.
-     *
-     * @param declared the label declared by the step's directives, or {@code null}
-     * @param completedSteps the number of steps parsed so far
-     * @return the label to use in diagnostics
-     */
-    private static String labelOrPosition(@Nullable String declared, int completedSteps) {
-        return declared == null ? "step " + (completedSteps + 1) : declared;
     }
 
     /**

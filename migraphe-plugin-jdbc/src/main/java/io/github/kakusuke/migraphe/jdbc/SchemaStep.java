@@ -17,6 +17,14 @@ import org.jspecify.annotations.Nullable;
  *     which is why {@link SchemaStepParser} lets two steps share one
  * @param checkSql the detection query, or {@code null} for an unconditional step whose statements
  *     are always executed
- * @param applySql the statements applying this step, in order
+ * @param applySql the statements applying this step, in order; must hold at least one statement,
+ *     since a step that applies nothing cannot be a step
  */
-record SchemaStep(String label, @Nullable String checkSql, List<String> applySql) {}
+record SchemaStep(String label, @Nullable String checkSql, List<String> applySql) {
+
+    SchemaStep {
+        if (applySql.isEmpty()) {
+            throw new IllegalArgumentException("Step '" + label + "' has an empty apply section");
+        }
+    }
+}
