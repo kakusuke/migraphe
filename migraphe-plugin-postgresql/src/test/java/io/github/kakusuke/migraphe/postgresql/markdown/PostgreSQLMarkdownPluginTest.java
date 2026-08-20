@@ -256,7 +256,7 @@ class PostgreSQLMarkdownPluginTest {
         assertThat(indexFile).exists();
         assertThat(Files.readString(indexFile)).contains("plpgsql");
 
-        Path tableFile = tempDir.resolve("testdb/public/tables/users.md");
+        Path tableFile = tempDir.resolve("public/tables/users.md");
         assertThat(tableFile).exists();
     }
 
@@ -298,11 +298,7 @@ class PostgreSQLMarkdownPluginTest {
 
         plugin.output(schemaInfo, outputContext);
 
-        Path tableFile =
-                tempDir.resolve(definition.name())
-                        .resolve("public")
-                        .resolve("tables")
-                        .resolve("users.md");
+        Path tableFile = tempDir.resolve("public").resolve("tables").resolve("users.md");
         assertThat(Files.readString(tableFile)).doesNotContain("## ER Diagram");
 
         Path indexFile = tempDir.resolve("index.md");
@@ -319,11 +315,7 @@ class PostgreSQLMarkdownPluginTest {
 
         plugin.output(schemaInfo, outputContext);
 
-        Path tableFile =
-                tempDir.resolve(definition.name())
-                        .resolve("public")
-                        .resolve("tables")
-                        .resolve("users.md");
+        Path tableFile = tempDir.resolve("public").resolve("tables").resolve("users.md");
         String content = Files.readString(tableFile);
         assertThat(content).contains("## ER Diagram");
         assertThat(content).doesNotContain("```mermaid");

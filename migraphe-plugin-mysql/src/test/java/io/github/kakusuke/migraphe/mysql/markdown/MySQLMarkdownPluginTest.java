@@ -247,7 +247,7 @@ class MySQLMarkdownPluginTest {
 
         Path indexFile = tempDir.resolve("index.md");
         assertThat(indexFile).exists();
-        assertThat(Files.readString(indexFile)).startsWith("# Database: testdb");
+        assertThat(Files.readString(indexFile)).startsWith("# testdb");
     }
 
     @Test
@@ -274,11 +274,7 @@ class MySQLMarkdownPluginTest {
 
         plugin.output(schemaInfo, outputContext);
 
-        Path tableFile =
-                tempDir.resolve(definition.name())
-                        .resolve("mydb")
-                        .resolve("tables")
-                        .resolve("users.md");
+        Path tableFile = tempDir.resolve("mydb").resolve("tables").resolve("users.md");
         assertThat(Files.readString(tableFile)).doesNotContain("## ER Diagram");
 
         Path indexFile = tempDir.resolve("index.md");
@@ -295,11 +291,7 @@ class MySQLMarkdownPluginTest {
 
         plugin.output(schemaInfo, outputContext);
 
-        Path tableFile =
-                tempDir.resolve(definition.name())
-                        .resolve("mydb")
-                        .resolve("tables")
-                        .resolve("users.md");
+        Path tableFile = tempDir.resolve("mydb").resolve("tables").resolve("users.md");
         String content = Files.readString(tableFile);
         assertThat(content).contains("## ER Diagram");
         assertThat(content).doesNotContain("```mermaid");

@@ -100,13 +100,13 @@ class PostgreSQLSchemaDocE2ETest {
 
         // Per-table documents.
         String accountUserAccounts =
-                Files.readString(tempDir.resolve("maindb/account/tables/user_accounts.md"));
+                Files.readString(tempDir.resolve("account/tables/user_accounts.md"));
         assertThat(accountUserAccounts).contains("user_account_status");
         assertThat(accountUserAccounts).doesNotContain("(2147483647)");
         assertThat(accountUserAccounts).doesNotContain("\"account\".\"user_account_status\"");
 
         // (5) Cross-schema FK link in the per-table document.
-        String salesOrders = Files.readString(tempDir.resolve("maindb/sales/tables/orders.md"));
+        String salesOrders = Files.readString(tempDir.resolve("sales/tables/orders.md"));
         assertThat(salesOrders).contains("[user_accounts](../../account/tables/user_accounts.md)");
     }
 

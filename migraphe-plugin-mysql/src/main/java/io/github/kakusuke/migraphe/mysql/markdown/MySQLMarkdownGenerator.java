@@ -337,7 +337,7 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
      *
      * <p>For the named schema this emits index sections for routines, triggers, events, and
      * partitions (each only when present). Routines additionally get their own detail Markdown file
-     * written under {@code <outputDir>/<name>/<schema>/routines/<routine>.md}.
+     * written under {@code <outputDir>/<schema>/routines/<routine>.md}.
      *
      * @param sb the buffer accumulating the index page Markdown
      * @param schemaName the name of the schema being rendered
@@ -353,8 +353,6 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 sb.append("- [")
                         .append(routine.name())
                         .append("](")
-                        .append(name())
-                        .append("/")
                         .append(schemaName)
                         .append("/routines/")
                         .append(routine.name())
@@ -374,7 +372,6 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 appendDefinitionSection(fileSb, routine.definition());
                 Path routineFile =
                         outputDir
-                                .resolve(name())
                                 .resolve(schemaName)
                                 .resolve("routines")
                                 .resolve(routine.name() + ".md");

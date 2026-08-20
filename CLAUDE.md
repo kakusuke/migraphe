@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: `mysql-markdown` routine pages now carry a `## Parameters` table (from `information_schema.PARAMETERS`, grouped by `(schema, name, ROUTINE_TYPE)`) and the routine body as a fenced SQL block; PostgreSQL function pages gained the same body section from `pg_proc.prosrc` (Session 68)
-**Tests**: 1,051, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: generator output no longer nests under `generators[].name` — Markdown pages live at `<output-dir>/<schema>/`, and `index.md` is titled `# <name>` with no fixed prefix (Session 69)
+**Tests**: 1,054, 100% passing
 
 ## Module Structure
 
@@ -131,7 +131,7 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 12. **DAG Stream Layout Pipeline (Phase 15)**: `MigrationGraph → LayoutSort → LayoutTree → GridCanvas → ExecutionGraphView`; `Cell` sealed interface (13 variants)
 13. **Unified DAG Execution (Phase 16 → unified Session 54)**: single `DagExecutor(graph, history, listener, direction, maxParallelism)` for all UP/DOWN + sequential/parallel; vthreads + `ReadyNodeTracker(direction)`; **fail-soft** on failure; auto-wraps sync repository/listener
 14. **JDBC Plugin Extraction (Phase 17)**: generic `migraphe-plugin-jdbc`; `postgresql`/`mysql` extend `JdbcEnvironment` with fixed driver/DDL
-15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`. Markdown output embeds Mermaid ER diagrams (tables=entities, FKs=`||--o{`): database-wide in `index.md`, plus a per-table neighborhood diagram (`{T} ∪ ancestors* ∪ descendants*`) on each table page. YAML keys: `er-diagram` (default true, master switch), `er-diagram-keys-only` (default false = all columns / true = PK+FK only), `er-diagram-layout` (default `elk`, emitted as Mermaid frontmatter), `er-diagram-per-table` (default true), `er-diagram-per-table-max-entities` (default 60, `<=0` = unlimited) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+15. **Generator Plugin System (Phase 18)**: Generator SPI in `migraphe-api`; `JdbcSchemaInfoProvider`, `JdbcMarkdownPlugin`, `GeneratorRegistry`/`GeneratorExecutor`. Markdown output embeds Mermaid ER diagrams (tables=entities, FKs=`||--o{`): database-wide in `index.md`, plus a per-table neighborhood diagram (`{T} ∪ ancestors* ∪ descendants*`) on each table page. YAML keys: `er-diagram` (default true, master switch), `er-diagram-keys-only` (default false = all columns / true = PK+FK only), `er-diagram-layout` (default `elk`, emitted as Mermaid frontmatter), `er-diagram-per-table` (default true), `er-diagram-per-table-max-entities` (default 60, `<=0` = unlimited). Output layout is `<output-dir>/index.md` + one directory per schema (`<output-dir>/<schema>/tables|views/`); `generators[].name` is the `--name` filter key and the documentation title (`# <name>`, no fixed prefix) but never a path segment (Session 69) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 16. **Generator SPI Refactor — Source/Output Separation (Phase 19)**: `GeneratorSourcePlugin<T>` (data) decoupled from `GeneratorOutputPlugin` (render); `SourceContext`/`OutputContext`; JSON output module
 17. **CLI Maven Resolver (Phase 20)**: `plugins:` Maven coordinates resolved via Maven Resolver from `~/.m2` + Central into a URLClassLoader
 18. **PostgreSQL Generator Plugins**: `postgresql-schema` source (pg_catalog extras) + `postgresql-markdown` output via Template Method hooks
@@ -212,14 +212,13 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-08-20 (Session 68)
-- Fixed empty routine output in `mysql-markdown` (user report #4): `MySQLSchemaInfoProvider.extractRoutines` never queried `information_schema.PARAMETERS` (it hardcoded an empty `parameterList`) and never selected `ROUTINE_DEFINITION`, so routine pages showed a blank `| Parameters | |` row and no body at all.
-- Parameters are now grouped by a `RoutineKey(schema, name, type)` record — `ROUTINE_TYPE` is part of the identity because a procedure and a function may share a name (keying on the name alone merges their parameter lists; verified by hand-mutating the key). `ORDINAL_POSITION > 0` drops the row that reports a function's return value.
-- Bodies render through a new shared `JdbcMarkdownGenerator.appendDefinitionSection()`, which omits the section when the body is `null` (insufficient privilege) and grows the fence past the longest backtick run in the body. PostgreSQL function pages gained the same section from `pg_proc.prosrc` (not `pg_get_functiondef()`, which errors on aggregate/window functions); PG arguments deliberately stay the single formatted `pg_get_function_arguments()` line.
-- **Breaking**: `MySQLRoutineInfo.parameterList` (String) → `parameters` (`List<MySQLParameterInfo>`), plus a new `definition` component; `PostgreSQLFunctionInfo` gained `definition`. Existing-arity convenience constructors are preserved. Output changes for users who changed no configuration → minor bump. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
-
+### 2026-08-20 (Session 69)
+- Dropped the `generators[].name` level from Markdown generator output (user report #6): pages moved from `<output-dir>/<name>/<schema>/…` to `<output-dir>/<schema>/…`. `GeneratorSection.source()` is singular, so one generator always documents exactly one target and the per-name namespace could only ever hold one element; two generators sharing an `output-dir` never aggregated either, because each writes `index.md` at the root and the later run wins.
+- The `index.md` heading is now `# <name>` instead of `# Database: <name>`. `name` is free-form text the user chooses, so hard-coding `Database: ` in front of it was the actual defect the report noticed. `source.target` was rejected as the title source — a target id names a connection (`target: mysql` in this repo's own sample), not a document.
+- **No public API change**: `OutputContext` is untouched. `JdbcMarkdownGenerator.name()` → `title()` (rename forces external subclasses that used it for path prefixes to fail at compile time).
+- **Breaking for output**: generated paths change and the omitted-ER-diagram link went `../../../index.md` → `../../index.md`. Regenerate docs and delete the stale `<name>/` level. A new `everyRelativeLinkResolvesToAnExistingFile` test walks all generated Markdown and asserts every relative link resolves. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
 **Last Updated**: 2026-08-20
-**Current Work**: Routine documentation for `mysql-markdown` — parameters are read from `information_schema.PARAMETERS` (grouped by `(schema, name, ROUTINE_TYPE)`, return-value row filtered out) and rendered as a `## Parameters` table, and `ROUTINE_DEFINITION` is rendered as a fenced SQL block via the shared `JdbcMarkdownGenerator.appendDefinitionSection()`; PostgreSQL function pages gained the same body section from `pg_proc.prosrc`. Breaking record changes to `MySQLRoutineInfo` / `PostgreSQLFunctionInfo`. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+**Current Work**: Generator output layout — `generators[].name` is no longer a path segment (pages live at `<output-dir>/<schema>/`) and the `index.md` heading is `# <name>` with no fixed prefix. No public API change; `JdbcMarkdownGenerator.name()` renamed to `title()`. Breaking change to output paths. See [docs/CHANGELOG.md](docs/CHANGELOG.md).

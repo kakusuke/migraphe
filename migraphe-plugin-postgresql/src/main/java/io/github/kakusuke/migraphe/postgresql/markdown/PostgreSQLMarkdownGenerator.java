@@ -377,8 +377,8 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
      *
      * <p>Emits, when non-empty, Sequences, Functions, Materialized Views, Triggers, Partitions, and
      * Policies sections for the given schema. The Functions and Materialized Views sections also
-     * write individual detail files under {@code <name>/<schema>/functions/} and {@code
-     * <name>/<schema>/materialized-views/} respectively, via {@link #writeFile(Path, String)}.
+     * write individual detail files under {@code <schema>/functions/} and {@code
+     * <schema>/materialized-views/} respectively, via {@link #writeFile(Path, String)}.
      *
      * @param sb the buffer accumulating the schema index content
      * @param schemaName the schema being documented
@@ -432,8 +432,6 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         .append("(")
                         .append(func.arguments())
                         .append(")](")
-                        .append(name())
-                        .append("/")
                         .append(schemaName)
                         .append("/functions/")
                         .append(sanitized)
@@ -455,7 +453,6 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 appendDefinitionSection(fileSb, func.definition());
                 Path funcFile =
                         outputDir
-                                .resolve(name())
                                 .resolve(schemaName)
                                 .resolve("functions")
                                 .resolve(sanitized + ".md");
@@ -474,8 +471,6 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 sb.append("- [")
                         .append(mv.name())
                         .append("](")
-                        .append(name())
-                        .append("/")
                         .append(schemaName)
                         .append("/materialized-views/")
                         .append(mv.name())
@@ -496,7 +491,6 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         .append("\n```\n");
                 Path mvFile =
                         outputDir
-                                .resolve(name())
                                 .resolve(schemaName)
                                 .resolve("materialized-views")
                                 .resolve(mv.name() + ".md");
@@ -586,8 +580,6 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                         + "."
                         + seq.ownerColumn()
                         + "]("
-                        + name()
-                        + "/"
                         + schemaName
                         + "/tables/"
                         + seq.ownerTable()

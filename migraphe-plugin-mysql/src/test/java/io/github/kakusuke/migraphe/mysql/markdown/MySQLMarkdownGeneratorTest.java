@@ -122,7 +122,7 @@ class MySQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        String tableContent = Files.readString(tempDir.resolve("testdb/mydb/tables/users.md"));
+        String tableContent = Files.readString(tempDir.resolve("mydb/tables/users.md"));
         assertThat(tableContent)
                 .contains("## Table Properties")
                 .contains("InnoDB")
@@ -155,7 +155,7 @@ class MySQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        String tableContent = Files.readString(tempDir.resolve("testdb/mydb/tables/users.md"));
+        String tableContent = Files.readString(tempDir.resolve("mydb/tables/users.md"));
         assertThat(tableContent)
                 .contains("## Triggers")
                 .contains("trg_insert")
@@ -191,7 +191,7 @@ class MySQLMarkdownGeneratorTest {
         String indexContent = Files.readString(tempDir.resolve("index.md"));
         assertThat(indexContent).contains("### Routines").contains("get_user");
 
-        Path routineFile = tempDir.resolve("testdb/mydb/routines/get_user.md");
+        Path routineFile = tempDir.resolve("mydb/routines/get_user.md");
         assertThat(routineFile).exists();
         String routineContent = Files.readString(routineFile);
         assertThat(routineContent)
@@ -271,10 +271,10 @@ class MySQLMarkdownGeneratorTest {
         assertThat(indexContent).contains("| Name | Definer | Remarks |");
         assertThat(indexContent)
                 .containsPattern(
-                        "\\| \\[active_users\\]\\(testdb/mydb/views/active_users\\.md\\) \\| root@%"
+                        "\\| \\[active_users\\]\\(mydb/views/active_users\\.md\\) \\| root@%"
                                 + " \\|");
 
-        String viewContent = Files.readString(tempDir.resolve("testdb/mydb/views/active_users.md"));
+        String viewContent = Files.readString(tempDir.resolve("mydb/views/active_users.md"));
         assertThat(viewContent).startsWith("# active_users\n\nDefiner: root@%\n\n");
     }
 
@@ -309,7 +309,7 @@ class MySQLMarkdownGeneratorTest {
                 .contains("| Name | Table | Timing | Event | Statement | Definer |")
                 .containsPattern("\\| trg_insert \\| users \\|.*\\| root@% \\|");
 
-        String tableContent = Files.readString(tempDir.resolve("testdb/mydb/tables/users.md"));
+        String tableContent = Files.readString(tempDir.resolve("mydb/tables/users.md"));
         assertThat(tableContent)
                 .contains("| Name | Timing | Event | Statement | Definer |")
                 .containsPattern("\\| trg_insert \\|.*\\| root@% \\|");
@@ -341,7 +341,7 @@ class MySQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        Path routineFile = tempDir.resolve("testdb/mydb/routines/get_user.md");
+        Path routineFile = tempDir.resolve("mydb/routines/get_user.md");
         String content = Files.readString(routineFile);
         assertThat(content).contains("| Definer | root@% |");
     }
@@ -362,7 +362,7 @@ class MySQLMarkdownGeneratorTest {
 
         generate(schemaInfo, tempDir);
 
-        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        String content = Files.readString(tempDir.resolve("mydb/routines/set_user.md"));
         assertThat(content)
                 .contains("## Parameters")
                 .contains("| # | Mode | Name | Type |")
@@ -386,7 +386,7 @@ class MySQLMarkdownGeneratorTest {
 
         generate(schemaInfo, tempDir);
 
-        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        String content = Files.readString(tempDir.resolve("mydb/routines/set_user.md"));
         assertThat(content).contains("## Definition\n\n```sql\nBEGIN\n  SELECT 1;\nEND\n```\n");
     }
 
@@ -399,7 +399,7 @@ class MySQLMarkdownGeneratorTest {
 
         generate(schemaInfo, tempDir);
 
-        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        String content = Files.readString(tempDir.resolve("mydb/routines/set_user.md"));
         assertThat(content).doesNotContain("## Parameters").doesNotContain("## Definition");
     }
 
@@ -420,7 +420,7 @@ class MySQLMarkdownGeneratorTest {
 
         generate(schemaInfo, tempDir);
 
-        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        String content = Files.readString(tempDir.resolve("mydb/routines/set_user.md"));
         assertThat(content).contains("````sql\n").contains("\n````\n");
     }
 
@@ -438,7 +438,7 @@ class MySQLMarkdownGeneratorTest {
 
         generate(schemaInfo, tempDir);
 
-        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        String content = Files.readString(tempDir.resolve("mydb/routines/set_user.md"));
         assertThat(content).contains("| 1 | IN | a | enum('x\\|y') |");
     }
 

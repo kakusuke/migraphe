@@ -37,7 +37,7 @@ import org.jspecify.annotations.Nullable;
  * <p>Given a {@link JdbcSchemaInfo}, this generator produces an {@code index.md} listing every
  * (non-excluded) schema with its tables and views, plus one Markdown file per table and per view
  * describing columns, primary keys, foreign and exported keys, indexes, and view definitions.
- * Output is laid out beneath a per-database directory named after {@link #name()}.
+ * Output is laid out beneath one directory per schema, directly under the output directory.
  *
  * <p>The class is a Template Method base: dialect-specific generators (such as the PostgreSQL and
  * MySQL Markdown generators) subclass it and override the protected {@code append*} and {@code
@@ -62,7 +62,7 @@ public class JdbcMarkdownGenerator {
      */
     protected static final int DEFAULT_ER_DIAGRAM_PER_TABLE_MAX_ENTITIES = 60;
 
-    private final String name;
+    private final String title;
     private final JdbcSchemaInfo schemaInfo;
     private final List<CompiledExclude> excludes;
     private final boolean erDiagram;
@@ -93,49 +93,55 @@ public class JdbcMarkdownGenerator {
     private final Map<String, String> erEntityIdCache = new HashMap<>();
 
     /**
-     * Returns the database name used to title the output and to namespace the per-database output
-     * directory.
+     * Returns the title of the generated documentation, rendered as the {@code index.md} heading.
      *
-     * @return the database name supplied at construction
+     * <p>This is <em>not</em> a path segment: generated documents live directly under {@code
+     * <outputDir>/<schema>/}. The runtime supplies the generator's configured {@code name}, a
+     * free-form label chosen by the user.
+     *
+     * @return the documentation title supplied at construction
      */
-    protected String name() {
-        return name;
+    protected String title() {
+        return title;
     }
 
     /**
      * Constructs a generator for the given database.
      *
-     * @param name the database name used in titles, links, and the output directory layout
+     * @param title the documentation title used as the {@code index.md} heading; the runtime passes
+     *     the generator's configured {@code name}
      * @param schemaInfo the schema information to render
      * @param excludes the schema/table exclusion patterns to apply (may be empty)
      */
     public JdbcMarkdownGenerator(
-            String name,
+            String title,
             JdbcSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes) {
-        this(name, schemaInfo, excludes, true);
+        this(title, schemaInfo, excludes, true);
     }
 
     /**
      * Constructs a generator for the given database.
      *
-     * @param name the database name used in titles, links, and the output directory layout
+     * @param title the documentation title used as the {@code index.md} heading; the runtime passes
+     *     the generator's configured {@code name}
      * @param schemaInfo the schema information to render
      * @param excludes the schema/table exclusion patterns to apply (may be empty)
      * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
      */
     public JdbcMarkdownGenerator(
-            String name,
+            String title,
             JdbcSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram) {
-        this(name, schemaInfo, excludes, erDiagram, false);
+        this(title, schemaInfo, excludes, erDiagram, false);
     }
 
     /**
      * Constructs a generator for the given database.
      *
-     * @param name the database name used in titles, links, and the output directory layout
+     * @param title the documentation title used as the {@code index.md} heading; the runtime passes
+     *     the generator's configured {@code name}
      * @param schemaInfo the schema information to render
      * @param excludes the schema/table exclusion patterns to apply (may be empty)
      * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
@@ -143,18 +149,19 @@ public class JdbcMarkdownGenerator {
      *     foreign-key columns
      */
     public JdbcMarkdownGenerator(
-            String name,
+            String title,
             JdbcSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram,
             boolean erDiagramKeysOnly) {
-        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, "");
+        this(title, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, "");
     }
 
     /**
      * Constructs a generator for the given database.
      *
-     * @param name the database name used in titles, links, and the output directory layout
+     * @param title the documentation title used as the {@code index.md} heading; the runtime passes
+     *     the generator's configured {@code name}
      * @param schemaInfo the schema information to render
      * @param excludes the schema/table exclusion patterns to apply (may be empty)
      * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
@@ -164,19 +171,20 @@ public class JdbcMarkdownGenerator {
      *     null or empty to omit the frontmatter
      */
     public JdbcMarkdownGenerator(
-            String name,
+            String title,
             JdbcSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram,
             boolean erDiagramKeysOnly,
             @Nullable String erDiagramLayout) {
-        this(name, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, erDiagramLayout, true);
+        this(title, schemaInfo, excludes, erDiagram, erDiagramKeysOnly, erDiagramLayout, true);
     }
 
     /**
      * Constructs a generator for the given database.
      *
-     * @param name the database name used in titles, links, and the output directory layout
+     * @param title the documentation title used as the {@code index.md} heading; the runtime passes
+     *     the generator's configured {@code name}
      * @param schemaInfo the schema information to render
      * @param excludes the schema/table exclusion patterns to apply (may be empty)
      * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
@@ -188,7 +196,7 @@ public class JdbcMarkdownGenerator {
      *     own Markdown document
      */
     public JdbcMarkdownGenerator(
-            String name,
+            String title,
             JdbcSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram,
@@ -196,7 +204,7 @@ public class JdbcMarkdownGenerator {
             @Nullable String erDiagramLayout,
             boolean erDiagramPerTable) {
         this(
-                name,
+                title,
                 schemaInfo,
                 excludes,
                 erDiagram,
@@ -209,7 +217,8 @@ public class JdbcMarkdownGenerator {
     /**
      * Constructs a generator for the given database.
      *
-     * @param name the database name used in titles, links, and the output directory layout
+     * @param title the documentation title used as the {@code index.md} heading; the runtime passes
+     *     the generator's configured {@code name}
      * @param schemaInfo the schema information to render
      * @param excludes the schema/table exclusion patterns to apply (may be empty)
      * @param erDiagram whether the ER Diagram section is emitted in {@code index.md}
@@ -224,7 +233,7 @@ public class JdbcMarkdownGenerator {
      *     diagram; {@code 0} or less means unlimited
      */
     public JdbcMarkdownGenerator(
-            String name,
+            String title,
             JdbcSchemaInfo schemaInfo,
             List<JdbcMarkdownDefinition.ExcludePattern> excludes,
             boolean erDiagram,
@@ -232,7 +241,7 @@ public class JdbcMarkdownGenerator {
             @Nullable String erDiagramLayout,
             boolean erDiagramPerTable,
             int erDiagramPerTableMaxEntities) {
-        this.name = name;
+        this.title = title;
         this.schemaInfo = schemaInfo;
         this.excludes = excludes.stream().map(JdbcMarkdownGenerator::compileExclude).toList();
         this.erDiagram = erDiagram;
@@ -287,7 +296,7 @@ public class JdbcMarkdownGenerator {
      */
     public void generate(Path outputDir) {
         var indexBuilder = new StringBuilder();
-        indexBuilder.append("# Database: ").append(name).append("\n\n");
+        indexBuilder.append("# ").append(title).append("\n\n");
         appendIndexHeader(indexBuilder);
         appendErDiagram(indexBuilder);
 
@@ -494,11 +503,7 @@ public class JdbcMarkdownGenerator {
         appendTableSections(sb, schemaName, table.name());
 
         Path filePath =
-                outputDir
-                        .resolve(name)
-                        .resolve(schemaName)
-                        .resolve("tables")
-                        .resolve(table.name() + ".md");
+                outputDir.resolve(schemaName).resolve("tables").resolve(table.name() + ".md");
         writeFile(filePath, sb.toString());
     }
 
@@ -535,12 +540,7 @@ public class JdbcMarkdownGenerator {
         sb.append(view.definition());
         sb.append("\n```\n");
 
-        Path filePath =
-                outputDir
-                        .resolve(name)
-                        .resolve(schemaName)
-                        .resolve("views")
-                        .resolve(view.name() + ".md");
+        Path filePath = outputDir.resolve(schemaName).resolve("views").resolve(view.name() + ".md");
         writeFile(filePath, sb.toString());
     }
 
@@ -695,8 +695,6 @@ public class JdbcMarkdownGenerator {
         sb.append("| [")
                 .append(entryName)
                 .append("](")
-                .append(name)
-                .append("/")
                 .append(schemaName)
                 .append("/")
                 .append(subDir)
@@ -850,7 +848,7 @@ public class JdbcMarkdownGenerator {
                 .append(" entities, exceeding the configured limit of ")
                 .append(erDiagramPerTableMaxEntities)
                 .append(
-                        ". See the full [ER diagram](../../../index.md) in the database index"
+                        ". See the full [ER diagram](../../index.md) in the database index"
                                 + " instead.\n\n");
     }
 
