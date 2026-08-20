@@ -36,7 +36,7 @@ mise use github:kakusuke/migraphe
 
 # または手動インストール
 mkdir -p ~/.local/migraphe
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.5.0/migraphe-0.5.0.tar.gz | tar xz -C ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.6.0/migraphe-0.6.0.tar.gz | tar xz -C ~/.local/migraphe
 export PATH="$HOME/.local/migraphe/bin:$PATH"
 migraphe --help
 ```
