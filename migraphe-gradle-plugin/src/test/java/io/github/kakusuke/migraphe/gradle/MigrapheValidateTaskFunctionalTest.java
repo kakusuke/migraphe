@@ -210,6 +210,91 @@ class MigrapheValidateTaskFunctionalTest {
         assertThat(result.getOutput()).contains("Validation successful");
     }
 
+    @Test
+    void shouldFailWhenEnvOptionNamesAMissingOverlay() throws IOException {
+        String projectYaml =
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                """;
+        Files.writeString(testProjectDir.resolve("migraphe.yaml"), projectYaml);
+
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("migrapheValidate", "--env", "prodction")
+                        .buildAndFail();
+
+        assertThat(result.getOutput()).contains("prodction");
+    }
+
+    @Test
+    void shouldApplyEnvironmentOverlayFromProjectProperty() throws IOException {
+        createProjectOverriddenByProductionOverlay(testProjectDir);
+
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("migrapheValidate", "-Pmigraphe.env=production")
+                        .build();
+
+        assertThat(result.getOutput()).contains("Validation successful");
+    }
+
+    @Test
+    void shouldApplyEnvironmentOverlayFromExtension() throws IOException {
+        createProjectOverriddenByProductionOverlay(testProjectDir);
+        Files.writeString(
+                testProjectDir.resolve("build.gradle.kts"),
+                """
+                plugins {
+                    id("io.github.kakusuke.migraphe")
+                }
+                migraphe {
+                    env = "production"
+                }
+                """);
+
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("migrapheValidate")
+                        .build();
+
+        // オーバーレイの type が採用されるので検証が通る
+        assertThat(result.getOutput()).contains("Validation successful");
+    }
+
+    /**
+     * ベースの target type は未登録だが、production オーバーレイが noop へ差し替えるプロジェクトを作る。 オーバーレイが適用されなければ "Unknown
+     * plugin type" で失敗するので、適用の有無が観測できる。
+     */
+    private void createProjectOverriddenByProductionOverlay(Path baseDir) throws IOException {
+        Files.writeString(
+                baseDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                """);
+        Path targetsDir = Files.createDirectories(baseDir.resolve("targets"));
+        Files.writeString(targetsDir.resolve("test-db.yaml"), "type: not-a-registered-plugin\n");
+        Path environmentsDir = Files.createDirectories(baseDir.resolve("environments"));
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                target:
+                  test-db:
+                    type: noop
+                """);
+    }
+
     private void createProjectWithTargets(Path baseDir) throws IOException {
         String projectYaml =
                 """

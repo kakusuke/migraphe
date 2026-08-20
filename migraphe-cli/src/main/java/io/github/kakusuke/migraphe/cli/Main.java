@@ -94,17 +94,24 @@ public class Main {
 
             // The validate command needs no ExecutionContext (offline validation).
             if ("validate".equals(commandName)) {
-                ValidateCommand validateCommand = new ValidateCommand(baseDir, pluginRegistry);
+                ValidateCommand validateCommand =
+                        new ValidateCommand(baseDir, pluginRegistry, parseEnvOption(args));
                 return validateCommand.execute();
             }
 
-            // The generate command loads its own configuration.
+            // The generate command needs the generator plugin class loader, so it builds its own
+            // ExecutionContext rather than going through loadContext.
             if ("generate".equals(commandName)) {
                 String nameFilter = parseNameOption(args);
                 Path pluginsDir = resolvePluginsDir(baseDir, parsed);
                 GenerateCommand generateCommand =
                         new GenerateCommand(
-                                baseDir, pluginRegistry, pluginClassLoader, nameFilter, pluginsDir);
+                                baseDir,
+                                pluginRegistry,
+                                pluginClassLoader,
+                                nameFilter,
+                                pluginsDir,
+                                parseEnvOption(args));
                 return generateCommand.execute();
             }
 
@@ -355,16 +362,20 @@ public class Main {
         System.out.println(
                 "  pin [--check]                       Generate or verify migraphe.lock.yaml");
         System.out.println();
+        System.out.println("Common options (up, down, status, validate, generate):");
+        System.out.println(
+                "  --env <name>   Apply the environments/<name>.yaml overlay. Overrides target");
+        System.out.println(
+                "                 settings only; it does not partition migration history.");
+        System.out.println();
         System.out.println("Up options:");
         System.out.println("  <id>           Execute migrations up to and including <id>");
-        System.out.println("  --env <name>   Use the specified environment overlay");
         System.out.println("  -y             Skip confirmation prompt");
         System.out.println("  --dry-run      Show plan without executing");
         System.out.println();
         System.out.println("Down options:");
         System.out.println("  <version>      Rollback migrations that depend on <version>");
         System.out.println("  --all          Rollback all executed migrations");
-        System.out.println("  --env <name>   Use the specified environment overlay");
         System.out.println("  -y             Skip confirmation prompt");
         System.out.println("  --dry-run      Show plan without executing");
         System.out.println();

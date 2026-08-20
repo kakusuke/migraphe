@@ -50,7 +50,13 @@ class GenerateCommandTest {
         createProjectWithoutGenerators(tempDir);
         GenerateCommand command =
                 new GenerateCommand(
-                        tempDir, pluginRegistry, null, null, tempDir.resolve("plugins"), false);
+                        tempDir,
+                        pluginRegistry,
+                        null,
+                        null,
+                        tempDir.resolve("plugins"),
+                        null,
+                        false);
 
         // When
         int exitCode = command.execute();
@@ -67,7 +73,13 @@ class GenerateCommandTest {
         createProjectWithUnknownGeneratorType(tempDir);
         GenerateCommand command =
                 new GenerateCommand(
-                        tempDir, pluginRegistry, null, null, tempDir.resolve("plugins"), false);
+                        tempDir,
+                        pluginRegistry,
+                        null,
+                        null,
+                        tempDir.resolve("plugins"),
+                        null,
+                        false);
 
         // When
         int exitCode = command.execute();
@@ -89,6 +101,7 @@ class GenerateCommandTest {
                         null,
                         "non-existent-name",
                         tempDir.resolve("plugins"),
+                        null,
                         false);
 
         // When: 存在しない名前でフィルターすると、何も実行されない（プラグインエラーにならない）
@@ -104,7 +117,13 @@ class GenerateCommandTest {
         createProjectWithMissingTarget(tempDir);
         GenerateCommand command =
                 new GenerateCommand(
-                        tempDir, pluginRegistry, null, null, tempDir.resolve("plugins"), false);
+                        tempDir,
+                        pluginRegistry,
+                        null,
+                        null,
+                        tempDir.resolve("plugins"),
+                        null,
+                        false);
 
         // When
         int exitCode = command.execute();
@@ -116,6 +135,73 @@ class GenerateCommandTest {
     }
 
     // Helper methods
+
+    @Test
+    void shouldFailWhenNamedEnvironmentOverlayIsMissing() throws IOException {
+        // Given: environments/ が無いプロジェクト
+        createProjectWithoutGenerators(tempDir);
+        GenerateCommand command =
+                new GenerateCommand(
+                        tempDir,
+                        pluginRegistry,
+                        null,
+                        null,
+                        tempDir.resolve("plugins"),
+                        "production",
+                        false);
+
+        // When: 存在しないオーバーレイ名を指定
+        int exitCode = command.execute();
+
+        // Then: 黙って無視せず停止する（generate が --env を読んでいる証拠）
+        assertThat(exitCode).isEqualTo(1);
+        assertThat(errorStream.toString(StandardCharsets.UTF_8)).contains("production");
+    }
+
+    @Test
+    void shouldApplyEnvironmentOverlayValues() throws IOException {
+        // Given: オーバーレイが target の type を未知のプラグインへ差し替える
+        createProjectWithoutGenerators(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                target:
+                  test-db:
+                    type: not-a-registered-plugin
+                """);
+
+        // 対照群: --env なしならベース設定（type: noop）で成功する
+        int withoutOverlay =
+                new GenerateCommand(
+                                tempDir,
+                                pluginRegistry,
+                                null,
+                                null,
+                                tempDir.resolve("plugins"),
+                                null,
+                                false)
+                        .execute();
+        assertThat(withoutOverlay).isEqualTo(0);
+
+        // When: --env production
+        int withOverlay =
+                new GenerateCommand(
+                                tempDir,
+                                pluginRegistry,
+                                null,
+                                null,
+                                tempDir.resolve("plugins"),
+                                "production",
+                                false)
+                        .execute();
+
+        // Then: オーバーレイの値が実際に効いている（ファイル存在確認だけではない）
+        assertThat(withOverlay).isEqualTo(1);
+        assertThat(errorStream.toString(StandardCharsets.UTF_8))
+                .contains("not-a-registered-plugin");
+    }
 
     private void createProjectWithoutGenerators(Path baseDir) throws IOException {
         String projectYaml =
