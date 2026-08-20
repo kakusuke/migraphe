@@ -15,11 +15,14 @@ import org.gradle.api.DefaultTask;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.provider.MapProperty;
+import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Classpath;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputDirectory;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
+import org.gradle.api.tasks.options.Option;
 import org.gradle.work.DisableCachingByDefault;
 import org.jspecify.annotations.Nullable;
 
@@ -63,6 +66,29 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
      */
     @Input
     public abstract MapProperty<String, String> getVariables();
+
+    /**
+     * Returns the deployment-environment name whose {@code environments/<env>.yaml} overlay is
+     * applied on top of the base configuration.
+     *
+     * <p>Settable in the {@code migraphe { ... }} block, via {@code -Pmigraphe.env=...}, or with
+     * the {@code --env} command-line option. When absent, only the base configuration is used.
+     *
+     * @return the optional environment-name property
+     */
+    @Input
+    @Optional
+    public abstract Property<String> getEnv();
+
+    /**
+     * Sets the {@linkplain #getEnv() environment} from the {@code --env} command-line option.
+     *
+     * @param env the deployment-environment name to overlay
+     */
+    @Option(option = "env", description = "Environment overlay to apply (environments/<env>.yaml)")
+    public void setEnvOption(String env) {
+        getEnv().set(env);
+    }
 
     /**
      * Returns the resolved JAR files of the {@code migraphePlugin} configuration, from which
@@ -150,7 +176,10 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
     protected ExecutionContext loadExecutionContext(@Nullable URLClassLoader pluginClassLoader) {
         PluginRegistry registry = createPluginRegistry(pluginClassLoader);
         return ExecutionContext.load(
-                getBaseDir().get().getAsFile().toPath(), registry, getVariables().get());
+                getBaseDir().get().getAsFile().toPath(),
+                registry,
+                getEnv().getOrNull(),
+                getVariables().get());
     }
 
     /**

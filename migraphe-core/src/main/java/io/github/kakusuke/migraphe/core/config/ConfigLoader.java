@@ -138,6 +138,11 @@ public class ConfigLoader {
         // 6. Load the environment override file if present (ordinal 500).
         Path envFile = envName != null ? scanner.findEnvironmentFile(scanRoot, envName) : null;
 
+        if (envName != null && envFile == null) {
+            throw new ConfigurationException(
+                    environmentNotFoundMessage(scanner, scanRoot, envName));
+        }
+
         if (envFile != null) {
             try {
                 YamlConfigSource envSource = new YamlConfigSource(envFile.toUri().toURL(), 500);
@@ -177,6 +182,31 @@ public class ConfigLoader {
         builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // allow unmapped keys
 
         return builder.build();
+    }
+
+    /**
+     * Builds the error message reported when {@code --env} names an overlay that does not exist.
+     *
+     * <p>The message states the exact path that was searched and lists the overlay names that are
+     * available, so a typo such as {@code --env prodction} is immediately actionable.
+     *
+     * @param scanner the scanner used to list the available overlays
+     * @param scanRoot the scan-root directory (the one containing {@code environments/})
+     * @param envName the requested environment name
+     * @return the formatted error message
+     */
+    private String environmentNotFoundMessage(
+            YamlFileScanner scanner, Path scanRoot, String envName) {
+        Path expected = scanRoot.resolve("environments").resolve(envName + ".yaml");
+        List<String> available = scanner.listEnvironmentNames(scanRoot);
+        String availableText = available.isEmpty() ? "(none)" : String.join(", ", available);
+        return "Environment overlay not found for --env "
+                + envName
+                + ": "
+                + expected
+                + " (available: "
+                + availableText
+                + ")";
     }
 
     /**

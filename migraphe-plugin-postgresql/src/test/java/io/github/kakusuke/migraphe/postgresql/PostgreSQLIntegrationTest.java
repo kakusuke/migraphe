@@ -486,10 +486,60 @@ class PostgreSQLIntegrationTest {
     }
 
     @Test
+    void renamesLegacyEnvironmentIdColumn() throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id TEXT PRIMARY KEY,
+                        node_id TEXT NOT NULL,
+                        environment_id TEXT NOT NULL,
+                        direction TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        executed_at TIMESTAMP NOT NULL,
+                        description TEXT,
+                        serialized_down_task TEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT
+                    )
+                    """);
+            stmt.execute(
+                    "INSERT INTO migraphe_history VALUES ('legacy-1', 'db1/legacy', 'test-env',"
+                            + " 'UP', 'SUCCESS', NOW(), 'legacy row', NULL, 1, NULL)");
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT column_name FROM information_schema.columns WHERE"
+                                        + " table_schema = current_schema() AND table_name ="
+                                        + " 'migraphe_history' AND column_name IN ('target_id',"
+                                        + " 'environment_id')")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString(1)).isEqualTo("target_id");
+            assertThat(rs.next()).isFalse();
+        }
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT target_id FROM migraphe_history WHERE id = 'legacy-1'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString(1)).isEqualTo("test-env");
+        }
+    }
+
+    @Test
     void initializeIsIdempotent() throws Exception {
-        // The PostgreSQL resource declares the table and each index as separate steps, none of them
-        // guarded by a detection query: they rely on IF NOT EXISTS (CREATE TABLE since 9.1, CREATE
-        // INDEX since 9.5), so every step runs on every call and must stay harmless.
+        // The PostgreSQL resource declares the table and each index as separate steps guarded only
+        // by IF NOT EXISTS (CREATE TABLE since 9.1, CREATE INDEX since 9.5), so every one of them
+        // runs on every call and must stay harmless. The rename step between them does carry a
+        // detection query, whose bound parameter is exercised here too.
         historyRepo.initialize();
 
         assertThatCode(() -> historyRepo.initialize()).doesNotThrowAnyException();

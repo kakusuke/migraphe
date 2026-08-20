@@ -135,9 +135,10 @@ class MariaDBLegacyCompatibilityTest {
 
     @Test
     void initializeIsIdempotentOnThisServer() throws Exception {
-        // The MySQL resource has no detection query: its single creation step leans on CREATE TABLE
-        // IF NOT EXISTS, which this 5.5-generation server must honour for initialize() to stay
-        // idempotent across the up/down/status calls that all run it.
+        // The creation step has no detection query: it leans on CREATE TABLE IF NOT EXISTS, which
+        // this 5.5-generation server must honour for initialize() to stay idempotent across the
+        // up/down/status calls that all run it. The rename step that follows is guarded by a
+        // detection query instead, so this also covers that query running on this server.
         historyRepo.initialize();
 
         assertThatCode(() -> historyRepo.initialize()).doesNotThrowAnyException();
@@ -153,13 +154,157 @@ class MariaDBLegacyCompatibilityTest {
         }
     }
 
+    // --- Ordering when executed_at ties -------------------------------------------------
+    // This server reports itself as 5.5.5, so Connector/J drops fractional seconds and a down
+    // immediately followed by an up shares a timestamp. Both directions are asserted: ordering
+    // by executed_at alone leaves the winner to the storage engine, so one direction could pass
+    // by luck while the other fails.
+
+    @Test
+    void sameSecondUpThenDownCountsAsRolledBack() {
+        historyRepo.initialize();
+        NodeId node = NodeId.of("db1/flip");
+        Instant sameSecond = Instant.parse("2026-01-01T00:00:00Z");
+
+        historyRepo.record(
+                record(
+                        generatedId(),
+                        node,
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS,
+                        sameSecond));
+        historyRepo.record(
+                record(
+                        generatedId(),
+                        node,
+                        ExecutionDirection.DOWN,
+                        ExecutionStatus.SUCCESS,
+                        sameSecond));
+
+        assertThat(historyRepo.wasExecuted(node, environment.id())).isFalse();
+    }
+
+    @Test
+    void sameSecondDownThenUpCountsAsApplied() {
+        historyRepo.initialize();
+        NodeId node = NodeId.of("db1/flip");
+        Instant sameSecond = Instant.parse("2026-01-01T00:00:00Z");
+
+        historyRepo.record(
+                record(
+                        generatedId(),
+                        node,
+                        ExecutionDirection.DOWN,
+                        ExecutionStatus.SUCCESS,
+                        sameSecond));
+        historyRepo.record(
+                record(
+                        generatedId(),
+                        node,
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS,
+                        sameSecond));
+
+        assertThat(historyRepo.wasExecuted(node, environment.id())).isTrue();
+    }
+
+    @Test
+    void sameSecondRollbackIsExcludedFromExecutedNodes() {
+        historyRepo.initialize();
+        NodeId node = NodeId.of("db1/flip");
+        Instant sameSecond = Instant.parse("2026-01-01T00:00:00Z");
+
+        historyRepo.record(
+                record(
+                        generatedId(),
+                        node,
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS,
+                        sameSecond));
+        historyRepo.record(
+                record(
+                        generatedId(),
+                        node,
+                        ExecutionDirection.DOWN,
+                        ExecutionStatus.SUCCESS,
+                        sameSecond));
+
+        assertThat(historyRepo.executedNodes(environment.id())).isEmpty();
+    }
+
+    @Test
+    void renamesLegacyEnvironmentIdColumnWithChangeColumn() throws Exception {
+        // RENAME COLUMN needs MariaDB 10.5.2, so the resource spells the rename as CHANGE COLUMN;
+        // this server is where that choice has to hold.
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id VARCHAR(64) PRIMARY KEY,
+                        node_id VARCHAR(255) NOT NULL,
+                        environment_id VARCHAR(255) NOT NULL,
+                        direction VARCHAR(10) NOT NULL,
+                        status VARCHAR(10) NOT NULL,
+                        executed_at TIMESTAMP(6) NOT NULL,
+                        description TEXT,
+                        serialized_down_task LONGTEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT,
+                        INDEX idx_migraphe_history_node_env (node_id(100), environment_id(60))
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """);
+            stmt.execute(
+                    "INSERT INTO migraphe_history VALUES ('legacy-1', 'db1/legacy', 'test', 'UP',"
+                            + " 'SUCCESS', NOW(6), 'legacy row', NULL, 1, NULL)");
+        }
+
+        historyRepo.initialize();
+
+        assertThat(columnExists("target_id")).isTrue();
+        assertThat(columnExists("environment_id")).isFalse();
+        // The migrated row still reads back through the repository, index prefixes included.
+        assertThat(historyRepo.wasExecuted(NodeId.of("db1/legacy"), environment.id())).isTrue();
+    }
+
+    private boolean columnExists(String column) throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " DATABASE() AND table_name = 'migraphe_history' AND"
+                                        + " column_name = '"
+                                        + column
+                                        + "'")) {
+            return rs.next();
+        }
+    }
+
+    /**
+     * Returns an identifier from the production factory, so tied records carry real UUIDv7 values
+     * in creation order rather than hand-written ones.
+     */
+    private String generatedId() {
+        return ExecutionRecord.upSuccess(NodeId.of("seed"), environment.id(), "seed", null, 0).id();
+    }
+
     private ExecutionRecord record(
             NodeId nodeId,
             ExecutionDirection direction,
             ExecutionStatus status,
             Instant executedAt) {
+        return record(UUID.randomUUID().toString(), nodeId, direction, status, executedAt);
+    }
+
+    private ExecutionRecord record(
+            String id,
+            NodeId nodeId,
+            ExecutionDirection direction,
+            ExecutionStatus status,
+            Instant executedAt) {
         return new ExecutionRecord(
-                UUID.randomUUID().toString(),
+                id,
                 nodeId,
                 environment.id(),
                 direction,

@@ -532,18 +532,46 @@ Error:
 
 ### Environment-Specific Execution
 
-Pass `--env <name>` to overlay `environments/<name>.yaml` on top of your `targets/` configuration. The overlay takes highest precedence and overrides target connection settings (e.g. `jdbc_url`, `username`, `password`). Supported by the `up`, `down`, and `status` commands:
+Pass `--env <name>` to overlay `environments/<name>.yaml` on top of your `targets/` configuration. The overlay takes highest precedence and overrides target connection settings (e.g. `jdbc_url`, `username`, `password`). Supported by **all** commands that read the configuration — `up`, `down`, `status`, `validate` and `generate`:
 
 ```bash
 # Apply environments/production.yaml overrides
 migraphe up --env production
 migraphe status --env production
+migraphe validate --env production
+migraphe generate --env production
 
 # Apply environments/development.yaml overrides
 migraphe up --env development
 ```
 
-If `environments/<name>.yaml` does not exist, the flag is ignored (base configuration is used). `validate` and `generate` do not currently read `--env`.
+If `environments/<name>.yaml` does not exist, the command **fails** with the path it looked for and the list of overlays that do exist, so a typo such as `--env prodction` is caught immediately. Omitting `--env` altogether is always valid and uses the base configuration.
+
+From Gradle, the same overlay is selected with the `env` extension property, the `-Pmigraphe.env=<name>` project property, or the `--env <name>` task option (in increasing order of precedence):
+
+```kotlin
+migraphe {
+    env = "production"
+}
+```
+
+```bash
+./gradlew migrapheStatus --env production
+./gradlew migrapheStatus -Pmigraphe.env=production
+```
+
+#### Targets and environments are different things
+
+These two concepts are easy to confuse, because both are commonly called "environments":
+
+| | What it is | Where it lives |
+|---|---|---|
+| **target** | A connection: the thing migrations run against. Tasks reference it by name (`target: db1`). | `targets/*.yaml` |
+| **environment** (`--env`) | A set of configuration overrides applied on top of the targets. | `environments/*.yaml` |
+
+A target keeps its **name** regardless of `--env`; only its **values** change. So `--env production` does not create a new target — it rewrites the settings of the existing ones.
+
+This matters for migration history: history is partitioned by **target name**, not by `--env`. Running `migraphe up --env production` records the same target id as `migraphe up --env development` would. That is safe as long as each deployment environment has its own history database, which is the intended setup (`history.target` normally points at the same database the migrations run against). **Do not point `history.target` at a database shared across deployment environments** — the applied/not-applied state of different databases would be conflated.
 
 ## Rollback (down)
 
@@ -1003,9 +1031,11 @@ WHERE node_id = 'db1/001_create_users';
 ```
 
 **History Table Schema:**
-- `id`: Unique execution ID (UUID)
+- `id`: Unique execution ID (a time-ordered UUIDv7, so records sort by creation order)
 - `node_id`: Task ID
-- `environment_id`: Environment name
+- `target_id`: Target name, as declared by the task's `target:` and defined under `targets/`.
+  Versions before 0.6.0 called this column `environment_id`; `initialize()` renames it in place.
+  It has never held the `--env` overlay name, which selects configuration values only.
 - `direction`: UP or DOWN
 - `status`: SUCCESS, FAILURE, or SKIPPED
 - `description`: Task name
@@ -1055,6 +1085,7 @@ plugins {
 
 migraphe {
     baseDir.set(layout.projectDirectory.dir("db")) // default: project directory
+    // env = "production"                          // default: no overlay
 }
 
 dependencies {
@@ -1077,6 +1108,9 @@ dependencies {
 
 ### Task Options
 
+**All tasks**:
+- `--env=<name>` — Apply the `environments/<name>.yaml` overlay (see [Environment-Specific Execution](#environment-specific-execution))
+
 **migrapheUp**:
 - `--target=<nodeId>` — Migrate up to a specific node
 - `--preview` — Preview without executing
@@ -1094,6 +1128,7 @@ Options can also be specified via project properties (`-P`):
 ```bash
 ./gradlew migrapheUp -Pmigraphe.up.target=db1/create_users
 ./gradlew migrapheDown -Pmigraphe.down.all=true
+./gradlew migrapheStatus -Pmigraphe.env=production
 ```
 
 ## Troubleshooting

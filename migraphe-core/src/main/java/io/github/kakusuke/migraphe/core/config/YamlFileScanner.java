@@ -99,4 +99,35 @@ public class YamlFileScanner {
 
         return Files.exists(envFile) ? envFile : null;
     }
+
+    /**
+     * Lists the names of the available environment-override files, sorted alphabetically.
+     *
+     * <p>The name of an overlay is its file name without the {@code .yaml} extension, which is
+     * exactly what {@code --env} expects. This is used to suggest the valid choices when a
+     * requested overlay does not exist.
+     *
+     * @param baseDir the scan-root directory (the one containing {@code environments/})
+     * @return the sorted overlay names, or an empty list if the directory is absent
+     * @throws java.io.UncheckedIOException if the directory cannot be listed
+     */
+    public List<String> listEnvironmentNames(Path baseDir) {
+        Path environmentsDir = baseDir.resolve("environments");
+
+        if (!Files.exists(environmentsDir) || !Files.isDirectory(environmentsDir)) {
+            return List.of();
+        }
+
+        try (Stream<Path> paths = Files.list(environmentsDir)) {
+            return paths.filter(Files::isRegularFile)
+                    .map(path -> path.getFileName().toString())
+                    .filter(name -> name.endsWith(".yaml"))
+                    .map(name -> name.substring(0, name.length() - ".yaml".length()))
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            throw new UncheckedIOException(
+                    "Failed to scan environment files in " + environmentsDir, e);
+        }
+    }
 }

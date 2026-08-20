@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The {@code validate} command, which checks the project configuration offline.
@@ -30,6 +31,7 @@ public class ValidateCommand implements Command {
 
     private final Path baseDir;
     private final PluginRegistry pluginRegistry;
+    private final @Nullable String envName;
     private final boolean colorEnabled;
 
     /**
@@ -37,9 +39,11 @@ public class ValidateCommand implements Command {
      *
      * @param baseDir the project base directory containing {@code migraphe.yaml}
      * @param pluginRegistry the registry of loaded plugins used to validate plugin-typed entries
+     * @param envName the deployment-environment name whose {@code environments/<envName>.yaml}
+     *     overlay is applied, or {@code null} to validate the base configuration only
      */
-    public ValidateCommand(Path baseDir, PluginRegistry pluginRegistry) {
-        this(baseDir, pluginRegistry, AnsiColor.isColorEnabled());
+    public ValidateCommand(Path baseDir, PluginRegistry pluginRegistry, @Nullable String envName) {
+        this(baseDir, pluginRegistry, envName, AnsiColor.isColorEnabled());
     }
 
     /**
@@ -47,11 +51,18 @@ public class ValidateCommand implements Command {
      *
      * @param baseDir the project base directory containing {@code migraphe.yaml}
      * @param pluginRegistry the registry of loaded plugins used to validate plugin-typed entries
+     * @param envName the deployment-environment name whose {@code environments/<envName>.yaml}
+     *     overlay is applied, or {@code null} to validate the base configuration only
      * @param colorEnabled {@code true} to colorize console output
      */
-    public ValidateCommand(Path baseDir, PluginRegistry pluginRegistry, boolean colorEnabled) {
+    public ValidateCommand(
+            Path baseDir,
+            PluginRegistry pluginRegistry,
+            @Nullable String envName,
+            boolean colorEnabled) {
         this.baseDir = baseDir;
         this.pluginRegistry = pluginRegistry;
+        this.envName = envName;
         this.colorEnabled = colorEnabled;
     }
 
@@ -60,7 +71,7 @@ public class ValidateCommand implements Command {
         printHeader();
 
         ConfigValidator validator = new ConfigValidator(pluginRegistry);
-        ValidationOutput result = validator.validate(baseDir);
+        ValidationOutput result = validator.validate(baseDir, envName);
 
         // Display each check step.
         displayCheckResults(result);
@@ -134,6 +145,15 @@ public class ValidateCommand implements Command {
         // Early exit when migraphe.yaml is missing.
         if (!projectErrors.isEmpty() && errors.stream().anyMatch(e -> e.contains("not found"))) {
             return;
+        }
+
+        // 1b. Environment overlay (only when one was requested).
+        if (envName != null) {
+            List<String> envErrors = filterErrors(errors, "environments/");
+            printCheckResult(
+                    "Checking environment overlay (" + envName + ")...",
+                    envErrors.isEmpty(),
+                    envErrors);
         }
 
         // 2. Targets

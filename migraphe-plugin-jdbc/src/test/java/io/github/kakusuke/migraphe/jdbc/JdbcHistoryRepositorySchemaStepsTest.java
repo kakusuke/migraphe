@@ -42,6 +42,20 @@ class JdbcHistoryRepositorySchemaStepsTest {
         }
     }
 
+    private boolean columnExists(JdbcEnvironment env, String column) throws Exception {
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " SCHEMA() AND UPPER(table_name) = 'MIGRAPHE_HISTORY' AND"
+                                        + " UPPER(column_name) = '"
+                                        + column
+                                        + "'")) {
+            return rs.next();
+        }
+    }
+
     @Test
     @DisplayName("検出できたステップの適用SQLは実行されない")
     void skipsStepWhenDetected() throws Exception {
@@ -107,11 +121,13 @@ class JdbcHistoryRepositorySchemaStepsTest {
     }
 
     @Test
-    @DisplayName("検出SQLを持たない既定リソースでも initialize() は冪等")
+    @DisplayName("既定リソースの作成ステップは検出SQLを持たず、initialize() は冪等")
     void defaultResourceIsIdempotent() throws Exception {
-        // The shipped creation steps carry no detection query: they lean on IF NOT EXISTS, which no
+        // The shipped creation step carries no detection query: it leans on IF NOT EXISTS, which no
         // same-named table in another schema can confuse. Idempotency therefore rests on the
         // statements themselves, so assert it directly rather than trusting a detection query.
+        // Later steps do carry one — ALTER TABLE has no portable conditional form — and they name
+        // the current schema through a bound parameter instead of matching on table name alone.
         JdbcEnvironment env = env("steps_idempotent");
         String resource =
                 new String(
@@ -120,14 +136,110 @@ class JdbcHistoryRepositorySchemaStepsTest {
                                         "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql")
                                 .readAllBytes(),
                         StandardCharsets.UTF_8);
-        assertThat(SchemaStepParser.parse(resource))
-                .isNotEmpty()
-                .allSatisfy(step -> assertThat(step.checkSql()).isNull());
+        var steps = SchemaStepParser.parse(resource);
+        assertThat(steps).isNotEmpty();
+        assertThat(steps.get(0).checkSql()).isNull();
+        assertThat(steps.subList(1, steps.size()))
+                .allSatisfy(step -> assertThat(step.checkSql()).contains("?"));
 
         var repository = new JdbcHistoryRepository(env);
         repository.initialize();
 
         assertThatCode(repository::initialize).doesNotThrowAnyException();
         assertThat(tableExists(env, "MIGRAPHE_HISTORY")).isTrue();
+    }
+
+    @Test
+    @DisplayName("新規作成したテーブルは target_id 列を持つ")
+    void freshTableUsesTargetId() throws Exception {
+        JdbcEnvironment env = env("steps_fresh_target_id");
+        new JdbcHistoryRepository(env).initialize();
+
+        assertThat(columnExists(env, "TARGET_ID")).isTrue();
+        assertThat(columnExists(env, "ENVIRONMENT_ID")).isFalse();
+    }
+
+    @Test
+    @DisplayName("environment_id を持つ旧テーブルは target_id にリネームされ、既存行が保持される")
+    void renamesTheLegacyColumnKeepingRows() throws Exception {
+        JdbcEnvironment env = env("steps_legacy_rename");
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id VARCHAR(64) PRIMARY KEY,
+                        node_id VARCHAR(255) NOT NULL,
+                        environment_id VARCHAR(255) NOT NULL,
+                        direction VARCHAR(10) NOT NULL,
+                        status VARCHAR(10) NOT NULL,
+                        executed_at TIMESTAMP NOT NULL,
+                        description TEXT,
+                        serialized_down_task TEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT
+                    )
+                    """);
+            stmt.execute(
+                    "INSERT INTO migraphe_history VALUES ('legacy-1', 'node1', 'testdb', 'UP',"
+                            + " 'SUCCESS', CURRENT_TIMESTAMP, 'legacy row', NULL, 1, NULL)");
+        }
+
+        new JdbcHistoryRepository(env).initialize();
+
+        assertThat(columnExists(env, "TARGET_ID")).isTrue();
+        assertThat(columnExists(env, "ENVIRONMENT_ID")).isFalse();
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT id, target_id FROM migraphe_history WHERE id ="
+                                        + " 'legacy-1'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString("target_id")).isEqualTo("testdb");
+        }
+    }
+
+    @Test
+    @DisplayName("リネーム済みのテーブルに再実行しても壊れない")
+    void renameStepIsIdempotent() throws Exception {
+        JdbcEnvironment env = env("steps_rename_idempotent");
+        var repository = new JdbcHistoryRepository(env);
+        repository.initialize();
+
+        assertThatCode(repository::initialize).doesNotThrowAnyException();
+        assertThat(columnExists(env, "TARGET_ID")).isTrue();
+    }
+
+    @Test
+    @DisplayName("検出SQLの ? に現在のスキーマが束縛される")
+    void bindsTheCurrentSchemaToTheDetectionParameter() throws Exception {
+        JdbcEnvironment env = env("steps_qualified_hit");
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE TABLE step_probe (id INT)");
+        }
+        var repository = new JdbcHistoryRepository(env, "/schema-steps/qualified-check.sql");
+
+        // The apply statement has no IF NOT EXISTS, so an unbound parameter or a missed
+        // detection would surface here.
+        assertThatCode(repository::initialize).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("別スキーマの同名テーブルは検出とみなさない")
+    void doesNotMistakeASameNamedTableInAnotherSchema() throws Exception {
+        JdbcEnvironment env = env("steps_qualified_miss");
+        try (Connection conn = env.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("CREATE SCHEMA other");
+            stmt.execute("CREATE TABLE other.step_probe (id INT)");
+        }
+        var repository = new JdbcHistoryRepository(env, "/schema-steps/qualified-check.sql");
+
+        repository.initialize();
+
+        // Unqualified detection would have found other.step_probe and skipped creation.
+        assertThat(tableExists(env, "STEP_PROBE")).isTrue();
     }
 }

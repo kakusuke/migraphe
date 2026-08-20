@@ -119,16 +119,51 @@ class ConfigLoaderTest {
     }
 
     @Test
-    void shouldHandleNoEnvironmentFile(@TempDir Path tempDir) throws IOException {
+    void shouldThrowWhenNamedEnvironmentFileIsMissing(@TempDir Path tempDir) throws IOException {
         // Given: environments/ ディレクトリが存在しない
         createProjectStructure(tempDir);
 
         ConfigLoader loader = new ConfigLoader();
 
-        // When: --env=production を指定しても環境ファイルがない
-        SmallRyeConfig config = loader.loadConfig(tempDir, "production");
+        // When/Then: --env=production を明示したのにファイルが無ければ停止する（タイポの黙殺を防ぐ）
+        assertThatThrownBy(() -> loader.loadConfig(tempDir, "production"))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining("production")
+                .hasMessageContaining(
+                        tempDir.resolve("environments").resolve("production.yaml").toString());
+    }
 
-        // Then: エラーにならず、環境変数なしでロードされる
+    @Test
+    void shouldListAvailableEnvironmentsWhenNamedFileIsMissing(@TempDir Path tempDir)
+            throws IOException {
+        // Given: 別名のオーバーレイだけが存在する（= タイポの典型）
+        createProjectStructure(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(environmentsDir.resolve("production.yaml"), "DB_HOST: prod\n");
+        Files.writeString(environmentsDir.resolve("development.yaml"), "DB_HOST: dev\n");
+
+        ConfigLoader loader = new ConfigLoader();
+
+        // When/Then: 利用可能な名前を案内する
+        assertThatThrownBy(() -> loader.loadConfig(tempDir, "prodction"))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining("development")
+                .hasMessageContaining("production");
+    }
+
+    @Test
+    void shouldLoadWithoutOverlayWhenNoEnvironmentIsRequested(@TempDir Path tempDir)
+            throws IOException {
+        // Given: environments/ ディレクトリが存在しない
+        createProjectStructure(tempDir);
+
+        ConfigLoader loader = new ConfigLoader();
+
+        // When: --env 未指定（envName = null）
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        // Then: 従来どおりオーバーレイなしでロードされる
         assertThat(config).isNotNull();
         ProjectConfig projectConfig = config.getConfigMapping(ProjectConfig.class);
         assertThat(projectConfig.project().name()).isEqualTo("my-migrations");

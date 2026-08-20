@@ -1,10 +1,12 @@
 package io.github.kakusuke.migraphe.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
+import io.github.kakusuke.migraphe.core.config.ConfigurationException;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import java.io.ByteArrayOutputStream;
@@ -107,7 +109,8 @@ class MainTest {
                 """);
         Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
         Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
-        Files.createDirectories(tempDir.resolve("environments"));
+        Path environmentsDir = Files.createDirectories(tempDir.resolve("environments"));
+        Files.writeString(environmentsDir.resolve("staging.yaml"), "DB_HOST: staging-host\n");
 
         String[] argsWithEnv = {"up", "--env", "staging"};
         String[] argsWithoutEnv = {"up"};
@@ -115,12 +118,37 @@ class MainTest {
         ExecutionContext contextWithEnv = Main.loadContext(tempDir, pluginRegistry, argsWithEnv);
         ExecutionContext contextWithoutEnv =
                 Main.loadContext(tempDir, pluginRegistry, argsWithoutEnv);
-        ExecutionContext directLoad = ExecutionContext.load(tempDir, pluginRegistry, "staging");
 
+        // --env が渡っていればオーバーレイの値が読める
+        assertThat(contextWithEnv.config().getValue("DB_HOST", String.class))
+                .isEqualTo("staging-host");
+        assertThat(contextWithoutEnv.config().getOptionalValue("DB_HOST", String.class)).isEmpty();
         assertThat(contextWithEnv.environments()).containsKey("noop-db");
-        assertThat(contextWithoutEnv.environments()).containsKey("noop-db");
-        assertThat(contextWithEnv.environments().keySet())
-                .isEqualTo(directLoad.environments().keySet());
+    }
+
+    @Test
+    void loadContextShouldFailWhenNamedEnvironmentOverlayIsMissing(@TempDir Path tempDir)
+            throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: noop-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+
+        String[] args = {"up", "--env", "staging"};
+
+        // 打ち間違いを黙殺せず停止する
+        assertThatThrownBy(() -> Main.loadContext(tempDir, pluginRegistry, args))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining("staging");
     }
 
     @Test

@@ -48,7 +48,7 @@ class ValidateCommandTest {
     void shouldReturnSuccessForValidConfiguration() throws IOException {
         // Given: 正しい設定ファイル
         createValidProject(tempDir);
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
 
         // When
         int exitCode = command.execute();
@@ -66,7 +66,7 @@ class ValidateCommandTest {
         // Given: migraphe.yaml が存在しない
         Files.createDirectories(tempDir.resolve("targets"));
         Files.createDirectories(tempDir.resolve("tasks"));
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
 
         // When
         int exitCode = command.execute();
@@ -82,7 +82,7 @@ class ValidateCommandTest {
     void shouldReturnFailureForMissingTargetType() throws IOException {
         // Given: target の type が欠落
         createProjectWithMissingTargetType(tempDir);
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
 
         // When
         int exitCode = command.execute();
@@ -98,7 +98,7 @@ class ValidateCommandTest {
     void shouldDisplayErrorCountInSummary() throws IOException {
         // Given: 複数のエラー
         createProjectWithMultipleErrors(tempDir);
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
 
         // When
         int exitCode = command.execute();
@@ -114,7 +114,7 @@ class ValidateCommandTest {
     void shouldUseColorsWhenEnabled() throws IOException {
         // Given: 色が有効
         createValidProject(tempDir);
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, true);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, true);
 
         // When
         command.execute();
@@ -128,7 +128,7 @@ class ValidateCommandTest {
     void shouldNotUseColorsWhenDisabled() throws IOException {
         // Given: 色が無効
         createValidProject(tempDir);
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
 
         // When
         command.execute();
@@ -153,7 +153,7 @@ class ValidateCommandTest {
                 plugins:
                   - io.example:plugin-a:1.0
                 """);
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
 
         int exitCode = command.execute();
 
@@ -167,7 +167,7 @@ class ValidateCommandTest {
     void shouldDisplayCheckingSteps() throws IOException {
         // Given: 正しい設定ファイル
         createValidProject(tempDir);
-        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, false);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
 
         // When
         command.execute();
@@ -182,6 +182,20 @@ class ValidateCommandTest {
     }
 
     // Helper methods
+
+    @Test
+    void shouldFailWhenNamedEnvironmentOverlayIsMissing() throws IOException {
+        // Given: 正しい設定だが environments/ が無い
+        createValidProject(tempDir);
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, "prodction", false);
+
+        // When: 存在しないオーバーレイ名を指定
+        int exitCode = command.execute();
+
+        // Then: 黙って無視せず検証エラーとして報告する
+        assertThat(exitCode).isEqualTo(1);
+        assertThat(outputStream.toString(StandardCharsets.UTF_8)).contains("prodction");
+    }
 
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =

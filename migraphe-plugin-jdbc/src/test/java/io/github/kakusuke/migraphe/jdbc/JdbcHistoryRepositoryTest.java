@@ -177,6 +177,117 @@ class JdbcHistoryRepositoryTest {
         assertThat(customRepo.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb"))).isTrue();
     }
 
+    // --- Ordering when executed_at ties -------------------------------------------------
+    // MariaDB stores executed_at at second granularity (the MySQL driver drops fractional
+    // seconds because the server reports itself as 5.5.5), so a down immediately followed by
+    // an up shares a timestamp. The id then decides, and both directions are asserted: with
+    // executed_at alone the winner is whatever the storage engine happens to return, so a
+    // single direction could pass by luck.
+
+    @Test
+    void tiedTimestampsAreBrokenByIdWhenTheLatestIsDown() {
+        repository.initialize();
+        Instant sameSecond = Instant.parse("2026-08-20T10:00:00Z");
+
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000001", sameSecond, ExecutionDirection.UP));
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000002",
+                        sameSecond,
+                        ExecutionDirection.DOWN));
+
+        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb")))
+                .isFalse();
+    }
+
+    @Test
+    void tiedTimestampsAreBrokenByIdWhenTheLatestIsUp() {
+        repository.initialize();
+        Instant sameSecond = Instant.parse("2026-08-20T10:00:00Z");
+
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000001",
+                        sameSecond,
+                        ExecutionDirection.DOWN));
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000002", sameSecond, ExecutionDirection.UP));
+
+        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb"))).isTrue();
+    }
+
+    @Test
+    void tiedTimestampsAreBrokenByIdWhenInsertedInReverseIdOrder() {
+        repository.initialize();
+        Instant sameSecond = Instant.parse("2026-08-20T10:00:00Z");
+
+        // Inserted newest-first: physical order contradicts id order, so only id ordering wins.
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000002",
+                        sameSecond,
+                        ExecutionDirection.DOWN));
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000001", sameSecond, ExecutionDirection.UP));
+
+        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb")))
+                .isFalse();
+    }
+
+    @Test
+    void findLatestRecordBreaksTiedTimestampsById() {
+        repository.initialize();
+        Instant sameSecond = Instant.parse("2026-08-20T10:00:00Z");
+
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000002",
+                        sameSecond,
+                        ExecutionDirection.DOWN));
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000001", sameSecond, ExecutionDirection.UP));
+
+        var latest = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        assertThat(latest).isNotNull();
+        assertThat(latest.id()).isEqualTo("00000000-0000-7000-8000-000000000002");
+    }
+
+    @Test
+    void executedNodesBreaksTiedTimestampsById() {
+        repository.initialize();
+        Instant sameSecond = Instant.parse("2026-08-20T10:00:00Z");
+
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000001", sameSecond, ExecutionDirection.UP));
+        repository.record(
+                recordAt(
+                        "00000000-0000-7000-8000-000000000002",
+                        sameSecond,
+                        ExecutionDirection.DOWN));
+
+        assertThat(repository.executedNodes(EnvironmentId.of("testdb"))).isEmpty();
+    }
+
+    private ExecutionRecord recordAt(String id, Instant executedAt, ExecutionDirection direction) {
+        return new ExecutionRecord(
+                id,
+                NodeId.of("node1"),
+                EnvironmentId.of("testdb"),
+                direction,
+                ExecutionStatus.SUCCESS,
+                executedAt,
+                "test description",
+                direction == ExecutionDirection.UP ? "DOWN SQL" : null,
+                100L,
+                null);
+    }
+
     private ExecutionRecord createRecord(
             String id,
             String nodeId,
