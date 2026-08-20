@@ -36,7 +36,12 @@ Migrapheは、複数の環境にわたる複雑なデータベースマイグレ
 ### 前提条件
 
 - Java 21以降
-- サポート対象のデータベース（PostgreSQL、MySQL 8.0+、または任意のJDBC対応データベース）
+- サポート対象のデータベース（PostgreSQL、MySQL、MariaDB、または任意のJDBC対応データベース）。
+  PostgreSQL、MySQL 8.0、MariaDB 10.1 で検証済み
+  - **MySQL** 5.6.4 以降: 履歴テーブルが `TIMESTAMP(6)` を使うため、これを解釈できない
+    Oracle MySQL 5.5 は非対応
+  - **MariaDB** 5.5 系以降: 履歴テーブルのインデックスキー長を InnoDB の 767 バイト制限内に
+    収めているため、`innodb_large_prefix` の無いサーバでも作成できます
 
 ### mise でインストール（推奨）
 

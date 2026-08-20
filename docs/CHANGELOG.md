@@ -2,6 +2,22 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-20 (Session 67)
+- **MySQL/MariaDB 5.5 系で履歴テーブルが作成できない問題を修正 + `executedNodes()` から window 関数を除去**(利用者報告 #1)
+  - **報告内容**: MariaDB 5.5 で `migraphe_history` を作れない。`KEY (node_id, environment_id)` が utf8mb4 の `VARCHAR(255)`×2 = 2040 バイトで InnoDB の 767 バイト制限を超過する。
+  - **違反は 2 箇所だった**: 報告にあった複合インデックス(2040 バイト)のほかに、**`id VARCHAR(255) PRIMARY KEY` = 1020 バイト**も超過しており、DDL 内の定義順ではこちらが先に失敗する。MySQL 5.7+ / MariaDB 10.2+ では DYNAMIC 行フォーマットが既定で上限が 3072 バイトになるため、どちらも 5.5 世代でしか露出しない。
+  - **修正(案1: utf8mb4 維持)**: 識別子列の**文字セットは utf8mb4 のまま**、インデックス対象の長さだけを制限した。
+    - `id VARCHAR(64)` — 値は常に `UUID.randomUUID().toString()`(36 文字固定)で、コード全体を検索しても `WHERE id = ?` は存在せず読み出し専用のため、狭めても実害がない。
+    - `INDEX idx_migraphe_history_node_env (node_id(100), environment_id(60))` = 640 バイト、`INDEX idx_migraphe_history_env (environment_id(60))` = 240 バイト。`node_id` / `environment_id` の**列幅は `VARCHAR(255)` のまま据え置き**(格納する値を壊さない)。
+    - プレフィックスインデックスでも等価検索は正しく動く(MySQL がプレフィックスで絞ってから行の実値を再照合する)。実測 `EXPLAIN`: `type=ref, key=idx_migraphe_history_node_env, key_len=644, rows=1`。
+  - **`CHARACTER SET ascii` 案(報告者の提案)を却下した理由**: `node_id` は `TaskIdGenerator` が `tasks/` 配下のファイルパスから生成するため**非 ASCII になり得る**(`tasks/ユーザ作成.yaml` → `ユーザ作成`)。実機検証の結果、(a) 非 strict モード(5.5 系の既定に近い)では INSERT が **`Warning 1366` だけで通り値が壊れる**、(b) utf8mb4 接続のクライアントから `WHERE node_id = ?` に非 ASCII 値を渡すと **`ERROR 1267 Illegal mix of collations`** で検索自体が落ちる。510 バイトに収まる利点より静かな破損リスクが重い。
+  - **移行処理は入れない**: `initialize()` は `CREATE TABLE IF NOT EXISTS` 一発なので、既存テーブルは DDL を変えても無影響(新規作成のみ修正が効く)。旧スキーマの広い列幅は害がないため、バージョン検知 + ALTER の事故リスクを避けた。
+  - **汎用 JDBC DDL も併せて修正**: `migraphe-plugin-jdbc` 側の `id VARCHAR(255)` も同じ理由で 64 に狭めた(`type="jdbc"` + MySQL 5.5 では PK 単体で 767 違反になる)。PostgreSQL 側は `TEXT` なので変更不要。
+  - **`executedNodes()` の window 関数を除去**: `ROW_NUMBER() OVER (PARTITION BY node_id ORDER BY executed_at DESC)` は MySQL 8.0+ / MariaDB 10.2+ 専用で、5.5 世代では `ERROR 1064`(構文エラー)になる。相関サブクエリ `h.executed_at = (SELECT MAX(h2.executed_at) ...)` + `SELECT DISTINCT` に書き換え、H2 / PostgreSQL / MySQL / MariaDB で共通に動く形にした。**タイ時の意味は意図的に変わる**: 同一 node_id で `executed_at` が最大値タイのとき、`ROW_NUMBER` 版は任意の 1 行を選んでいたが、新実装はタイ行のいずれかが成功 UP なら適用済みと判定する。`HistoryRepository.executedNodes` は core/CLI/Gradle から呼ばれておらず(`up`/`down`/`status` はすべて `wasExecuted` 経由)、影響は直接 API を叩く利用者のみ。
+  - **テスト**(`MariaDBLegacyCompatibilityTest`、4 本 green): `mariadb:10.1` を使う。**`mariadb:5.5` は arm64 イメージが無い**が、10.1 は `innodb_file_format=Antelope` / `innodb_large_prefix=0` が既定で 767 制限を再現し、window 関数も未実装(10.2 で追加)で、しかもサーバ自身が `5.5.5-10.1.48-MariaDB` と申告する。つまり**1 コンテナで両方の不具合を再現できる**。`MariaDBContainer` ではなく `MySQLContainer` にイメージを差し替えて使っているのは、`jdbc:mysql://` URL を得るため(`MySQLEnvironment` はドライバが MySQL 固定)。修正前の実測失敗は `ERROR 1071 Specified key was too long` と `ERROR 1064`。サーバが実際に 767 制限を強制していることを確認する canary テスト(`SELECT @@innodb_large_prefix` = 0)も置いた。非 ASCII の `node_id` 往復テストで utf8mb4 維持の判断を固定。
+  - **⚠️ 副産物として発見した別バグ(今回は未修正)**: **MariaDB では `executed_at` の秒未満が失われる**。Connector/J はサーバのバージョン文字列で小数秒送信の可否を決めるが、MariaDB は自身を `5.5.5-10.1.48-MariaDB` と申告するため、ドライバが「MySQL 5.6.4 未満 = 小数秒非対応」と判断してクライアント側で切り捨てる。列が `TIMESTAMP(6)` でも実測で 3 行すべて `micros=0`(約 20ms 間隔の INSERT)。結果として `wasExecuted()` の `ORDER BY executed_at DESC LIMIT 1` は、同一秒内に UP と DOWN が並ぶと **MariaDB では既に非決定的**。恒久対策には挿入順を表す単調増加列(スキーマ変更 + 移行)が必要なため今回のスコープ外とし、テスト側は明示的な秒単位タイムスタンプを書いて壁時計順序に依存しない形にした。
+  - **リリース時の注意点**: bugfix(patch bump 相当)。既存テーブルには一切触らないため、既存環境の挙動は `executedNodes()` のタイ semantics を除いて不変。
+
 ### 2026-08-20 (Session 66)
 - **MySQL 方言の文分割が `DROP TABLE IF EXISTS` を多数含むスクリプトで指数爆発する不具合を修正**(利用者からの報告 #2「down が文数の多いタスクでハングする」)
   - **症状**: MariaDB 利用者から「83 文の `DROP TABLE IF EXISTS` を持つ down タスクが『Executing rollback...』から返らない」との報告。同タスクの up(83 文の `CREATE TABLE`)は 1.1 秒、7 文の DROP は 77ms、手動実行は 0.14 秒。autocommit の有無・`--all` の有無・MariaDB 5.5/11.4 のいずれでも再現。**DB に到達する前の文分割で詰まっていた**ため、接続設定やサーバ側の要因ではない。
