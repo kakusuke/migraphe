@@ -36,7 +36,12 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 ### Prerequisites
 
 - Java 21 or later
-- A supported database (PostgreSQL, MySQL 8.0+, or any JDBC-compatible database)
+- A supported database (PostgreSQL, MySQL, MariaDB, or any JDBC-compatible database). Verified
+  against PostgreSQL, MySQL 8.0 and MariaDB 10.1
+  - **MySQL** 5.6.4 or later: the history table stores `TIMESTAMP(6)`, which Oracle MySQL 5.5
+    cannot parse, so 5.5 is not supported
+  - **MariaDB** from the 5.5 generation onwards: the history table's index key lengths stay within
+    InnoDB's 767-byte limit, so it can be created on servers without `innodb_large_prefix`
 
 ### Install with mise (Recommended)
 

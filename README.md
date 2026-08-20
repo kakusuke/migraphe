@@ -21,6 +21,13 @@ A migration orchestration tool that manages database and infrastructure migratio
 - **Configurable layout** via `project.scan-root` to relocate `tasks/`, `targets/`, `environments/`, and `plugins/` under a subdirectory (CLI / Gradle share the same field)
 - **Type-safe**: built with Java 21, jspecify + NullAway
 
+## Requirements
+
+- Java 21 or later
+- A database reachable over JDBC. Verified against PostgreSQL, MySQL 8.0 and MariaDB 10.1
+  - **MySQL**: 5.6.4 or later. The history table stores `TIMESTAMP(6)`, which Oracle MySQL 5.5 cannot parse, so 5.5 is not supported
+  - **MariaDB**: the 5.5 generation onwards. The history table's index key lengths stay within InnoDB's 767-byte limit, so it can be created on servers without `innodb_large_prefix`
+
 ## Install
 
 ```bash

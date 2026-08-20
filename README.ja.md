@@ -21,6 +21,13 @@
 - **レイアウト切替**: `project.scan-root` で `tasks/`／`targets/`／`environments/`／`plugins/` の探索起点をサブディレクトリに切替（CLI／Gradle 共通）
 - **型安全**: Java 21 + jspecify + NullAway で構築
 
+## 動作要件
+
+- Java 21 以降
+- JDBC で接続できるデータベース。PostgreSQL、MySQL 8.0、MariaDB 10.1 で検証済み
+  - **MySQL**: 5.6.4 以降。履歴テーブルが `TIMESTAMP(6)` を使うため、これを解釈できない Oracle MySQL 5.5 は非対応
+  - **MariaDB**: 5.5 系以降。履歴テーブルのインデックスキー長を InnoDB の 767 バイト制限内に収めているため、`innodb_large_prefix` の無いサーバでも作成できます
+
 ## インストール
 
 ```bash

@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: fixed the MySQL statement splitter blowing up exponentially on scripts full of `DROP TABLE IF EXISTS` — the block parser is now memoized via the new `SqlParsers.memoize` combinator (Session 66)
-**Tests**: 1,036, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: made `migraphe_history` creatable on 5.5-generation MySQL/MariaDB (InnoDB 767-byte key limit) by narrowing `id` to `VARCHAR(64)` and adding index prefix lengths, and replaced the `ROW_NUMBER()` window function in `executedNodes()` with a portable correlated subquery (Session 67)
+**Tests**: 1,040, 100% passing
 
 ## Module Structure
 
@@ -212,15 +212,15 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-08-20 (Session 66)
-- Fixed the MySQL statement splitter hanging on scripts with many `DROP TABLE IF EXISTS` statements (user report: "down hangs on tasks with many statements"). `MySqlGrammar.block()`'s `ifBlock` matches the `IF` of `DROP TABLE IF EXISTS`, and its body scans ahead for an `END` that never arrives; because the body admits nested blocks, that failing scan was repeated for every such keyword it passed over — O(2^k). Measured: 22 statements 9.7s, 83 effectively hung.
-- The grammar's *decisions* were already correct (a false `IF` is properly rejected, and `BEGIN ... DROP TABLE IF EXISTS tmp; ... END` stayed one statement) — **only the cost was wrong**. Fix is therefore a pure performance change: new public combinator `SqlParsers.memoize(SqlParser)` (packrat) wraps the assembled block parser. After: 22 → 2.8ms, 83 → 6.0ms, 300 → 46.4ms, 1000 → 426.7ms.
-- `MemoizingParser` holds one `Memo` (`final String sql` + `final int[] results`) for the most recent input, invalidated by `String.equals` (short-circuits on identity; sound to reuse for an equal input since parsers are pure). Results are stored verbatim because the table is pre-filled with `UNCOMPUTED = -2`, which `parse` (returning `-1` or a position) can never produce. Published without synchronization — final fields prevent observing a half-built table, purity makes a missed entry cost a recomputation; the pre-fill must stay inside the constructor so the freeze covers it. A `ThreadLocal` variant was dropped because ErrorProne's `ThreadLocalUsage` flagged it; the field-based form is simpler, faster, and needed no suppression.
-- Six tests added: `MySqlGrammarTest.NonBlockIfKeyword` (83-statement DROP/CREATE scripts under `assertTimeoutPreemptively(2s)`, plus a characterization test pinning the false-`IF` rejection) and three `memoize` contract tests in `SqlParsersTest` (delegate results, compute-once, cache invalidation on a changed input).
-- Up migrations shared the same trap (`CREATE TABLE IF NOT EXISTS` × 83 also hung), so this was never down-specific. PostgreSQL is unaffected — its grammar has no keyword blocks by design.
-- **Release notes**: bugfix (patch bump). Split results are unchanged; previously hanging input now returns. One public API addition (`SqlParsers.memoize`); no existing signature changed. Remaining worst case is O(chars × non-opening keywords) — a statement-start restriction on block openers would make it linear and is deferred as a separate grammar change. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-08-20 (Session 67)
+- Fixed the MySQL history-table DDL so it can be created on 5.5-generation servers, where InnoDB caps an index key prefix at 767 bytes (user report #1). **Two** violations existed, not one: the reported `INDEX (node_id, environment_id)` (utf8mb4 255×4×2 = 2040 B) and also `id VARCHAR(255) PRIMARY KEY` (1020 B), which fails first. Identifier columns keep utf8mb4; only indexed lengths are bounded — `id VARCHAR(64)` (always a 36-char UUID, never a lookup key) plus `INDEX (node_id(100), environment_id(60))` and `INDEX (environment_id(60))`. The generic JDBC DDL narrows `id` likewise; PostgreSQL uses `TEXT` and is unaffected.
+- Rejected the reported `CHARACTER SET ascii` remedy: `node_id` comes from the task file path and may be non-ASCII, where a non-strict server accepts the INSERT with only `Warning 1366` (silent corruption) and a utf8mb4 client's lookup fails with `ERROR 1267`.
+- No migration ships: `initialize()` uses `CREATE TABLE IF NOT EXISTS`, so existing tables are untouched and only new installs get the corrected shape.
+- Removed the `ROW_NUMBER() OVER (...)` window function from `JdbcHistoryRepository.executedNodes()` (MySQL 8.0+/MariaDB 10.2+ only; `ERROR 1064` on 5.5) in favour of a correlated `MAX(executed_at)` subquery with `DISTINCT`. Tie semantics change deliberately; no core/CLI/Gradle caller exists.
+- Tests: `MariaDBLegacyCompatibilityTest` (4, on `mariadb:10.1` — the oldest arm64 image that still enforces the 767-byte limit and predates window functions, self-reporting as `5.5.5-10.1.48-MariaDB`), incl. a canary on `@@innodb_large_prefix` and a non-ASCII `node_id` round-trip.
+- **Discovered, not fixed**: Connector/J truncates fractional seconds against MariaDB (it reads the `5.5.5` version prefix), so `executed_at` holds whole seconds despite `TIMESTAMP(6)` — `wasExecuted()`'s `ORDER BY executed_at DESC LIMIT 1` is already non-deterministic there for same-second UP/DOWN pairs. A fix needs a monotonic tiebreaker column (schema change + migration). See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
 **Last Updated**: 2026-08-20
-**Current Work**: Performance fix in the MySQL statement splitter — `MySqlGrammar.block()`'s assembled parser is now wrapped in the new `SqlParsers.memoize` combinator, so block-opening keywords that never close (the `IF` of `DROP TABLE IF EXISTS`) no longer cause O(2^k) re-scanning. Recognized spans are unchanged. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the measurements, the racy-single-check rationale, and the deferred grammar change that would make it linear.
+**Current Work**: History-table portability to 5.5-generation MySQL/MariaDB — index key lengths brought under InnoDB's 767-byte limit (utf8mb4 retained, `id` narrowed to `VARCHAR(64)`, prefix indexes) and `executedNodes()` rewritten without window functions. Verified on `mariadb:10.1`. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the rejected ascii alternative and the newly discovered MariaDB sub-second precision loss.

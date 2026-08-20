@@ -171,6 +171,11 @@ public final class JdbcHistoryRepository implements HistoryRepository {
      * <p>For each node only its most recent record is considered; a node is included when that
      * latest record is a successful {@code UP}. The result is ordered by node identifier.
      *
+     * <p>The query deliberately avoids window functions (a correlated {@code MAX(executed_at)}
+     * subquery is used instead) so it also runs on pre-window-function servers such as MariaDB 10.1
+     * and earlier. Should several records for the same node share the maximum {@code executed_at},
+     * the node counts as applied when any of them is a successful {@code UP}.
+     *
      * @param environmentId the environment to query
      * @return the identifiers of nodes whose latest record is a successful UP
      * @throws NullPointerException if {@code environmentId} is {@code null}
@@ -182,14 +187,14 @@ public final class JdbcHistoryRepository implements HistoryRepository {
 
         String sql =
                 """
-                SELECT node_id FROM (
-                    SELECT node_id, direction, status,
-                           ROW_NUMBER() OVER (PARTITION BY node_id ORDER BY executed_at DESC) as rn
-                    FROM migraphe_history
-                    WHERE environment_id = ?
-                ) AS latest
-                WHERE rn = 1 AND direction = 'UP' AND status = 'SUCCESS'
-                ORDER BY node_id
+                SELECT DISTINCT h.node_id FROM migraphe_history h
+                WHERE h.environment_id = ?
+                  AND h.direction = 'UP' AND h.status = 'SUCCESS'
+                  AND h.executed_at = (
+                      SELECT MAX(h2.executed_at) FROM migraphe_history h2
+                      WHERE h2.environment_id = h.environment_id AND h2.node_id = h.node_id
+                  )
+                ORDER BY h.node_id
                 """;
 
         try (Connection conn = environment.createConnection();
