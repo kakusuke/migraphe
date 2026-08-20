@@ -21,12 +21,14 @@ import org.jspecify.annotations.Nullable;
  * Generic {@link HistoryRepository} that persists migration execution history in a relational
  * database via JDBC.
  *
- * <p>All records are stored in a single {@code migraphe_history} table whose schema is created by
- * {@link #initialize()} from a SQL resource on the classpath. Each query opens a short-lived
- * connection from the supplied {@link JdbcEnvironment}, so the repository keeps the migration
- * history in the same database the migrations run against. "Latest" lookups order by {@code
- * executed_at} and a node is considered applied only when its most recent record is a successful
- * {@code UP}.
+ * <p>All records are stored in a single {@code migraphe_history} table whose schema is brought up
+ * to date by {@link #initialize()} from a SQL resource on the classpath. The resource is a list of
+ * {@link SchemaStep}s — each a detection query paired with the statements applying it — so the
+ * table can gain columns and indexes over time without any schema-version bookkeeping. Each query
+ * opens a short-lived connection from the supplied {@link JdbcEnvironment}, so the repository keeps
+ * the migration history in the same database the migrations run against. "Latest" lookups order by
+ * {@code executed_at} and a node is considered applied only when its most recent record is a
+ * successful {@code UP}.
  */
 public final class JdbcHistoryRepository implements HistoryRepository {
 
@@ -62,23 +64,93 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Creates the {@code migraphe_history} table by executing the configured schema resource.
+     * Brings the {@code migraphe_history} table up to date with the configured schema resource.
      *
-     * <p>Safe to call repeatedly when the schema script is idempotent (for example uses {@code
-     * CREATE TABLE IF NOT EXISTS}).
+     * <p>The resource is parsed into {@link SchemaStep}s, each pairing a detection query with the
+     * statements that apply it. A step whose detection query returns at least one row is skipped,
+     * so calling this repeatedly is safe and no schema-version bookkeeping is needed. Detection
+     * queries run before the table exists, so a failing one is reported rather than treated as "not
+     * applied": mistaking a permission error for a missing table would turn it into a blind DDL
+     * attempt.
      *
-     * @throws JdbcException if the schema resource cannot be loaded or executed
+     * <p>When applying a step fails, the detection query runs once more. A competing process may
+     * have applied the same step in between, in which case the failure is benign and swallowed;
+     * otherwise it is reported.
+     *
+     * @throws JdbcException if the schema resource cannot be loaded, or a step cannot be detected
+     *     or applied
      */
     @Override
     public void initialize() {
-        try (Connection conn = environment.createConnection();
-                Statement stmt = conn.createStatement()) {
-            String schemaSql = loadSchemaResource();
-            stmt.execute(schemaSql);
-        } catch (SQLException e) {
-            throw new JdbcException("Failed to initialize history schema", e);
+        List<SchemaStep> steps;
+        try {
+            steps = SchemaStepParser.parse(loadSchemaResource());
         } catch (IOException e) {
             throw new JdbcException("Failed to load schema resource", e);
+        }
+
+        try (Connection conn = environment.createConnection()) {
+            for (SchemaStep step : steps) {
+                applyStep(conn, step);
+            }
+        } catch (SQLException e) {
+            throw new JdbcException("Failed to initialize history schema", e);
+        }
+    }
+
+    /**
+     * Applies one schema step unless it is already in place.
+     *
+     * <p>Package-private so the detect/apply/re-detect flow can be exercised directly.
+     *
+     * @param conn the connection to run the step on
+     * @param step the step to apply
+     * @throws JdbcException if the step cannot be detected or applied
+     */
+    void applyStep(Connection conn, SchemaStep step) {
+        if (isApplied(conn, step)) {
+            return;
+        }
+        try (Statement stmt = conn.createStatement()) {
+            for (String sql : step.applySql()) {
+                stmt.execute(sql);
+            }
+        } catch (SQLException e) {
+            // A competing process may have applied this step between our detection and our apply.
+            JdbcException failure =
+                    new JdbcException("Failed to apply schema step '" + step.label() + "'", e);
+            boolean applied;
+            try {
+                applied = isApplied(conn, step);
+            } catch (JdbcException recheckFailure) {
+                failure.addSuppressed(recheckFailure);
+                throw failure;
+            }
+            if (!applied) {
+                throw failure;
+            }
+        }
+    }
+
+    /**
+     * Runs a step's detection query.
+     *
+     * @param conn the connection to run the query on
+     * @param step the step to test
+     * @return {@code true} if the step is already applied; always {@code false} for an
+     *     unconditional step
+     * @throws JdbcException if the detection query fails
+     */
+    private boolean isApplied(Connection conn, SchemaStep step) {
+        String checkSql = step.checkSql();
+        if (checkSql == null) {
+            return false;
+        }
+        try (Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(checkSql)) {
+            return rs.next();
+        } catch (SQLException e) {
+            throw new JdbcException("Failed to detect schema step '" + step.label() + "'", e);
         }
     }
 

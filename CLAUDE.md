@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: generator output no longer nests under `generators[].name` — Markdown pages live at `<output-dir>/<schema>/`, and `index.md` is titled `# <name>` with no fixed prefix (Session 69)
-**Tests**: 1,054, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: gave the history schema an evolution path — dialect DDL resources are now lists of `--@apply` steps (with an optional `--@check` detection query) that `initialize()` walks, so existing tables can gain columns and indexes without a schema-version table (Session 70)
+**Tests**: 1,085, 100% passing
 
 ## Module Structure
 
@@ -68,6 +68,7 @@ io.github.kakusuke.migraphe.jdbc/
 ├── JdbcEnvironment, JdbcUpTask, JdbcDownTask, JdbcMigrationNode, JdbcHistoryRepository
 ├── JdbcPlugin, Jdbc{Environment,MigrationNode,HistoryRepository}Provider
 ├── JdbcEnvironmentDefinition, SqlTaskDefinition, JdbcException
+├── SchemaStep, SchemaStepParser  # history-schema steps: --@apply statements + optional --@check detection (package-private)
 ├── statement/      # SQL splitting toolkit: SqlParser, SqlParsers (combinators), StatementSplitter (StatementSplitter.standard()), DelimiterDirective
 ├── schema/         # JdbcSchemaInfo, JdbcSchemaDetail, JdbcTableInfo, JdbcViewInfo, JdbcColumnInfo, etc. (19 types)
 │                   # JdbcSchemaInfoProvider (DatabaseMetaData → JdbcSchemaInfo)
@@ -138,7 +139,8 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 19. **MySQL Generator Plugins**: `mysql-schema` source (catalog-based, information_schema) + `mysql-markdown` output via the same Template Method pattern
 20. **JitPack + Lockfile Pinning (Phase 21)**: `repositories:` (HTTPS-only), `migraphe.lock.yaml` SHA-256 pinning via `migraphe pin`/`--check`/`validate`
 21. **JitPack Distribution (Phase 22)**: JitPack is the primary distribution channel until Maven Central; `-PpublishGroup` switch, plugin-marker workaround, tag-based user docs
-22. **SQL Statement Splitting (Session 55, memoized in 66)**: parser-combinator toolkit in `migraphe-plugin-jdbc` (`...jdbc.statement`); dialect grammars defined per-plugin (PostgreSQL dollar-quote, no keyword blocks; MySQL recursive BEGIN/END blocks + DELIMITER); the MySQL block parser is wrapped in `SqlParsers.memoize` so keywords that open no block (the `IF` of `DROP TABLE IF EXISTS`) cost O(1) rejections instead of O(2^k); unified split-and-loop execution in both autocommit/transaction modes; old `SqlStatements` removed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+22. **SQL Statement Splitting (Session 55)**: parser-combinator toolkit in `migraphe-plugin-jdbc` (`...jdbc.statement`); dialect grammars defined per-plugin (PostgreSQL dollar-quote, no keyword blocks; MySQL recursive BEGIN/END blocks + DELIMITER); unified split-and-loop execution in both autocommit/transaction modes; old `SqlStatements` removed. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+23. **History Schema Evolution (Session 70)**: dialect DDL resources are lists of steps — `--@apply` (statements, starts a step) with an optional preceding `--@check` (detection query) — parsed by `SchemaStepParser` and walked by `initialize()`, one statement at a time; a step whose query returns a row is skipped, one without a query always runs. **Shipped resources use no detection**: creation leans on `IF NOT EXISTS`, which no other schema's same-named table can confuse, whereas the generic resource cannot name the current schema portably. Detection is reserved for changes lacking a portable conditional form (`ALTER TABLE ADD COLUMN` — no `IF NOT EXISTS` on Oracle MySQL). Detection queries run before the table exists (`information_schema`) and their failures propagate rather than read as "not applied"; an apply failure re-runs detection to absorb a lost race. No schema-version table, no config key. All commands share the path (`status` already created the table). A resource with no directive is one unconditional step, keeping custom plain-SQL resources working. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## CLI Project Structure
 
@@ -212,13 +214,18 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-08-20 (Session 69)
-- Dropped the `generators[].name` level from Markdown generator output (user report #6): pages moved from `<output-dir>/<name>/<schema>/…` to `<output-dir>/<schema>/…`. `GeneratorSection.source()` is singular, so one generator always documents exactly one target and the per-name namespace could only ever hold one element; two generators sharing an `output-dir` never aggregated either, because each writes `index.md` at the root and the later run wins.
-- The `index.md` heading is now `# <name>` instead of `# Database: <name>`. `name` is free-form text the user chooses, so hard-coding `Database: ` in front of it was the actual defect the report noticed. `source.target` was rejected as the title source — a target id names a connection (`target: mysql` in this repo's own sample), not a document.
-- **No public API change**: `OutputContext` is untouched. `JdbcMarkdownGenerator.name()` → `title()` (rename forces external subclasses that used it for path prefixes to fail at compile time).
-- **Breaking for output**: generated paths change and the omitted-ER-diagram link went `../../../index.md` → `../../index.md`. Regenerate docs and delete the stale `<name>/` level. A new `everyRelativeLinkResolvesToAnExistingFile` test walks all generated Markdown and asserts every relative link resolves. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-08-20 (Session 70)
+- Gave the history table an evolution path. `initialize()` used to hand its whole dialect DDL resource to a single `stmt.execute()`, so idempotency rested on `CREATE TABLE IF NOT EXISTS` alone and **an existing table could never change shape** — editing a resource only affected fresh installs. Resources are now lists of steps: `--@apply` introduces a step's statements, an optional `--@check` before it declares a detection query, `SchemaStepParser` produces `SchemaStep` records, and `initialize()` walks them one statement at a time — skipping a step whose query returns a row, always running one without a query.
+- **Detection is optional and the shipped resources use none.** Every shipped step creates an object, and `IF NOT EXISTS` expresses that conditionally in a form no other schema's same-named table can confuse. A creation-time detection query would have to answer "does this exist *here*", which the generic JDBC resource cannot: no expression names the current schema across H2, MySQL and PostgreSQL (`SCHEMA()` covers H2+MySQL but breaks `type="jdbc"` on PostgreSQL), and an unqualified `UPPER(table_name)` match would find a `migraphe_history` in another database on the same MySQL server, skip creation, and leave `INSERT` failing. So: creation leans on `IF NOT EXISTS`; **detection is reserved for changes with no portable conditional form** — chiefly `ALTER TABLE ADD COLUMN`, which Oracle MySQL cannot write as `IF NOT EXISTS`. Schema-qualifying those future queries is deferred to the PR adding the first column.
+- **No schema-version table, no config key**: idempotency is structural, a partial run resumes on the next command, and a user preferring manual DDL applies it first so the step becomes a no-op. No type-change step ships (`id VARCHAR(255)` only hurts as an index key, and existing tables were created where the limit is 3072 B).
+- Detection queries inspect `information_schema`/`pg_indexes` so they run before the table exists, and **their failures propagate** instead of reading as "not applied" — folding a permission error into "missing" would become a blind DDL attempt. An apply failure re-runs detection to absorb a lost race (original exception thrown with the re-check failure suppressed if that fails too); for an unconditional step the failure rightly propagates, since `IF NOT EXISTS` already absorbed the race. No dialect lock.
+- All commands share the path: `up`/`down`/`status` already called `initialize()` unconditionally, so `status` has always created the table.
+- PostgreSQL keeps the table and each index as separate steps: each statement runs on its own (fixing three being passed to one `execute()`), diagnostics name the failing step, and a manually dropped index self-heals on the next run.
+- Backward compatible: a resource with no directive is one unconditional step, so custom plain-SQL resources passed to `JdbcHistoryRepository(env, path)` keep working; SQL before the first directive is rejected rather than silently dropped.
+- Labels: either directive may name a step and whichever declares it wins, but a step declaring **two different** labels is rejected (previously `--@apply`'s label was silently ignored whenever `--@check` opened the step — so `--@check` + `--@apply B` now yields `B` instead of `step N`, and conflicting labels now fail instead of silently taking the first).
+- Tests: +31 (1,085 total) across H2, MySQL 8.0, MariaDB 10.1 and PostgreSQL 16. The detection mechanism and its lost-race swallow stay covered by **test-only resources** (the swallow reproduced deterministically by applying the same `CREATE TABLE` twice); the shipped resources are covered by idempotency instead. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
 ---
 
 **Last Updated**: 2026-08-20
-**Current Work**: Generator output layout — `generators[].name` is no longer a path segment (pages live at `<output-dir>/<schema>/`) and the `index.md` heading is `# <name>` with no fixed prefix. No public API change; `JdbcMarkdownGenerator.name()` renamed to `title()`. Breaking change to output paths. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+**Current Work**: History-schema evolution mechanism — dialect DDL resources became step lists (`--@apply`, optional `--@check`) walked by `initialize()`, so existing history tables can gain columns and indexes with no schema-version table, no new config key, and no special casing for `status`. Shipped steps create objects and rely on `IF NOT EXISTS`, keeping behaviour equivalent to before; detection exists for the follow-ups (#3 checksum, #5 environment identity, MariaDB ordering column), where `ALTER TABLE ADD COLUMN` has no portable conditional form. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
