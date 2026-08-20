@@ -81,9 +81,9 @@ class PostgreSQLMarkdownGeneratorTest {
         Path indexFile = tempDir.resolve("index.md");
         assertThat(indexFile).exists();
         String indexContent = Files.readString(indexFile);
-        assertThat(indexContent).contains("# Database: testdb").contains("users");
+        assertThat(indexContent).contains("# testdb").contains("users");
 
-        Path tableFile = tempDir.resolve("testdb/public/tables/users.md");
+        Path tableFile = tempDir.resolve("public/tables/users.md");
         assertThat(tableFile).exists();
         String tableContent = Files.readString(tableFile);
         assertThat(tableContent).contains("# users").contains("id");
@@ -251,8 +251,7 @@ class PostgreSQLMarkdownGeneratorTest {
         String indexContent = Files.readString(tempDir.resolve("index.md"));
         assertThat(indexContent).contains("### Functions").contains("add_nums");
 
-        Path functionFile =
-                tempDir.resolve("testdb/public/functions/add_nums_a_integer_b_integer.md");
+        Path functionFile = tempDir.resolve("public/functions/add_nums_a_integer_b_integer.md");
         assertThat(functionFile).exists();
         String functionContent = Files.readString(functionFile);
         assertThat(functionContent).contains("# add_nums").contains("sql").contains("integer");
@@ -299,7 +298,7 @@ class PostgreSQLMarkdownGeneratorTest {
 
         String functionContent =
                 Files.readString(
-                        tempDir.resolve("testdb/public/functions/add_nums_a_integer_b_integer.md"));
+                        tempDir.resolve("public/functions/add_nums_a_integer_b_integer.md"));
         assertThat(functionContent).contains("## Definition\n\n```sql\nSELECT a + b\n```\n");
     }
 
@@ -337,7 +336,7 @@ class PostgreSQLMarkdownGeneratorTest {
         String indexContent = Files.readString(tempDir.resolve("index.md"));
         assertThat(indexContent).contains("### Materialized Views").contains("mv_test");
 
-        Path matViewFile = tempDir.resolve("testdb/public/materialized-views/mv_test.md");
+        Path matViewFile = tempDir.resolve("public/materialized-views/mv_test.md");
         assertThat(matViewFile).exists();
         String matViewContent = Files.readString(matViewFile);
         assertThat(matViewContent).contains("# mv_test").contains("SELECT 1");
@@ -525,7 +524,7 @@ class PostgreSQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        Path tableFile = tempDir.resolve("testdb/public/tables/users.md");
+        Path tableFile = tempDir.resolve("public/tables/users.md");
         assertThat(tableFile).exists();
         String tableContent = Files.readString(tableFile);
         assertThat(tableContent)
@@ -587,7 +586,7 @@ class PostgreSQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        Path tableFile = tempDir.resolve("testdb/public/tables/docs.md");
+        Path tableFile = tempDir.resolve("public/tables/docs.md");
         assertThat(tableFile).exists();
         String tableContent = Files.readString(tableFile);
         assertThat(tableContent)
@@ -704,8 +703,7 @@ class PostgreSQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        Path functionFile =
-                tempDir.resolve("testdb/public/functions/add_nums_a_integer_b_integer.md");
+        Path functionFile = tempDir.resolve("public/functions/add_nums_a_integer_b_integer.md");
         String content = Files.readString(functionFile);
         assertThat(content).contains("| Owner | alice |");
     }
@@ -741,7 +739,7 @@ class PostgreSQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        Path mvFile = tempDir.resolve("testdb/public/materialized-views/mv_test.md");
+        Path mvFile = tempDir.resolve("public/materialized-views/mv_test.md");
         String content = Files.readString(mvFile);
         assertThat(content).contains("| Owner | alice |");
     }
@@ -845,10 +843,9 @@ class PostgreSQLMarkdownGeneratorTest {
         String indexContent = Files.readString(tempDir.resolve("index.md"));
         assertThat(indexContent).contains("| Name | Owner | Remarks |");
         assertThat(indexContent)
-                .containsPattern(
-                        "\\| \\[users\\]\\(testdb/public/tables/users\\.md\\) \\| alice \\|");
+                .containsPattern("\\| \\[users\\]\\(public/tables/users\\.md\\) \\| alice \\|");
 
-        String tableContent = Files.readString(tempDir.resolve("testdb/public/tables/users.md"));
+        String tableContent = Files.readString(tempDir.resolve("public/tables/users.md"));
         assertThat(tableContent).startsWith("# users\n\nOwner: alice\n\n");
     }
 
@@ -891,11 +888,10 @@ class PostgreSQLMarkdownGeneratorTest {
         assertThat(indexContent).contains("| Name | Owner | Remarks |");
         assertThat(indexContent)
                 .containsPattern(
-                        "\\| \\[active_users\\]\\(testdb/public/views/active_users\\.md\\) \\| bob"
+                        "\\| \\[active_users\\]\\(public/views/active_users\\.md\\) \\| bob"
                                 + " \\|");
 
-        String viewContent =
-                Files.readString(tempDir.resolve("testdb/public/views/active_users.md"));
+        String viewContent = Files.readString(tempDir.resolve("public/views/active_users.md"));
         assertThat(viewContent).startsWith("# active_users\n\nOwner: bob\n\n");
     }
 
@@ -944,7 +940,7 @@ class PostgreSQLMarkdownGeneratorTest {
 
         generator.generate(tempDir);
 
-        Path tableFile = tempDir.resolve("testdb/public/tables/events.md");
+        Path tableFile = tempDir.resolve("public/tables/events.md");
         assertThat(tableFile).exists();
         String tableContent = Files.readString(tableFile);
         assertThat(tableContent)
@@ -1015,7 +1011,7 @@ class PostgreSQLMarkdownGeneratorTest {
         assertThat(indexContent)
                 .containsPattern(
                         "\\| users_id_seq \\| bigint \\| 1 \\| 1 \\| 1 \\| 9999 \\| false \\|"
-                                + " \\[users\\.id\\]\\(testdb/public/tables/users\\.md\\) \\| alice"
+                                + " \\[users\\.id\\]\\(public/tables/users\\.md\\) \\| alice"
                                 + " \\|");
     }
 
@@ -1094,6 +1090,6 @@ class PostgreSQLMarkdownGeneratorTest {
                         "\\| users_id_seq \\| bigint \\| 1 \\| 1 \\| 1 \\| 9999 \\| false \\|"
                                 + " users\\.id \\| alice \\|");
         assertThat(indexContent)
-                .doesNotContainPattern("\\[users\\.id\\]\\(testdb/public/tables/users\\.md\\)");
+                .doesNotContainPattern("\\[users\\.id\\]\\(public/tables/users\\.md\\)");
     }
 }

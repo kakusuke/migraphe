@@ -167,7 +167,7 @@ migraphe generate --name schema-docs
 
 | フィールド | 必須 | デフォルト | 説明 |
 |-----------|------|-----------|------|
-| `name` | はい | — | ジェネレーター識別子（`--name` で指定） |
+| `name` | はい | — | ジェネレーター識別子（`--name` で指定）。同時に生成ドキュメントのタイトル（`index.md` の見出しとして `# <name>` の形で出力）。パスの一部にはならない |
 | `type` | はい | — | `jdbc-markdown` である必要があります |
 | `source.type` | はい | — | source プラグインのタイプ。本プラグインでは `jdbc-schema` |
 | `source.target` | はい | — | source がスキーマメタデータを読み取るターゲット名 |
@@ -190,13 +190,12 @@ migraphe generate --name schema-docs
 ```
 docs/schema/
 ├── index.md                      # データベース概要（全スキーマのテーブル/ビュー一覧・ER 図）
-└── mydb/                         # ジェネレーターの `name`
-    └── public/                   # スキーマごとに 1 ディレクトリ
-        ├── tables/
-        │   ├── users.md          # テーブル詳細（カラム・キー・インデックス）
-        │   └── posts.md
-        └── views/
-            └── recent_posts.md   # ビュー詳細
+└── public/                       # スキーマごとに 1 ディレクトリ
+    ├── tables/
+    │   ├── users.md              # テーブル詳細（カラム・キー・インデックス）
+    │   └── posts.md
+    └── views/
+        └── recent_posts.md       # ビュー詳細
 ```
 
 `index.md` は `output-dir` 直下に 1 つだけ生成されます（スキーマごとの `index.md` はありません）。スキーマディレクトリの中には `tables/` と `views/` のみが置かれます。

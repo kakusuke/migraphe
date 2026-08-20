@@ -167,7 +167,7 @@ For the `jdbc-markdown` output type:
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|
-| `name` | Yes | — | Generator identifier (used by `--name`) |
+| `name` | Yes | — | Generator identifier (used by `--name`) and the title of the generated documentation (the `index.md` heading, rendered as `# <name>`). Never a path segment |
 | `type` | Yes | — | Must be `jdbc-markdown` |
 | `source.type` | Yes | — | Source plugin type; `jdbc-schema` for this plugin |
 | `source.target` | Yes | — | Target name the source reads schema metadata from |
@@ -190,13 +190,12 @@ The `jdbc-markdown` generator produces:
 ```
 docs/schema/
 ├── index.md                      # Database overview (all schemas, tables/views, ER diagram)
-└── mydb/                         # `name` of the generator
-    └── public/                   # one directory per schema
-        ├── tables/
-        │   ├── users.md          # Table details (columns, keys, indexes)
-        │   └── posts.md
-        └── views/
-            └── recent_posts.md   # View details
+└── public/                       # one directory per schema
+    ├── tables/
+    │   ├── users.md              # Table details (columns, keys, indexes)
+    │   └── posts.md
+    └── views/
+        └── recent_posts.md       # View details
 ```
 
 The single `index.md` sits directly under `output-dir` (there is no per-schema `index.md`); schema directories hold only `tables/` and `views/`.

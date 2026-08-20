@@ -21,8 +21,12 @@ import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Types;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -558,7 +562,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        assertThat(outputDir.resolve("mydb/PUBLIC/tables/users.md")).exists();
+        assertThat(outputDir.resolve("PUBLIC/tables/users.md")).exists();
     }
 
     @Test
@@ -567,7 +571,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(content)
                 .contains("| id |")
                 .contains("| name |")
@@ -582,7 +586,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(content).contains("## Primary Key").contains("id");
     }
 
@@ -592,7 +596,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/orders.md"));
         assertThat(content).contains("users").contains("[users](../../PUBLIC/tables/users.md)");
     }
 
@@ -602,7 +606,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/orders.md"));
         assertThat(content).contains("idx_orders_user_id");
     }
 
@@ -612,7 +616,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        Path viewFile = outputDir.resolve("mydb/PUBLIC/views/active_users.md");
+        Path viewFile = outputDir.resolve("PUBLIC/views/active_users.md");
         assertThat(viewFile).exists();
         String content = Files.readString(viewFile);
         assertThat(content)
@@ -641,9 +645,9 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        assertThat(outputDir.resolve("mydb/PUBLIC/tables/users.md")).doesNotExist();
-        assertThat(outputDir.resolve("mydb/PUBLIC/tables/orders.md")).doesNotExist();
-        assertThat(outputDir.resolve("mydb/PUBLIC/views/active_users.md")).doesNotExist();
+        assertThat(outputDir.resolve("PUBLIC/tables/users.md")).doesNotExist();
+        assertThat(outputDir.resolve("PUBLIC/tables/orders.md")).doesNotExist();
+        assertThat(outputDir.resolve("PUBLIC/views/active_users.md")).doesNotExist();
     }
 
     @Test
@@ -677,7 +681,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(content).contains("ユーザーマスタテーブル");
     }
 
@@ -706,7 +710,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/views/active_users.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/views/active_users.md"));
         assertThat(content)
                 .contains("# active_users")
                 .contains("アクティブユーザービュー")
@@ -723,7 +727,7 @@ class JdbcMarkdownGeneratorTest {
         assertThat(content)
                 .contains("| Name | Remarks |")
                 .contains("| --- | --- |")
-                .contains("| [users](mydb/PUBLIC/tables/users.md) |")
+                .contains("| [users](PUBLIC/tables/users.md) |")
                 .doesNotContain("- [users]")
                 .doesNotContain("- [orders]");
     }
@@ -800,8 +804,8 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        assertThat(outputDir.resolve("mydb/PUBLIC/tables/users.md")).exists();
-        assertThat(outputDir.resolve("mydb/PUBLIC/tables/orders.md")).doesNotExist();
+        assertThat(outputDir.resolve("PUBLIC/tables/users.md")).exists();
+        assertThat(outputDir.resolve("PUBLIC/tables/orders.md")).doesNotExist();
     }
 
     @Test
@@ -825,7 +829,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        assertThat(outputDir.resolve("mydb/PUBLIC/tables/users.md")).exists();
+        assertThat(outputDir.resolve("PUBLIC/tables/users.md")).exists();
     }
 
     @Test
@@ -852,8 +856,7 @@ class JdbcMarkdownGeneratorTest {
         assertThat(content)
                 .contains("| Name | Engine | Remarks |")
                 .contains("| --- | --- | --- |")
-                .containsPattern(
-                        "\\| \\[users\\]\\(mydb/PUBLIC/tables/users\\.md\\) \\| InnoDB \\|");
+                .containsPattern("\\| \\[users\\]\\(PUBLIC/tables/users\\.md\\) \\| InnoDB \\|");
     }
 
     @Test
@@ -902,7 +905,7 @@ class JdbcMarkdownGeneratorTest {
                 .contains("| Name | Definer | Remarks |")
                 .contains("| --- | --- | --- |")
                 .containsPattern(
-                        "\\| \\[active_users\\]\\(mydb/PUBLIC/views/active_users\\.md\\) \\| root@%"
+                        "\\| \\[active_users\\]\\(PUBLIC/views/active_users\\.md\\) \\| root@%"
                                 + " \\|");
     }
 
@@ -922,7 +925,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(content).startsWith("# users\n\nOwner: dba\n\n");
     }
 
@@ -942,7 +945,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/views/active_users.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/views/active_users.md"));
         assertThat(content).startsWith("# active_users\n\nDefiner: root@%\n\n");
     }
 
@@ -1514,7 +1517,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/SALES/tables/orders.md"));
+        String content = Files.readString(outputDir.resolve("SALES/tables/orders.md"));
         assertThat(content).contains("[users](../../AUTH/tables/users.md)");
     }
 
@@ -1598,7 +1601,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/AUTH/tables/users.md"));
+        String content = Files.readString(outputDir.resolve("AUTH/tables/users.md"));
         assertThat(content).contains("[orders](../../SALES/tables/orders.md)");
     }
 
@@ -1792,7 +1795,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/orders.md"));
         assertThat(content).contains("[users](../../PUBLIC/tables/users.md)");
         assertThat(content).doesNotContain("../../public/tables/users.md");
     }
@@ -1802,12 +1805,11 @@ class JdbcMarkdownGeneratorTest {
         var generator = new JdbcMarkdownGenerator("mydb", buildFkChainSchemaInfo(), List.of());
         generator.generate(outputDir);
 
-        String orderItems =
-                Files.readString(outputDir.resolve("mydb/PUBLIC/tables/order_items.md"));
+        String orderItems = Files.readString(outputDir.resolve("PUBLIC/tables/order_items.md"));
         assertThat(orderItems).contains(expectedErId("PUBLIC", "orders"));
         assertThat(orderItems).contains(expectedErId("PUBLIC", "users"));
 
-        String orders = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        String orders = Files.readString(outputDir.resolve("PUBLIC/tables/orders.md"));
         assertThat(orders).contains(expectedErId("PUBLIC", "users"));
         assertThat(orders).doesNotContain(expectedErId("PUBLIC", "products"));
     }
@@ -1818,7 +1820,7 @@ class JdbcMarkdownGeneratorTest {
         var generator = new JdbcMarkdownGenerator("mydb", buildFkChainSchemaInfo(), List.of());
         generator.generate(outputDir);
 
-        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String users = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(users).contains(expectedErId("PUBLIC", "orders"));
         assertThat(users).contains(expectedErId("PUBLIC", "order_items"));
         assertThat(users).doesNotContain(expectedErId("PUBLIC", "products"));
@@ -2004,7 +2006,7 @@ class JdbcMarkdownGeneratorTest {
         generator.generate(outputDir);
 
         String tableContent =
-                Files.readString(outputDir.resolve("mydb/account/tables/user_accounts.md"));
+                Files.readString(outputDir.resolve("account/tables/user_accounts.md"));
         assertThat(tableContent).contains("| status | user_account_status | NO |  | NO |  |\n");
         assertThat(tableContent).doesNotContain("\"account\".\"user_account_status\"");
         assertThat(tableContent).doesNotContain("(2147483647)");
@@ -2143,8 +2145,7 @@ class JdbcMarkdownGeneratorTest {
                                                 && line.contains(ordersErId));
         assertThat(relationshipLinePresent).isTrue();
 
-        String ordersFileContent =
-                Files.readString(outputDir.resolve("mydb/sales/tables/orders.md"));
+        String ordersFileContent = Files.readString(outputDir.resolve("sales/tables/orders.md"));
         assertThat(ordersFileContent).contains("[users](../../account/tables/users.md)");
     }
 
@@ -2258,8 +2259,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String ordersFileContent =
-                Files.readString(outputDir.resolve("mydb/sales/tables/orders.md"));
+        String ordersFileContent = Files.readString(outputDir.resolve("sales/tables/orders.md"));
         assertThat(ordersFileContent).contains("[widgets](../../Account/tables/widgets.md)");
     }
 
@@ -2297,7 +2297,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String tableContent = Files.readString(outputDir.resolve("mydb/public/tables/t.md"));
+        String tableContent = Files.readString(outputDir.resolve("public/tables/t.md"));
         assertThat(tableContent).doesNotContain("| c |  |").contains("weird");
 
         String indexContent = Files.readString(outputDir.resolve("index.md"));
@@ -2338,7 +2338,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String tableContent = Files.readString(outputDir.resolve("mydb/public/tables/t.md"));
+        String tableContent = Files.readString(outputDir.resolve("public/tables/t.md"));
         assertThat(tableContent).contains("| c | weird | NO |  | NO |  |\n");
         assertThat(tableContent).doesNotContain("weird.");
 
@@ -2412,7 +2412,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/public/tables/orders.md"));
+        String content = Files.readString(outputDir.resolve("public/tables/orders.md"));
         assertThat(content).contains("../../public/tables/ext_things.md");
         assertThat(content).doesNotContain("../../PUBLIC/tables/ext_things.md");
     }
@@ -2423,7 +2423,7 @@ class JdbcMarkdownGeneratorTest {
 
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(content).contains("## ER Diagram\n\n```mermaid\n");
         assertThat(content).contains("  " + expectedErId("PUBLIC", "users") + "[\"users\"] {\n");
         assertThat(content.indexOf("## ER Diagram")).isLessThan(content.indexOf("## Columns"));
@@ -2436,7 +2436,7 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildSchemaInfo(), List.of(), true, false, "elk", false);
         generator.generate(outputDir);
 
-        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String users = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(users).doesNotContain("## ER Diagram");
 
         String index = Files.readString(outputDir.resolve("index.md"));
@@ -2448,7 +2448,7 @@ class JdbcMarkdownGeneratorTest {
         var generator = new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of(), false);
         generator.generate(outputDir);
 
-        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String users = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(users).doesNotContain("## ER Diagram");
 
         String index = Files.readString(outputDir.resolve("index.md"));
@@ -2463,10 +2463,10 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildFkChainSchemaInfo(), List.of(), true, false, "elk", true, 1);
         generator.generate(outputDir);
 
-        String orders = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
+        String orders = Files.readString(outputDir.resolve("PUBLIC/tables/orders.md"));
         assertThat(orders).contains("## ER Diagram");
         assertThat(orders).doesNotContain("```mermaid");
-        assertThat(orders).contains("../../../index.md");
+        assertThat(orders).contains("../../index.md");
     }
 
     @Test
@@ -2475,7 +2475,7 @@ class JdbcMarkdownGeneratorTest {
         var generator = new JdbcMarkdownGenerator("mydb", buildFkChainSchemaInfo(), List.of());
         generator.generate(outputDir);
 
-        String products = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/products.md"));
+        String products = Files.readString(outputDir.resolve("PUBLIC/tables/products.md"));
         assertThat(products).contains(expectedErId("PUBLIC", "products"));
         assertThat(products).contains(expectedErId("PUBLIC", "order_items"));
         assertThat(products).doesNotContain(expectedErId("PUBLIC", "users"));
@@ -2489,7 +2489,7 @@ class JdbcMarkdownGeneratorTest {
                 new JdbcMarkdownGenerator("mydb", buildSelfReferencingSchemaInfo(), List.of());
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/employees.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/employees.md"));
         String entityId = expectedErId("PUBLIC", "employees");
         assertThat(content).containsOnlyOnce(entityId + "[\"employees\"]");
         assertThat(content).containsOnlyOnce(entityId + " ||--o{ " + entityId);
@@ -2502,7 +2502,7 @@ class JdbcMarkdownGeneratorTest {
                 new JdbcMarkdownGenerator("mydb", buildMutualReferenceSchemaInfo(), List.of());
         generator.generate(outputDir);
 
-        String content = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/a.md"));
+        String content = Files.readString(outputDir.resolve("PUBLIC/tables/a.md"));
         assertThat(content).contains(expectedErId("PUBLIC", "a"));
         assertThat(content).contains(expectedErId("PUBLIC", "b"));
     }
@@ -2514,10 +2514,10 @@ class JdbcMarkdownGeneratorTest {
                 new JdbcMarkdownGenerator("mydb", buildCrossSchemaFkSchemaInfo(), List.of());
         generator.generate(outputDir);
 
-        String orders = Files.readString(outputDir.resolve("mydb/SALES/tables/orders.md"));
+        String orders = Files.readString(outputDir.resolve("SALES/tables/orders.md"));
         assertThat(orders).contains(expectedErId("AUTH", "users"));
 
-        String users = Files.readString(outputDir.resolve("mydb/AUTH/tables/users.md"));
+        String users = Files.readString(outputDir.resolve("AUTH/tables/users.md"));
         assertThat(users).contains(expectedErId("SALES", "orders"));
     }
 
@@ -2529,10 +2529,9 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildFkChainSchemaInfo(), List.of(excludeTable("orders")));
         generator.generate(outputDir);
 
-        assertThat(outputDir.resolve("mydb/PUBLIC/tables/orders.md")).doesNotExist();
+        assertThat(outputDir.resolve("PUBLIC/tables/orders.md")).doesNotExist();
 
-        String orderItems =
-                Files.readString(outputDir.resolve("mydb/PUBLIC/tables/order_items.md"));
+        String orderItems = Files.readString(outputDir.resolve("PUBLIC/tables/order_items.md"));
         assertThat(orderItems).doesNotContain(expectedErId("PUBLIC", "users"));
     }
 
@@ -2544,7 +2543,7 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildFkChainSchemaInfo(), List.of(), true, false, null, true, 2);
         generator.generate(outputDir);
 
-        String products = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/products.md"));
+        String products = Files.readString(outputDir.resolve("PUBLIC/tables/products.md"));
         assertThat(products).contains("```mermaid");
         assertThat(products).doesNotContain("ER diagram omitted");
     }
@@ -2557,7 +2556,7 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildFkChainSchemaInfo(), List.of(), true, false, null, true, 0);
         generator.generate(outputDir);
 
-        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String users = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(users).contains("```mermaid");
         assertThat(users).doesNotContain("ER diagram omitted");
     }
@@ -2570,7 +2569,7 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildFkChainSchemaInfo(), List.of(), true, false, null, true, -1);
         generator.generate(outputDir);
 
-        String users = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/users.md"));
+        String users = Files.readString(outputDir.resolve("PUBLIC/tables/users.md"));
         assertThat(users).contains("```mermaid");
         assertThat(users).doesNotContain("ER diagram omitted");
     }
@@ -2583,8 +2582,8 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildFkChainSchemaInfo(), List.of(), true, false, "elk", true, 1);
         generator.generate(outputDir);
 
-        String orders = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/orders.md"));
-        assertThat(orders).contains("](../../../index.md)");
+        String orders = Files.readString(outputDir.resolve("PUBLIC/tables/orders.md"));
+        assertThat(orders).contains("](../../index.md)");
     }
 
     @Test
@@ -2595,10 +2594,65 @@ class JdbcMarkdownGeneratorTest {
                         "mydb", buildFkChainSchemaInfo(), List.of(), true, true, null, true, 1);
         generator.generate(outputDir);
 
-        String products = Files.readString(outputDir.resolve("mydb/PUBLIC/tables/products.md"));
+        String products = Files.readString(outputDir.resolve("PUBLIC/tables/products.md"));
         assertThat(products).contains("## ER Diagram");
         assertThat(products).doesNotContain("```mermaid");
         assertThat(products)
                 .contains("ER diagram omitted: this table's neighborhood includes 2 entities");
+    }
+
+    private static final Pattern MARKDOWN_LINK = Pattern.compile("\\]\\(([^)]+)\\)");
+
+    /**
+     * Walks every generated Markdown file and asserts that each relative link resolves to a file
+     * that actually exists. Guards the whole cross-linking scheme at once: index -&gt; detail
+     * pages, foreign-key links between table pages, and the omitted-ER-diagram link back to the
+     * index. A change to the directory depth that forgets to adjust a {@code ../} prefix fails
+     * here.
+     */
+    @Test
+    void everyRelativeLinkResolvesToAnExistingFile(@TempDir Path outputDir) throws Exception {
+        var generator =
+                new JdbcMarkdownGenerator(
+                        "mydb", buildFkChainSchemaInfo(), List.of(), true, false, "elk", true, 1);
+        generator.generate(outputDir);
+
+        List<String> broken = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(outputDir)) {
+            for (Path file : files.filter(f -> f.toString().endsWith(".md")).toList()) {
+                Matcher m = MARKDOWN_LINK.matcher(Files.readString(file));
+                while (m.find()) {
+                    String link = m.group(1);
+                    Path resolved = file.getParent().resolve(link).normalize();
+                    if (!Files.exists(resolved)) {
+                        broken.add(outputDir.relativize(file) + " -> " + link);
+                    }
+                }
+            }
+        }
+
+        assertThat(broken).isEmpty();
+    }
+
+    @Test
+    void tableAndViewFilesAreWrittenDirectlyUnderTheSchemaDirectory(@TempDir Path outputDir) {
+        var generator = new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of());
+
+        generator.generate(outputDir);
+
+        assertThat(outputDir.resolve("PUBLIC/tables/users.md")).exists();
+        assertThat(outputDir.resolve("PUBLIC/views/active_users.md")).exists();
+        assertThat(outputDir.resolve("mydb")).doesNotExist();
+    }
+
+    @Test
+    void indexLinksOmitTheGeneratorNameLevel(@TempDir Path outputDir) throws Exception {
+        var generator = new JdbcMarkdownGenerator("mydb", buildSchemaInfo(), List.of());
+
+        generator.generate(outputDir);
+
+        String content = Files.readString(outputDir.resolve("index.md"));
+        assertThat(content).contains("| [users](PUBLIC/tables/users.md) |");
+        assertThat(content).doesNotContain("mydb/PUBLIC");
     }
 }

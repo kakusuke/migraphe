@@ -2,7 +2,26 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-20 (Session 69)
+- **生成物の階層からジェネレータ名を落とし、`index.md` の見出しを `# <name>` にした**(MariaDB 利用者からの報告 #6)
+  - **問題**: Markdown アウトプットプラグインは詳細ページを `<output-dir>/<generators[].name>/<schema>/` に書き、`index.md` の見出しを `# Database: <generators[].name>` にしていた。`name: schema-docs` と設定した利用者の生成物が `docs/schema/schema-docs/readingfarm/tables/…` / `# Database: schema-docs` になる。**1 つの YAML キーが「`--name` のフィルタキー」「ディレクトリの名前空間」「DB ラベル」の 3 役を兼務**していた。リポジトリ自身のサンプル設定でも同じ症状が再現していた。
+  - **パスの役割を外す**: `ProjectConfig.GeneratorSection.source()` は**単数**(`SourceSection` を 1 つ返し、`type` / `target` も単数の `Optional<String>`)。つまり **1 generator = 1 source = 1 target = 1 DB** で、name ごとの名前空間は構造上つねに 1 要素しか持てない。さらに複数の generator を同じ `output-dir` に向けても `index.md` は `output-dir` 直下に書かれるため**後勝ちで上書き**され、集約用途としても成立していなかった。名前空間は `output-dir` で足りる。
+  - **タイトルの役割は残し、枕詞を外す**: 見出しは `# Database: <name>` から **`# <name>`** に変更。`name` は利用者が自由に書けるラベルなので、その前に `Database: ` と決めつけるのが誤りだった(報告が「見出しも変」と言っていた原因は `name` の値ではなくこの枕詞)。
+    - **`source.target` を見出しに使う案は却下**した。target id は**接続先の識別子**であってドキュメントのタイトルではない。実際このリポジトリのサンプルは `target: mysql` / `target: pg` であり、`# Database: mysql` はタイトルとして意味を成さない。
+    - `name` は必須項目なので、**target 不在時のフォールバックという概念自体が不要**になった。結果として **本変更の公開 API 追加はゼロ**(`OutputContext` は無変更)。
+  - **`name()` → `title()` の改名**: `JdbcMarkdownGenerator` のフィールドとアクセサを改名した。リポジトリ内の 2 つのサブクラス(MySQL / PostgreSQL)は `name()` を**パスのプレフィックス構築にしか使っていなかった**(全 7 箇所)。名前を据え置くと外部のサブクラスがそのままパスに前置し続け、**基底クラスと矛盾したレイアウトを静かに出力**しうるため、コンパイルエラーで気付ける形にした。`databaseLabel()` ではなく `title()` にしたのは、見出しの出所が `name` に戻った以上「データベースのラベル」は実態と合わないため。
+  - **相対リンクの深さ**: FK 相互リンク `../../<schema>/tables/<t>.md` は**変更不要**(リンク元・リンク先が同じだけ 1 段浅くなるため)。一方、ER 図省略時のインデックスへのリンクは `../../../index.md` → `../../index.md` の修正が必要だった。この種の見落としを潰すため、**生成された全 Markdown を走査して各相対リンクの実ファイル存在を検証する** `everyRelativeLinkResolvesToAnExistingFile` テストを追加した(ER 図省略の分岐を通る fixture を使用)。このテストは変更前にも通る特性テストで、Red ではなく変更中の `../` 付け替え漏れを捕まえるガードとして機能した(実際に検出させた)。
+  - **テスト**(3 本追加、全 1,054 テスト green): テーブル/ビューがスキーマ直下に出ること、`index.md` のリンクが 1 段浅くなること、全相対リンクの健全性。既存の見出しアサーション 3 箇所を `# <name>` 形式へ、旧レイアウト前提のアサーション(jdbc 47 / MySQL 13 / PG 5 箇所ほか)を更新した。
+  - **サンプル生成物について**: `.gitignore` に `sample/**/docs/` があり、サンプルの生成物は**コミットされていない**。再生成やパスの付け替えは不要。
+  - **検証**: `./gradlew clean build --warning-mode all` で ErrorProne/NullAway 警告ゼロ、全モジュール green(1,054 テスト)、spotless 適用済み。
+  - **⚠️ リリース時の注意点**:
+    - **破壊的変更(出力パス)**: 既存利用者の生成物のパスが 1 段浅くなる。既存の `<output-dir>/<name>/` ディレクトリは**手で削除**したうえで再生成が必要。生成物を VCS に入れている場合は差分が大きくなる。
+    - 生成物を外部サイトにホストしている場合、**既存 URL がすべて変わる**。
+    - **見出しの文言が変わる**(`# Database: foo` → `# foo`)。見出し文字列に依存した後処理スクリプトがあると壊れる。
+    - **`JdbcMarkdownGenerator.name()` が消滅**(`title()` へ改名)。同クラスを継承した外部プラグインはコンパイルエラーになる。公開 API(`migraphe-api`)の変更は無い。
+
 ### 2026-08-20 (Session 68)
+
 - **`mysql-markdown` のルーチン出力が空だった問題を修正 — 引数表と定義本体を出力し、PostgreSQL 側の関数本体も対称化**(MariaDB 利用者からの報告 #4)
   - **バグの本質**: `MySQLSchemaInfoProvider.extractRoutines()` は `information_schema.PARAMETERS` を**一度も引いておらず**、`MySQLRoutineInfo.parameterList` に**空文字をハードコード**していた(record の Javadoc にも "currently always empty" と明記されていた = 意図的な未実装)。加えて `ROUTINE_DEFINITION` を SELECT していなかったため定義本体も存在しなかった。結果、ルーチン詳細ページには `| Parameters | |` という空欄行だけが出て、本体セクションは無かった。報告者環境では DB 側に情報がある(parameters 7 件 / routine_definition 22,291 文字)。
   - **引数の取得**: `information_schema.PARAMETERS` を `WHERE SPECIFIC_SCHEMA = ? AND ORDINAL_POSITION > 0` で引き、`RoutineKey(schema, name, type)` レコードでグルーピング。

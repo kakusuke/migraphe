@@ -762,7 +762,7 @@ generators:
 ```
 
 **Fields:**
-- `name` (required): Identifier for this generator
+- `name` (required): Identifier for this generator, selectable via `migraphe generate --name`. Markdown output plugins also use it as the documentation title, emitted as the `index.md` heading `# <name>`. It is never part of the output path.
 - `type` (required): Output plugin type (e.g., `jdbc-markdown`, `output-json`)
 - `source` (required for source/output flow):
   - `type`: Source plugin type (e.g., `jdbc-schema`, `migration-tree`)
@@ -809,7 +809,7 @@ migraphe generate --name mydb
 
 ### Output Structure
 
-Markdown output plugins (`jdbc-markdown`, `postgresql-markdown`, `mysql-markdown`) write a single database-wide `index.md` directly under `output-dir`, plus one directory per schema (`<output-dir>/<name>/<schema>/`) containing a `tables/` and a `views/` directory. Every table page lists column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links — both the **Foreign Keys** (imported keys) and **Referenced By** (exported keys) perspectives — and indexes. The exact directory layout and the imported-vs-exported foreign-key rendering are documented in the [`migraphe-plugin-jdbc` README](../migraphe-plugin-jdbc/README.md).
+Markdown output plugins (`jdbc-markdown`, `postgresql-markdown`, `mysql-markdown`) write a single database-wide `index.md` directly under `output-dir`, plus one directory per schema (`<output-dir>/<schema>/`) containing a `tables/` and a `views/` directory. Every table page lists column definitions (name, type, nullable, default), primary/unique keys, foreign keys with cross-links — both the **Foreign Keys** (imported keys) and **Referenced By** (exported keys) perspectives — and indexes. The exact directory layout and the imported-vs-exported foreign-key rendering are documented in the [`migraphe-plugin-jdbc` README](../migraphe-plugin-jdbc/README.md).
 
 By default, `index.md` also embeds a single database-wide **ER diagram** in Mermaid `erDiagram` notation (a fenced ```mermaid block, rendered inline by GitHub and most Markdown viewers). Each table becomes an entity with its columns (type plus PK/FK markers; a column that is both is marked `PK, FK`), and foreign keys become relationships (`||--o{`). The diagram is schema-aware: tables from different schemas are distinct entities even when they share a name, cross-schema foreign keys are drawn, and cross-schema table links in the per-table pages resolve to the referenced schema's directory. Column types are shown by their base name (e.g. a PostgreSQL enum type is rendered as `user_account_status`, not its quoted schema-qualified form). It stays a single combined diagram — Mermaid `erDiagram` has no grouping construct, so tables are not boxed per schema. Set `er-diagram: false` on the generator to suppress this section, or `er-diagram-keys-only: true` to keep the diagram compact by showing only primary-key and foreign-key columns for each entity.
 
@@ -824,7 +824,7 @@ When a neighborhood grows past `er-diagram-per-table-max-entities` (default `60`
 ```markdown
 ## ER Diagram
 
-ER diagram omitted: this table's neighborhood includes 82 entities, exceeding the configured limit of 60. See the full [ER diagram](../../../index.md) in the database index instead.
+ER diagram omitted: this table's neighborhood includes 82 entities, exceeding the configured limit of 60. See the full [ER diagram](../../index.md) in the database index instead.
 ```
 
 #### ER Diagram Rendering Notes

@@ -89,11 +89,8 @@ class JdbcMarkdownPluginTest {
         };
     }
 
-    private Path usersMdPath(String schemaName, JdbcMarkdownDefinition definition) {
-        return tempDir.resolve(definition.name())
-                .resolve(schemaName)
-                .resolve("tables")
-                .resolve("USERS.md");
+    private Path usersMdPath(String schemaName) {
+        return tempDir.resolve(schemaName).resolve("tables").resolve("USERS.md");
     }
 
     private DefinitionResolver resolverFor(GeneratorDefinition definition) {
@@ -159,7 +156,7 @@ class JdbcMarkdownPluginTest {
 
         var indexMd = tempDir.resolve("index.md");
         assertThat(indexMd).exists();
-        assertThat(Files.readString(indexMd)).startsWith("# Database: testdb");
+        assertThat(Files.readString(indexMd)).startsWith("# testdb");
     }
 
     @Test
@@ -187,7 +184,7 @@ class JdbcMarkdownPluginTest {
         outputPlugin.output(schemaInfo, context);
 
         String schemaName = schemaInfo.schemas().get(0).name();
-        var usersMd = usersMdPath(schemaName, definition);
+        var usersMd = usersMdPath(schemaName);
         assertThat(Files.readString(usersMd))
                 .contains("[ORDERS](../../" + schemaName + "/tables/ORDERS.md)");
     }
@@ -203,7 +200,7 @@ class JdbcMarkdownPluginTest {
         outputPlugin.output(schemaInfo, context);
 
         String schemaName = schemaInfo.schemas().get(0).name();
-        var usersMd = usersMdPath(schemaName, definition);
+        var usersMd = usersMdPath(schemaName);
         assertThat(Files.readString(usersMd)).doesNotContain("## ER Diagram");
 
         var indexMd = tempDir.resolve("index.md");
@@ -237,7 +234,7 @@ class JdbcMarkdownPluginTest {
         outputPlugin.output(schemaInfo, context);
 
         String schemaName = schemaInfo.schemas().get(0).name();
-        var usersMd = usersMdPath(schemaName, definition);
+        var usersMd = usersMdPath(schemaName);
         String content = Files.readString(usersMd);
         assertThat(content).contains("## ER Diagram");
         assertThat(content).doesNotContain("```mermaid");

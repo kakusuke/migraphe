@@ -27,10 +27,15 @@ public interface JdbcMarkdownDefinition extends GeneratorDefinition {
     String type();
 
     /**
-     * Returns the database name used to title the generated documentation and to namespace the
-     * output directory layout.
+     * Returns this generator's configured name, which serves two purposes: it is the title of the
+     * generated documentation (the {@code index.md} heading) and the key that selects this
+     * generator via {@code migraphe generate --name}.
      *
-     * @return the database name from configuration
+     * <p>It never appears in the output <em>path</em>: generated files live directly under {@code
+     * <output-dir>/<schema>/}. Because the name is a free-form label chosen by the user, the
+     * heading is rendered as {@code # <name>} without any fixed prefix.
+     *
+     * @return the generator name from configuration
      */
     String name();
 
