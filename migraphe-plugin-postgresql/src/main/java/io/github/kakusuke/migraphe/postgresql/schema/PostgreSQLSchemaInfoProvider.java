@@ -182,7 +182,8 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                         + " pg_get_function_result(p.oid) AS return_type,"
                         + " l.lanname AS language,"
                         + " p.prokind = 'p' AS is_procedure,"
-                        + " pg_get_userbyid(p.proowner) AS owner"
+                        + " pg_get_userbyid(p.proowner) AS owner,"
+                        + " p.prosrc AS definition"
                         + " FROM pg_proc p"
                         + " JOIN pg_namespace n ON p.pronamespace = n.oid"
                         + " JOIN pg_language l ON p.prolang = l.oid"
@@ -198,7 +199,8 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
                                 rs.getString("return_type"),
                                 rs.getString("language"),
                                 rs.getBoolean("is_procedure"),
-                                rs.getString("owner")));
+                                rs.getString("owner"),
+                                rs.getString("definition")));
             }
         }
         return result;

@@ -256,6 +256,51 @@ class PostgreSQLMarkdownGeneratorTest {
         assertThat(functionFile).exists();
         String functionContent = Files.readString(functionFile);
         assertThat(functionContent).contains("# add_nums").contains("sql").contains("integer");
+        assertThat(functionContent).doesNotContain("## Definition");
+    }
+
+    @Test
+    void functionFileIncludesDefinitionBody(@TempDir Path tempDir) throws Exception {
+        var schemaDetail =
+                new JdbcSchemaDetail(
+                        "public",
+                        List.of(),
+                        List.of(),
+                        List.<JdbcRoutineInfo>of(),
+                        List.<JdbcTriggerInfo>of(),
+                        List.<JdbcSequenceInfo>of(),
+                        List.<JdbcUdtInfo>of());
+        var schemaInfo =
+                new PostgreSQLSchemaInfo(
+                        List.of(schemaDetail),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(
+                                new PostgreSQLFunctionInfo(
+                                        "public",
+                                        "add_nums",
+                                        "a integer, b integer",
+                                        "integer",
+                                        "sql",
+                                        false,
+                                        "postgres",
+                                        "SELECT a + b")),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of());
+
+        var generator =
+                new PostgreSQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of());
+
+        generator.generate(tempDir);
+
+        String functionContent =
+                Files.readString(
+                        tempDir.resolve("testdb/public/functions/add_nums_a_integer_b_integer.md"));
+        assertThat(functionContent).contains("## Definition\n\n```sql\nSELECT a + b\n```\n");
     }
 
     @Test

@@ -88,6 +88,22 @@ class PostgreSQLSchemaInfoProviderTest {
     }
 
     @Test
+    void shouldExtractFunctionDefinition() throws Exception {
+        executeSql(
+                "CREATE FUNCTION multiply_numbers(a integer, b integer) RETURNS integer AS"
+                        + " 'SELECT a * b' LANGUAGE sql");
+
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+
+        var func =
+                info.functions().stream()
+                        .filter(f -> f.name().equals("multiply_numbers"))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(func.definition()).contains("SELECT a * b");
+    }
+
+    @Test
     void shouldExtractTriggers() throws Exception {
         executeSql("CREATE TABLE trigger_test (id serial PRIMARY KEY, name text)");
         executeSql(

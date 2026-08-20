@@ -2,6 +2,28 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-20 (Session 68)
+- **`mysql-markdown` のルーチン出力が空だった問題を修正 — 引数表と定義本体を出力し、PostgreSQL 側の関数本体も対称化**(MariaDB 利用者からの報告 #4)
+  - **バグの本質**: `MySQLSchemaInfoProvider.extractRoutines()` は `information_schema.PARAMETERS` を**一度も引いておらず**、`MySQLRoutineInfo.parameterList` に**空文字をハードコード**していた(record の Javadoc にも "currently always empty" と明記されていた = 意図的な未実装)。加えて `ROUTINE_DEFINITION` を SELECT していなかったため定義本体も存在しなかった。結果、ルーチン詳細ページには `| Parameters | |` という空欄行だけが出て、本体セクションは無かった。報告者環境では DB 側に情報がある(parameters 7 件 / routine_definition 22,291 文字)。
+  - **引数の取得**: `information_schema.PARAMETERS` を `WHERE SPECIFIC_SCHEMA = ? AND ORDINAL_POSITION > 0` で引き、`RoutineKey(schema, name, type)` レコードでグルーピング。
+    - **`ROUTINE_TYPE` をキーに含めるのが必須**: MySQL はプロシージャと関数を別名前空間に持つため**同名の PROCEDURE と FUNCTION が共存できる**。名前だけでキーイングすると両者の引数リストがマージされる(Session 65 で直した FK 集約バグと同型)。手動ミューテーション(キーから型を落とす)で該当テストが `["f1", "p1", "p2"]` と混ざって落ちることを確認済み。
+    - **`ORDINAL_POSITION > 0` フィルタ**: FUNCTION は戻り値を `ORDINAL_POSITION = 0`(`PARAMETER_MODE` / `PARAMETER_NAME` が NULL)の行として報告する。引数ではないので SQL 側で除外する。戻り型は従来どおり `ROUTINES.DTD_IDENTIFIER` 由来の `Data Type` 行で出る。
+    - **`DTD_IDENTIFIER` の値はサーバ差がある**(MariaDB 10.1 は `int(11)`、MySQL 8.0 は `int`)。テストは型文字列を固定せず「非空であること」だけを検証する。
+  - **定義本体**: `ROUTINES` の SELECT に `ROUTINE_DEFINITION` を追加。**権限が無いと NULL になる仕様**(MySQL 8.0.20+ は `SHOW_ROUTINE` 権限、5.x は `mysql.proc` への SELECT)なので、null / 空白ならセクションを出さない(空の見出しを出さない)。
+  - **PostgreSQL の対称化**: `PostgreSQLFunctionInfo` に `@Nullable String definition` を追加し、抽出クエリに `p.prosrc` を追加。**`pg_get_functiondef()` は使わない** — CREATE 文全体を返せる代わりに集約関数・ウィンドウ関数でエラーになるため、MySQL の `ROUTINE_DEFINITION` と同じ「本体だけ」のセマンティクスになる `prosrc` を選んだ。**引数は構造化しない**(`pg_get_function_arguments()` の 1 行文字列を維持) — サーバが既定値 / VARIADIC / OUT を正しく整形した文字列を分解するのは回帰リスクが高い。MySQL は表・PG は 1 行という非対称は意図的。
+  - **共通化**: コードフェンス生成は `JdbcMarkdownGenerator.appendDefinitionSection(StringBuilder, @Nullable String)` に `protected static` で置き、MySQL / PostgreSQL 両ジェネレータが共有する。**フェンスは本体中の最長バックティック連より 1 本長く**するため、本体が Markdown フェンスを含んでいてもブロックが早期終了しない。引数表のセルは `|` と改行をエスケープ(既存の `formatIndexRemarks` の慣習に倣う)。
+  - **破壊的変更**: `MySQLRoutineInfo.parameterList` (String) → `parameters` (`List<MySQLParameterInfo>`)、および `definition` の追加。`PostgreSQLFunctionInfo` にも `definition` を追加。**いずれも既存の引数個数のコンビニエンスコンストラクタを維持**したため、`MySQLRoutineInfo` の 5 番目の引数を `List.of(...)` に変える以外の呼び出し側修正は不要(PG は完全に後方互換)。
+  - **テスト**(11 本追加、全 1,051 テスト green):
+    - `MySQLSchemaInfoProviderTest`(Testcontainers `mysql:8.0`)4 本 — IN/OUT/INOUT の位置・モード・名前、FUNCTION の戻り値行が除外されること、`ROUTINE_DEFINITION` の取得、**同名 PROCEDURE / FUNCTION の引数が混ざらないこと**。
+    - `MySQLMarkdownGeneratorTest` 5 本 — `## Parameters` 表、`## Definition` のフェンス済みブロック、引数も本体も無いときにセクションを出さないこと、本体が ``` を含むときフェンスが 4 本に伸びること、`|` を含む型(`enum('x|y')`)のエスケープ。
+    - `PostgreSQLSchemaInfoProviderTest` / `PostgreSQLMarkdownGeneratorTest` 各 1 本 — `prosrc` の取得と `## Definition` の出力。
+  - **検証**: `./gradlew clean build --warning-mode all` で **ErrorProne/NullAway 警告ゼロ**、全モジュール green(1,051 テスト)、spotless 適用済み。
+  - **⚠️ リリース時の注意点**:
+    - **minor bump 相当**: 設定を変更していない既存ユーザーの生成物が変わる(ルーチン詳細ページに `## Parameters` と `## Definition` が増え、プロパティ表からは空欄だった `| Parameters | |` 行が消える。PG の関数ページには `## Definition` が増える)。
+    - **公開 record のコンポーネントが変わる**ため、`MySQLRoutineInfo` をカノニカルコンストラクタで直接構築している外部コードはコンパイルエラーになる(`parameterList()` アクセサも消滅)。
+    - 定義本体を出力するようになるため、**ルーチン本体に機密情報を書いているプロジェクトでは生成ドキュメントの共有範囲に注意**が必要。
+    - 22,291 文字級の本体でも Markdown としては問題ないが、ページサイズは本体の長さに比例して増える(ER 図と違いレンダラー側の上限には当たらない)。
+
 ### 2026-08-20 (Session 67)
 - **MySQL/MariaDB 5.5 系で履歴テーブルが作成できない問題を修正 + `executedNodes()` から window 関数を除去**(利用者報告 #1)
   - **報告内容**: MariaDB 5.5 で `migraphe_history` を作れない。`KEY (node_id, environment_id)` が utf8mb4 の `VARCHAR(255)`×2 = 2040 バイトで InnoDB の 767 バイト制限を超過する。

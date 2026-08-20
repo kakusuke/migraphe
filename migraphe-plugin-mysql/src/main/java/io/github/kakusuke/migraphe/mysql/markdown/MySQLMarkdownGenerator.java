@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.mysql.markdown;
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownDefinition;
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownGenerator;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
+import io.github.kakusuke.migraphe.mysql.schema.MySQLRoutineInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLSchemaInfo;
 import java.nio.file.Path;
 import java.util.List;
@@ -365,11 +366,12 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 fileSb.append("| Schema | ").append(routine.schema()).append(" |\n");
                 fileSb.append("| Type | ").append(routine.type()).append(" |\n");
                 fileSb.append("| Data Type | ").append(routine.dataType()).append(" |\n");
-                fileSb.append("| Parameters | ").append(routine.parameterList()).append(" |\n");
                 fileSb.append("| Security | ").append(routine.securityType()).append(" |\n");
                 if (routine.definer() != null && !routine.definer().isBlank()) {
                     fileSb.append("| Definer | ").append(routine.definer()).append(" |\n");
                 }
+                appendRoutineParameters(fileSb, routine);
+                appendDefinitionSection(fileSb, routine.definition());
                 Path routineFile =
                         outputDir
                                 .resolve(name())
@@ -453,5 +455,35 @@ public class MySQLMarkdownGenerator extends JdbcMarkdownGenerator {
             }
             sb.append("\n");
         }
+    }
+
+    /**
+     * Appends the routine's parameter table, or nothing when it declares no parameters.
+     *
+     * @param sb the buffer accumulating the routine detail page
+     * @param routine the routine being documented
+     */
+    private static void appendRoutineParameters(StringBuilder sb, MySQLRoutineInfo routine) {
+        if (routine.parameters().isEmpty()) {
+            return;
+        }
+        sb.append("\n## Parameters\n\n");
+        sb.append("| # | Mode | Name | Type |\n");
+        sb.append("| --- | --- | --- | --- |\n");
+        for (var param : routine.parameters()) {
+            sb.append("| ")
+                    .append(param.position())
+                    .append(" | ")
+                    .append(formatCell(param.mode()))
+                    .append(" | ")
+                    .append(formatCell(param.name()))
+                    .append(" | ")
+                    .append(formatCell(param.dataType()))
+                    .append(" |\n");
+        }
+    }
+
+    private static String formatCell(String value) {
+        return value.replace('\n', ' ').replace('\r', ' ').replace("|", "\\|");
     }
 }

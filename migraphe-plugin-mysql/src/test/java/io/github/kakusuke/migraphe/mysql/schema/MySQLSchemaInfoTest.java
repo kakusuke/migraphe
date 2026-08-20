@@ -56,13 +56,19 @@ class MySQLSchemaInfoTest {
     void shouldHoldRoutineInfo() {
         var routineInfo =
                 new MySQLRoutineInfo(
-                        "mydb", "get_user", "FUNCTION", "VARCHAR", "id INT", "DEFINER");
+                        "mydb",
+                        "get_user",
+                        "FUNCTION",
+                        "VARCHAR",
+                        List.of(new MySQLParameterInfo(1, "IN", "id", "int")),
+                        "DEFINER");
 
         assertThat(routineInfo.schema()).isEqualTo("mydb");
         assertThat(routineInfo.name()).isEqualTo("get_user");
         assertThat(routineInfo.type()).isEqualTo("FUNCTION");
         assertThat(routineInfo.dataType()).isEqualTo("VARCHAR");
-        assertThat(routineInfo.parameterList()).isEqualTo("id INT");
+        assertThat(routineInfo.parameters())
+                .containsExactly(new MySQLParameterInfo(1, "IN", "id", "int"));
         assertThat(routineInfo.securityType()).isEqualTo("DEFINER");
     }
 
