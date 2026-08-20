@@ -2,6 +2,31 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-21 (Session 73)
+
+- **`/tdd-cycle` を「5 subagent 直列」から「Plan/Red/Green/Tidy はメインコンテキスト + `cycle-verifier`(Opus) が事後監査」に再設計**
+  - **動機は実測**: Session 65 のビルドログ(`/tmp/migraphe-build-mcp/*.log`)を計測したところ、1 サイクル 8 分のうち **Gradle 実行は合計 60 秒**(各 3〜13s)で、残り約 7 分は **5 体の subagent がゼロから同じ 2 ファイル(本番 + テストクラス)を探し直す時間**だった。前回計測でも 1 サイクル ~218k tokens。ボトルネックはビルドではなく委譲そのもの。
+  - **決め手**: 実際に観測された失敗(Session 54 の 340 行クラス生成、no-op サイクル)は**順序違反ではなくスコープと計画の質**の問題で、前回 eval でもフェーズ規律は PASS だった。順序を守らせるためだけに分割コストを払う理由が無い。
+  - **旧構成の構造的欠陥 4 点**: (1) `regression-guard` は「diff だけ見ろ」と指示されながら `Bash` を持たず親も diff を渡さないため実質機能していなかった、(2) 全 agent 冒頭の「jdtls-lsp を優先せよ」は subagent の `tools:` に無いツールへの参照、(3) agent プロンプトの事実が陳腐化(Gradle 8.5 / 304 tests / モジュール 5 個 ← 実際は 8 個)し `run_test` の module 指定ミスを誘発、(4) SKILL.md に YAML frontmatter が無く `name`/`description` 未定義。
+  - **Red ゲートが規律の要**: 同一コンテキストでは「構造上できない」を作れないため、代わりに*観測可能な証拠*を要求する — 本番を 1 行でも編集する前に `run_test` の**非ゼロ exit_code を実際に観測**していること。親は実行記録(順序・exit code・失敗理由・`log_path`)を積み、verifier に diff と共に渡す。
+  - **ゲート違反は修正不能として扱う**: 当初「Fix, re-verify」と書いていたが、独立レビューで「revert → 赤を再実行 → 再適用が唯一従える手順になり、答えを知った後に再現した赤を正直なサイクルと区別できない」と指摘され、**報告してそのままクローズ**に変更。「ゲートは書類ではなく規律を測る」ため。
+  - **characterization は Plan での事前宣言のみ有効**に変更(事後宣言は緑を見た後の逃げ道になるため `test-validity` 扱い)。characterization では Green を飛ばすので **Tidy 差分が本番差分の全体**になる点を verifier のチェック対象に追加。
+  - **`cycle-verifier` の 5 チェック**(うち 3 つは旧構成で未検査): `gate` / `test-validity`(振る舞いでなく実装をなぞっていないか) / `over-implementation` / `scope` / `regression`(severity タグ付き)。差し戻しは `test-validity` と `over-implementation` のみ(修正が実在するため)、**再監査は 1 回まで**、二度目も食い違えばユーザーが裁定。
+  - **ゲート順序はログから独立に立証できる**(実運用で発見): Gradle ログの `:<module>:compileJava` が `UP-TO-DATE` か実行済みかで、その実行時点で本番ソースが変更済みだったかが分かる。記録の記述に依存しない唯一の証拠なので verifier の必須手順にした(限界も明記 — `compileTestJava` は別タスク、revert-then-replay までは弾けない)。
+  - **tidy notes を蒸留**: `.claude/agent-memory/tidy-after-green/` を `.claude/skills/tdd-cycle/references/` へ移設したうえで **1,093 行 → 188 行**に圧縮。基準は「将来の Tidy の挙動を変えるか」で、セッション番号・日付・作業履歴は全削除。per-class ノートに埋もれていた一般則(`replaceAll` の再コンパイル、`%02x` の widened int バグ、`Locale.ROOT`、Map の事前登録ループ削除条件、サブクラスコンストラクタの `this()` 委譲 等)を索引 `tidy-notes.md` に引き上げ、索引末尾に**「diff が該当パスに触れたときのみ開く」ゲート表**を置いた。`graphcanvas.md` は削除 — 記述対象の `GraphCanvas`/`Row`/`GroupInfo` が既に存在せず(`GridCanvas` に改名済み)、唯一生きていた記述は索引と重複していた。
+  - **検証**: 独立 subagent 2 体で (a) 設計の敵対的レビュー(10 件指摘、すべて反映)、(b) 全記述の現行ソース照合(61 件中 9 件の誤りを検出・修正。`SchemaTableKey` は実在しない型、「テストが行順序を厳密に検証している」は偽で実際は全て部分文字列 `contains` 等)。さらに実タスク 1 サイクルを完走させて機能検証(下記 MySQL バグ修正)。
+  - **削除**: `micro-plan` / `test-writer` / `minimal-fix` / `regression-guard` / `tidy-after-green` の 5 agent。
+  - **CLAUDE.md**: 指示 #5(委譲は独立性と広さのため。同じファイルを繰り返し読む作業はメイン)、#6(`jdtls-lsp` → `LSP`)、Development Process の TDD 表を更新。
+
+- **`MySQLSchemaInfoProvider.buildKeyInfo` に Session 65 と同型のバグを発見・修正 — exported keys で子テーブルが静かに消える**(新 `/tdd-cycle` の実タスク検証を兼ねて 1 サイクル完走)
+  - **発見の経緯**: Session 66 のドキュメント事実照合の副産物。Session 65 で `JdbcSchemaInfoProvider` を修正した際、**MySQL 側の近似コピーは手つかずのまま**だった。集約マップが `Map<String, ForeignKeyBuilder>` で素の `FK_NAME` をキーにしており、`buildExportedKeys` は `getExportedKeys(catalog, null, tableName)` を呼ぶため結果セットに複数の子テーブルの行が混ざる。
+  - **MySQL 固有の到達条件**: MySQL は FK 制約名の一意性を**データベース単位**で担保するため、同一 DB 内の子テーブル同士は衝突しない。衝突するのは**異なるデータベースにある 2 つの子テーブルが同名制約を持つ**場合(MySQL はクロス DB の FK を許可するため正当な構成)。実測失敗は `["fk_child_remote"]` vs 期待 `["fk_child_local", "fk_child_remote"]` で、**`fk_child_local` が丸ごと消えていた**。
+  - **修正**: `private record BuilderKey(String fkTableCat, String fkTableName, String fkName)` を導入。JDBC 版は `FKTABLE_SCHEM` をキーの第 1 要素にしているが、**MySQL はデータベース名をカタログ列に入れ `FKTABLE_SCHEM` を null にする**ため、そのまま移植すると第 1 要素が常に `""` になり意味を成さない。よって `FKTABLE_CAT` に機械的に読み替えた。併せて `if (fkName == null) fkName = "";` を既存の `nullToEmpty(...)` に寄せた(`BuilderKey` が NullAway 下で非 null を要求するため)。
+  - **`""` バケット問題は MySQL では到達しない**: JDBC 側に残る「同一子テーブル上の複数の無名 FK 制約がマージされる」課題は、**InnoDB が FK 名を必ず `<table>_ibfk_N` で自動生成する**ため MySQL では再現しない。
+  - **テスト**(`MySQLSchemaInfoProviderTest`、Testcontainers MySQL 8.0、計 10 本 green): `shouldReportOneExportedKeyPerChildTableWhenConstraintNamesCollide`。**root 接続が必須** — Testcontainers の `test` ユーザーは 2 つ目のデータベースを作成できず、かつ `information_schema` は権限でフィルタされるため、非 root で provider を走らせるとクロス DB の子テーブルがそもそも見えない。
+  - **⚠️ リリース時の注意点**: **bugfix(patch bump 相当)**。Session 65 と同様、クロス DB で同名 FK 制約を持つ構成では `## Exported Keys` セクションの行数が増える(欠落していた子テーブルが現れる)。
+  - **既知の残課題**: (1) クロス DB の子テーブルへの Markdown リンクが切れる — `referencedSchema` が `""` になり `JdbcMarkdownGenerator.resolveReferencedSchema` が現在スキーマにフォールバックするため、存在しないページを指す。この形は修正前から存在したが、修正により該当行が増える。ER 図は `known` に無いターゲットを除外するので無傷。(2) `FKTABLE_CAT` が `FKTABLE_NAME` より効くのは「異なる DB に**同名**のテーブルがある」場合のみで、現テストはそれを区別していない。
+
 ### 2026-08-20 (Session 72)
 - **`--env`(`environments/<name>.yaml` オーバーレイ)を全コマンドに適用し、存在しないオーバーレイ名をエラーにした**
   - **動機**: 利用者報告 #5「`--env` を変えても履歴の `environment_id` が変わらない」の切り分け過程で、`--env` 自体が**一部の経路にしか繋がっていない**ことが判明した。migraphe には直交する 2 系統があり、**target 系統**(`targets/*.yaml`。Java の `Environment`/`EnvironmentId` はこの系統を指す。名前は歴史的経緯)が「接続先そのもの」、**environment 系統**(`environments/*.yaml` + `--env`)は「設定値のオーバーレイ」でしかない。target は `--env` によって**中身が変わるが名前は変わらない**。この用語の衝突が誤解の温床になっていた。

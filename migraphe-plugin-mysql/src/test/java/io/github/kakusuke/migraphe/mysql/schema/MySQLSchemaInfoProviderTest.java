@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.tuple;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.jdbc.schema.JdbcForeignKeyInfo;
 import io.github.kakusuke.migraphe.mysql.MySQLEnvironment;
 import io.github.kakusuke.migraphe.mysql.MySQLException;
 import java.sql.Connection;
@@ -262,6 +263,42 @@ class MySQLSchemaInfoProviderTest {
         assertThat(info.viewDefiners()).isNotEmpty();
         assertThat(info.viewDefiners()).containsKey("migraphe_test.test_view");
         assertThat(info.viewDefiners().get("migraphe_test.test_view")).isNotBlank();
+    }
+
+    @Test
+    void shouldReportOneExportedKeyPerChildTableWhenConstraintNamesCollide() throws Exception {
+        var rootEnv =
+                MySQLEnvironment.create("root", mysql.getJdbcUrl(), "root", mysql.getPassword());
+        try (Connection conn = rootEnv.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP DATABASE IF EXISTS migraphe_fk_alt");
+            stmt.execute("DROP TABLE IF EXISTS migraphe_test.fk_child_local");
+            stmt.execute("DROP TABLE IF EXISTS migraphe_test.fk_parent");
+            stmt.execute("CREATE TABLE migraphe_test.fk_parent (id INT PRIMARY KEY)");
+            stmt.execute(
+                    "CREATE TABLE migraphe_test.fk_child_local (parent_id INT,"
+                            + " CONSTRAINT fk_shared FOREIGN KEY (parent_id)"
+                            + " REFERENCES migraphe_test.fk_parent(id))");
+            stmt.execute("CREATE DATABASE migraphe_fk_alt");
+            stmt.execute(
+                    "CREATE TABLE migraphe_fk_alt.fk_child_remote (parent_id INT,"
+                            + " CONSTRAINT fk_shared FOREIGN KEY (parent_id)"
+                            + " REFERENCES migraphe_test.fk_parent(id))");
+        }
+        var provider = new MySQLSchemaInfoProvider();
+
+        var info = provider.getSchemaInfo(rootEnv);
+
+        var parent =
+                info.schemas().stream()
+                        .filter(s -> s.name().equals("migraphe_test"))
+                        .flatMap(s -> s.tables().stream())
+                        .filter(t -> t.name().equals("fk_parent"))
+                        .findFirst()
+                        .orElseThrow();
+        assertThat(parent.exportedKeys())
+                .extracting(JdbcForeignKeyInfo::referencedTable)
+                .containsExactlyInAnyOrder("fk_child_local", "fk_child_remote");
     }
 
     @Test

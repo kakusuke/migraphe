@@ -405,15 +405,15 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
 
     private List<JdbcForeignKeyInfo> buildKeyInfo(ResultSet rs, boolean imported)
             throws SQLException {
-        Map<String, ForeignKeyBuilder> builders = new LinkedHashMap<>();
+        Map<BuilderKey, ForeignKeyBuilder> builders = new LinkedHashMap<>();
         try (rs) {
             while (rs.next()) {
-                String fkName = rs.getString("FK_NAME");
-                if (fkName == null) {
-                    fkName = "";
-                }
+                String fkName = nullToEmpty(rs.getString("FK_NAME"));
+                String fkTableCat = nullToEmpty(rs.getString("FKTABLE_CAT"));
+                String fkTableName = nullToEmpty(rs.getString("FKTABLE_NAME"));
+                BuilderKey key = new BuilderKey(fkTableCat, fkTableName, fkName);
                 ForeignKeyBuilder builder =
-                        builders.computeIfAbsent(fkName, ForeignKeyBuilder::new);
+                        builders.computeIfAbsent(key, k -> new ForeignKeyBuilder(k.fkName()));
                 if (imported) {
                     builder.columns.add(rs.getString("FKCOLUMN_NAME"));
                     builder.referencedSchema = nullToEmpty(rs.getString("PKTABLE_SCHEM"));
@@ -472,6 +472,8 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
     private static String nullToEmpty(@Nullable String value) {
         return value != null ? value : "";
     }
+
+    private record BuilderKey(String fkTableCat, String fkTableName, String fkName) {}
 
     private static class ForeignKeyBuilder {
         final String name;
