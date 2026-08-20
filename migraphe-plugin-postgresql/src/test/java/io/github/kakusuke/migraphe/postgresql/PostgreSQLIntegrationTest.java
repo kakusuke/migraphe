@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.postgresql;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
@@ -481,6 +482,47 @@ class PostgreSQLIntegrationTest {
                                 "SELECT table_name FROM information_schema.tables "
                                         + "WHERE table_name = 'autocommit_down_test'")) {
             assertThat(rs.next()).isFalse();
+        }
+    }
+
+    @Test
+    void initializeIsIdempotent() throws Exception {
+        // The PostgreSQL resource declares the table and each index as separate steps, none of them
+        // guarded by a detection query: they rely on IF NOT EXISTS (CREATE TABLE since 9.1, CREATE
+        // INDEX since 9.5), so every step runs on every call and must stay harmless.
+        historyRepo.initialize();
+
+        assertThatCode(() -> historyRepo.initialize()).doesNotThrowAnyException();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT COUNT(*) FROM pg_indexes WHERE schemaname ="
+                                        + " current_schema() AND tablename = 'migraphe_history'")) {
+            rs.next();
+            // Two named indexes plus the primary key's implicit unique index.
+            assertThat(rs.getInt(1)).isEqualTo(3);
+        }
+    }
+
+    @Test
+    void recreatesAMissingIndex() throws Exception {
+        historyRepo.initialize();
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP INDEX idx_migraphe_history_env");
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM pg_indexes WHERE schemaname = current_schema()"
+                                        + " AND indexname = 'idx_migraphe_history_env'")) {
+            assertThat(rs.next()).isTrue();
         }
     }
 }

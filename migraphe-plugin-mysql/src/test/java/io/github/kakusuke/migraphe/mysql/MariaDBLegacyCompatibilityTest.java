@@ -133,6 +133,26 @@ class MariaDBLegacyCompatibilityTest {
         assertThat(historyRepo.executedNodes(environment.id())).containsExactly(applied);
     }
 
+    @Test
+    void initializeIsIdempotentOnThisServer() throws Exception {
+        // The MySQL resource has no detection query: its single creation step leans on CREATE TABLE
+        // IF NOT EXISTS, which this 5.5-generation server must honour for initialize() to stay
+        // idempotent across the up/down/status calls that all run it.
+        historyRepo.initialize();
+
+        assertThatCode(() -> historyRepo.initialize()).doesNotThrowAnyException();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema"
+                                        + " = DATABASE() AND table_name = 'migraphe_history'")) {
+            rs.next();
+            assertThat(rs.getInt(1)).isEqualTo(1);
+        }
+    }
+
     private ExecutionRecord record(
             NodeId nodeId,
             ExecutionDirection direction,
