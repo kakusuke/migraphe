@@ -1,5 +1,8 @@
 package io.github.kakusuke.migraphe.jdbc.statement;
 
+import java.util.Arrays;
+import org.jspecify.annotations.Nullable;
+
 /**
  * Factory methods for building and composing {@link SqlParser} combinators.
  *
@@ -9,7 +12,8 @@ package io.github.kakusuke.migraphe.jdbc.statement;
  * {@link #quoted(char, boolean, boolean)}, {@link #lineComment(String, boolean)}, {@link
  * #delimited(String, String)}, {@link #anyChar()}), and <em>combinators</em> that compose other
  * parsers into larger ones ({@link #seq(SqlParser...)}, {@link #or(SqlParser...)}, {@link
- * #many(SqlParser)}, {@link #opt(SqlParser)}, {@link #not(SqlParser)}, {@link #ref}).
+ * #many(SqlParser)}, {@link #opt(SqlParser)}, {@link #not(SqlParser)}, {@link #ref}, {@link
+ * #memoize(SqlParser)}).
  *
  * <p>All parsers follow the same contract as {@link SqlParser#parse(String, int)}: a non-negative
  * return value is the position after the consumed text, and {@code -1} means no match. Because
@@ -185,6 +189,106 @@ public final class SqlParsers {
      */
     public static SqlParser ref(java.util.function.Supplier<SqlParser> supplier) {
         return (sql, pos) -> supplier.get().parse(sql, pos);
+    }
+
+    /**
+     * Marker stored in a memo table for a position whose result has not been computed yet.
+     *
+     * <p>{@link SqlParser#parse(String, int)} returns either {@code -1} (no match) or a position in
+     * {@code [0, sql.length()]}, so {@code -2} can never be a real result and a table pre-filled
+     * with it can store results verbatim. Widening that return contract would break this
+     * assumption.
+     */
+    private static final int UNCOMPUTED = -2;
+
+    /**
+     * Creates a parser that caches the delegate's result per input position (packrat memoization).
+     *
+     * <p>Wrapping a recursive parser in {@code memoize} turns repeated failed attempts at the same
+     * position from exponential into linear work: without it, a grammar whose block body may itself
+     * contain blocks re-scans the remainder of the input once per nested candidate, so a script
+     * with <em>k</em> block-opening keywords that never close (for example the {@code IF} in {@code
+     * DROP TABLE IF EXISTS}) costs O(2<sup>k</sup>). The cached decisions are identical to the
+     * uncached ones, so memoizing changes only cost, never which spans a grammar recognizes.
+     *
+     * <p>Requirements and caveats:
+     *
+     * <ul>
+     *   <li>The delegate must be a pure function of the input and position it is given — the same
+     *       arguments must always yield the same result. Every combinator in this class satisfies
+     *       this.
+     *   <li>One memo table is held at a time and is discarded as soon as the returned parser is
+     *       handed a different (non-{@linkplain String#equals equal}) input, so a memoized parser
+     *       is reusable across inputs without retaining them.
+     *   <li>The table is not synchronized. Sharing one memoized parser across threads stays correct
+     *       — because the delegate is pure, a thread that misses the cache merely recomputes a
+     *       value another thread already holds — but concurrent users may duplicate work.
+     * </ul>
+     *
+     * @param parser the parser whose results should be cached; must be a pure function of the input
+     *     and position it is given
+     * @return a parser that returns the same results as {@code parser} while computing each
+     *     position at most once per input
+     */
+    public static SqlParser memoize(SqlParser parser) {
+        return new MemoizingParser(parser);
+    }
+
+    /**
+     * A {@link SqlParser} that caches its delegate's result for each position of the most recent
+     * input.
+     *
+     * <p>The table is published without synchronization. That is safe because {@link Memo}'s fields
+     * are final — a racing reader therefore cannot observe a half-built table — and because the
+     * delegate is required to be pure, which makes a missed cache entry cost at most a
+     * recomputation of the same value.
+     */
+    private static final class MemoizingParser implements SqlParser {
+
+        private final SqlParser delegate;
+        private @Nullable Memo memo;
+
+        MemoizingParser(SqlParser delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public int parse(String sql, int pos) {
+            @Nullable Memo current = memo;
+            if (current == null || !current.sql.equals(sql)) {
+                current = new Memo(sql);
+                memo = current;
+            }
+            int cached = current.results[pos];
+            if (cached != UNCOMPUTED) {
+                return cached;
+            }
+            int end = delegate.parse(sql, pos);
+            current.results[pos] = end;
+            return end;
+        }
+    }
+
+    /**
+     * Memo table for a single input: {@code results[pos]} holds the parse result at {@code pos}, or
+     * {@link #UNCOMPUTED} while it is still unknown.
+     *
+     * <p>The table is filled inside the constructor deliberately. {@link MemoizingParser} publishes
+     * a {@code Memo} without synchronization and leans on the final-field freeze, which covers the
+     * array contents only as they stood when the constructor returned. Filling after publication
+     * would let a racing reader see a default {@code 0} and mistake it for a cached "matched at
+     * position 0, consumed nothing".
+     */
+    private static final class Memo {
+
+        private final String sql;
+        private final int[] results;
+
+        Memo(String sql) {
+            this.sql = sql;
+            this.results = new int[sql.length() + 1];
+            Arrays.fill(this.results, UNCOMPUTED);
+        }
     }
 
     /**

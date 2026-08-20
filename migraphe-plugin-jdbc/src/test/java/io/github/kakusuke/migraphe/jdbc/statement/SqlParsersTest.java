@@ -241,4 +241,38 @@ class SqlParsersTest {
         assertThat(p.parse("/* c */X", 0)).isEqualTo(7);
         assertThat(p.parse("plain", 0)).isEqualTo(-1);
     }
+
+    @Test
+    void memoizeReturnsTheDelegateResultForMatchAndNoMatch() {
+        SqlParser p = SqlParsers.memoize(SqlParsers.keyword("BEGIN"));
+        assertThat(p.parse("BEGIN END", 0)).isEqualTo(5);
+        assertThat(p.parse("BEGIN END", 0)).isEqualTo(5);
+        assertThat(p.parse("BEGIN END", 6)).isEqualTo(-1);
+        assertThat(p.parse("BEGIN END", 6)).isEqualTo(-1);
+    }
+
+    @Test
+    void memoizeComputesEachPositionOnlyOnce() {
+        int[] calls = new int[1];
+        SqlParser delegate =
+                (sql, pos) -> {
+                    calls[0]++;
+                    return SqlParsers.keyword("BEGIN").parse(sql, pos);
+                };
+        SqlParser p = SqlParsers.memoize(delegate);
+        p.parse("BEGIN END", 0);
+        p.parse("BEGIN END", 0);
+        p.parse("BEGIN END", 6);
+        p.parse("BEGIN END", 6);
+        assertThat(calls[0]).isEqualTo(2);
+    }
+
+    @Test
+    void memoizeDiscardsTheCacheWhenTheInputChanges() {
+        SqlParser p = SqlParsers.memoize(SqlParsers.keyword("BEGIN"));
+        assertThat(p.parse("BEGIN", 0)).isEqualTo(5);
+        // Same length as the previous input, so a stale cache would wrongly report a match.
+        assertThat(p.parse("BREAK", 0)).isEqualTo(-1);
+        assertThat(p.parse("BEGIN", 0)).isEqualTo(5);
+    }
 }

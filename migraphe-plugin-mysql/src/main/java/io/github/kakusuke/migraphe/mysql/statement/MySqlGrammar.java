@@ -53,6 +53,13 @@ public final class MySqlGrammar {
      * each block consumes its own {@code END} (plus any block-specific trailing keyword), an outer
      * block never mistakes an inner block's {@code END} for its own.
      *
+     * <p>A keyword that opens no block — the {@code IF} of {@code DROP TABLE IF EXISTS}, say — is
+     * rejected only after the body has scanned ahead for a matching {@code END} that never arrives.
+     * Because the body admits nested blocks, that failing scan would be repeated for every such
+     * keyword it passes over, costing O(2<sup>k</sup>) for k of them in one script. The assembled
+     * block parser is therefore {@linkplain SqlParsers#memoize(SqlParser) memoized}, which computes
+     * each position once without changing which spans are recognized.
+     *
      * @return a parser matching one compound-statement block
      */
     static SqlParser block() {
@@ -104,8 +111,16 @@ public final class MySqlGrammar {
                         SqlParsers.keyword("END"),
                         ws,
                         SqlParsers.keyword("REPEAT"));
+        // Memoized so a candidate rejected at a position is never re-derived; see the Javadoc.
         SqlParser block =
-                SqlParsers.or(beginBlock, ifBlock, caseBlock, loopBlock, whileBlock, repeatBlock);
+                SqlParsers.memoize(
+                        SqlParsers.or(
+                                beginBlock,
+                                ifBlock,
+                                caseBlock,
+                                loopBlock,
+                                whileBlock,
+                                repeatBlock));
         holder[0] = block;
         return block;
     }

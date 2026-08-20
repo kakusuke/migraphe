@@ -1,8 +1,10 @@
 package io.github.kakusuke.migraphe.mysql.statement;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -393,6 +395,49 @@ class MySqlGrammarTest {
             assertThat(result).hasSize(1);
             assertThat(result.get(0)).startsWith("CREATE TABLE products");
             assertThat(result.get(0)).endsWith("'Product catalog entries'");
+        }
+    }
+
+    @Nested
+    @DisplayName("ブロックを開かない IF キーワード")
+    class NonBlockIfKeyword {
+
+        private String repeat(String template, int count) {
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < count; i++) {
+                sb.append(template.replace("{}", String.valueOf(i))).append("\n");
+            }
+            return sb.toString();
+        }
+
+        @Test
+        @DisplayName("DROP TABLE IF EXISTS 83文を実用時間内に83文へ分割する")
+        void manyDropTableIfExistsStatements() {
+            String sql = repeat("DROP TABLE IF EXISTS t{};", 83);
+            List<String> result =
+                    assertTimeoutPreemptively(Duration.ofSeconds(2), () -> splitter.split(sql));
+            assertThat(result).hasSize(83);
+            assertThat(result.get(0)).isEqualTo("DROP TABLE IF EXISTS t0");
+            assertThat(result.get(82)).isEqualTo("DROP TABLE IF EXISTS t82");
+        }
+
+        @Test
+        @DisplayName("CREATE TABLE IF NOT EXISTS 83文を実用時間内に83文へ分割する")
+        void manyCreateTableIfNotExistsStatements() {
+            String sql = repeat("CREATE TABLE IF NOT EXISTS t{} (id INT);", 83);
+            List<String> result =
+                    assertTimeoutPreemptively(Duration.ofSeconds(2), () -> splitter.split(sql));
+            assertThat(result).hasSize(83);
+            assertThat(result.get(0)).isEqualTo("CREATE TABLE IF NOT EXISTS t0 (id INT)");
+            assertThat(result.get(82)).isEqualTo("CREATE TABLE IF NOT EXISTS t82 (id INT)");
+        }
+
+        @Test
+        @DisplayName("ルーチン本体内の DROP TABLE IF EXISTS はブロックを開かず、本体は1文のまま")
+        void dropTableIfExistsInsideRoutineBody() {
+            String sql = "CREATE PROCEDURE p() BEGIN DROP TABLE IF EXISTS tmp; SELECT 1; END";
+            List<String> result = splitter.split(sql);
+            assertThat(result).containsExactly(sql);
         }
     }
 }
