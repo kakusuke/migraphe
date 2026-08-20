@@ -68,7 +68,7 @@ PG と MySQL のタスクが単一の DAG として並び、依存順（MySQL �
 migraphe up -y
 ```
 
-各タスクはそれぞれの DB に対して実行されます。実行履歴は PG の `migraphe_history` テーブルに `environment_id` 列で区別して集約されます。
+各タスクはそれぞれの DB に対して実行されます。実行履歴は PG の `migraphe_history` テーブルに `target_id` 列で区別して集約されます。
 
 ### 状態確認
 

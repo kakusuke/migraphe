@@ -30,7 +30,7 @@ e コマースの業務ドメインをDBごとに分割した、マイクロサ�
 
 - **タスクの `target:` と `dependencies:` は独立** — PG のタスクは MySQL のタスクに依存できる（その逆も可）
 - migraphe は単一の DAG で両DBのマイグレーションを管理し、依存順に実行する
-- **実行履歴は PG に集約** (`history.target: pg`) — `migraphe_history` テーブルに `environment_id` で区別して記録される
+- **実行履歴は PG に集約** (`history.target: pg`) — `migraphe_history` テーブルに `target_id` で区別して記録される
 - **クロスDB参照はFKなし** — 異なるDB間にFKは張れないため、論理参照のみ（`reviews.user_id` は plain BIGINT）
 
 ## ディレクトリ構成

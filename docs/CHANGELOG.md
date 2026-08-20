@@ -2,6 +2,18 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-20 (Session 71)
+- **実行履歴 ID を UUIDv7 にして順序不定を解消し、`environment_id` 列を `target_id` にリネーム**（PR #55 の機構の上に構築）
+  - **順序の背景**: `wasExecuted()` / `findLatestRecord()` は `ORDER BY executed_at DESC LIMIT 1` で「最新」を決めていたが、同一ノードの複数レコードが同じ時刻を持つと勝者が不定になる。そして MariaDB では日常的にそうなる: Connector/J はサーバのバージョン文字列 `5.5.5-10.1.48-MariaDB` を見て「MySQL 5.6.4 未満＝小数秒非対応」と判定し、**クライアント側で小数秒を切り捨てる**。列が `TIMESTAMP(6)` でも実測で `micros=0`。接続プロパティ（`sendFractionalSeconds` / `useServerPrepStmts`）の4通りすべてで回避不可、MariaDB 公式ドライバなら保持されることも確認済みで、**原因はドライバのバージョン判定だけ**。結果、`down` 直後の `up`（CI やローカルの反復）が同一秒に入ると、ロールバック済みのノードを「適用済み」と**静かに**誤判定し得た。
+  - **解法**: 単調増加列を足すのではなく、**`ExecutionRecord` の4つのファクトリが生成する ID を UUIDv4 から UUIDv7（RFC 9562）に変更**した。既に存在する `id` 主キーが生成順に並ぶようになるので、スキーマ変更ゼロでタイブレーカが手に入る。方言ごとに異なる自動採番構文（汎用 JDBC リソースでは移植可能に書けない）も不要になり、副次的に InnoDB の主キーが追記順になる。
+  - **並び順は `executed_at DESC, id DESC` の複合**。`executed_at` を第1キーに保つのが要点で、旧バージョンが書いた行の ID はランダムな UUIDv4 だから、`id` 単独で並べると既存データの順序が壊れる。複合なら既存行は従来どおりに並び、**同一時刻のタイだけ**が ID で決まる。`executedNodes()` も `MAX(executed_at)` 一致方式から同じ規則の相関スカラサブクエリ（`ORDER BY h2.executed_at DESC, h2.id DESC LIMIT 1`）に変更（Session 66 で入れたタイ時の緩い意味も解消され、`DISTINCT` も不要になった）。`allRecords()` は `executed_at, id` で安定化。
+  - **`RecordIds` は `migraphe-api` の package-private**。`ExecutionRecord` の正準コンストラクタは任意の文字列を受け続けるので、独自 ID を渡す利用者は無傷であり、ID 形式を公開契約にしない。同一ミリ秒内の単調性は 12ビットの `rand_a` を専用カウンタとして使い（RFC 9562 §6.2 method 1）、溢れたら次ミリ秒を先借りする。**時計が巻き戻っても直前のタイムスタンプを保持してカウンタを進める**ので、プロセス生存中は狭義単調。残る62ビットの乱数がプロセス間の一意性を担う（カウンタでは担保できない）。
+  - **列名のリネーム**: `environment_id` は一貫して**ターゲット名**（タスクの `target:` が指す `targets/` の定義）を格納しており、`--env` のオーバーレイ名が入ったことは一度もない（あれは設定値を上書きするだけで履歴には届かない）。`target_id` に改名した。
+  - **これが検出SQLを必要とする最初のステップ**（`ALTER TABLE` に可搬な条件付き形式が無い）であり、Session 69 で先送りした課題が現実になった。**検出SQLは位置パラメータを持てるようになり、その全てに現在のスキーマが束縛される**（`Connection.getSchema()`、null なら `getCatalog()`）。H2 は `PUBLIC`、PostgreSQL は `public`、MySQL/MariaDB はスキーマ未設定でカタログ＝DB 名＝`table_schema` の値。これで汎用リソースでも**同一サーバの別 DB にある同名テーブルを誤検出しない**。
+  - **リネーム文は方言別**: MySQL は `CHANGE COLUMN`（型を書き直す）— `RENAME COLUMN` は MySQL 8.0 / MariaDB 10.5.2 以降にしか無く、このリソースは 5.5 世代も対象だから。PostgreSQL は `RENAME COLUMN`。汎用 JDBC は移植性のため add / backfill / drop の3文。**インデックス名の `_env` 接尾辞は据え置き**: 改名にはさらに方言ごとに異なるステップが必要で 5.5 世代では表現できず、名前は内部的で誰も読まない。
+  - **後方互換の注意**: この変更を挟んで**1つの履歴 DB に複数バージョンの migraphe を混在させないこと**（旧バージョンは `environment_id` を参照する）。API 側の `Environment` → `Target` 改名は別 PR。
+  - **テスト**: +24（計 1,109）。順序は H2 / MariaDB 10.1 の両方で**両方向**（同一秒に UP→DOWN なら未適用、DOWN→UP なら適用済み）を検証し、`ORDER BY` から `id DESC` を外すミューテーションで両方向とも実サーバで落ちることを確認した（片方向だけでは物理順で偶然通る）。`executedNodes()` 側も同様に確認。リネームは旧形状のテーブルから既存行を保持したまま移行することを H2 / MariaDB 10.1（`CHANGE COLUMN` 経路）/ PostgreSQL で検証し、検出を常に真にするミューテーションで落ちることも確認。`RecordIds` は辞書順＝生成順、同一ミリ秒内の単調性、32仮想スレッド×500件の一意性、時計巻き戻し、UUID v7/variant の妥当性を単体で固定。別スキーマの同名テーブルを検出しないことも H2 で固定。
+
 ### 2026-08-20 (Session 70)
 - **履歴スキーマの進化・移行機構を導入（検出SQLと適用SQLの組）**
   - **背景**: `initialize()` は方言別 DDL リソースを1本の文字列として読み、丸ごと1回の `stmt.execute()` に渡すだけだった。冪等性は `CREATE TABLE IF NOT EXISTS` にのみ依存し、バージョン管理も差分検出も ALTER 経路も無いため、**既存テーブルの形は永遠に変わらない**（リソースを書き換えても新規作成時にしか効かない）。今後 #3 チェックサム列 / #5 環境識別 / MariaDB 順序列を足すにあたり、移行の土台が必要になった。

@@ -5,7 +5,6 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.time.Instant;
 import java.util.Objects;
-import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,7 +16,10 @@ import org.jspecify.annotations.Nullable;
  * invariants: a {@link ExecutionStatus#FAILURE} requires an error message, and a {@link
  * ExecutionDirection#DOWN} execution must not carry a serialized down task.
  *
- * @param id the unique identifier of this execution record
+ * @param id the unique identifier of this execution record. The {@code static} factories below
+ *     generate a time-ordered UUIDv7, so identifiers of records created in sequence also sort in
+ *     that order and can break ties between records sharing an {@code executedAt} value; a record
+ *     constructed directly may carry any unique string
  * @param nodeId the identifier of the node that was executed
  * @param environmentId the environment in which the execution took place
  * @param direction whether the execution was {@link ExecutionDirection#UP} or {@link
@@ -96,7 +98,7 @@ public record ExecutionRecord(
             @Nullable String serializedDownTask,
             long durationMs) {
         return new ExecutionRecord(
-                UUID.randomUUID().toString(),
+                RecordIds.newId(),
                 nodeId,
                 environmentId,
                 ExecutionDirection.UP,
@@ -124,7 +126,7 @@ public record ExecutionRecord(
     public static ExecutionRecord downSuccess(
             NodeId nodeId, EnvironmentId environmentId, String description, long durationMs) {
         return new ExecutionRecord(
-                UUID.randomUUID().toString(),
+                RecordIds.newId(),
                 nodeId,
                 environmentId,
                 ExecutionDirection.DOWN,
@@ -156,7 +158,7 @@ public record ExecutionRecord(
             String description,
             String errorMessage) {
         return new ExecutionRecord(
-                UUID.randomUUID().toString(),
+                RecordIds.newId(),
                 nodeId,
                 environmentId,
                 direction,
@@ -184,7 +186,7 @@ public record ExecutionRecord(
     public static ExecutionRecord skipped(
             NodeId nodeId, EnvironmentId environmentId, String description, String reason) {
         return new ExecutionRecord(
-                UUID.randomUUID().toString(),
+                RecordIds.newId(),
                 nodeId,
                 environmentId,
                 ExecutionDirection.UP, // a skip is normally recorded in the UP direction

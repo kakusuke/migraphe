@@ -26,9 +26,22 @@ import org.jspecify.annotations.Nullable;
  * {@link SchemaStep}s — each a detection query paired with the statements applying it — so the
  * table can gain columns and indexes over time without any schema-version bookkeeping. Each query
  * opens a short-lived connection from the supplied {@link JdbcEnvironment}, so the repository keeps
- * the migration history in the same database the migrations run against. "Latest" lookups order by
- * {@code executed_at} and a node is considered applied only when its most recent record is a
- * successful {@code UP}.
+ * the migration history in the same database the migrations run against. A node is considered
+ * applied only when its most recent record is a successful {@code UP}.
+ *
+ * <p>"Most recent" orders by {@code executed_at} and then by {@code id}. The identifier decides
+ * ties because {@link ExecutionRecord}'s factories mint time-ordered UUIDv7 values, and ties are
+ * not hypothetical: MariaDB reports itself as version 5.5.5, so the MySQL driver drops fractional
+ * seconds and a rollback immediately followed by a re-apply lands on one timestamp. Ordering by
+ * {@code executed_at} alone would then leave the winner to the storage engine — silently reporting
+ * a rolled-back node as applied. Keeping {@code executed_at} as the primary key of the ordering
+ * leaves rows written by older versions, whose identifiers are random UUIDv4 values, ordered
+ * exactly as before.
+ *
+ * <p>The target column is named {@code target_id}. Releases before 0.6.0 called it {@code
+ * environment_id}; {@link #initialize()} renames it in place. It has always held a target id, so
+ * {@link ExecutionRecord#environmentId()} maps onto it despite the differing name — the API-side
+ * rename is a separate change.
  */
 public final class JdbcHistoryRepository implements HistoryRepository {
 
@@ -146,12 +159,35 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         if (checkSql == null) {
             return false;
         }
-        try (Statement stmt = conn.createStatement();
-                ResultSet rs = stmt.executeQuery(checkSql)) {
-            return rs.next();
+        try (PreparedStatement pstmt = conn.prepareStatement(checkSql)) {
+            for (int i = 1; i <= pstmt.getParameterMetaData().getParameterCount(); i++) {
+                pstmt.setString(i, currentSchema(conn));
+            }
+            try (ResultSet rs = pstmt.executeQuery()) {
+                return rs.next();
+            }
         } catch (SQLException e) {
             throw new JdbcException("Failed to detect schema step '" + step.label() + "'", e);
         }
+    }
+
+    /**
+     * Returns the identifier naming the schema the history table lives in.
+     *
+     * <p>Detection queries compare this against {@code information_schema}'s {@code table_schema}
+     * so that a same-named table elsewhere on the server cannot satisfy them. No expression names
+     * the current schema across every dialect, so the value is read from the connection instead:
+     * {@link Connection#getSchema()} answers on H2 ({@code PUBLIC}) and PostgreSQL ({@code
+     * public}), while MySQL and MariaDB leave it unset and carry the database name as the catalog —
+     * which is exactly what their {@code table_schema} holds.
+     *
+     * @param conn the connection whose schema is being resolved
+     * @return the current schema, or the catalog when the driver reports no schema
+     * @throws SQLException if the connection cannot report either
+     */
+    private static @Nullable String currentSchema(Connection conn) throws SQLException {
+        String schema = conn.getSchema();
+        return schema != null ? schema : conn.getCatalog();
     }
 
     /**
@@ -168,7 +204,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         String sql =
                 """
                 INSERT INTO migraphe_history (
-                    id, node_id, environment_id, direction, status,
+                    id, node_id, target_id, direction, status,
                     executed_at, description, serialized_down_task, duration_ms, error_message
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
@@ -213,8 +249,8 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         String sql =
                 """
                 SELECT direction, status FROM migraphe_history
-                WHERE node_id = ? AND environment_id = ?
-                ORDER BY executed_at DESC
+                WHERE node_id = ? AND target_id = ?
+                ORDER BY executed_at DESC, id DESC
                 LIMIT 1
                 """;
 
@@ -259,12 +295,14 @@ public final class JdbcHistoryRepository implements HistoryRepository {
 
         String sql =
                 """
-                SELECT DISTINCT h.node_id FROM migraphe_history h
-                WHERE h.environment_id = ?
+                SELECT h.node_id FROM migraphe_history h
+                WHERE h.target_id = ?
                   AND h.direction = 'UP' AND h.status = 'SUCCESS'
-                  AND h.executed_at = (
-                      SELECT MAX(h2.executed_at) FROM migraphe_history h2
-                      WHERE h2.environment_id = h.environment_id AND h2.node_id = h.node_id
+                  AND h.id = (
+                      SELECT h2.id FROM migraphe_history h2
+                      WHERE h2.target_id = h.target_id AND h2.node_id = h.node_id
+                      ORDER BY h2.executed_at DESC, h2.id DESC
+                      LIMIT 1
                   )
                 ORDER BY h.node_id
                 """;
@@ -304,8 +342,8 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         String sql =
                 """
                 SELECT * FROM migraphe_history
-                WHERE node_id = ? AND environment_id = ?
-                ORDER BY executed_at DESC
+                WHERE node_id = ? AND target_id = ?
+                ORDER BY executed_at DESC, id DESC
                 LIMIT 1
                 """;
 
@@ -341,8 +379,8 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         String sql =
                 """
                 SELECT * FROM migraphe_history
-                WHERE environment_id = ?
-                ORDER BY executed_at
+                WHERE target_id = ?
+                ORDER BY executed_at, id
                 """;
 
         try (Connection conn = environment.createConnection();
@@ -365,7 +403,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     private ExecutionRecord mapToExecutionRecord(ResultSet rs) throws SQLException {
         String id = rs.getString("id");
         NodeId nodeId = NodeId.of(rs.getString("node_id"));
-        EnvironmentId envId = EnvironmentId.of(rs.getString("environment_id"));
+        EnvironmentId envId = EnvironmentId.of(rs.getString("target_id"));
         ExecutionDirection direction = ExecutionDirection.valueOf(rs.getString("direction"));
         ExecutionStatus status = ExecutionStatus.valueOf(rs.getString("status"));
         Instant executedAt = rs.getTimestamp("executed_at").toInstant();

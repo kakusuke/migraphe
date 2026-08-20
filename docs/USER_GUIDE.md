@@ -1003,9 +1003,11 @@ WHERE node_id = 'db1/001_create_users';
 ```
 
 **History Table Schema:**
-- `id`: Unique execution ID (UUID)
+- `id`: Unique execution ID (a time-ordered UUIDv7, so records sort by creation order)
 - `node_id`: Task ID
-- `environment_id`: Environment name
+- `target_id`: Target name, as declared by the task's `target:` and defined under `targets/`.
+  Versions before 0.6.0 called this column `environment_id`; `initialize()` renames it in place.
+  It has never held the `--env` overlay name, which selects configuration values only.
 - `direction`: UP or DOWN
 - `status`: SUCCESS, FAILURE, or SKIPPED
 - `description`: Task name

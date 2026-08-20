@@ -1002,9 +1002,11 @@ WHERE node_id = 'db1/001_create_users';
 ```
 
 **履歴テーブルスキーマ:**
-- `id`: 一意の実行ID（UUID）
+- `id`: 一意の実行ID（時刻順に並ぶ UUIDv7。生成順と辞書順が一致する）
 - `node_id`: タスクID
-- `environment_id`: 環境名
+- `target_id`: ターゲット名（タスクの `target:` が指す `targets/` の定義）。0.6.0 より前は
+  `environment_id` という列名だったが、`initialize()` がその場でリネームする。`--env` で選ぶ
+  オーバーレイ名が入ったことは一度もない（あれは設定値を上書きするだけ）
 - `direction`: UPまたはDOWN
 - `status`: SUCCESS、FAILURE、またはSKIPPED
 - `description`: タスク名
