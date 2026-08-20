@@ -197,7 +197,7 @@ On top of the standard JDBC schema (tables, views, columns, keys, indexes), the 
 - **Extensions** — installed extensions and their versions
 - **Enums** — user-defined enum types and their labels
 - **Sequences** — standalone and owned sequences
-- **Functions / Procedures** — including language and definer/owner attribution
+- **Functions / Procedures** — including language, definer/owner attribution, and the routine body (`pg_proc.prosrc`) as a fenced SQL block. Arguments stay as the single formatted line produced by `pg_get_function_arguments()`
 - **Triggers** — table triggers and their timing/events
 - **Materialized Views** — definitions in addition to regular views
 - **Partitions** — partitioned tables and their partition hierarchy

@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: made `migraphe_history` creatable on 5.5-generation MySQL/MariaDB (InnoDB 767-byte key limit) by narrowing `id` to `VARCHAR(64)` and adding index prefix lengths, and replaced the `ROW_NUMBER()` window function in `executedNodes()` with a portable correlated subquery (Session 67)
-**Tests**: 1,040, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: `mysql-markdown` routine pages now carry a `## Parameters` table (from `information_schema.PARAMETERS`, grouped by `(schema, name, ROUTINE_TYPE)`) and the routine body as a fenced SQL block; PostgreSQL function pages gained the same body section from `pg_proc.prosrc` (Session 68)
+**Tests**: 1,051, 100% passing
 
 ## Module Structure
 
@@ -212,15 +212,14 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-08-20 (Session 67)
-- Fixed the MySQL history-table DDL so it can be created on 5.5-generation servers, where InnoDB caps an index key prefix at 767 bytes (user report #1). **Two** violations existed, not one: the reported `INDEX (node_id, environment_id)` (utf8mb4 255×4×2 = 2040 B) and also `id VARCHAR(255) PRIMARY KEY` (1020 B), which fails first. Identifier columns keep utf8mb4; only indexed lengths are bounded — `id VARCHAR(64)` (always a 36-char UUID, never a lookup key) plus `INDEX (node_id(100), environment_id(60))` and `INDEX (environment_id(60))`. The generic JDBC DDL narrows `id` likewise; PostgreSQL uses `TEXT` and is unaffected.
-- Rejected the reported `CHARACTER SET ascii` remedy: `node_id` comes from the task file path and may be non-ASCII, where a non-strict server accepts the INSERT with only `Warning 1366` (silent corruption) and a utf8mb4 client's lookup fails with `ERROR 1267`.
-- No migration ships: `initialize()` uses `CREATE TABLE IF NOT EXISTS`, so existing tables are untouched and only new installs get the corrected shape.
-- Removed the `ROW_NUMBER() OVER (...)` window function from `JdbcHistoryRepository.executedNodes()` (MySQL 8.0+/MariaDB 10.2+ only; `ERROR 1064` on 5.5) in favour of a correlated `MAX(executed_at)` subquery with `DISTINCT`. Tie semantics change deliberately; no core/CLI/Gradle caller exists.
-- Tests: `MariaDBLegacyCompatibilityTest` (4, on `mariadb:10.1` — the oldest arm64 image that still enforces the 767-byte limit and predates window functions, self-reporting as `5.5.5-10.1.48-MariaDB`), incl. a canary on `@@innodb_large_prefix` and a non-ASCII `node_id` round-trip.
-- **Discovered, not fixed**: Connector/J truncates fractional seconds against MariaDB (it reads the `5.5.5` version prefix), so `executed_at` holds whole seconds despite `TIMESTAMP(6)` — `wasExecuted()`'s `ORDER BY executed_at DESC LIMIT 1` is already non-deterministic there for same-second UP/DOWN pairs. A fix needs a monotonic tiebreaker column (schema change + migration). See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+### 2026-08-20 (Session 68)
+- Fixed empty routine output in `mysql-markdown` (user report #4): `MySQLSchemaInfoProvider.extractRoutines` never queried `information_schema.PARAMETERS` (it hardcoded an empty `parameterList`) and never selected `ROUTINE_DEFINITION`, so routine pages showed a blank `| Parameters | |` row and no body at all.
+- Parameters are now grouped by a `RoutineKey(schema, name, type)` record — `ROUTINE_TYPE` is part of the identity because a procedure and a function may share a name (keying on the name alone merges their parameter lists; verified by hand-mutating the key). `ORDINAL_POSITION > 0` drops the row that reports a function's return value.
+- Bodies render through a new shared `JdbcMarkdownGenerator.appendDefinitionSection()`, which omits the section when the body is `null` (insufficient privilege) and grows the fence past the longest backtick run in the body. PostgreSQL function pages gained the same section from `pg_proc.prosrc` (not `pg_get_functiondef()`, which errors on aggregate/window functions); PG arguments deliberately stay the single formatted `pg_get_function_arguments()` line.
+- **Breaking**: `MySQLRoutineInfo.parameterList` (String) → `parameters` (`List<MySQLParameterInfo>`), plus a new `definition` component; `PostgreSQLFunctionInfo` gained `definition`. Existing-arity convenience constructors are preserved. Output changes for users who changed no configuration → minor bump. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+
 
 ---
 
 **Last Updated**: 2026-08-20
-**Current Work**: History-table portability to 5.5-generation MySQL/MariaDB — index key lengths brought under InnoDB's 767-byte limit (utf8mb4 retained, `id` narrowed to `VARCHAR(64)`, prefix indexes) and `executedNodes()` rewritten without window functions. Verified on `mariadb:10.1`. See [docs/CHANGELOG.md](docs/CHANGELOG.md) for the rejected ascii alternative and the newly discovered MariaDB sub-second precision loss.
+**Current Work**: Routine documentation for `mysql-markdown` — parameters are read from `information_schema.PARAMETERS` (grouped by `(schema, name, ROUTINE_TYPE)`, return-value row filtered out) and rendered as a `## Parameters` table, and `ROUTINE_DEFINITION` is rendered as a fenced SQL block via the shared `JdbcMarkdownGenerator.appendDefinitionSection()`; PostgreSQL function pages gained the same body section from `pg_proc.prosrc`. Breaking record changes to `MySQLRoutineInfo` / `PostgreSQLFunctionInfo`. See [docs/CHANGELOG.md](docs/CHANGELOG.md).

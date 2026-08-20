@@ -197,7 +197,7 @@ migraphe generate --name pg-schema-docs
 - **拡張 (Extensions)** — インストール済み拡張とそのバージョン
 - **列挙型 (Enums)** — ユーザー定義の enum 型とそのラベル
 - **シーケンス (Sequences)** — 独立およびテーブル所有のシーケンス
-- **関数/プロシージャ (Functions / Procedures)** — 言語と定義者/所有者の帰属を含む
+- **関数/プロシージャ (Functions / Procedures)** — 言語、定義者/所有者の帰属、および SQL コードブロックとしての定義本体（`pg_proc.prosrc`）を含む。引数は `pg_get_function_arguments()` が整形した 1 行の文字列のままです
 - **トリガー (Triggers)** — テーブルトリガーとそのタイミング/イベント
 - **マテリアライズドビュー (Materialized Views)** — 通常のビューに加えて定義を記載
 - **パーティション (Partitions)** — パーティションテーブルとそのパーティション階層

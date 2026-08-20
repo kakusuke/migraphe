@@ -152,25 +152,77 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
 
     private List<MySQLRoutineInfo> extractRoutines(Connection conn, String catalog)
             throws SQLException {
+        Map<RoutineKey, List<MySQLParameterInfo>> parameters =
+                extractRoutineParameters(conn, catalog);
         List<MySQLRoutineInfo> result = new ArrayList<>();
         String sql =
                 "SELECT ROUTINE_SCHEMA, ROUTINE_NAME, ROUTINE_TYPE,"
-                        + " DTD_IDENTIFIER, SECURITY_TYPE, DEFINER"
+                        + " DTD_IDENTIFIER, SECURITY_TYPE, DEFINER, ROUTINE_DEFINITION"
                         + " FROM information_schema.ROUTINES"
                         + " WHERE ROUTINE_SCHEMA = ?";
         try (var ps = conn.prepareStatement(sql)) {
             ps.setString(1, catalog);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    String schema = rs.getString("ROUTINE_SCHEMA");
+                    String name = rs.getString("ROUTINE_NAME");
+                    String type = rs.getString("ROUTINE_TYPE");
                     result.add(
                             new MySQLRoutineInfo(
-                                    rs.getString("ROUTINE_SCHEMA"),
-                                    rs.getString("ROUTINE_NAME"),
-                                    rs.getString("ROUTINE_TYPE"),
+                                    schema,
+                                    name,
+                                    type,
                                     nullToEmpty(rs.getString("DTD_IDENTIFIER")),
-                                    "",
+                                    List.copyOf(
+                                            parameters.getOrDefault(
+                                                    new RoutineKey(schema, name, type), List.of())),
                                     rs.getString("SECURITY_TYPE"),
-                                    rs.getString("DEFINER")));
+                                    rs.getString("DEFINER"),
+                                    rs.getString("ROUTINE_DEFINITION")));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Reads the declared parameters of every routine in the schema, grouped by routine identity.
+     *
+     * <p>The grouping key includes {@code ROUTINE_TYPE} because a procedure and a function may
+     * share a name, in which case keying on the name alone would merge their parameter lists. A
+     * function's return value, which the source table reports at ordinal position {@code 0} with no
+     * mode and no name, is excluded by the query.
+     *
+     * @param conn the open connection to query
+     * @param catalog the schema (MySQL database) to inspect
+     * @return the parameters of each routine, in ordinal order
+     * @throws SQLException if the query fails
+     */
+    private Map<RoutineKey, List<MySQLParameterInfo>> extractRoutineParameters(
+            Connection conn, String catalog) throws SQLException {
+        Map<RoutineKey, List<MySQLParameterInfo>> result = new LinkedHashMap<>();
+        String sql =
+                "SELECT SPECIFIC_SCHEMA, SPECIFIC_NAME, ROUTINE_TYPE, ORDINAL_POSITION,"
+                        + " PARAMETER_MODE, PARAMETER_NAME, DTD_IDENTIFIER"
+                        + " FROM information_schema.PARAMETERS"
+                        + " WHERE SPECIFIC_SCHEMA = ? AND ORDINAL_POSITION > 0"
+                        + " ORDER BY SPECIFIC_NAME, ROUTINE_TYPE, ORDINAL_POSITION";
+        try (var ps = conn.prepareStatement(sql)) {
+            ps.setString(1, catalog);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    RoutineKey key =
+                            new RoutineKey(
+                                    rs.getString("SPECIFIC_SCHEMA"),
+                                    rs.getString("SPECIFIC_NAME"),
+                                    rs.getString("ROUTINE_TYPE"));
+                    result.computeIfAbsent(key, k -> new ArrayList<>())
+                            .add(
+                                    new MySQLParameterInfo(
+                                            rs.getInt("ORDINAL_POSITION"),
+                                            nullToEmpty(rs.getString("PARAMETER_MODE")),
+                                            nullToEmpty(rs.getString("PARAMETER_NAME")),
+                                            nullToEmpty(rs.getString("DTD_IDENTIFIER"))));
                 }
             }
         }
@@ -445,6 +497,18 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
                     deleteRule);
         }
     }
+
+    /**
+     * Identity of a stored routine within a schema.
+     *
+     * <p>{@code type} participates in the identity because a procedure and a function may share a
+     * name.
+     *
+     * @param schema the schema the routine belongs to
+     * @param name the routine name
+     * @param type the routine kind ({@code "PROCEDURE"} or {@code "FUNCTION"})
+     */
+    private record RoutineKey(String schema, String name, String type) {}
 
     private static class IndexBuilder {
         final String name;

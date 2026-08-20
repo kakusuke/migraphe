@@ -452,6 +452,7 @@ public class PostgreSQLMarkdownGenerator extends JdbcMarkdownGenerator {
                 if (func.owner() != null && !func.owner().isBlank()) {
                     fileSb.append("| Owner | ").append(func.owner()).append(" |\n");
                 }
+                appendDefinitionSection(fileSb, func.definition());
                 Path funcFile =
                         outputDir
                                 .resolve(name())

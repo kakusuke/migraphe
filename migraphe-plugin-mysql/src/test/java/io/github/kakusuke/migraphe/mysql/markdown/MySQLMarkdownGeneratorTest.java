@@ -14,6 +14,7 @@ import io.github.kakusuke.migraphe.jdbc.schema.JdbcTriggerInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcUdtInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLEventInfo;
+import io.github.kakusuke.migraphe.mysql.schema.MySQLParameterInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLPartitionInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLRoutineInfo;
 import io.github.kakusuke.migraphe.mysql.schema.MySQLSchemaInfo;
@@ -176,7 +177,7 @@ class MySQLMarkdownGeneratorTest {
                                         "get_user",
                                         "FUNCTION",
                                         "VARCHAR",
-                                        "id INT",
+                                        List.of(new MySQLParameterInfo(1, "IN", "id", "int")),
                                         "DEFINER")),
                         List.of(),
                         List.of());
@@ -328,7 +329,7 @@ class MySQLMarkdownGeneratorTest {
                                         "get_user",
                                         "FUNCTION",
                                         "VARCHAR",
-                                        "id INT",
+                                        List.of(new MySQLParameterInfo(1, "IN", "id", "int")),
                                         "DEFINER",
                                         "root@%")),
                         List.of(),
@@ -343,6 +344,119 @@ class MySQLMarkdownGeneratorTest {
         Path routineFile = tempDir.resolve("testdb/mydb/routines/get_user.md");
         String content = Files.readString(routineFile);
         assertThat(content).contains("| Definer | root@% |");
+    }
+
+    @Test
+    void routineFileIncludesParametersTable(@TempDir Path tempDir) throws Exception {
+        var schemaInfo =
+                routineSchemaInfo(
+                        new MySQLRoutineInfo(
+                                "mydb",
+                                "set_user",
+                                "PROCEDURE",
+                                "",
+                                List.of(
+                                        new MySQLParameterInfo(1, "IN", "a", "int"),
+                                        new MySQLParameterInfo(2, "OUT", "b", "varchar(10)")),
+                                "DEFINER"));
+
+        generate(schemaInfo, tempDir);
+
+        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        assertThat(content)
+                .contains("## Parameters")
+                .contains("| # | Mode | Name | Type |")
+                .contains("| 1 | IN | a | int |")
+                .contains("| 2 | OUT | b | varchar(10) |");
+    }
+
+    @Test
+    void routineFileIncludesDefinitionBody(@TempDir Path tempDir) throws Exception {
+        var schemaInfo =
+                routineSchemaInfo(
+                        new MySQLRoutineInfo(
+                                "mydb",
+                                "set_user",
+                                "PROCEDURE",
+                                "",
+                                List.of(),
+                                "DEFINER",
+                                "root@%",
+                                "BEGIN\n  SELECT 1;\nEND"));
+
+        generate(schemaInfo, tempDir);
+
+        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        assertThat(content).contains("## Definition\n\n```sql\nBEGIN\n  SELECT 1;\nEND\n```\n");
+    }
+
+    @Test
+    void routineFileOmitsParametersAndDefinitionWhenAbsent(@TempDir Path tempDir) throws Exception {
+        var schemaInfo =
+                routineSchemaInfo(
+                        new MySQLRoutineInfo(
+                                "mydb", "set_user", "PROCEDURE", "", List.of(), "DEFINER"));
+
+        generate(schemaInfo, tempDir);
+
+        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        assertThat(content).doesNotContain("## Parameters").doesNotContain("## Definition");
+    }
+
+    @Test
+    void routineDefinitionFenceIsExtendedWhenBodyContainsFence(@TempDir Path tempDir)
+            throws Exception {
+        var schemaInfo =
+                routineSchemaInfo(
+                        new MySQLRoutineInfo(
+                                "mydb",
+                                "set_user",
+                                "PROCEDURE",
+                                "",
+                                List.of(),
+                                "DEFINER",
+                                "root@%",
+                                "BEGIN\n  -- ``` not a fence\n  SELECT 1;\nEND"));
+
+        generate(schemaInfo, tempDir);
+
+        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        assertThat(content).contains("````sql\n").contains("\n````\n");
+    }
+
+    @Test
+    void routineParameterCellsEscapePipes(@TempDir Path tempDir) throws Exception {
+        var schemaInfo =
+                routineSchemaInfo(
+                        new MySQLRoutineInfo(
+                                "mydb",
+                                "set_user",
+                                "PROCEDURE",
+                                "",
+                                List.of(new MySQLParameterInfo(1, "IN", "a", "enum('x|y')")),
+                                "DEFINER"));
+
+        generate(schemaInfo, tempDir);
+
+        String content = Files.readString(tempDir.resolve("testdb/mydb/routines/set_user.md"));
+        assertThat(content).contains("| 1 | IN | a | enum('x\\|y') |");
+    }
+
+    private MySQLSchemaInfo routineSchemaInfo(MySQLRoutineInfo routine) {
+        return new MySQLSchemaInfo(
+                List.of(emptySchema("mydb")),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(routine),
+                List.of(),
+                List.of());
+    }
+
+    private void generate(MySQLSchemaInfo schemaInfo, Path outputDir) {
+        new MySQLMarkdownGenerator(
+                        "testdb", schemaInfo, List.<JdbcMarkdownDefinition.ExcludePattern>of())
+                .generate(outputDir);
     }
 
     @Test

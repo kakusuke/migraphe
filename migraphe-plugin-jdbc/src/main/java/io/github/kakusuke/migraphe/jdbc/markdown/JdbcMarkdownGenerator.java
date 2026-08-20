@@ -1210,4 +1210,45 @@ public class JdbcMarkdownGenerator {
             throw new UncheckedIOException(e);
         }
     }
+
+    /**
+     * Appends a {@code ## Definition} section rendering the given body as a fenced SQL block.
+     *
+     * <p>Nothing is appended when {@code definition} is {@code null} or blank, which is how an
+     * unavailable body is represented (for example {@code
+     * information_schema.ROUTINES.ROUTINE_DEFINITION} is {@code null} when the connected account
+     * lacks the privilege to read it). The fence is grown one backtick past the longest backtick
+     * run in the body, so a body that itself contains a Markdown fence cannot terminate the block
+     * early.
+     *
+     * @param sb the buffer accumulating the detail page
+     * @param definition the routine body to render, or {@code null} when it was not captured
+     */
+    protected static void appendDefinitionSection(StringBuilder sb, @Nullable String definition) {
+        if (definition == null || definition.isBlank()) {
+            return;
+        }
+        String fence = "`".repeat(Math.max(3, longestBacktickRun(definition) + 1));
+        sb.append("\n## Definition\n\n")
+                .append(fence)
+                .append("sql\n")
+                .append(definition)
+                .append("\n")
+                .append(fence)
+                .append("\n");
+    }
+
+    private static int longestBacktickRun(String text) {
+        int longest = 0;
+        int current = 0;
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) == '`') {
+                current++;
+                longest = Math.max(longest, current);
+            } else {
+                current = 0;
+            }
+        }
+        return longest;
+    }
 }

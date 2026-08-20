@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.mysql.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
@@ -150,6 +151,84 @@ class MySQLSchemaInfoProviderTest {
                                         && r.schema().equals("migraphe_test")
                                         && r.definer() != null
                                         && !r.definer().isBlank());
+    }
+
+    @Test
+    void shouldExtractRoutineParameters() throws Exception {
+        executeSql("DROP PROCEDURE IF EXISTS test_param_proc");
+        executeSql(
+                "CREATE PROCEDURE test_param_proc("
+                        + "IN a INT, OUT b VARCHAR(10), INOUT c DECIMAL(10,2))"
+                        + " BEGIN SET b = 'x'; END");
+        var provider = new MySQLSchemaInfoProvider();
+
+        var info = provider.getSchemaInfo(createEnv());
+
+        var routine = findRoutine(info, "test_param_proc", "PROCEDURE");
+        assertThat(routine.parameters())
+                .extracting(
+                        MySQLParameterInfo::position,
+                        MySQLParameterInfo::mode,
+                        MySQLParameterInfo::name)
+                .containsExactly(tuple(1, "IN", "a"), tuple(2, "OUT", "b"), tuple(3, "INOUT", "c"));
+        // The type spelling differs between server versions (MariaDB reports int(11) where
+        // MySQL 8.0 reports int), so only require that something was captured.
+        assertThat(routine.parameters()).allSatisfy(p -> assertThat(p.dataType()).isNotBlank());
+    }
+
+    @Test
+    void shouldExcludeFunctionReturnValueFromParameters() throws Exception {
+        executeSql("DROP FUNCTION IF EXISTS test_param_func");
+        executeSql(
+                "CREATE FUNCTION test_param_func(n INT) RETURNS VARCHAR(60) DETERMINISTIC"
+                        + " BEGIN RETURN CONCAT('v', n); END");
+        var provider = new MySQLSchemaInfoProvider();
+
+        var info = provider.getSchemaInfo(createEnv());
+
+        var routine = findRoutine(info, "test_param_func", "FUNCTION");
+        assertThat(routine.parameters())
+                .extracting(MySQLParameterInfo::position, MySQLParameterInfo::name)
+                .containsExactly(tuple(1, "n"));
+    }
+
+    @Test
+    void shouldExtractRoutineDefinition() throws Exception {
+        executeSql("DROP PROCEDURE IF EXISTS test_def_proc");
+        executeSql("CREATE PROCEDURE test_def_proc(IN x INT) BEGIN SELECT x + 41; END");
+        var provider = new MySQLSchemaInfoProvider();
+
+        var info = provider.getSchemaInfo(createEnv());
+
+        assertThat(findRoutine(info, "test_def_proc", "PROCEDURE").definition())
+                .contains("SELECT x + 41");
+    }
+
+    @Test
+    void shouldNotMixParametersBetweenSameNamedProcedureAndFunction() throws Exception {
+        executeSql("DROP PROCEDURE IF EXISTS dual_name");
+        executeSql("DROP FUNCTION IF EXISTS dual_name");
+        executeSql("CREATE PROCEDURE dual_name(IN p1 INT, IN p2 INT) BEGIN SELECT p1 + p2; END");
+        executeSql(
+                "CREATE FUNCTION dual_name(f1 INT) RETURNS INT DETERMINISTIC"
+                        + " BEGIN RETURN f1; END");
+        var provider = new MySQLSchemaInfoProvider();
+
+        var info = provider.getSchemaInfo(createEnv());
+
+        assertThat(findRoutine(info, "dual_name", "PROCEDURE").parameters())
+                .extracting(MySQLParameterInfo::name)
+                .containsExactly("p1", "p2");
+        assertThat(findRoutine(info, "dual_name", "FUNCTION").parameters())
+                .extracting(MySQLParameterInfo::name)
+                .containsExactly("f1");
+    }
+
+    private MySQLRoutineInfo findRoutine(MySQLSchemaInfo info, String name, String type) {
+        return info.routines().stream()
+                .filter(r -> r.name().equals(name) && r.type().equals(type))
+                .findFirst()
+                .orElseThrow();
     }
 
     @Test

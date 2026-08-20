@@ -192,7 +192,7 @@ On top of the standard JDBC schema (tables, views, columns, keys, indexes), the 
 - **Storage Engines** — per-table engine (e.g., InnoDB) and table options
 - **Table Metadata** — collation, row format, auto-increment, comments
 - **Triggers** — table triggers with timing/events
-- **Routines** — stored procedures and functions, including definer attribution
+- **Routines** — stored procedures and functions, including definer attribution, a parameter table (position / mode / name / type) and the routine body as a fenced SQL block. The body is omitted when the connected account lacks the privilege to read `ROUTINE_DEFINITION`
 - **Events** — scheduled events
 - **Partitions** — partitioning method and partition list
 
