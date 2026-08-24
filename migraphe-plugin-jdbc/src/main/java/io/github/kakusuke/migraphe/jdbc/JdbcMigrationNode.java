@@ -56,19 +56,19 @@ public final class JdbcMigrationNode implements MigrationNode {
     /**
      * Returns the SHA-256 of this node's UP SQL, hex-encoded.
      *
-     * <p>Normalization is deliberately limited to line endings and the surrounding whitespace a
-     * YAML block scalar contributes, so the same migration checked out on another platform keeps
-     * its fingerprint. It stops there on purpose: collapsing interior whitespace would change the
-     * meaning of string literals, and broadening normalization later invalidates every fingerprint
-     * already recorded.
+     * <p>The SQL is hashed as given, with only its leading and trailing whitespace stripped — the
+     * whitespace a YAML block scalar contributes. Nothing else is normalized: a comment-only edit
+     * changes the token, so does re-indenting an interior line, and so does a CRLF line ending
+     * where the same text had LF. Adding normalization would invalidate every token already
+     * recorded.
      *
-     * @return the hex-encoded SHA-256 of the normalized UP SQL
+     * @return the hex-encoded SHA-256 of the stripped UP SQL
      */
     @Override
     public String fingerprint() {
-        String normalized = upSql.replace("\r\n", "\n").replace("\r", "\n").strip();
+        String stripped = upSql.strip();
         try {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(normalized.getBytes(UTF_8));
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(stripped.getBytes(UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is required but unavailable", e);
@@ -235,6 +235,10 @@ public final class JdbcMigrationNode implements MigrationNode {
         /**
          * Sets the forward (UP) migration SQL from a literal string.
          *
+         * <p>{@link JdbcMigrationNode#fingerprint()} hashes this text as given. A caller that read
+         * it from a file should fold CRLF to LF first, or the same file will fingerprint
+         * differently on a CRLF checkout.
+         *
          * @param sql the UP SQL
          * @return this builder
          */
@@ -250,6 +254,7 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          * @throws IOException if the file cannot be read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder upSqlFromFile(Path path) throws IOException {
             this.upSql = Files.readString(path);
             return this;
@@ -262,6 +267,7 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          * @throws IOException if the resource cannot be found or read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder upSqlFromResource(String resourcePath) throws IOException {
             this.upSql = loadResource(resourcePath);
             return this;
@@ -285,6 +291,7 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          * @throws IOException if the file cannot be read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder downSqlFromFile(Path path) throws IOException {
             this.downSql = Files.readString(path);
             return this;
@@ -297,6 +304,7 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          * @throws IOException if the resource cannot be found or read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder downSqlFromResource(String resourcePath) throws IOException {
             this.downSql = loadResource(resourcePath);
             return this;

@@ -79,25 +79,21 @@ public interface MigrationNode {
     @Nullable Task downTask();
 
     /**
-     * Returns an opaque token identifying the content this node would apply, or {@code null} when
-     * the plugin cannot produce one.
+     * Returns an opaque token over the UP content this node would apply, or {@code null} when the
+     * plugin cannot produce one. {@code null} means "unknown", not "unchanged", so callers must
+     * skip the comparison rather than treat it as a match.
      *
-     * <p>Two nodes with the same fingerprint apply the same thing; a fingerprint that changed since
-     * a node was applied means the definition was edited afterwards. {@code null} means "unknown",
-     * not "unchanged", so callers must skip the comparison rather than treat it as a match.
+     * <p>What counts as the UP content, and how a token is derived from it, is the plugin's choice.
+     * The token is opaque: callers may only compare two of them for equality. It must not cover the
+     * mode in which the content is applied, nor the rollback definition.
      *
-     * <p>The token must be <strong>stable</strong>: identical content must yield an identical token
-     * across JVM invocations, platforms, and plugin versions, because callers persist it and
-     * compare it much later. Deriving it from anything whose iteration order is unspecified — a
-     * {@link Set}, a {@code HashMap} — breaks that, and every later comparison then reports a
-     * change that never happened.
+     * <p>The token must be <strong>stable</strong>: the same node must yield the same token across
+     * JVM invocations, platforms, and plugin versions, because callers persist it and compare it
+     * much later. Deriving it from anything whose iteration order is unspecified — a {@link Set}, a
+     * {@code HashMap} — breaks that.
      *
-     * <p>The token must cover the UP <strong>content</strong> — the statements themselves — and
-     * neither the mode in which they are applied nor the rollback definition. The remedy for a
-     * changed fingerprint is to roll the node back and re-apply it, which destroys data, so the
-     * token must change only when re-applying would produce a different result. Editing a {@code
-     * down} definition, or switching a node between autocommit and transactional execution, leaves
-     * the applied result identical and must therefore leave the token identical.
+     * <p>Callers must <strong>report</strong> a changed token, never auto-remediate it. The remedy
+     * is a destructive roll-back-and-re-apply, so a report has to stay declinable.
      *
      * @return the fingerprint, or {@code null} if this plugin does not provide one
      */

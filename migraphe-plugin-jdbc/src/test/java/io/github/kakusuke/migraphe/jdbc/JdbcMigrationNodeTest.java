@@ -49,27 +49,17 @@ class JdbcMigrationNodeTest {
     }
 
     @Test
-    void fingerprintIsSha256OfUpSqlNormalizedForLineEndings() {
-        var lf =
-                nodeBuilder()
-                        .upSql("CREATE TABLE users (id INT);\nCREATE INDEX idx ON users (id);\n")
-                        .build();
-        var crlf =
-                nodeBuilder()
-                        .upSql(
-                                "\r\nCREATE TABLE users (id INT);\r\nCREATE INDEX idx ON users"
-                                        + " (id);\r\n  ")
-                        .build();
-        var cr =
-                nodeBuilder()
-                        .upSql("CREATE TABLE users (id INT);\rCREATE INDEX idx ON users (id);")
-                        .build();
+    void fingerprintStripsSurroundingWhitespaceAndNothingElse() {
+        var trailingNewline = nodeBuilder().upSql("CREATE TABLE users (id INT);\n").build();
+        var padded = nodeBuilder().upSql("  CREATE TABLE users (id INT);  ").build();
+        var lf = nodeBuilder().upSql("CREATE TABLE users (\nid INT\n);").build();
+        var crlf = nodeBuilder().upSql("CREATE TABLE users (\r\nid INT\r\n);").build();
         var other = nodeBuilder().upSql("CREATE TABLE orders (id INT);").build();
 
-        assertThat(lf.fingerprint())
-                .isEqualTo("5ecd4e327db305c2b3f327cd604d789a703cfeedc58cf67c6bfd36d38b2db19f");
-        assertThat(crlf.fingerprint()).isEqualTo(lf.fingerprint());
-        assertThat(cr.fingerprint()).isEqualTo(lf.fingerprint());
+        assertThat(trailingNewline.fingerprint())
+                .isEqualTo("5ea918fac5561634f4b577815b41483e5882b9c57dd3bd2351e3422d641af545");
+        assertThat(padded.fingerprint()).isEqualTo(trailingNewline.fingerprint());
+        assertThat(crlf.fingerprint()).isNotEqualTo(lf.fingerprint());
         assertThat(other.fingerprint())
                 .isEqualTo("13d48c0dae01b9846a83a8848e24e38f31b555559f27216010f998177c0a756a");
     }
@@ -82,6 +72,35 @@ class JdbcMigrationNodeTest {
                 nodeBuilder().upSql("CREATE TABLE users (id INT);").autocommit(true).build();
 
         assertThat(autocommitting.fingerprint()).isEqualTo(transactional.fingerprint());
+    }
+
+    @Test
+    void fingerprintIgnoresDownSql() {
+        var withoutDown = nodeBuilder().upSql("CREATE TABLE users (id INT);").build();
+        var withDown =
+                nodeBuilder()
+                        .upSql("CREATE TABLE users (id INT);")
+                        .downSql("DROP TABLE users;")
+                        .build();
+
+        assertThat(withDown.fingerprint()).isEqualTo(withoutDown.fingerprint());
+    }
+
+    @Test
+    void fingerprintChangesWhenACommentIsAdded() {
+        var bare = nodeBuilder().upSql("CREATE TABLE users (id INT);").build();
+        var commented =
+                nodeBuilder().upSql("-- create users\nCREATE TABLE users (id INT);").build();
+
+        assertThat(commented.fingerprint()).isNotEqualTo(bare.fingerprint());
+    }
+
+    @Test
+    void fingerprintChangesWhenAnInteriorLineIsReindented() {
+        var flat = nodeBuilder().upSql("CREATE TABLE users (\nid INT\n);").build();
+        var indented = nodeBuilder().upSql("CREATE TABLE users (\n    id INT\n);").build();
+
+        assertThat(indented.fingerprint()).isNotEqualTo(flat.fingerprint());
     }
 
     @Test
