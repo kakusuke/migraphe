@@ -28,6 +28,9 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
 
+    // 組み込み DB（引数解析の配線をコンテナ無しで検証するため）
+    testImplementation(libs.h2)
+
     // Testcontainers（統合テスト用）
     testImplementation(platform(libs.testcontainers.bom))
     testImplementation(libs.testcontainers.postgresql)
