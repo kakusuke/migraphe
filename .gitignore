@@ -140,3 +140,10 @@ sample/**/docs/
 # Their SHA-256 hashes are tied to the released JARs, so committing them would
 # force a churn on every release; sample users run `migraphe pin` themselves.
 sample/**/migraphe.lock.yaml
+
+# Claude Code local state.
+# Shared config under .claude/ (settings.json, agents/, skills/, mcp-servers/)
+# stays tracked; only per-developer files and generated dirs are ignored.
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
