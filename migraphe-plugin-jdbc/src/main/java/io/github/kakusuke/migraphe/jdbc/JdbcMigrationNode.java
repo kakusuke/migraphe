@@ -9,6 +9,9 @@ import io.github.kakusuke.migraphe.api.task.Task;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -47,6 +50,28 @@ public final class JdbcMigrationNode implements MigrationNode {
 
         if (upSql.isBlank()) {
             throw new IllegalArgumentException("upSql must not be blank");
+        }
+    }
+
+    /**
+     * Returns the SHA-256 of this node's UP SQL, hex-encoded.
+     *
+     * <p>Normalization is deliberately limited to line endings and the surrounding whitespace a
+     * YAML block scalar contributes, so the same migration checked out on another platform keeps
+     * its fingerprint. It stops there on purpose: collapsing interior whitespace would change the
+     * meaning of string literals, and broadening normalization later invalidates every fingerprint
+     * already recorded.
+     *
+     * @return the hex-encoded SHA-256 of the normalized UP SQL
+     */
+    @Override
+    public String fingerprint() {
+        String normalized = upSql.replace("\r\n", "\n").replace("\r", "\n").strip();
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256").digest(normalized.getBytes(UTF_8));
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is required but unavailable", e);
         }
     }
 
