@@ -121,7 +121,6 @@ public class Main {
             Command command = createCommand(commandName, args, context);
 
             if (command == null) {
-                System.err.println("Unknown command: " + commandName);
                 printUsage();
                 return 1;
             }
@@ -158,14 +157,21 @@ public class Main {
         return registry;
     }
 
-    /** Creates the {@link Command} instance matching the given command name, or {@code null}. */
+    /**
+     * Creates the {@link Command} instance matching the given command name, or {@code null} when
+     * the name matches no command (reported here to standard error) or the matched command rejected
+     * its arguments (reported by that command).
+     */
     private static @Nullable Command createCommand(
             String commandName, String[] args, ExecutionContext context) {
         return switch (commandName) {
             case "up" -> createUpCommand(args, context);
             case "status" -> new StatusCommand(context);
             case "down" -> createDownCommand(args, context);
-            default -> null;
+            default -> {
+                System.err.println("Unknown command: " + commandName);
+                yield null;
+            }
         };
     }
 

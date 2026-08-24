@@ -289,6 +289,37 @@ class MainTest {
     }
 
     @Test
+    void unknownCommandShouldBeReportedOnlyForUnrecognisedCommandWord(@TempDir Path tempDir)
+            throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: noop-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+
+        String originalUserDir = System.getProperty("user.dir");
+        System.setProperty("user.dir", tempDir.toString());
+        String downStderr;
+        String bogusStderr;
+        try {
+            downStderr = captureStderr(() -> captureStdout(() -> Main.run(new String[] {"down"})));
+            bogusStderr =
+                    captureStderr(() -> captureStdout(() -> Main.run(new String[] {"bogus"})));
+        } finally {
+            System.setProperty("user.dir", originalUserDir);
+        }
+
+        assertThat(downStderr).contains("Version argument or --all required");
+        assertThat(downStderr).doesNotContain("Unknown command");
+        assertThat(bogusStderr).contains("Unknown command: bogus");
+    }
+
+    @Test
     void usageTextShouldAdvertisePreviewFlag() {
         String stdout = captureStdout(() -> Main.run(new String[0]));
 
