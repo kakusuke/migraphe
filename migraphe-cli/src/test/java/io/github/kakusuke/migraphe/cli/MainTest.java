@@ -106,16 +106,7 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        Files.writeString(
-                tempDir.resolve("migraphe.yaml"),
-                """
-                project:
-                  name: test
-                history:
-                  target: noop-db
-                """);
-        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
-        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        writeNoopProject(tempDir);
         Path environmentsDir = Files.createDirectories(tempDir.resolve("environments"));
         Files.writeString(environmentsDir.resolve("staging.yaml"), "DB_HOST: staging-host\n");
 
@@ -139,16 +130,7 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        Files.writeString(
-                tempDir.resolve("migraphe.yaml"),
-                """
-                project:
-                  name: test
-                history:
-                  target: noop-db
-                """);
-        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
-        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        writeNoopProject(tempDir);
 
         String[] args = {"up", "--env", "staging"};
 
@@ -180,16 +162,7 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        Files.writeString(
-                tempDir.resolve("migraphe.yaml"),
-                """
-                project:
-                  name: test
-                history:
-                  target: noop-db
-                """);
-        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
-        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        writeNoopProject(tempDir);
         Path tasksDir = Files.createDirectories(tempDir.resolve("tasks"));
         Files.writeString(
                 tasksDir.resolve("001_create_users.yaml"),
@@ -266,16 +239,7 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        Files.writeString(
-                tempDir.resolve("migraphe.yaml"),
-                """
-                project:
-                  name: test
-                history:
-                  target: noop-db
-                """);
-        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
-        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        writeNoopProject(tempDir);
 
         String[] args = {"down"};
         ExecutionContext context = Main.loadContext(tempDir, pluginRegistry, args);
@@ -291,16 +255,7 @@ class MainTest {
     @Test
     void unknownCommandShouldBeReportedOnlyForUnrecognisedCommandWord(@TempDir Path tempDir)
             throws IOException {
-        Files.writeString(
-                tempDir.resolve("migraphe.yaml"),
-                """
-                project:
-                  name: test
-                history:
-                  target: noop-db
-                """);
-        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
-        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        writeNoopProject(tempDir);
 
         String originalUserDir = System.getProperty("user.dir");
         System.setProperty("user.dir", tempDir.toString());
@@ -320,6 +275,27 @@ class MainTest {
     }
 
     @Test
+    void fullHelpShouldBePrintedOnlyForUnrecognisedCommandWord(@TempDir Path tempDir)
+            throws IOException {
+        writeNoopProject(tempDir);
+
+        String originalUserDir = System.getProperty("user.dir");
+        System.setProperty("user.dir", tempDir.toString());
+        String downStdout;
+        String bogusStdout;
+        try {
+            downStdout = captureStdout(() -> captureStderr(() -> Main.run(new String[] {"down"})));
+            bogusStdout =
+                    captureStdout(() -> captureStderr(() -> Main.run(new String[] {"bogus"})));
+        } finally {
+            System.setProperty("user.dir", originalUserDir);
+        }
+
+        assertThat(downStdout).doesNotContain("Migraphe - Database Migration Tool");
+        assertThat(bogusStdout).contains("Migraphe - Database Migration Tool");
+    }
+
+    @Test
     void usageTextShouldAdvertisePreviewFlag() {
         String stdout = captureStdout(() -> Main.run(new String[0]));
 
@@ -333,6 +309,22 @@ class MainTest {
 
         assertThat(stdout).contains("pin");
         assertThat(stdout).contains("--check");
+    }
+
+    /**
+     * Writes the smallest project the CLI will load: one noop target, used as the history store.
+     */
+    private static void writeNoopProject(Path baseDir) throws IOException {
+        Files.writeString(
+                baseDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: noop-db
+                """);
+        Path targetsDir = Files.createDirectories(baseDir.resolve("targets"));
+        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
     }
 
     /** Runs {@code action} with {@code System.err} redirected and returns what it printed. */

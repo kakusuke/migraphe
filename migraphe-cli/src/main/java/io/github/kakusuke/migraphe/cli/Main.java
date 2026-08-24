@@ -121,7 +121,6 @@ public class Main {
             Command command = createCommand(commandName, args, context);
 
             if (command == null) {
-                printUsage();
                 return 1;
             }
 
@@ -170,6 +169,7 @@ public class Main {
             case "down" -> createDownCommand(args, context);
             default -> {
                 System.err.println("Unknown command: " + commandName);
+                printUsage();
                 yield null;
             }
         };

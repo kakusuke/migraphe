@@ -22,7 +22,13 @@ test still passes, because the assertion that catches it lives in `MainTest`'s
 it is still there before touching this.
 
 Printing from this layer is the file's convention, not an exception to it: `createDownCommand` already
-reports its own rejection.
+reports its own rejection. `printUsage()` sits in the same arm for the same reason — the full help is
+useful to someone who mistyped a command name and is noise after a targeted "you need --all or a
+version" line.
+
+The consequence is that `run`'s `if (command == null)` branch is now **silent by design**. Any new
+`case` whose factory can return `null` must report the reason itself, or the user gets a bare exit
+code 1 with no output at all.
 
 If the two `null` reasons ever need to be distinguished by *callers* rather than just reported, that is
 a return-type change across every null-returning helper here (plus their NullAway annotations) — a
