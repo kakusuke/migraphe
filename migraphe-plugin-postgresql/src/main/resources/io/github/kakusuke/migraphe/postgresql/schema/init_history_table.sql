@@ -47,3 +47,20 @@ CREATE INDEX IF NOT EXISTS idx_migraphe_history_node_env
 --@apply target index
 CREATE INDEX IF NOT EXISTS idx_migraphe_history_env
     ON migraphe_history(target_id);
+
+-- Records the fingerprint of the UP content a node applied, so a later run can tell that the
+-- definition was edited afterwards. Nullable, because rows written before this column existed carry
+-- no fingerprint and null must read as "unknown" rather than "unchanged". TEXT because
+-- MigrationNode.fingerprint() leaves the token's derivation, and so its length, to the plugin.
+--
+-- PostgreSQL does have ALTER TABLE ... ADD COLUMN IF NOT EXISTS, but the detection query is kept so
+-- this step reads the same as its counterparts in the MySQL and generic resources, where Oracle
+-- MySQL's lack of that clause makes detection the only option. The parameter is cast for the reason
+-- given above.
+--@check add fingerprint column
+SELECT 1 FROM information_schema.columns
+ WHERE table_schema = CAST(? AS text)
+   AND table_name = 'migraphe_history'
+   AND column_name = 'fingerprint';
+--@apply
+ALTER TABLE migraphe_history ADD COLUMN fingerprint TEXT;

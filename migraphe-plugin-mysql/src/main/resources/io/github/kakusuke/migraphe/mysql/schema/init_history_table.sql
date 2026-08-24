@@ -47,3 +47,20 @@ SELECT 1 FROM information_schema.columns
    AND column_name = 'target_id';
 --@apply
 ALTER TABLE migraphe_history CHANGE COLUMN environment_id target_id VARCHAR(255) NOT NULL;
+
+-- Records the fingerprint of the UP content a node applied, so a later run can tell that the
+-- definition was edited afterwards. Nullable, because rows written before this column existed carry
+-- no fingerprint and null must read as "unknown" rather than "unchanged".
+--
+-- TEXT, like description and error_message, rather than a bounded width: MigrationNode
+-- .fingerprint() leaves the token's derivation, and so its length, to the plugin. The column is in
+-- no index, so the InnoDB key-length limit that bounds id and target_id does not apply here. A
+-- bounded column would truncate silently on a non-strict server, and a truncated token never again
+-- equals the freshly computed one, so an unchanged node would report as edited forever.
+--@check add fingerprint column
+SELECT 1 FROM information_schema.columns
+ WHERE table_schema = ?
+   AND table_name = 'migraphe_history'
+   AND column_name = 'fingerprint';
+--@apply
+ALTER TABLE migraphe_history ADD COLUMN fingerprint TEXT;
