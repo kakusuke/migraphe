@@ -51,35 +51,20 @@ class JdbcMigrationNodeTest {
     @Test
     void fingerprintIsSha256OfUpSqlNormalizedForLineEndings() {
         var lf =
-                JdbcMigrationNode.builder()
-                        .id("node1")
-                        .name("Create table")
-                        .environment(env)
+                nodeBuilder()
                         .upSql("CREATE TABLE users (id INT);\nCREATE INDEX idx ON users (id);\n")
                         .build();
         var crlf =
-                JdbcMigrationNode.builder()
-                        .id("node1")
-                        .name("Create table")
-                        .environment(env)
+                nodeBuilder()
                         .upSql(
                                 "\r\nCREATE TABLE users (id INT);\r\nCREATE INDEX idx ON users"
                                         + " (id);\r\n  ")
                         .build();
         var cr =
-                JdbcMigrationNode.builder()
-                        .id("node1")
-                        .name("Create table")
-                        .environment(env)
+                nodeBuilder()
                         .upSql("CREATE TABLE users (id INT);\rCREATE INDEX idx ON users (id);")
                         .build();
-        var other =
-                JdbcMigrationNode.builder()
-                        .id("node1")
-                        .name("Create table")
-                        .environment(env)
-                        .upSql("CREATE TABLE orders (id INT);")
-                        .build();
+        var other = nodeBuilder().upSql("CREATE TABLE orders (id INT);").build();
 
         assertThat(lf.fingerprint())
                 .isEqualTo("5ecd4e327db305c2b3f327cd604d789a703cfeedc58cf67c6bfd36d38b2db19f");
@@ -87,6 +72,16 @@ class JdbcMigrationNodeTest {
         assertThat(cr.fingerprint()).isEqualTo(lf.fingerprint());
         assertThat(other.fingerprint())
                 .isEqualTo("13d48c0dae01b9846a83a8848e24e38f31b555559f27216010f998177c0a756a");
+    }
+
+    @Test
+    void fingerprintIgnoresAutocommit() {
+        var transactional =
+                nodeBuilder().upSql("CREATE TABLE users (id INT);").autocommit(false).build();
+        var autocommitting =
+                nodeBuilder().upSql("CREATE TABLE users (id INT);").autocommit(true).build();
+
+        assertThat(autocommitting.fingerprint()).isEqualTo(transactional.fingerprint());
     }
 
     @Test
@@ -184,5 +179,10 @@ class JdbcMigrationNodeTest {
                         .upSql("SELECT 1")
                         .build();
         assertThat(node.dependencies()).containsExactly(NodeId.of("dep1"));
+    }
+
+    /** Builder pre-filled with the identity fields the fingerprint deliberately ignores. */
+    private JdbcMigrationNode.Builder nodeBuilder() {
+        return JdbcMigrationNode.builder().id("node1").name("Create table").environment(env);
     }
 }

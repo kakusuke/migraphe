@@ -92,9 +92,12 @@ public interface MigrationNode {
      * {@link Set}, a {@code HashMap} — breaks that, and every later comparison then reports a
      * change that never happened.
      *
-     * <p>The token must cover the UP content <strong>only</strong>. Editing a {@code down}
-     * definition is a legitimate act, so including rollback content would report a change on every
-     * such edit.
+     * <p>The token must cover the UP <strong>content</strong> — the statements themselves — and
+     * neither the mode in which they are applied nor the rollback definition. The remedy for a
+     * changed fingerprint is to roll the node back and re-apply it, which destroys data, so the
+     * token must change only when re-applying would produce a different result. Editing a {@code
+     * down} definition, or switching a node between autocommit and transactional execution, leaves
+     * the applied result identical and must therefore leave the token identical.
      *
      * @return the fingerprint, or {@code null} if this plugin does not provide one
      */
