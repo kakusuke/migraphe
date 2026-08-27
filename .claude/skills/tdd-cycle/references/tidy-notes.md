@@ -87,6 +87,11 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   laid out exactly once (`renderLines` applies the label function per non-`VirtualNode`). A layout
   change that collapses or omits a node would make the summary disagree with what is printed, and no
   test would say so — the existing ones use 2-3 node graphs where the sets coincide
+- **"Read a node's fingerprint, treating a throw as unknown" now exists twice** —
+  `DagExecutor.fingerprintOf` and `StatusService.NodeStatus.currentFingerprint`, same package,
+  identical bodies. Do not unify them by widening either one's visibility: the executor calling into
+  the service, or the service into the executor, both invert the dependency the classes have today.
+  A shared home is a design decision, not a tidy
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

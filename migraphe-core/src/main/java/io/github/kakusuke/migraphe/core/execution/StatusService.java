@@ -79,8 +79,8 @@ public final class StatusService {
          * <p>Answers {@code false} whenever either fingerprint is {@code null}, because {@link
          * MigrationNode#fingerprint()} defines {@code null} as "unknown" rather than "unchanged" —
          * a plugin that produces no fingerprint, and a row written before the column existed, both
-         * read that way. Only the UP content is covered, so editing a rollback definition or an
-         * apply-mode flag is not reported here.
+         * read that way, as does an accessor that throws. Only the UP content is covered, so
+         * editing a rollback definition or an apply-mode flag is not reported here.
          *
          * @return {@code true} only when both fingerprints are known and differ
          */
@@ -89,8 +89,25 @@ public final class StatusService {
                 return false;
             }
             String applied = latestRecord.fingerprint();
-            String current = node.fingerprint();
+            String current = currentFingerprint();
             return applied != null && current != null && !applied.equals(current);
+        }
+
+        /**
+         * Returns the node's current fingerprint, or {@code null} when the plugin's accessor
+         * throws.
+         *
+         * <p>Reporting the node unchanged beats taking the whole status report down over an
+         * optional metadata accessor.
+         *
+         * @return the fingerprint, or {@code null} if it could not be read
+         */
+        private @Nullable String currentFingerprint() {
+            try {
+                return node.fingerprint();
+            } catch (RuntimeException e) {
+                return null;
+            }
         }
     }
 

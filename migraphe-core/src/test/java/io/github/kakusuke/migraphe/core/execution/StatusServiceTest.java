@@ -9,6 +9,7 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
+import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNode;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
@@ -180,6 +181,24 @@ class StatusServiceTest {
         assertThat(changedFor(status, "node-without")).isFalse();
         assertThat(changedFor(status, "record-without")).isFalse();
         assertThat(changedFor(status, "pending")).isFalse();
+    }
+
+    @Test
+    @DisplayName("fingerprint() が例外を投げるノードは変化なしとして扱われる")
+    void upContentUnchangedWhenFingerprintAccessorThrows() {
+        // Given
+        graph.addNode(new ThrowingFingerprintNode(createNode("throwing", "Throwing")));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("throwing"), testEnv.id(), "Throwing", null, 1L, "abc"));
+
+        statusService = new StatusService(graph, historyRepo);
+
+        // When
+        StatusService.StatusInfo status = statusService.getStatus();
+
+        // Then
+        assertThat(changedFor(status, "throwing")).isFalse();
     }
 
     private boolean changedFor(StatusService.StatusInfo status, String nodeId) {
