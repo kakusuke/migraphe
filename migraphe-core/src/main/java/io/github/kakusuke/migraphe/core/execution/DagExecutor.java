@@ -355,30 +355,45 @@ public final class DagExecutor implements Executor {
         Result<TaskResult, String> result = task.execute();
         long duration = System.currentTimeMillis() - startTime;
 
-        if (result.isOk()) {
-            listener.onNodeSucceeded(node, direction, duration);
+        try {
+            if (result.isOk()) {
+                listener.onNodeSucceeded(node, direction, duration);
 
-            TaskResult taskResult = result.value();
-            history.record(recordSuccess(node, duration, taskResult));
+                TaskResult taskResult = result.value();
+                history.record(recordSuccess(node, duration, taskResult));
 
-            executedCount.incrementAndGet();
-            processCompletion(node.id(), tracker, readyQueue);
-        } else {
-            String errorMsg = result.error();
-            String message = errorMsg != null ? errorMsg : "Unknown error";
-            String sqlContent = null;
-            if (task instanceof SqlContentProvider sqlProvider) {
-                sqlContent = sqlProvider.sqlContent();
+                executedCount.incrementAndGet();
+                processCompletion(node.id(), tracker, readyQueue);
+            } else {
+                String errorMsg = result.error();
+                String message = errorMsg != null ? errorMsg : "Unknown error";
+
+                listener.onNodeFailed(node, direction, sqlContentOf(task), message);
+
+                history.record(
+                        ExecutionRecord.failure(
+                                node.id(),
+                                node.environment().id(),
+                                direction,
+                                node.name(),
+                                message));
+
+                failedNodes.add(node.id());
+                failureCount.incrementAndGet();
+                propagateFailure(node.id(), failedNodes, targetNodes, skippedCount, latch);
             }
+        } catch (RuntimeException e) {
+            String message =
+                    (result.isOk()
+                                    ? "applied, but recording the result failed: "
+                                    : "recording the failure failed: ")
+                            + e;
 
-            listener.onNodeFailed(node, direction, sqlContent, message);
+            listener.onNodeFailed(node, direction, sqlContentOf(task), message);
 
-            history.record(
-                    ExecutionRecord.failure(
-                            node.id(), node.environment().id(), direction, node.name(), message));
-
-            failedNodes.add(node.id());
-            failureCount.incrementAndGet();
+            if (failedNodes.add(node.id())) {
+                failureCount.incrementAndGet();
+            }
             propagateFailure(node.id(), failedNodes, targetNodes, skippedCount, latch);
         }
     }
@@ -423,6 +438,13 @@ public final class DagExecutor implements Executor {
      */
     private @Nullable Task taskFor(MigrationNode node) {
         return direction == ExecutionDirection.DOWN ? node.downTask() : node.upTask();
+    }
+
+    /**
+     * Returns the SQL the task would report to a failure listener, or {@code null} if it has none.
+     */
+    private static @Nullable String sqlContentOf(Task task) {
+        return task instanceof SqlContentProvider sqlProvider ? sqlProvider.sqlContent() : null;
     }
 
     /**

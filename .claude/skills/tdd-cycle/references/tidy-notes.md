@@ -65,7 +65,17 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   target set that was not already ready — the coordinator polls an empty queue while those dependents
   still hold latch counts. Otherwise it *returns success* with the node's record missing and
   `executedCount` short, so a completed run is no evidence that nothing threw. Never move a call that
-  can throw between `task.execute()` and `processCompletion`
+  can throw between `task.execute()` and `processCompletion`. The `catch` guards its `failureCount`
+  bump with `failedNodes.add(...)` while the `else` branch does not; that asymmetry is load-bearing
+  for two independent reasons — the `else` branch's own `propagateFailure` can throw and re-enter the
+  `catch` after its `add` already succeeded, *and* another node's `propagateFailure` can add this one
+  concurrently
+- **`propagateFailure`'s cone can contain a node that is currently running.** Its cone is
+  `getAllDependents`/`getAllDependencies` over the whole graph, while `ReadyNodeTracker` counts
+  in-degree only over dependencies inside `targetNodes` — so with `a→b→c` and `b` already applied,
+  `targetNodes` is `{a, c}`, `c` starts ready, and under parallelism `a` can mark a running `c`
+  skipped (counting its latch down a second time). Never write a tidy that assumes cone membership
+  implies not-yet-started
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
