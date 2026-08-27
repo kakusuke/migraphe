@@ -303,6 +303,13 @@ class MainTest {
     }
 
     @Test
+    void usageShouldListAmendAmongTheCommandsHonouringTheEnvOption() {
+        String usage = captureStdout(() -> Main.run(new String[0]));
+
+        assertThat(usage).contains("Common options (up, down, status, amend, validate, generate):");
+    }
+
+    @Test
     void downUsageErrorShouldAdvertisePreviewFlag(@TempDir Path tempDir) throws IOException {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
