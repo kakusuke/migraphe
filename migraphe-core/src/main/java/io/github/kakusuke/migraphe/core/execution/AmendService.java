@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.core.execution;
 
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.history.HistoryFingerprintUpdater;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
@@ -23,6 +24,7 @@ import java.util.Objects;
 public final class AmendService {
 
     private final StatusService statusService;
+    private final HistoryRepository historyRepository;
 
     /**
      * Creates an amend service over a graph and its history.
@@ -32,6 +34,7 @@ public final class AmendService {
      */
     public AmendService(MigrationGraph graph, HistoryRepository historyRepository) {
         this.statusService = new StatusService(graph, historyRepository);
+        this.historyRepository = historyRepository;
     }
 
     /**
@@ -49,6 +52,28 @@ public final class AmendService {
         }
 
         return new AmendPlan(List.copyOf(toRecord));
+    }
+
+    /**
+     * Writes the planned fingerprints to the history.
+     *
+     * @param plan the plan to carry out
+     * @return how many records were revised
+     */
+    public int apply(AmendPlan plan) {
+        if (!(historyRepository instanceof HistoryFingerprintUpdater updater)) {
+            throw new IllegalStateException(
+                    "This history repository cannot revise a recorded fingerprint: "
+                            + historyRepository.getClass().getName());
+        }
+
+        int written = 0;
+        for (AmendEntry entry : plan.toRecord()) {
+            if (updater.updateFingerprint(entry.recordId(), entry.fingerprint())) {
+                written++;
+            }
+        }
+        return written;
     }
 
     /**

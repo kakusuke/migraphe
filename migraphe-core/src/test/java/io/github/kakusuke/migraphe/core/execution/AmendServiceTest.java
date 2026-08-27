@@ -97,6 +97,26 @@ class AmendServiceTest {
         assertThat(entry.fingerprint()).isEqualTo("new");
     }
 
+    @Test
+    @DisplayName("apply はプランの fingerprint を履歴に書き、書いた件数を返す")
+    void shouldApplyPlannedFingerprints() {
+        // Given
+        graph.addNode(new FingerprintedNode(createNode("stale", "Stale"), "abc"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(NodeId.of("stale"), testEnv.id(), "Stale", null, 1L));
+
+        AmendService service = new AmendService(graph, historyRepo);
+
+        // When
+        int written = service.apply(service.plan());
+
+        // Then
+        assertThat(written).isEqualTo(1);
+        ExecutionRecord after = historyRepo.findLatestRecord(NodeId.of("stale"), testEnv.id());
+        assertThat(after).isNotNull();
+        assertThat(after.fingerprint()).isEqualTo("abc");
+    }
+
     private MigrationNode createNode(String id, String name) {
         Task upTask = SimpleTask.of("UP: " + name);
         Task downTask = SimpleTask.of("DOWN: " + name);
