@@ -2,7 +2,7 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
-### 2026-08-27 (Session 74)
+### 2026-08-27 / 08-28 (Session 74)
 
 - **`--preview` を CLI にも実装し、`--dry-run` と同義にした**
   - ドキュメントと Gradle プラグインは既に `--preview` を使っていたが、**CLI には存在しなかった**。`migraphe up --preview` は `Error: Target not found: --preview` になっていた（フラグでない引数はターゲット名として解釈されるため）。`Main.parseDryRun` が両方を受け、`boolFlags` に `--preview` を追加。ドキュメント上は `--preview` を推す（Gradle の `--dry-run` が Gradle 自身に予約されている問題を回避しつつ、両者の綴りを一致させられる）。
@@ -40,7 +40,19 @@ Claude session records. Newest entries first. The latest session summary also li
   - boolean の `upContentChanged()` は列挙ができた時点で削除（未リリース。`validate`/`reconcile` は `CHANGED` と `UNKNOWN` を区別して警告したいはずなので、boolean は今後の作業にも形が合わない）。
   - **アップグレードの帰結**: 列が無かった時代に適用された行はすべて `UNKNOWN` = `[?]` になり、しかもこれは一過性ではない。`up` は適用済みノードを除外するので fingerprint を埋めず、`down` は対象と**その推移的な依存元すべて**を巻き戻すので、鎖の先頭を1つ更新するには下流全部を実 DB に対して破棄して作り直すことになる。**baseline 相当の操作が無い限り `[?]` は恒久的に残る** — これが `baseline`（実行せずに現在の定義を適用済みとして記録。「DB が正しい、履歴を合わせる」）と `reconcile`（ずれているものを down して再 up。「定義が正しい、DB を合わせる」）を別物として計画している理由。
 
-- **リリースノート**: 破壊的変更を含む（minor bump）。`ExecutionRecord` の canonical constructor が 10→11 引数になるため、**それを直接呼ぶプラグインは再コンパイルが必要**。`MigrationNode.fingerprint()` は `default` メソッドなので既存プラグインは無変更で動く。`upSuccess` の5引数版も残る。利用者向けには (b)(c) の修正が効く — どちらも既定構成（逐次実行）で踏めるもので、(b) は履歴 DB の障害でコマンドが戻らなくなる問題、(c) はスキップと表示されたマイグレーションが実際に走る問題。`status` は fingerprint のずれを `[!]`、記録の無い行を `[?]` として表示する — **アップグレード直後は既存の適用済みノードが全部 `[?]` になり、`baseline` 相当の操作が入るまで解消しない**（上記参照）。**(d) は未修正のまま残る** — `execution.parallel: true` を使っている場合は上記を参照。
+- **新コマンド `amend` — ドリフトを「履歴側を直す」方向で解消する**（設計の詳細: [ARCHITECTURE.md](ARCHITECTURE.md) 決定 33）
+  - 決定 30/32 でドリフトが**見える**ようになったが**直す手段が無い**状態だった。特に `[?]` は一過性ではなく、`up` は適用済みノードを除外するので fingerprint を埋めず、`down` は推移的な依存元すべてを巻き戻すため、1つ解消するために下流を実 DB に対して作り直すことになる。よって修復コマンドは fingerprint と**同じリリースに入れる必要**があった。
+  - **状態ではなく「どちら側を正とするか」で分解した**。利用シーンを列挙すると、同じ `[!]` が「ファイルを直した」場合と「DB を手で直した」場合で正反対の答えを求めることが分かったため。結果: `amend`（履歴 ← 定義、DB は触らない）/ `rebuild`（DB ← 定義。down して再適用し、DB にしか無いものを落とす。`dependencies` 列が前提、次回）/ `baseline <id>`（既存 DB の取り込み。未記録ノードを INSERT、別途）。**0.7.0 は `amend` のみ**。
+  - **命名**: 最初の候補 `reconcile` は「どちら側に寄せるか」を含まないため `--accept` / `--reapply` のような必須フラグを要し、意味がフラグ側にあるコマンドは間違ったフラグで叩かれる。利用者の「歴史修正だよーという単語選びはできる?」を受けて `amend` に決定。動詞が対象を明示する。
+  - **対象はドリフト集合（`UNKNOWN` ∪ `CHANGED`）で、ノード指定も `--all` も無い**。挙げた利用シーンがどれも全体を要求したため、セレクタは「作業を中途で放置する手段」にしかならない。`AmendService.isDrifted` の `switch` に `default` を置かないのは `markerFor` と同じ理由。
+  - **書き込みは既存行の `UPDATE`**。行を append する案は構造的に不可能で、`wasExecuted` は全実装で「最新行が UP かつ SUCCESS」なので、完全な偽の適用行でない限りノードが「未適用」に読まれて次の `up` が実 DB に DDL を流し直す。そして完全な偽の適用行にすると `status` が `(0ms, 今日)` を表示し、**画面が適用時刻について嘘をつく** — `UPDATE` なら `executed_at`・実行時間・保存済みロールバック SQL がそのまま残る。
+  - **`HistoryRepository` 本体は変更せず、capability interface `HistoryFingerprintUpdater` を新設**。`default` メソッド追加案は `SynchronizedHistoryRepository` が全メソッドを明示 override しているため**追加分だけ throwing default を静かに継承**する。既存の `SqlContentProvider` と同じ `instanceof` 検出の前例に従い、「実装していない」を型で表せる形にした。`JdbcHistoryRepository` の1実装で3方言に効き、`InMemoryHistoryRepository` は別途実装（`history.target` が未設定のとき、および `noop` で返るのがこれ）。**`fingerprint` 列は3方言すべてに既存のため DDL 変更はゼロ**。
+  - **UP+SUCCESS のガードは `AmendService` 側に置いた**。capability の契約は「この行を書き換える」であって、リポジトリは理由を知り得ない。これは理論上の話ではなく、`wasExecuted` と `findLatestRecord` が食い違うテスト用リポジトリ（サードパーティ実装が実際に取り得る形）で `plan()` が**ロールバック行の id** を指すエントリを生成し、そのまま書き込んで成功と報告する経路が実在した。
+  - `plan()` と `apply()` を分離し、`--preview` と確認プロンプトが**実際に書き込む集合そのもの**を表示する。書けた数が計画数より少なければ行が消えたということで、CLI は終了コード 1、Gradle は `GradleException`（ビルドには持ち帰る終了コードが無い）。
+  - **`previous_fingerprint` 列は入れない**（利用者が明示的に却下 — 「開発DBにそこまでする義理はない」）。帰結として `amend` 後は「差があった事実」が復元できないので、capability の javadoc・`CHANGED` 行の警告表示・ユーザーガイドの3箇所に明記した。
+  - CLI（`amend [-y] [--preview]`、`--env` も従来どおり効く）と Gradle（`migrapheAmend`、`--preview` / `-Pmigraphe.amend.dryRun`）の両方に配線。Gradle 側に確認プロンプトは無く、これは他5タスクと同じ方針（Gradle タスクは stdin を読まないし、`migrapheDown --all` は既に無確認で DB オブジェクトを壊す）。
+
+- **リリースノート**: 破壊的変更を含む（minor bump）。`ExecutionRecord` の canonical constructor が 10→11 引数になるため、**それを直接呼ぶプラグインは再コンパイルが必要**。`MigrationNode.fingerprint()` は `default` メソッドなので既存プラグインは無変更で動く。`upSuccess` の5引数版も残る。利用者向けには (b)(c) の修正が効く — どちらも既定構成（逐次実行）で踏めるもので、(b) は履歴 DB の障害でコマンドが戻らなくなる問題、(c) はスキップと表示されたマイグレーションが実際に走る問題。`status` は fingerprint のずれを `[!]`、記録の無い行を `[?]` として表示する — **アップグレード直後は既存の適用済みノードが全部 `[?]` になる。これを解消できるのは新コマンド `migraphe amend` だけ**（`up` は適用済みノードを飛ばすので後から埋めない）。**(d) は未修正のまま残る** — `execution.parallel: true` を使っている場合は上記を参照。
 
 ### 2026-08-21 (Session 73)
 

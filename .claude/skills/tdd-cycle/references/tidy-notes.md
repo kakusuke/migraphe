@@ -117,6 +117,16 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   false for `SynchronizedHistoryRepository`, so callers must use what
   `ExecutionContext.createHistoryRepository()` returns (the raw implementation) rather than anything
   `DagExecutor` has wrapped
+- **Gradle functional tests can reach a real history repository two ways, and the cheap one is easy to
+  miss.** `type: noop` gives every task a fresh `InMemoryHistoryRepository` with no driver and no
+  database, which is enough to exercise `withExecutionContext` → `createHistoryRepository` →
+  `initialize()` → any read that an empty history answers. Only tests that need *applied* rows need
+  the other way: a resolvable configuration (`jdbcPluginJar`) handed to the test JVM as a system
+  property and declared in the generated build script as `migraphePlugin(files(...))`, following the
+  `generatorJsonJar` precedent. In that second form the database must be **file-backed** — TestKit
+  runs the build in its own daemon JVM, so an in-memory H2 is invisible to the assertions
+- **Adding a Gradle task means editing `MigrapheGradlePlugin`'s class javadoc too.** It enumerates the
+  task names and its `apply` javadoc counts them ("the six Migraphe tasks"); both go stale silently
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
