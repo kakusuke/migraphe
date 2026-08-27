@@ -5,6 +5,7 @@ import io.github.kakusuke.migraphe.core.execution.AmendService;
 import io.github.kakusuke.migraphe.core.execution.AmendService.AmendEntry;
 import io.github.kakusuke.migraphe.core.execution.AmendService.AmendPlan;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
+import io.github.kakusuke.migraphe.core.execution.UpContentState;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
@@ -116,7 +117,18 @@ public class AmendCommand implements Command {
         System.out.println();
 
         for (AmendEntry entry : plan.toRecord()) {
-            System.out.println("  " + entry.node().id().value() + " - " + entry.node().name());
+            System.out.println(
+                    "  "
+                            + fromMarker(entry.from())
+                            + " → [✓]  "
+                            + entry.node().id().value()
+                            + " - "
+                            + entry.node().name());
+            if (entry.from() == UpContentState.CHANGED) {
+                System.out.println(
+                        "             ⚠ edited after it was applied; what actually ran will no"
+                                + " longer be recorded");
+            }
         }
 
         int planned = plan.toRecord().size();
@@ -137,6 +149,20 @@ public class AmendCommand implements Command {
             String input = scanner.nextLine().trim().toLowerCase(Locale.ROOT);
             return "y".equals(input) || "yes".equals(input);
         }
+    }
+
+    /**
+     * The marker {@code status} shows for the state a node is being moved away from.
+     *
+     * <p>Only the drifted states reach a plan; the others are listed so that adding a state to
+     * {@link UpContentState} stops this compiling.
+     */
+    private static String fromMarker(UpContentState state) {
+        return switch (state) {
+            case UNKNOWN -> "[?]";
+            case CHANGED -> "[!]";
+            case NOT_APPLICABLE, UNCHANGED, UNREADABLE -> "[✓]";
+        };
     }
 
     private static String fingerprints(int count) {

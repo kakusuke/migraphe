@@ -133,7 +133,7 @@ public final class AmendService {
         String fingerprint =
                 Objects.requireNonNull(
                         status.node().fingerprint(), "drift implies a node fingerprint");
-        return new AmendEntry(status.node(), record.id(), fingerprint);
+        return new AmendEntry(status.node(), record.id(), fingerprint, status.upContentState());
     }
 
     /**
@@ -142,8 +142,12 @@ public final class AmendService {
      * @param node the node whose content the fingerprint describes
      * @param recordId the history record to revise
      * @param fingerprint the fingerprint to store
+     * @param from the state the node is in now, so a report can say what it is moving away from —
+     *     {@link UpContentState#CHANGED} discards a known-different token, {@link
+     *     UpContentState#UNKNOWN} fills in an absent one
      */
-    public record AmendEntry(MigrationNode node, String recordId, String fingerprint) {}
+    public record AmendEntry(
+            MigrationNode node, String recordId, String fingerprint, UpContentState from) {}
 
     /**
      * What amending would do.
