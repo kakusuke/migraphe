@@ -1,10 +1,17 @@
 package io.github.kakusuke.migraphe.gradle;
 
+import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.core.execution.StatusService;
+import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
+import io.github.kakusuke.migraphe.core.execution.StatusService.StatusInfo;
 import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import org.gradle.api.tasks.TaskAction;
 import org.gradle.work.DisableCachingByDefault;
 
@@ -36,43 +43,38 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                     HistoryRepository historyRepo = context.createHistoryRepository();
                     historyRepo.initialize();
 
-                    ExecutionGraphView graphView = new ExecutionGraphView(context.graph());
+                    StatusInfo status = new StatusService(context.graph(), historyRepo).getStatus();
+                    Map<NodeId, NodeStatus> statusByNode = new HashMap<>();
+                    for (NodeStatus nodeStatus : status.nodes()) {
+                        statusByNode.put(nodeStatus.node().id(), nodeStatus);
+                    }
 
-                    int[] executedCount = {0};
-                    int[] pendingCount = {0};
+                    ExecutionGraphView graphView = new ExecutionGraphView(context.graph());
 
                     List<String> lines =
                             graphView.renderLines(
                                     node -> {
-                                        boolean executed =
-                                                historyRepo.wasExecuted(
-                                                        node.id(), node.environment().id());
+                                        NodeStatus nodeStatus =
+                                                Objects.requireNonNull(
+                                                        statusByNode.get(node.id()),
+                                                        "graph node missing from status: "
+                                                                + node.id().value());
                                         StringBuilder sb = new StringBuilder();
-                                        if (executed) {
-                                            executedCount[0]++;
-                                            sb.append("[✓] ");
-                                        } else {
-                                            pendingCount[0]++;
-                                            sb.append("[ ] ");
-                                        }
+                                        sb.append(nodeStatus.executed() ? "[✓] " : "[ ] ");
                                         sb.append(node.id().value())
                                                 .append(" - ")
                                                 .append(node.name());
-                                        if (executed) {
-                                            ExecutionRecord record =
-                                                    historyRepo.findLatestRecord(
-                                                            node.id(), node.environment().id());
-                                            if (record != null) {
-                                                sb.append(" (")
-                                                        .append(
-                                                                FormatUtils.formatDuration(
-                                                                        record.durationMs()))
-                                                        .append(", ")
-                                                        .append(
-                                                                FormatUtils.formatDateTime(
-                                                                        record.executedAt()))
-                                                        .append(")");
-                                            }
+                                        ExecutionRecord record = nodeStatus.latestRecord();
+                                        if (record != null) {
+                                            sb.append(" (")
+                                                    .append(
+                                                            FormatUtils.formatDuration(
+                                                                    record.durationMs()))
+                                                    .append(", ")
+                                                    .append(
+                                                            FormatUtils.formatDateTime(
+                                                                    record.executedAt()))
+                                                    .append(")");
                                         }
                                         return sb.toString();
                                     });
@@ -85,9 +87,9 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                     getLogger()
                             .lifecycle(
                                     "Summary: Total: {} | Executed: {} | Pending: {}",
-                                    executedCount[0] + pendingCount[0],
-                                    executedCount[0],
-                                    pendingCount[0]);
+                                    status.executedCount() + status.pendingCount(),
+                                    status.executedCount(),
+                                    status.pendingCount());
                 });
     }
 

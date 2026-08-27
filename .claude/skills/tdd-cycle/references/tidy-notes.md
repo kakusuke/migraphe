@@ -81,6 +81,12 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `targetNodes` is `{a, c}`, `c` starts ready, and under parallelism `a` can mark a running `c`
   skipped (counting its latch down a second time). Never write a tidy that assumes cone membership
   implies not-yet-started
+- **The `status` summary counts one per *graph* node, while the rendered lines come from
+  `ExecutionGraphView.renderLines`.** Both the CLI command and the Gradle task now take their counts
+  from `StatusService` and their lines from the canvas, so the two agree only while every graph node is
+  laid out exactly once (`renderLines` applies the label function per non-`VirtualNode`). A layout
+  change that collapses or omits a node would make the summary disagree with what is printed, and no
+  test would say so — the existing ones use 2-3 node graphs where the sets coincide
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
