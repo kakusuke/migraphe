@@ -170,6 +170,42 @@ class DagExecutorSequentialUpTest {
         }
 
         @Test
+        @DisplayName("UP 成功はノードの fingerprint を履歴に残し、DOWN 成功は残さない")
+        void shouldRecordFingerprintOnUpOnly() {
+            // Given
+            MigrationGraph upGraph = MigrationGraph.create();
+            MigrationNode fingerprinted =
+                    new FingerprintedNode(createNode("a", Set.of()), "abc123");
+            upGraph.addNode(fingerprinted);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            new DagExecutor(upGraph, history, new MockExecutionListener(), ExecutionDirection.UP, 1)
+                    .execute(Set.of(NodeId.of("a")));
+
+            // Then
+            ExecutionRecord afterUp = history.findLatestRecord(NodeId.of("a"), testEnv.id());
+            assertThat(afterUp).isNotNull();
+            assertThat(afterUp.fingerprint()).isEqualTo("abc123");
+
+            // When rolled back
+            MigrationGraph downGraph = MigrationGraph.create();
+            downGraph.addNode(fingerprinted);
+            new DagExecutor(
+                            downGraph,
+                            history,
+                            new MockExecutionListener(),
+                            ExecutionDirection.DOWN,
+                            1)
+                    .execute(Set.of(NodeId.of("a")));
+
+            // Then
+            ExecutionRecord afterDown = history.findLatestRecord(NodeId.of("a"), testEnv.id());
+            assertThat(afterDown).isNotNull();
+            assertThat(afterDown.direction()).isEqualTo(ExecutionDirection.DOWN);
+            assertThat(afterDown.fingerprint()).isNull();
+        }
+
+        @Test
         @DisplayName("実行済みノードはスキップされる")
         void shouldSkipExecutedNodes() {
             // Given
@@ -277,6 +313,45 @@ class DagExecutorSequentialUpTest {
             assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
             assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+        }
+    }
+
+    /** Wraps a node so it reports a fingerprint, which {@link SimpleMigrationNode} never does. */
+    private record FingerprintedNode(MigrationNode delegate, String fingerprint)
+            implements MigrationNode {
+        @Override
+        public NodeId id() {
+            return delegate.id();
+        }
+
+        @Override
+        public String name() {
+            return delegate.name();
+        }
+
+        @Override
+        public @Nullable String description() {
+            return delegate.description();
+        }
+
+        @Override
+        public Environment environment() {
+            return delegate.environment();
+        }
+
+        @Override
+        public Set<NodeId> dependencies() {
+            return delegate.dependencies();
+        }
+
+        @Override
+        public Task upTask() {
+            return delegate.upTask();
+        }
+
+        @Override
+        public @Nullable Task downTask() {
+            return delegate.downTask();
         }
     }
 

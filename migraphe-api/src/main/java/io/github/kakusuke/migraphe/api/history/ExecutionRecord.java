@@ -94,7 +94,8 @@ public record ExecutionRecord(
      *     null} if the step does not support rollback
      * @param durationMs the execution duration in milliseconds
      * @return a new {@code ExecutionRecord} with status {@link ExecutionStatus#SUCCESS} and
-     *     direction {@link ExecutionDirection#UP}
+     *     direction {@link ExecutionDirection#UP}, whose {@code fingerprint} is {@code null} —
+     *     meaning "unknown", never "unchanged". Use the overload taking one to record it
      */
     public static ExecutionRecord upSuccess(
             NodeId nodeId,
@@ -102,6 +103,31 @@ public record ExecutionRecord(
             String description,
             @Nullable String serializedDownTask,
             long durationMs) {
+        return upSuccess(nodeId, environmentId, description, serializedDownTask, durationMs, null);
+    }
+
+    /**
+     * Creates a record for a successful up execution, carrying the fingerprint of the content that
+     * was applied.
+     *
+     * @param nodeId the node that was executed
+     * @param environmentId the environment in which the execution took place
+     * @param description a human-readable description of the executed task
+     * @param serializedDownTask the serialized down task captured for later rollback, or {@code
+     *     null} if the step does not support rollback
+     * @param durationMs the execution duration in milliseconds
+     * @param fingerprint the node's fingerprint at apply time, or {@code null} when the plugin does
+     *     not provide one
+     * @return a new {@code ExecutionRecord} with status {@link ExecutionStatus#SUCCESS} and
+     *     direction {@link ExecutionDirection#UP}
+     */
+    public static ExecutionRecord upSuccess(
+            NodeId nodeId,
+            EnvironmentId environmentId,
+            String description,
+            @Nullable String serializedDownTask,
+            long durationMs,
+            @Nullable String fingerprint) {
         return new ExecutionRecord(
                 RecordIds.newId(),
                 nodeId,
@@ -113,7 +139,7 @@ public record ExecutionRecord(
                 serializedDownTask,
                 durationMs,
                 null,
-                null);
+                fingerprint);
     }
 
     /**
