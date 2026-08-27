@@ -101,7 +101,10 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   redundant.** `pending` covers "never applied", `opt-out` covers "plugin returns null", and
   `pending-throwing` covers "never applied *and* the accessor throws" — the last one is the only
   thing holding `upContentState`'s `latestRecord == null` check above the `fingerprint()` read.
-  Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`
+  Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`.
+  `AmendService.entryFor` also depends on that ordering: it reads `UNKNOWN` as proof that both
+  `latestRecord()` and `node.fingerprint()` are non-null, and says so in two `requireNonNull`
+  messages. Reorder `upContentState` and those become reachable failures rather than assertions
 - **`HistoryRepository` is append-only, and `HistoryFingerprintUpdater` is deliberately not part of
   it.** Do not "simplify" by folding the capability in: `SynchronizedHistoryRepository` overrides every
   method explicitly, so an added `default` would be silently inherited as a throwing stub, and every
