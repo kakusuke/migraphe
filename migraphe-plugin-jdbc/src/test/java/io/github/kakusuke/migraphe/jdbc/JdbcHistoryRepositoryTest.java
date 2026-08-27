@@ -352,6 +352,13 @@ class JdbcHistoryRepositoryTest {
         assertThat(after.serializedDownTask()).isEqualTo(before.serializedDownTask());
     }
 
+    @Test
+    void updateFingerprintReportsAMissForAnUnknownRecordId() {
+        repository.initialize();
+
+        assertThat(repository.updateFingerprint("no-such-id", "abc")).isFalse();
+    }
+
     private ExecutionRecord recordAt(String id, Instant executedAt, ExecutionDirection direction) {
         return new ExecutionRecord(
                 id,
