@@ -70,6 +70,11 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   for two independent reasons — the `else` branch's own `propagateFailure` can throw and re-enter the
   `catch` after its `add` already succeeded, *and* another node's `propagateFailure` can add this one
   concurrently
+- **The coordinator loop checks `failedNodes` twice, and both checks are needed.** The one before
+  `semaphore.acquire()` avoids taking a permit for a node already known to be skipped; the one after it
+  closes the window in which another node's `propagateFailure` marks this one while it waits for the
+  permit — without it a node reported skipped still gets dispatched and its migration runs. Neither
+  path counts the latch down, because `propagateFailure` already did for every node it marks
 - **`propagateFailure`'s cone can contain a node that is currently running.** Its cone is
   `getAllDependents`/`getAllDependencies` over the whole graph, while `ReadyNodeTracker` counts
   in-degree only over dependencies inside `targetNodes` — so with `a→b→c` and `b` already applied,

@@ -274,7 +274,13 @@ public final class DagExecutor implements Executor {
                     semaphore.acquire();
                 }
 
-                @Nullable Semaphore sem = semaphore;
+                if (failedNodes.contains(node.id())) {
+                    if (semaphore != null) {
+                        semaphore.release();
+                    }
+                    continue;
+                }
+
                 Thread.startVirtualThread(
                         () -> {
                             try {
@@ -289,8 +295,8 @@ public final class DagExecutor implements Executor {
                                         latch,
                                         targetNodes);
                             } finally {
-                                if (sem != null) {
-                                    sem.release();
+                                if (semaphore != null) {
+                                    semaphore.release();
                                 }
                                 latch.countDown();
                             }
