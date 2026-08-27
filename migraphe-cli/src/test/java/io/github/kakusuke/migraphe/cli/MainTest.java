@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -231,6 +232,73 @@ class MainTest {
         try (Connection connection = DriverManager.getConnection(jdbcUrl, "sa", "");
                 ResultSet tables = connection.getMetaData().getTables(null, null, "USERS", null)) {
             assertThat(tables.next()).isTrue();
+        }
+    }
+
+    @Test
+    void amendShouldRecordTheMissingFingerprint(@TempDir Path tempDir)
+            throws IOException, SQLException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        String jdbcUrl = "jdbc:h2:mem:amend_cli;DB_CLOSE_DELAY=-1";
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: h2-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(
+                targetsDir.resolve("h2-db.yaml"),
+                """
+                type: jdbc
+                driver_class: org.h2.Driver
+                db_label: H2
+                jdbc_url: %s
+                username: sa
+                """
+                        .formatted(jdbcUrl));
+        Path tasksDir = Files.createDirectories(tempDir.resolve("tasks"));
+        Files.writeString(
+                tasksDir.resolve("001_create_users.yaml"),
+                """
+                name: Create users
+                target: h2-db
+                autocommit: true
+                up: |
+                  CREATE TABLE users (id INT PRIMARY KEY);
+                down: |
+                  DROP TABLE IF EXISTS users;
+                """);
+
+        ExecutionContext context = Main.loadContext(tempDir, pluginRegistry, new String[] {"up"});
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        // Erase the recorded fingerprint, which is what an upgrade from before the column looks
+        // like.
+        try (Connection connection = DriverManager.getConnection(jdbcUrl, "sa", "");
+                Statement statement = connection.createStatement()) {
+            statement.executeUpdate("UPDATE migraphe_history SET fingerprint = NULL");
+        }
+
+        Command amendCommand =
+                Objects.requireNonNull(
+                        Main.createAmendCommand(new String[] {"amend", "-y"}, context));
+        AtomicInteger exitCode = new AtomicInteger();
+        String stdout = captureStdout(() -> exitCode.set(amendCommand.execute()));
+
+        assertThat(exitCode.get()).isZero();
+        assertThat(stdout).contains("Recorded 1");
+        assertThat(captureStdout(() -> Main.run(new String[0]))).contains("amend");
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl, "sa", "");
+                Statement statement = connection.createStatement();
+                ResultSet rs = statement.executeQuery("SELECT fingerprint FROM migraphe_history")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString(1)).isNotNull();
         }
     }
 

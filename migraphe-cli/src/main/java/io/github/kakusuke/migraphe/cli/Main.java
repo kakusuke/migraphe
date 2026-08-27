@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.cli;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.cli.command.AmendCommand;
 import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
@@ -167,6 +168,7 @@ public class Main {
             case "up" -> createUpCommand(args, context);
             case "status" -> new StatusCommand(context);
             case "down" -> createDownCommand(args, context);
+            case "amend" -> createAmendCommand(args, context);
             default -> {
                 System.err.println("Unknown command: " + commandName);
                 printUsage();
@@ -185,6 +187,15 @@ public class Main {
 
         NodeId nodeId = targetId != null ? NodeId.of(targetId) : null;
         return new UpCommand(context, nodeId, skipConfirm, dryRun);
+    }
+
+    /** Builds an {@link AmendCommand} from the parsed arguments. */
+    static Command createAmendCommand(String[] args, ExecutionContext context) {
+        List<String> argList = Arrays.asList(args);
+        boolean skipConfirm = argList.contains("-y");
+        boolean dryRun = parseDryRun(args);
+
+        return new AmendCommand(context, skipConfirm, dryRun);
     }
 
     /**
@@ -376,6 +387,8 @@ public class Main {
         System.out.println("  down [-y] [--preview] [--all | <v>] Rollback migrations");
         System.out.println("  status                              Show migration status");
         System.out.println(
+                "  amend [-y] [--preview]              Record the current definitions as applied");
+        System.out.println(
                 "  validate                            Validate configuration (offline)");
         System.out.println("  generate [--name <name>]            Run generators");
         System.out.println(
@@ -391,6 +404,10 @@ public class Main {
         System.out.println("  <id>           Execute migrations up to and including <id>");
         System.out.println("  -y             Skip confirmation prompt");
         System.out.println("  --preview      Show plan without executing");
+        System.out.println();
+        System.out.println("Amend options:");
+        System.out.println("  -y             Skip confirmation prompt");
+        System.out.println("  --preview      Show plan without recording");
         System.out.println();
         System.out.println("Down options:");
         System.out.println("  <version>      Rollback migrations that depend on <version>");
