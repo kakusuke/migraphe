@@ -11,12 +11,13 @@
 5. [Writing Migrations](#writing-migrations)
 6. [Running Migrations](#running-migrations)
 7. [Rollback (down)](#rollback-down)
-8. [Configuration Validation (validate)](#configuration-validation-validate)
-9. [Schema Documentation Generation (generate)](#schema-documentation-generation-generate)
-10. [Environment Management](#environment-management)
-11. [Advanced Features](#advanced-features)
-12. [Gradle Plugin](#gradle-plugin)
-13. [Troubleshooting](#troubleshooting)
+8. [Recording Definitions as Applied (amend)](#recording-definitions-as-applied-amend)
+9. [Configuration Validation (validate)](#configuration-validation-validate)
+10. [Schema Documentation Generation (generate)](#schema-documentation-generation-generate)
+11. [Environment Management](#environment-management)
+12. [Advanced Features](#advanced-features)
+13. [Gradle Plugin](#gradle-plugin)
+14. [Troubleshooting](#troubleshooting)
 
 ## Introduction
 
@@ -457,8 +458,8 @@ Summary: Total: 3 | Executed: 1 | Pending: 2
 |--------|---------|
 | `[ ]` | Not applied yet |
 | `[✓]` | Applied, and no change detected in its `up` content — also shown when the plugin supplies no fingerprint and so opts out of the comparison |
-| `[!]` | Applied, but the `up` content has been edited since |
-| `[?]` | The plugin supplies a fingerprint but the applied row carries none, so a change cannot be detected. Rows written before 0.7.0 read this way |
+| `[!]` | Applied, but the `up` content has been edited since. Resolve it by rolling back and re-applying, or with [`migraphe amend`](#recording-definitions-as-applied-amend) |
+| `[?]` | The plugin supplies a fingerprint but the applied row carries none, so a change cannot be detected. Rows written before 0.7.0 read this way; [`migraphe amend`](#recording-definitions-as-applied-amend) is the only way to clear it |
 | `[E]` | The plugin's fingerprint could not be read — the plugin itself is at fault |
 
 ### Execute Migrations
@@ -695,6 +696,68 @@ No changes made (dry run).
 2. **Dependency order**: Migrations that are depended upon are rolled back first
 3. **Recorded in history**: Rollbacks are recorded in the history table (direction: DOWN)
 4. **Only executed migrations**: Only migrations marked as executed in history are rolled back
+
+## Recording Definitions as Applied (amend)
+
+The `amend` command rewrites the **history** so that it agrees with your current task files. For every migration whose recorded fingerprint is missing or differs from its definition, it records the current fingerprint. **No database objects are touched.**
+
+Use it when `status` shows `[?]` or `[!]` and you have decided that what the database already contains is correct:
+
+- `[?]` — the migration was applied by a version older than 0.7.0, which recorded no fingerprint. `amend` is the only way to clear this: `up` skips migrations that are already applied, so it never fills the fingerprint in afterwards.
+- `[!]` — the `up` content was edited after it was applied, and the edit needs no rollback (a comment, a formatter run, a schema you had already fixed by hand).
+
+If the *database* is the side that is wrong, roll the migration back and re-apply it (`migraphe down <id>` followed by `migraphe up`) instead. `amend` will not do that for you.
+
+### Basic Usage
+
+```bash
+$ migraphe amend
+
+Amend plan (history only — no database changes):
+
+  [?] → [✓]  db1/001_create_users - Create users table
+  [!] → [✓]  db1/002_create_posts - Create posts table
+             ⚠ edited after it was applied; what actually ran will no longer be recorded
+
+2 fingerprints will be recorded.
+
+Record 2 fingerprints? [y/N]: y
+
+Recorded 2 fingerprints.
+```
+
+Preview first — no prompt, no writes:
+
+```bash
+migraphe amend --preview
+```
+
+When nothing has drifted, the command prints `Nothing to amend.` and exits 0.
+
+### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--preview` | Display the plan without recording anything (`--dry-run` is accepted as a legacy alias) |
+| `-y` | Skip the confirmation prompt |
+| `--env <name>` | Apply the `environments/<name>.yaml` overlay |
+
+There is deliberately **no migration argument and no `--all`**: the scope is always every migration that has drifted, which is the only scope this command has.
+
+### Important Notes
+
+1. **The previous fingerprint is lost**: `amend` overwrites the column and keeps no history of it. Afterwards there is no record that the definition ever differed. This is intentional — see [ARCHITECTURE.md](ARCHITECTURE.md).
+2. **Only the fingerprint changes**: `executed_at`, the duration and the stored rollback SQL are left as they were, so `status` keeps reporting when the migration actually ran.
+3. **`[!]` discards evidence**: the fingerprint of what really ran is replaced by the fingerprint of what the file says now. If the edit needs to reach the database, roll back instead. This is why the plan marks those rows with a warning.
+4. **Only successful UP rows are amended**: a migration whose latest history row is a rollback or a failure is left alone.
+5. **The history repository has to support it**: the bundled JDBC, PostgreSQL, MySQL and in-memory repositories do. A third-party repository that does not implement the revision capability makes `amend` stop with an error rather than report success it did not achieve.
+
+### Exit Codes
+
+| Exit Code | Meaning |
+|-----------|---------|
+| 0 | Everything planned was recorded — also when there was nothing to amend, the run was a preview, or you answered `N` at the prompt |
+| 1 | A planned row could not be recorded (it was gone by the time the write ran), or the command failed |
 
 ## Configuration Validation (validate)
 
@@ -1118,6 +1181,7 @@ dependencies {
 | `migrapheStatus` | Show migration execution status |
 | `migrapheUp` | Execute forward (UP) migrations |
 | `migrapheDown` | Execute rollback (DOWN) migrations |
+| `migrapheAmend` | Record the current definitions as applied (history only) |
 | `migrapheGenerate` | Generate schema documentation |
 
 ### Task Options
@@ -1134,6 +1198,9 @@ dependencies {
 - `--all` — Rollback all executed migrations
 - `--preview` — Preview without executing
 
+**migrapheAmend**:
+- `--preview` — Show the plan without recording anything
+
 **migrapheGenerate**:
 - `--name=<name>` — Generate for a specific generator only
 
@@ -1143,6 +1210,7 @@ Options can also be specified via project properties (`-P`):
 ./gradlew migrapheUp -Pmigraphe.up.target=db1/create_users
 ./gradlew migrapheDown -Pmigraphe.down.all=true
 ./gradlew migrapheStatus -Pmigraphe.env=production
+./gradlew migrapheAmend -Pmigraphe.amend.dryRun=true
 ```
 
 ## Troubleshooting

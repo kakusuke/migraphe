@@ -46,6 +46,19 @@ class MigraphePluginApplyTest {
     }
 
     @Test
+    void shouldRegisterMigrapheAmendTask() {
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("tasks", "--group=migraphe")
+                        .build();
+
+        assertThat(result.getOutput()).contains("migrapheAmend");
+        assertThat(result.getOutput()).contains("Record the current definitions as applied");
+    }
+
+    @Test
     void shouldRegisterMigrapheExtension() {
         // Extension が正しく登録されていればタスク一覧が表示される
         BuildResult result =

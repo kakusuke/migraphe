@@ -7,8 +7,8 @@
 DAG-based migration orchestration tool for database/infrastructure migrations across multiple environments.
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
-**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: UP-content `fingerprint` recorded in history and reported by `status` as five drift states, plus three exception-safety defects fixed in `DagExecutor`'s completion accounting, a fourth knowingly left open (Session 74)
-**Tests**: 1,152, 100% passing
+**Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: UP-content `fingerprint` recorded in history, reported by `status` as five drift states and resolved by the new `amend` command, plus three exception-safety defects fixed in `DagExecutor`'s completion accounting, a fourth knowingly left open (Session 74)
+**Tests**: 1,171, 100% passing
 
 ## Module Structure
 
@@ -42,7 +42,7 @@ io.github.kakusuke.migraphe.api/
 ├── environment/    # Environment, EnvironmentId
 ├── graph/          # MigrationNode (interface), NodeId
 ├── task/           # Task, TaskResult, ExecutionDirection
-├── history/        # HistoryRepository (interface), ExecutionRecord, ExecutionStatus, RecordIds (UUIDv7, package-private)
+├── history/        # HistoryRepository (interface), HistoryFingerprintUpdater (capability), ExecutionRecord, ExecutionStatus, RecordIds (UUIDv7, package-private)
 ├── execution/      # ExecutionListener, ExecutionPlanInfo, ExecutionSummary
 ├── schema/         # SchemaInfoProvider<T>
 ├── common/         # Result
@@ -54,6 +54,7 @@ io.github.kakusuke.migraphe.core/
 ├── graph/          # MigrationGraph, ExecutionPlan, ExecutionLevel, TopologicalSort, FormatUtils
 │   └── layout/     # ExecutionGraphView, LayoutSort, LayoutOrder, LayoutTree, LayoutStream, NonTreeEdge, Cell, GridCanvas, NodeLineInfo, GraphVisualizer
 ├── execution/      # DagExecutor (unified UP/DOWN + sequential/parallel), StatusService, ExecutionResult, ExecutionContext
+│                   # + AmendService, UpContentState, StatusLineFormatter (shared by CLI + Gradle)
 │                   # + ReadyNodeTracker (direction-aware), SynchronizedExecutionListener, Executor (interface)
 ├── generator/      # GeneratorRegistry, GeneratorExecutor
 │   └── tree/       # MigrationTreeSourcePlugin (type="migration-tree")
@@ -101,7 +102,7 @@ io.github.kakusuke.migraphe.output.json/
 
 io.github.kakusuke.migraphe.cli/
 ├── Main.java
-├── command/        # Command, UpCommand, DownCommand, StatusCommand, ValidateCommand, GenerateCommand
+├── command/        # Command, UpCommand, DownCommand, StatusCommand, AmendCommand, ValidateCommand, GenerateCommand
 ├── resolver/       # MavenArtifactCoordinate, PluginConfigPreParser, MavenPluginResolver, PluginResolver
 ├── listener/       # ConsoleExecutionListener
 └── util/           # AnsiColor
@@ -110,7 +111,7 @@ io.github.kakusuke.migraphe.gradle/
 ├── MigrapheGradlePlugin.java     # Plugin entry point
 ├── MigrapheExtension.java        # DSL extension (baseDir)
 ├── AbstractMigrapheTask.java     # Base task (PluginRegistry, ExecutionContext)
-├── Migraphe{Up,Down,Status,Validate,Generate}Task.java  # Gradle tasks
+├── Migraphe{Up,Down,Status,Amend,Validate,Generate}Task.java  # Gradle tasks
 └── GradleExecutionListener.java  # Gradle Logger-based listener
 ```
 
@@ -148,6 +149,8 @@ One-line summaries below. Full rationale: see [Architecture & Design Decisions](
 
 27. **Drift Reporting in `status` (Session 74)**: a `null` fingerprint means two different things — on the **node** the plugin is opting out of the comparison, on the **record** the row predates the column — so a boolean folded distinct answers into one. `NodeStatus.upContentState()` returns `UpContentState`: `NOT_APPLICABLE` (never applied, or plugin opts out; `executed()` separates them), `UNKNOWN`, `UNCHANGED`, `CHANGED`, `UNREADABLE`. `UNREADABLE` is its own state because the interface default returns `null` and cannot throw, so a throw proves an override — a fault, not an opt-out. Markers `[ ] [✓] [!] [?] [E]`, rendered by the shared `StatusLineFormatter` in core (both `StatusCommand` and `MigrapheStatusTask` use it); the switch has no `default` arm so a new state stops compiling. **Upgrade consequence**: pre-column rows read `UNKNOWN` permanently — `up` skips applied nodes and `down` cascades to all dependents — which is why `baseline` (record the current definition as applied, without executing) is planned separately from `reconcile` (roll back and re-apply what drifted). See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) decision 32.
 
+28. **`amend` — Resolving Drift in the History's Favour (Session 74)**: `migraphe amend` / `migrapheAmend` records the current definitions as what was applied, **touching no database objects**. Needed in the same release as the fingerprint itself: `up` skips applied nodes so it never backfills, and `down` cascades to every transitive dependent, so `[?]` is otherwise permanent. Repair commands are split **by which side is authoritative**, not by which state shows — the same `[!]` wants opposite answers depending on whether the file or the database was fixed. Hence `amend` (history ← definitions), `rebuild` (database ← definitions; needs a `dependencies` column, deferred) and `baseline <id>` (adopt an existing database, deferred); **0.7.0 ships only `amend`**. `reconcile` was rejected as a name for needing a mandatory direction flag. Scope is the drift set (`UNKNOWN` ∪ `CHANGED`) with **no node argument and no `--all`**. The write is an **`UPDATE` of the existing row** via a new capability interface, `HistoryFingerprintUpdater` — appending is structurally impossible (`wasExecuted` = "latest row is UP and SUCCESS", so any appended non-fake-apply row makes the node read as never applied and `up` re-runs its DDL), and a `HistoryRepository` `default` method would be silently inherited by `SynchronizedHistoryRepository` as a throwing stub. No DDL change — the column already existed in all three dialects. The UP+SUCCESS guard lives in `AmendService`, not the repository. **No `previous_fingerprint` column** (explicitly rejected), so the fact that a difference existed is unrecoverable — stated in the javadoc, in the plan's `CHANGED` warning, and in the user guide. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## CLI Project Structure
 
 ```
@@ -158,7 +161,7 @@ project/
 └── environments/*.yaml  # Environment-specific overrides
 ```
 
-Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe validate`, `migraphe generate [--name <name>]`
+Commands: `migraphe status`, `migraphe up`, `migraphe down`, `migraphe amend`, `migraphe validate`, `migraphe generate [--name <name>]`
 
 ## Instructions for Claude
 
@@ -224,15 +227,16 @@ Pre-commit / session-end steps (incl. CLAUDE.md / CHANGELOG.md / ARCHITECTURE.md
 
 Latest session only — full history: [docs/CHANGELOG.md](docs/CHANGELOG.md).
 
-### 2026-08-27 (Session 74)
+### 2026-08-27 / 08-28 (Session 74)
 - Implemented `--preview` in the CLI as a synonym for `--dry-run`; it existed in the docs and the Gradle plugin but not in the CLI, where `migraphe up --preview` failed with `Error: Target not found: --preview`. Also stopped `Unknown command` printing after a correct argument error.
 - Added the **UP content fingerprint**: `migraphe_history.fingerprint`, `MigrationNode.fingerprint()` (`default null`, opaque), SHA-256 of `upSql.strip()` in `JdbcMigrationNode`, and a detection-guarded `TEXT` column in all three dialects. The interface javadoc was rejected **four times** in review for stating absolutes the implementation could not honor; the surviving text claims only that the token is opaque and that `null` means unknown. Groundwork for rolling back orphan migrations — prompted by empirically disproving a claim in an intro-article draft: deleting a task file makes the node vanish from `status` and `down --all`, stranding the DB objects.
 - Fixed **three exception-safety defects in `DagExecutor`'s completion accounting**, all one shape: a throwing `fingerprint()` and a throwing `history.record()` each hung the whole run (`processCompletion` skipped, dependents never queued, latch never zero), and a node reported "dependency failed" while it waited for a semaphore permit was dispatched anyway — its migration ran after the console said it was skipped, with no parallel configuration needed.
 - Established that the **generic history resource works on PostgreSQL**. The PostgreSQL resource's comment claimed a bare positional parameter cannot be compared against `information_schema`'s `sql_identifier` domain, and on that basis `type="jdbc"` with a PostgreSQL driver was believed broken. Nothing had tested it; it initializes cleanly. Comment corrected, test kept as the first coverage of that pair.
 - **`status` now reports drift**, in five states rather than a boolean, after the user pointed out that a `null` fingerprint on the node (the plugin opting out) and a `null` on the record (a row predating the column) are not the same thing. `UpContentState` + the markers `[ ] [✓] [!] [?] [E]`, rendered by a `StatusLineFormatter` shared by the CLI and Gradle — extracted only after consolidating the Gradle task onto `StatusService` made the two rendering lambdas identical, which also gave the Gradle side its first unit cover of the executed branch. The boolean `upContentChanged()` was deleted once the enum existed (never released). Guarded `node.fingerprint()` on the read path first, since wiring the marker made a throwing plugin able to take `status` down.
+- Added **`migraphe amend` / `migrapheAmend`**, which records the current definitions as applied and touches no database objects. It had to ship with the fingerprint rather than after it: `up` skips applied nodes and `down` cascades to every transitive dependent, so `[?]` is otherwise permanent. Repair commands are split **by which side is authoritative** — the same `[!]` wants opposite answers depending on whether the file or the database was fixed — leaving `rebuild` and `baseline` for later. The write is an `UPDATE` through a new capability interface, `HistoryFingerprintUpdater`; appending a row is structurally impossible because `wasExecuted` reads "the latest row is UP and SUCCESS", so anything short of a full fake apply makes `up` re-run the migration. No DDL change was needed.
 - **Release notes**: breaking change (minor bump). `ExecutionRecord`'s canonical constructor goes 10 → 11 arguments, so a plugin calling it directly must recompile; `MigrationNode.fingerprint()` is a `default` method, so existing plugins are unaffected. For users, the two `DagExecutor` fixes both bite in the **default sequential configuration**. **One defect is knowingly left open**: a node marked skipped while already running is counted down twice, so with `execution.parallel: true` the run can summarize and exit while another node is mid-DDL, and a node the console reported skipped gets a success history row. See [docs/CHANGELOG.md](docs/CHANGELOG.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) decisions 30-31.
 
 ---
 
-**Last Updated**: 2026-08-27
-**Current Work**: UP-content fingerprinting is recorded and now rendered by `status` as five drift states. Next: `baseline` (adopt the current definitions without executing — required before the `[?]` an upgrade shows can ever clear), `reconcile` (roll back and re-apply what drifted), a `dependencies` column so orphan migrations can be rolled back, and drift warnings in `validate`. `DagExecutor`'s completion accounting was hardened against exceptions on the success path; one accounting defect is deliberately deferred to its own change. See [docs/CHANGELOG.md](docs/CHANGELOG.md).
+**Last Updated**: 2026-08-28
+**Current Work**: UP-content fingerprinting is recorded, rendered by `status` as five drift states, and now resolvable in the history's favour by `migraphe amend` / `migrapheAmend`. Next: `rebuild` (roll back and re-apply what drifted, and drop what only exists in the database — needs a `dependencies` column in the history), `baseline <id>` (adopt an existing database by inserting rows for unrecorded nodes), and drift warnings in `validate`. `DagExecutor`'s completion accounting was hardened against exceptions on the success path; one accounting defect is deliberately deferred to its own change. See [docs/CHANGELOG.md](docs/CHANGELOG.md).

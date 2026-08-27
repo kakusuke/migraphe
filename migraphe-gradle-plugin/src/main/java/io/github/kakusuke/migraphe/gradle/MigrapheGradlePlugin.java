@@ -19,8 +19,9 @@ import org.gradle.api.artifacts.Configuration;
  *   <li>creates the resolvable {@code migraphePlugin} configuration, used to declare
  *       database/plugin JAR dependencies whose classpath is handed to every task;
  *   <li>lazily registers the {@code migrapheValidate}, {@code migrapheStatus}, {@code
- *       migrapheGenerate}, {@code migrapheUp} and {@code migrapheDown} tasks in the {@code
- *       migraphe} group, wiring the extension properties and the plugin classpath onto each.
+ *       migrapheGenerate}, {@code migrapheUp}, {@code migrapheDown} and {@code migrapheAmend} tasks
+ *       in the {@code migraphe} group, wiring the extension properties and the plugin classpath
+ *       onto each.
  * </ul>
  *
  * <p>For tasks that also accept command-line options, configuration-time fallbacks are read from
@@ -34,7 +35,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
 
     /**
      * Applies the plugin to the given project, creating the {@code migraphe} extension, the {@code
-     * migraphePlugin} configuration and the five Migraphe tasks.
+     * migraphePlugin} configuration and the six Migraphe tasks.
      *
      * @param project the Gradle project the plugin is applied to
      */
@@ -145,6 +146,24 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                                 task.getAll().convention(true);
                             }
                             Object dryRunProp = project.findProperty("migraphe.down.dryRun");
+                            if ("true".equals(String.valueOf(dryRunProp))) {
+                                task.getDryRun().convention(true);
+                            }
+                        });
+
+        project.getTasks()
+                .register(
+                        "migrapheAmend",
+                        MigrapheAmendTask.class,
+                        task -> {
+                            task.setDescription("Record the current definitions as applied");
+                            task.setGroup("migraphe");
+                            task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
+                            task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
+                            // Fallback from -P properties (at configuration time).
+                            Object dryRunProp = project.findProperty("migraphe.amend.dryRun");
                             if ("true".equals(String.valueOf(dryRunProp))) {
                                 task.getDryRun().convention(true);
                             }

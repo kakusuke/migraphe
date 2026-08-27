@@ -394,7 +394,7 @@ public class Main {
         System.out.println(
                 "  pin [--check]                       Generate or verify migraphe.lock.yaml");
         System.out.println();
-        System.out.println("Common options (up, down, status, validate, generate):");
+        System.out.println("Common options (up, down, status, amend, validate, generate):");
         System.out.println(
                 "  --env <name>   Apply the environments/<name>.yaml overlay. Overrides target");
         System.out.println(

@@ -7,6 +7,11 @@ val generatorJsonJar by configurations.creating {
     isCanBeConsumed = false
 }
 
+val jdbcPluginJar by configurations.creating {
+    isCanBeResolved = true
+    isCanBeConsumed = false
+}
+
 dependencies {
     implementation(project(":migraphe-core"))
 
@@ -14,8 +19,12 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.assertj.core)
     testImplementation(gradleTestKit())
+    testImplementation(libs.h2)
 
     generatorJsonJar(project(":migraphe-plugin-generator-json"))
+
+    jdbcPluginJar(project(":migraphe-plugin-jdbc"))
+    jdbcPluginJar(libs.h2)
 }
 
 gradlePlugin {
@@ -36,10 +45,16 @@ tasks.test {
     }
     val generatorJsonFiles = configurations["generatorJsonJar"]
     inputs.files(generatorJsonFiles).withPropertyName("generatorJsonClasspath")
+    val jdbcPluginFiles = configurations["jdbcPluginJar"]
+    inputs.files(jdbcPluginFiles).withPropertyName("jdbcPluginClasspath")
     doFirst {
         systemProperty(
             "generator.json.classpath",
             generatorJsonFiles.files.joinToString(File.pathSeparator) { it.absolutePath },
+        )
+        systemProperty(
+            "jdbc.plugin.classpath",
+            jdbcPluginFiles.files.joinToString(File.pathSeparator) { it.absolutePath },
         )
     }
 }

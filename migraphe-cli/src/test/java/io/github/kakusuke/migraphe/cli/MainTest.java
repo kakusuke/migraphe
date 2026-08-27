@@ -292,7 +292,6 @@ class MainTest {
 
         assertThat(exitCode.get()).isZero();
         assertThat(stdout).contains("Recorded 1");
-        assertThat(captureStdout(() -> Main.run(new String[0]))).contains("amend");
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl, "sa", "");
                 Statement statement = connection.createStatement();
@@ -300,6 +299,13 @@ class MainTest {
             assertThat(rs.next()).isTrue();
             assertThat(rs.getString(1)).isNotNull();
         }
+    }
+
+    @Test
+    void usageShouldListAmendAmongTheCommandsHonouringTheEnvOption() {
+        String usage = captureStdout(() -> Main.run(new String[0]));
+
+        assertThat(usage).contains("Common options (up, down, status, amend, validate, generate):");
     }
 
     @Test
