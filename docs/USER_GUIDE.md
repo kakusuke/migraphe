@@ -496,7 +496,7 @@ Migration completed successfully. 2 migrations executed.
 |--------|-------------|
 | `<id>` | Execute only the specified migration and its dependencies |
 | `-y` | Skip confirmation prompt |
-| `--preview` | Show execution plan only without executing |
+| `--preview` | Show execution plan only without executing (`--dry-run` is accepted as an alias) |
 
 ### Colored Output
 
@@ -1043,6 +1043,10 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: Execution duration
 - `serialized_down_task`: Rollback SQL (UP migrations only)
 - `error_message`: Error details (FAILURE status only)
+- `fingerprint`: Fingerprint of the UP content that was applied, recorded on UP success only. The
+  JDBC, PostgreSQL and MySQL plugins use the SHA-256 hex digest of the `up:` SQL with surrounding
+  whitespace stripped. Empty on DOWN rows, on rows written before 0.7.0, and when a plugin does not
+  supply one — in every such case it means "unknown", not "unchanged".
 
 ## Gradle Plugin
 

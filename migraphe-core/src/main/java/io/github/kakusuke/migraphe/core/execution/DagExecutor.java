@@ -274,7 +274,13 @@ public final class DagExecutor implements Executor {
                     semaphore.acquire();
                 }
 
-                @Nullable Semaphore sem = semaphore;
+                if (failedNodes.contains(node.id())) {
+                    if (semaphore != null) {
+                        semaphore.release();
+                    }
+                    continue;
+                }
+
                 Thread.startVirtualThread(
                         () -> {
                             try {
@@ -289,8 +295,8 @@ public final class DagExecutor implements Executor {
                                         latch,
                                         targetNodes);
                             } finally {
-                                if (sem != null) {
-                                    sem.release();
+                                if (semaphore != null) {
+                                    semaphore.release();
                                 }
                                 latch.countDown();
                             }
@@ -355,30 +361,45 @@ public final class DagExecutor implements Executor {
         Result<TaskResult, String> result = task.execute();
         long duration = System.currentTimeMillis() - startTime;
 
-        if (result.isOk()) {
-            listener.onNodeSucceeded(node, direction, duration);
+        try {
+            if (result.isOk()) {
+                listener.onNodeSucceeded(node, direction, duration);
 
-            TaskResult taskResult = result.value();
-            history.record(recordSuccess(node, duration, taskResult));
+                TaskResult taskResult = result.value();
+                history.record(recordSuccess(node, duration, taskResult));
 
-            executedCount.incrementAndGet();
-            processCompletion(node.id(), tracker, readyQueue);
-        } else {
-            String errorMsg = result.error();
-            String message = errorMsg != null ? errorMsg : "Unknown error";
-            String sqlContent = null;
-            if (task instanceof SqlContentProvider sqlProvider) {
-                sqlContent = sqlProvider.sqlContent();
+                executedCount.incrementAndGet();
+                processCompletion(node.id(), tracker, readyQueue);
+            } else {
+                String errorMsg = result.error();
+                String message = errorMsg != null ? errorMsg : "Unknown error";
+
+                listener.onNodeFailed(node, direction, sqlContentOf(task), message);
+
+                history.record(
+                        ExecutionRecord.failure(
+                                node.id(),
+                                node.environment().id(),
+                                direction,
+                                node.name(),
+                                message));
+
+                failedNodes.add(node.id());
+                failureCount.incrementAndGet();
+                propagateFailure(node.id(), failedNodes, targetNodes, skippedCount, latch);
             }
+        } catch (RuntimeException e) {
+            String message =
+                    (result.isOk()
+                                    ? "applied, but recording the result failed: "
+                                    : "recording the failure failed: ")
+                            + e;
 
-            listener.onNodeFailed(node, direction, sqlContent, message);
+            listener.onNodeFailed(node, direction, sqlContentOf(task), message);
 
-            history.record(
-                    ExecutionRecord.failure(
-                            node.id(), node.environment().id(), direction, node.name(), message));
-
-            failedNodes.add(node.id());
-            failureCount.incrementAndGet();
+            if (failedNodes.add(node.id())) {
+                failureCount.incrementAndGet();
+            }
             propagateFailure(node.id(), failedNodes, targetNodes, skippedCount, latch);
         }
     }
@@ -426,6 +447,13 @@ public final class DagExecutor implements Executor {
     }
 
     /**
+     * Returns the SQL the task would report to a failure listener, or {@code null} if it has none.
+     */
+    private static @Nullable String sqlContentOf(Task task) {
+        return task instanceof SqlContentProvider sqlProvider ? sqlProvider.sqlContent() : null;
+    }
+
+    /**
      * Returns the transitive successor set used for failure propagation: {@code getAllDependents}
      * for UP, {@code getAllDependencies} for DOWN.
      */
@@ -456,7 +484,22 @@ public final class DagExecutor implements Executor {
                 node.name(),
                 serializedDownTask,
                 duration,
-                node.fingerprint());
+                fingerprintOf(node));
+    }
+
+    /**
+     * Returns the node's fingerprint, or {@code null} when the plugin's accessor throws.
+     *
+     * <p>The node's task has already been applied by the time this is called, so a broken accessor
+     * must not cost the success record: without it the migration is applied again on the next run.
+     * {@code null} is what {@link MigrationNode#fingerprint()} already defines as "unknown".
+     */
+    private static @Nullable String fingerprintOf(MigrationNode node) {
+        try {
+            return node.fingerprint();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /**

@@ -495,7 +495,7 @@ Migration completed successfully. 2 migrations executed.
 |-----------|------|
 | `<id>` | 指定したマイグレーションとその依存先のみを実行 |
 | `-y` | 確認プロンプトをスキップ |
-| `--preview` | 実行計画のみ表示し、実際には実行しない |
+| `--preview` | 実行計画のみ表示し、実際には実行しない（`--dry-run` も同義として受け付ける） |
 
 ### 色付き出力
 
@@ -1014,6 +1014,10 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: 実行時間
 - `serialized_down_task`: ロールバックSQL（UPマイグレーションのみ）
 - `error_message`: エラーの詳細（FAILUREステータスのみ）
+- `fingerprint`: 適用したUPの内容のフィンガープリント。UP成功時のみ記録される。JDBC / PostgreSQL /
+  MySQL プラグインは `up:` のSQLを前後の空白を除いて SHA-256 でハッシュした16進文字列を使う。DOWNの行、
+  0.7.0 より前に書かれた行、プラグインが提供しない場合は空になり、いずれも「変更なし」ではなく
+  「不明」を意味する
 
 ## Gradleプラグイン
 

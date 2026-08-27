@@ -20,6 +20,7 @@ import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -336,6 +337,62 @@ class DagExecutorParallelUpTest {
         assertThat(result.success()).isTrue();
         assertThat(result.summary().executedCount()).isEqualTo(3);
         assertThat(maxConcurrent.get()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("スキップ伝播済みのノードは、許可待ちの後でも実行されない")
+    void shouldNotDispatchNodeSkippedWhileWaitingForPermit() throws InterruptedException {
+        // Given: a→b→c のうち b は対象外なので c の in-degree は 0 で、a と同時にキューに乗る
+        CountDownLatch cStarted = new CountDownLatch(1);
+
+        Task slowFailingTask =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return Result.err("task failed");
+                    }
+
+                    @Override
+                    public String description() {
+                        return "SlowFailingTask";
+                    }
+                };
+
+        Task startSignalingTask =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        cStarted.countDown();
+                        return Result.ok(TaskResult.withoutDownTask("done"));
+                    }
+
+                    @Override
+                    public String description() {
+                        return "StartSignalingTask";
+                    }
+                };
+
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(createNodeWithTask("a", Set.of(), slowFailingTask));
+        graph.addNode(createNode("b", Set.of(NodeId.of("a"))));
+        graph.addNode(createNodeWithTask("c", Set.of(NodeId.of("b")), startSignalingTask));
+
+        InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+        MockExecutionListener listener = new MockExecutionListener();
+        DagExecutor executor = new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
+
+        // When: b を対象から外し、a の許可待ちで c がブロックされる状態を作る
+        ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("c")));
+
+        // Then
+        assertThat(result.success()).isFalse();
+        assertThat(listener.skippedNodes).containsExactly(NodeId.of("c"));
+        assertThat(cStarted.await(300, TimeUnit.MILLISECONDS)).isFalse();
     }
 
     @Test

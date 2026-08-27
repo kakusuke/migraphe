@@ -16,6 +16,8 @@ import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +40,9 @@ class PostgreSQLIntegrationTest {
 
     private static final String PG_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
+
+    private static final String GENERIC_SCHEMA_RESOURCE =
+            "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql";
 
     private PostgreSQLEnvironment environment;
     private HistoryRepository historyRepo;
@@ -185,6 +190,47 @@ class PostgreSQLIntegrationTest {
                                         + "WHERE table_name = 'migraphe_history'")) {
             assertThat(rs.next()).isTrue();
         }
+    }
+
+    @Test
+    void shouldInitializeHistorySchemaFromGenericResource() throws Exception {
+        // given: 汎用リソースがゼロから作れる状態にする（共有コンテナなので finally で必ず戻す）
+        dropHistoryTable();
+        try {
+            HistoryRepository genericRepo =
+                    new JdbcHistoryRepository(environment, GENERIC_SCHEMA_RESOURCE);
+
+            // when / then: type="jdbc" + PostgreSQL ドライバの組み合わせで初期化できる
+            assertThatCode(genericRepo::initialize).doesNotThrowAnyException();
+            assertThat(historyColumnNames()).contains("target_id", "fingerprint");
+        } finally {
+            dropHistoryTable();
+            historyRepo.initialize();
+        }
+    }
+
+    /** 履歴テーブルを落とす。コンテナはクラス共有なので、呼んだ後は必ず作り直すこと。 */
+    private void dropHistoryTable() throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history CASCADE");
+        }
+    }
+
+    /** 履歴テーブルの列名を返す。 */
+    private List<String> historyColumnNames() throws Exception {
+        List<String> names = new ArrayList<>();
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT column_name FROM information_schema.columns "
+                                        + "WHERE table_name = 'migraphe_history'")) {
+            while (rs.next()) {
+                names.add(rs.getString(1));
+            }
+        }
+        return names;
     }
 
     @Test

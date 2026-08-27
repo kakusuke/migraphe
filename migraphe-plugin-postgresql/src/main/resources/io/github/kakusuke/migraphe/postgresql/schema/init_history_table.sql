@@ -7,8 +7,11 @@
 --
 -- A detection query may carry positional parameters; every one of them is bound to the name of the
 -- schema holding the history table, so a same-named table in another schema cannot satisfy the
--- query. The parameter is cast explicitly because PostgreSQL cannot infer the type of a bare
--- placeholder compared against information_schema's sql_identifier domain.
+-- query. The explicit cast is not required: the generic resource compares the same column against a
+-- bare placeholder and initializes cleanly on PostgreSQL 16, which
+-- PostgreSQLIntegrationTest.shouldInitializeHistorySchemaFromGenericResource pins. It is kept
+-- because it costs nothing and states the comparison's type here rather than leaving it to how the
+-- driver happens to bind the parameter.
 --
 -- The table and each index are separate steps: every statement is executed on its own, and a
 -- manually dropped index is recreated on the next run because each step always runs.

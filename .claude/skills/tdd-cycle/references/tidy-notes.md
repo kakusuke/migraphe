@@ -59,6 +59,28 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
 - **Null-normalization next to an existing helper**: `String s = rs.getString(…); if (s == null) s = "";`
   collapses to `nullToEmpty(rs.getString(…))`. This usually also removes an effectively-final shadow
   variable that only existed so a lambda could capture it
+- **A throw on `DagExecutor.executeNode`'s success path costs more than one record.** The virtual
+  thread's `finally` counts the latch down, but `processCompletion` is skipped, so dependents never
+  reach the ready queue. The run then hangs iff the throwing node has a dependent (for UP) inside the
+  target set that was not already ready — the coordinator polls an empty queue while those dependents
+  still hold latch counts. Otherwise it *returns success* with the node's record missing and
+  `executedCount` short, so a completed run is no evidence that nothing threw. Never move a call that
+  can throw between `task.execute()` and `processCompletion`. The `catch` guards its `failureCount`
+  bump with `failedNodes.add(...)` while the `else` branch does not; that asymmetry is load-bearing
+  for two independent reasons — the `else` branch's own `propagateFailure` can throw and re-enter the
+  `catch` after its `add` already succeeded, *and* another node's `propagateFailure` can add this one
+  concurrently
+- **The coordinator loop checks `failedNodes` twice, and both checks are needed.** The one before
+  `semaphore.acquire()` avoids taking a permit for a node already known to be skipped; the one after it
+  closes the window in which another node's `propagateFailure` marks this one while it waits for the
+  permit — without it a node reported skipped still gets dispatched and its migration runs. Neither
+  path counts the latch down, because `propagateFailure` already did for every node it marks
+- **`propagateFailure`'s cone can contain a node that is currently running.** Its cone is
+  `getAllDependents`/`getAllDependencies` over the whole graph, while `ReadyNodeTracker` counts
+  in-degree only over dependencies inside `targetNodes` — so with `a→b→c` and `b` already applied,
+  `targetNodes` is `{a, c}`, `c` starts ready, and under parallelism `a` can mark a running `c`
+  skipped (counting its latch down a second time). Never write a tidy that assumes cone membership
+  implies not-yet-started
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
