@@ -100,20 +100,6 @@ public final class StatusService {
             }
             return applied.equals(current) ? UpContentState.UNCHANGED : UpContentState.CHANGED;
         }
-
-        /**
-         * Indicates whether the node's UP content differs from what was applied.
-         *
-         * <p>Only {@link UpContentState#CHANGED} answers {@code true}: an unknown, unreadable or
-         * inapplicable comparison is never reported as a change, because {@link
-         * MigrationNode#fingerprint()} defines an absent token as "unknown" rather than
-         * "unchanged". Callers that need to tell those apart should read {@link #upContentState()}.
-         *
-         * @return {@code true} only when both fingerprints are known and differ
-         */
-        public boolean upContentChanged() {
-            return upContentState() == UpContentState.CHANGED;
-        }
     }
 
     /**

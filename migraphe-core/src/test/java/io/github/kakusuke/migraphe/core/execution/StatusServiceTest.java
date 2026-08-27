@@ -142,66 +142,6 @@ class StatusServiceTest {
     }
 
     @Test
-    @DisplayName("UP 内容の変化は両方の fingerprint が判っているときだけ報告される")
-    void upContentChangedOnlyWhenBothFingerprintsAreKnown() {
-        // Given
-        MigrationNode same = new FingerprintedNode(createNode("same", "Same"), "abc");
-        MigrationNode edited = new FingerprintedNode(createNode("edited", "Edited"), "abc");
-        MigrationNode nodeWithout = createNode("node-without", "Node without");
-        MigrationNode recordWithout =
-                new FingerprintedNode(createNode("record-without", "Record without"), "abc");
-        MigrationNode pending = new FingerprintedNode(createNode("pending", "Pending"), "abc");
-        graph.addNode(same);
-        graph.addNode(edited);
-        graph.addNode(nodeWithout);
-        graph.addNode(recordWithout);
-        graph.addNode(pending);
-
-        historyRepo.record(
-                ExecutionRecord.upSuccess(
-                        NodeId.of("same"), testEnv.id(), "Same", null, 1L, "abc"));
-        historyRepo.record(
-                ExecutionRecord.upSuccess(
-                        NodeId.of("edited"), testEnv.id(), "Edited", null, 1L, "xyz"));
-        historyRepo.record(
-                ExecutionRecord.upSuccess(
-                        NodeId.of("node-without"), testEnv.id(), "Node without", null, 1L, "abc"));
-        historyRepo.record(
-                ExecutionRecord.upSuccess(
-                        NodeId.of("record-without"), testEnv.id(), "Record without", null, 1L));
-
-        statusService = new StatusService(graph, historyRepo);
-
-        // When
-        StatusService.StatusInfo status = statusService.getStatus();
-
-        // Then
-        assertThat(changedFor(status, "same")).isFalse();
-        assertThat(changedFor(status, "edited")).isTrue();
-        assertThat(changedFor(status, "node-without")).isFalse();
-        assertThat(changedFor(status, "record-without")).isFalse();
-        assertThat(changedFor(status, "pending")).isFalse();
-    }
-
-    @Test
-    @DisplayName("fingerprint() が例外を投げるノードは変化なしとして扱われる")
-    void upContentUnchangedWhenFingerprintAccessorThrows() {
-        // Given
-        graph.addNode(new ThrowingFingerprintNode(createNode("throwing", "Throwing")));
-        historyRepo.record(
-                ExecutionRecord.upSuccess(
-                        NodeId.of("throwing"), testEnv.id(), "Throwing", null, 1L, "abc"));
-
-        statusService = new StatusService(graph, historyRepo);
-
-        // When
-        StatusService.StatusInfo status = statusService.getStatus();
-
-        // Then
-        assertThat(changedFor(status, "throwing")).isFalse();
-    }
-
-    @Test
     @DisplayName("UP 内容の状態は 対象外・不明・変更なし・変更あり・読めない を区別する")
     void upContentStateDistinguishesEveryCase() {
         // Given
@@ -250,14 +190,6 @@ class StatusServiceTest {
                 .findFirst()
                 .orElseThrow()
                 .upContentState();
-    }
-
-    private boolean changedFor(StatusService.StatusInfo status, String nodeId) {
-        return status.nodes().stream()
-                .filter(ns -> ns.node().id().equals(NodeId.of(nodeId)))
-                .findFirst()
-                .orElseThrow()
-                .upContentChanged();
     }
 
     private MigrationNode createNode(String id, String name) {

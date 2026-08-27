@@ -97,6 +97,11 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   purpose.** Adding a constant to the enum then fails to compile until the renderer decides how it
   looks. Never add `default ->` to quiet that: a new state would silently render as `[✓]`, i.e. as
   "no change detected", which is the one answer a new state is least likely to mean
+- **`StatusServiceTest`'s state table has three rows expecting `NOT_APPLICABLE` and none is
+  redundant.** `pending` covers "never applied", `opt-out` covers "plugin returns null", and
+  `pending-throwing` covers "never applied *and* the accessor throws" — the last one is the only
+  thing holding `upContentState`'s `latestRecord == null` check above the `fingerprint()` read.
+  Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
