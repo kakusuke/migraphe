@@ -4,6 +4,7 @@ import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
+import io.github.kakusuke.migraphe.api.history.HistoryFingerprintUpdater;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.util.*;
@@ -26,7 +27,8 @@ import org.jspecify.annotations.Nullable;
  * environment is an {@link ExecutionDirection#UP} record with status {@link
  * ExecutionStatus#SUCCESS}.
  */
-public final class InMemoryHistoryRepository implements HistoryRepository {
+public final class InMemoryHistoryRepository
+        implements HistoryRepository, HistoryFingerprintUpdater {
 
     private final Map<EnvironmentId, List<ExecutionRecord>> recordsByEnvironment;
 
@@ -46,6 +48,32 @@ public final class InMemoryHistoryRepository implements HistoryRepository {
         recordsByEnvironment
                 .computeIfAbsent(record.environmentId(), k -> new ArrayList<>())
                 .add(record);
+    }
+
+    /**
+     * Replaces the fingerprint stored on one record, leaving every other field as it was.
+     *
+     * <p>Record ids are unique across environments, so every partition is searched.
+     *
+     * @param recordId the id of the record to revise
+     * @param fingerprint the fingerprint to store
+     * @return {@code true} if a record with that id was revised, {@code false} if none matched
+     */
+    @Override
+    public boolean updateFingerprint(String recordId, String fingerprint) {
+        Objects.requireNonNull(recordId, "recordId must not be null");
+        Objects.requireNonNull(fingerprint, "fingerprint must not be null");
+
+        for (List<ExecutionRecord> records : recordsByEnvironment.values()) {
+            for (int i = 0; i < records.size(); i++) {
+                ExecutionRecord existing = records.get(i);
+                if (existing.id().equals(recordId)) {
+                    records.set(i, withFingerprint(existing, fingerprint));
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override
@@ -109,5 +137,20 @@ public final class InMemoryHistoryRepository implements HistoryRepository {
 
     private List<ExecutionRecord> getRecordsForEnvironment(EnvironmentId environmentId) {
         return recordsByEnvironment.getOrDefault(environmentId, Collections.emptyList());
+    }
+
+    private static ExecutionRecord withFingerprint(ExecutionRecord record, String fingerprint) {
+        return new ExecutionRecord(
+                record.id(),
+                record.nodeId(),
+                record.environmentId(),
+                record.direction(),
+                record.status(),
+                record.executedAt(),
+                record.description(),
+                record.serializedDownTask(),
+                record.durationMs(),
+                record.errorMessage(),
+                fingerprint);
     }
 }

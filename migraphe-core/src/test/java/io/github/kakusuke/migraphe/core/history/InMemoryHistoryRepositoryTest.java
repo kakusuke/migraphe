@@ -1,10 +1,12 @@
 package io.github.kakusuke.migraphe.core.history;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.history.HistoryFingerprintUpdater;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.util.List;
@@ -31,6 +33,51 @@ class InMemoryHistoryRepositoryTest {
         // when & then
         assertThat(repository.allRecords(envId)).isEmpty();
         assertThat(repository.executedNodes(envId)).isEmpty();
+    }
+
+    @Test
+    void shouldAdvertiseTheFingerprintCapabilityAndReportAMiss() {
+        // when & then
+        assertThat(repository).isInstanceOf(HistoryFingerprintUpdater.class);
+        assertThat(((HistoryFingerprintUpdater) repository).updateFingerprint("no-such-id", "abc"))
+                .isFalse();
+    }
+
+    @Test
+    void shouldReplaceOnlyTheFingerprint() {
+        // given
+        InMemoryHistoryRepository inMemory = new InMemoryHistoryRepository();
+        ExecutionRecord record =
+                ExecutionRecord.upSuccess(node1, envId, "Create table", "DROP TABLE t", 100);
+        inMemory.record(record);
+
+        // when
+        boolean updated = inMemory.updateFingerprint(record.id(), "abc");
+
+        // then
+        assertThat(updated).isTrue();
+        ExecutionRecord after = inMemory.findLatestRecord(node1, envId);
+        assertThat(after).isNotNull();
+        assertThat(after.fingerprint()).isEqualTo("abc");
+        assertThat(after.id()).isEqualTo(record.id());
+        assertThat(after.executedAt()).isEqualTo(record.executedAt());
+        assertThat(after.durationMs()).isEqualTo(record.durationMs());
+        assertThat(after.serializedDownTask()).isEqualTo("DROP TABLE t");
+        assertThat(after.description()).isEqualTo("Create table");
+    }
+
+    @Test
+    void shouldRejectNullFingerprintArguments() {
+        // given
+        InMemoryHistoryRepository inMemory = new InMemoryHistoryRepository();
+        ExecutionRecord record = ExecutionRecord.upSuccess(node1, envId, "Create table", null, 100);
+        inMemory.record(record);
+
+        // when & then
+        assertThatThrownBy(() -> inMemory.updateFingerprint(record.id(), null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> inMemory.updateFingerprint(null, "abc"))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test

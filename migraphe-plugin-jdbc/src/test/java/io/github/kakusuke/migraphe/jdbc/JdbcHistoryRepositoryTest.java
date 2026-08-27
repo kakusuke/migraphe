@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
@@ -315,6 +316,73 @@ class JdbcHistoryRepositoryTest {
                 repository.findLatestRecord(NodeId.of("node2"), EnvironmentId.of("testdb"));
         assertThat(withoutFingerprint).isNotNull();
         assertThat(withoutFingerprint.fingerprint()).isNull();
+    }
+
+    @Test
+    void updateFingerprintReplacesOnlyTheFingerprint() {
+        repository.initialize();
+
+        repository.record(
+                new ExecutionRecord(
+                        "00000000-0000-7000-8000-0000000000fc",
+                        NodeId.of("node1"),
+                        EnvironmentId.of("testdb"),
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS,
+                        Instant.parse("2026-01-30T12:34:56Z"),
+                        "test description",
+                        "DOWN SQL",
+                        100L,
+                        null,
+                        null));
+
+        var before = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        assertThat(before).isNotNull();
+        assertThat(before.fingerprint()).isNull();
+
+        boolean updated =
+                repository.updateFingerprint("00000000-0000-7000-8000-0000000000fc", "abc");
+
+        assertThat(updated).isTrue();
+
+        var after = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        assertThat(after).isNotNull();
+        assertThat(after.fingerprint()).isEqualTo("abc");
+        assertThat(after.executedAt()).isEqualTo(before.executedAt());
+        assertThat(after.durationMs()).isEqualTo(before.durationMs());
+        assertThat(after.serializedDownTask()).isEqualTo(before.serializedDownTask());
+    }
+
+    @Test
+    void updateFingerprintReportsAMissForAnUnknownRecordId() {
+        repository.initialize();
+
+        assertThat(repository.updateFingerprint("no-such-id", "abc")).isFalse();
+    }
+
+    @Test
+    void updateFingerprintRejectsNullArguments() {
+        repository.initialize();
+
+        repository.record(
+                createRecord(
+                        "00000000-0000-7000-8000-0000000000fd",
+                        "node1",
+                        "testdb",
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS));
+
+        assertThatThrownBy(
+                        () ->
+                                repository.updateFingerprint(
+                                        "00000000-0000-7000-8000-0000000000fd", null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> repository.updateFingerprint(null, "abc"))
+                .isInstanceOf(NullPointerException.class);
+
+        var record = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        assertThat(record).isNotNull();
+        assertThat(record.fingerprint()).isNull();
     }
 
     private ExecutionRecord recordAt(String id, Instant executedAt, ExecutionDirection direction) {

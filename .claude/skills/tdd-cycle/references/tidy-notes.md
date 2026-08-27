@@ -93,15 +93,30 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `UNREADABLE`, because a report can say "your plugin is broken" where a stored token cannot. They
   look like the same try/catch — do not unify them, and do not "simplify" the status side back to
   `null`, which would make a plugin fault indistinguishable from a plugin that opts out
-- **`StatusLineFormatter.markerFor` switches over `UpContentState` with no `default` arm on
-  purpose.** Adding a constant to the enum then fails to compile until the renderer decides how it
-  looks. Never add `default ->` to quiet that: a new state would silently render as `[✓]`, i.e. as
-  "no change detected", which is the one answer a new state is least likely to mean
+- **`StatusLineFormatter.markerFor` and `AmendService.isDrifted` switch over `UpContentState` with
+  no `default` arm on purpose.** Adding a constant to the enum then fails to compile until both
+  decide what it means. Never add `default ->` to quiet that: a new state would silently render as
+  `[✓]`, i.e. "no change detected", and would silently fall outside what `amend` resolves — the two
+  answers a new state is least likely to mean
 - **`StatusServiceTest`'s state table has three rows expecting `NOT_APPLICABLE` and none is
   redundant.** `pending` covers "never applied", `opt-out` covers "plugin returns null", and
   `pending-throwing` covers "never applied *and* the accessor throws" — the last one is the only
   thing holding `upContentState`'s `latestRecord == null` check above the `fingerprint()` read.
-  Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`
+  Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`.
+  `AmendService.entryFor` also depends on that ordering: it reads a drifted state as proof that both
+  `latestRecord()` and `node.fingerprint()` are non-null, and says so in two `requireNonNull`
+  messages. Reorder `upContentState` and those become reachable failures rather than assertions
+- **`HistoryRepository` is append-only, and `HistoryFingerprintUpdater` is deliberately not part of
+  it.** Do not "simplify" by folding the capability in: `SynchronizedHistoryRepository` overrides every
+  method explicitly, so an added `default` would be silently inherited as a throwing stub, and every
+  third-party repository would be handed a mutation method it cannot honour. Nor try to implement
+  fingerprint revision by *appending* a row — `wasExecuted` is "the latest row is UP and SUCCESS" in
+  every implementation, so any appended row that is not a full fake apply makes the node read as never
+  applied and `up` re-runs it. Revision has to be an in-place update of the existing row
+- **A wrapped history repository loses the capability.** `instanceof HistoryFingerprintUpdater` is
+  false for `SynchronizedHistoryRepository`, so callers must use what
+  `ExecutionContext.createHistoryRepository()` returns (the raw implementation) rather than anything
+  `DagExecutor` has wrapped
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
