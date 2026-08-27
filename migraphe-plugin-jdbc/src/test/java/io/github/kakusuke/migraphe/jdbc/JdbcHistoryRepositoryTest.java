@@ -317,6 +317,41 @@ class JdbcHistoryRepositoryTest {
         assertThat(withoutFingerprint.fingerprint()).isNull();
     }
 
+    @Test
+    void updateFingerprintReplacesOnlyTheFingerprint() {
+        repository.initialize();
+
+        repository.record(
+                new ExecutionRecord(
+                        "00000000-0000-7000-8000-0000000000fc",
+                        NodeId.of("node1"),
+                        EnvironmentId.of("testdb"),
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS,
+                        Instant.parse("2026-01-30T12:34:56Z"),
+                        "test description",
+                        "DOWN SQL",
+                        100L,
+                        null,
+                        null));
+
+        var before = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        assertThat(before).isNotNull();
+        assertThat(before.fingerprint()).isNull();
+
+        boolean updated =
+                repository.updateFingerprint("00000000-0000-7000-8000-0000000000fc", "abc");
+
+        assertThat(updated).isTrue();
+
+        var after = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        assertThat(after).isNotNull();
+        assertThat(after.fingerprint()).isEqualTo("abc");
+        assertThat(after.executedAt()).isEqualTo(before.executedAt());
+        assertThat(after.durationMs()).isEqualTo(before.durationMs());
+        assertThat(after.serializedDownTask()).isEqualTo(before.serializedDownTask());
+    }
+
     private ExecutionRecord recordAt(String id, Instant executedAt, ExecutionDirection direction) {
         return new ExecutionRecord(
                 id,

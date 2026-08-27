@@ -102,6 +102,17 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `pending-throwing` covers "never applied *and* the accessor throws" — the last one is the only
   thing holding `upContentState`'s `latestRecord == null` check above the `fingerprint()` read.
   Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`
+- **`HistoryRepository` is append-only, and `HistoryFingerprintUpdater` is deliberately not part of
+  it.** Do not "simplify" by folding the capability in: `SynchronizedHistoryRepository` overrides every
+  method explicitly, so an added `default` would be silently inherited as a throwing stub, and every
+  third-party repository would be handed a mutation method it cannot honour. Nor try to implement
+  fingerprint revision by *appending* a row — `wasExecuted` is "the latest row is UP and SUCCESS" in
+  every implementation, so any appended row that is not a full fake apply makes the node read as never
+  applied and `up` re-runs it. Revision has to be an in-place update of the existing row
+- **A wrapped history repository loses the capability.** `instanceof HistoryFingerprintUpdater` is
+  false for `SynchronizedHistoryRepository`, so callers must use what
+  `ExecutionContext.createHistoryRepository()` returns (the raw implementation) rather than anything
+  `DagExecutor` has wrapped
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

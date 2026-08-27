@@ -4,6 +4,7 @@ import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
+import io.github.kakusuke.migraphe.api.history.HistoryFingerprintUpdater;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.io.BufferedReader;
@@ -43,7 +44,7 @@ import org.jspecify.annotations.Nullable;
  * {@link ExecutionRecord#environmentId()} maps onto it despite the differing name — the API-side
  * rename is a separate change.
  */
-public final class JdbcHistoryRepository implements HistoryRepository {
+public final class JdbcHistoryRepository implements HistoryRepository, HistoryFingerprintUpdater {
 
     private static final String DEFAULT_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql";
@@ -228,6 +229,30 @@ public final class JdbcHistoryRepository implements HistoryRepository {
             pstmt.executeUpdate();
         } catch (SQLException e) {
             throw new JdbcException("Failed to record execution history", e);
+        }
+    }
+
+    /**
+     * Replaces the fingerprint stored on one execution record, leaving every other column alone.
+     *
+     * @param recordId the id of the record to revise
+     * @param fingerprint the fingerprint to store
+     * @return {@code true} if a record with that id was revised, {@code false} if none matched
+     * @throws JdbcException if the update fails
+     */
+    @Override
+    public boolean updateFingerprint(String recordId, String fingerprint) {
+        String sql = "UPDATE migraphe_history SET fingerprint = ? WHERE id = ?";
+
+        try (Connection conn = environment.createConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setString(1, fingerprint);
+            pstmt.setString(2, recordId);
+
+            return pstmt.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new JdbcException("Failed to update execution history fingerprint", e);
         }
     }
 
