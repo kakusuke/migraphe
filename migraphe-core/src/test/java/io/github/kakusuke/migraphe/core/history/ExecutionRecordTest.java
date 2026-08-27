@@ -114,6 +114,7 @@ class ExecutionRecordTest {
                                         "desc",
                                         null,
                                         100L,
+                                        null,
                                         null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Failure status requires error message");
@@ -134,6 +135,7 @@ class ExecutionRecordTest {
                                         "desc",
                                         "serialized",
                                         100L,
+                                        null,
                                         null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("DOWN execution should not have serializedDownTask");

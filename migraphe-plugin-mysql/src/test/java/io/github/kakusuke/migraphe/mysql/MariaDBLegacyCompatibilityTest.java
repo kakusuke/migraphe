@@ -313,6 +313,7 @@ class MariaDBLegacyCompatibilityTest {
                 "test description",
                 direction == ExecutionDirection.UP ? "DROP TABLE t" : null,
                 10L,
-                status == ExecutionStatus.FAILURE ? "boom" : null);
+                status == ExecutionStatus.FAILURE ? "boom" : null,
+                null);
     }
 }

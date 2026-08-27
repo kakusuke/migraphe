@@ -274,6 +274,49 @@ class JdbcHistoryRepositoryTest {
         assertThat(repository.executedNodes(EnvironmentId.of("testdb"))).isEmpty();
     }
 
+    @Test
+    void fingerprintRoundTripsThroughTheHistoryTable() {
+        repository.initialize();
+
+        repository.record(
+                new ExecutionRecord(
+                        "00000000-0000-7000-8000-0000000000fa",
+                        NodeId.of("node1"),
+                        EnvironmentId.of("testdb"),
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS,
+                        Instant.now(),
+                        "test description",
+                        "DOWN SQL",
+                        100L,
+                        null,
+                        "5ea918fac5561634f4b577815b41483e5882b9c57dd3bd2351e3422d641af545"));
+        repository.record(
+                new ExecutionRecord(
+                        "00000000-0000-7000-8000-0000000000fb",
+                        NodeId.of("node2"),
+                        EnvironmentId.of("testdb"),
+                        ExecutionDirection.UP,
+                        ExecutionStatus.SUCCESS,
+                        Instant.now(),
+                        "test description",
+                        "DOWN SQL",
+                        100L,
+                        null,
+                        null));
+
+        var withFingerprint =
+                repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        assertThat(withFingerprint).isNotNull();
+        assertThat(withFingerprint.fingerprint())
+                .isEqualTo("5ea918fac5561634f4b577815b41483e5882b9c57dd3bd2351e3422d641af545");
+
+        var withoutFingerprint =
+                repository.findLatestRecord(NodeId.of("node2"), EnvironmentId.of("testdb"));
+        assertThat(withoutFingerprint).isNotNull();
+        assertThat(withoutFingerprint.fingerprint()).isNull();
+    }
+
     private ExecutionRecord recordAt(String id, Instant executedAt, ExecutionDirection direction) {
         return new ExecutionRecord(
                 id,
@@ -285,6 +328,7 @@ class JdbcHistoryRepositoryTest {
                 "test description",
                 direction == ExecutionDirection.UP ? "DOWN SQL" : null,
                 100L,
+                null,
                 null);
     }
 
@@ -304,6 +348,7 @@ class JdbcHistoryRepositoryTest {
                 "test description",
                 direction == ExecutionDirection.UP ? "DOWN SQL" : null,
                 100L,
-                status == ExecutionStatus.FAILURE ? "test error" : null);
+                status == ExecutionStatus.FAILURE ? "test error" : null,
+                null);
     }
 }

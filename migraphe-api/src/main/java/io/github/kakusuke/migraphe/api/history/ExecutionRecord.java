@@ -32,6 +32,10 @@ import org.jspecify.annotations.Nullable;
  * @param durationMs the execution duration in milliseconds
  * @param errorMessage the error message when the execution failed, or {@code null} otherwise
  *     (required when {@code status} is {@link ExecutionStatus#FAILURE})
+ * @param fingerprint {@link io.github.kakusuke.migraphe.api.graph.MigrationNode#fingerprint()} as
+ *     it stood when the node was applied, or {@code null} when it is not known — which is what a
+ *     record written before this field existed carries, and what a plugin that produces no
+ *     fingerprint carries. {@code null} does not mean "unchanged"
  * @see HistoryRepository
  * @see ExecutionStatus
  * @see ExecutionDirection
@@ -46,7 +50,8 @@ public record ExecutionRecord(
         String description, // human-readable task description
         @Nullable String serializedDownTask, // serialized DownTask (only present for UP executions)
         long durationMs, // execution time in milliseconds
-        @Nullable String errorMessage // error message (only present on failure)
+        @Nullable String errorMessage, // error message (only present on failure)
+        @Nullable String fingerprint // fingerprint of the applied UP content, or null if unknown
         ) {
     /**
      * Canonical constructor that validates the record invariants.
@@ -107,6 +112,7 @@ public record ExecutionRecord(
                 description,
                 serializedDownTask,
                 durationMs,
+                null,
                 null);
     }
 
@@ -135,6 +141,7 @@ public record ExecutionRecord(
                 description,
                 null, // DOWN executions never carry a serializedDownTask
                 durationMs,
+                null,
                 null);
     }
 
@@ -167,7 +174,8 @@ public record ExecutionRecord(
                 description,
                 null,
                 0L,
-                errorMessage);
+                errorMessage,
+                null);
     }
 
     /**
@@ -195,7 +203,8 @@ public record ExecutionRecord(
                 description,
                 null,
                 0L,
-                reason);
+                reason,
+                null);
     }
 
     /**
