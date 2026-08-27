@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
@@ -135,6 +136,31 @@ class AmendServiceTest {
 
         // Then
         assertThat(plan.toRecord()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("fingerprint を書けないリポジトリでは、書くものがあるときだけ失敗する")
+    void shouldRequireTheCapabilityOnlyWhenThereIsSomethingToWrite() {
+        // Given: capability を持たないリポジトリと、ドリフトの無いグラフ
+        HistoryRepository incapable = new AlwaysAppliedHistoryRepository(historyRepo);
+        AmendService nothingToDo = new AmendService(graph, incapable);
+
+        // When & Then: 書くものが無いので成功して0件
+        assertThat(nothingToDo.apply(nothingToDo.plan())).isZero();
+
+        // Given: ドリフトしたノードを1つ
+        graph.addNode(new FingerprintedNode(createNode("stale", "Stale"), "abc"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(NodeId.of("stale"), testEnv.id(), "Stale", null, 1L));
+        AmendService somethingToDo = new AmendService(graph, incapable);
+        AmendService.AmendPlan plan = somethingToDo.plan();
+
+        // When & Then: 書けないことを明示して停止する
+        assertThat(plan.toRecord()).hasSize(1);
+        assertThatThrownBy(() -> somethingToDo.apply(plan))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("cannot revise")
+                .hasMessageContaining(AlwaysAppliedHistoryRepository.class.getName());
     }
 
     private MigrationNode createNode(String id, String name) {

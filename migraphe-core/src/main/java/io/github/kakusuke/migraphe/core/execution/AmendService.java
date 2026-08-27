@@ -59,10 +59,23 @@ public final class AmendService {
     /**
      * Writes the planned fingerprints to the history.
      *
+     * <p>The count is what the repository reported, not the plan's size, so a record that vanished
+     * between planning and applying reads as not written rather than being assumed.
+     *
+     * <p>A repository that cannot revise a stored fingerprint stops the operation — but only when
+     * there is something to write. An empty plan is nothing to do, and reporting "cannot amend" for
+     * it would answer a question nobody asked.
+     *
      * @param plan the plan to carry out
      * @return how many records were revised
+     * @throws IllegalStateException if the plan is non-empty and the history repository cannot
+     *     revise a stored fingerprint
      */
     public int apply(AmendPlan plan) {
+        if (plan.toRecord().isEmpty()) {
+            return 0;
+        }
+
         if (!(historyRepository instanceof HistoryFingerprintUpdater updater)) {
             throw new IllegalStateException(
                     "This history repository cannot revise a recorded fingerprint: "
