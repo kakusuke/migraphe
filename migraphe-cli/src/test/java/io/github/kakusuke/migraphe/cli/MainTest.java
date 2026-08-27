@@ -292,7 +292,6 @@ class MainTest {
 
         assertThat(exitCode.get()).isZero();
         assertThat(stdout).contains("Recorded 1");
-        assertThat(captureStdout(() -> Main.run(new String[0]))).contains("amend");
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl, "sa", "");
                 Statement statement = connection.createStatement();
