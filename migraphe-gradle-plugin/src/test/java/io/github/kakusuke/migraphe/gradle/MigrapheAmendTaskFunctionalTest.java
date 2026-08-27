@@ -81,6 +81,19 @@ class MigrapheAmendTaskFunctionalTest {
         assertThat(recordedFingerprint(jdbcUrl)).isNull();
     }
 
+    @Test
+    void shouldRecordTheMissingFingerprintOnTheAppliedRow() throws IOException, SQLException {
+        String jdbcUrl = writeH2Project();
+
+        runTask("migrapheUp");
+        eraseRecordedFingerprints(jdbcUrl);
+
+        BuildResult result = runTask("migrapheAmend");
+
+        assertThat(result.getOutput()).contains("Recorded 1 fingerprint.");
+        assertThat(recordedFingerprint(jdbcUrl)).isNotNull();
+    }
+
     /** Runs one Migraphe task against the test project and requires the build to succeed. */
     private BuildResult runTask(String... arguments) {
         return GradleRunner.create()
