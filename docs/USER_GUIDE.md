@@ -496,7 +496,7 @@ Migration completed successfully. 2 migrations executed.
 |--------|-------------|
 | `<id>` | Execute only the specified migration and its dependencies |
 | `-y` | Skip confirmation prompt |
-| `--preview` | Show execution plan only without executing |
+| `--preview` | Show execution plan only without executing (`--dry-run` is accepted as an alias) |
 
 ### Colored Output
 

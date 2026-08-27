@@ -2,6 +2,36 @@
 
 Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
 
+### 2026-08-27 (Session 74)
+
+- **`--preview` を CLI にも実装し、`--dry-run` と同義にした**
+  - ドキュメントと Gradle プラグインは既に `--preview` を使っていたが、**CLI には存在しなかった**。`migraphe up --preview` は `Error: Target not found: --preview` になっていた（フラグでない引数はターゲット名として解釈されるため）。`Main.parseDryRun` が両方を受け、`boolFlags` に `--preview` を追加。ドキュメント上は `--preview` を推す（Gradle の `--dry-run` が Gradle 自身に予約されている問題を回避しつつ、両者の綴りを一致させられる）。
+  - 併せて `Unknown command` の二重出力を修正。`createCommand` が「未知のコマンド」と「引数が不正」の両方で `null` を返していたため、`down` の引数エラーの後にも `Unknown command: down` が出ていた。println を `default` アーム内に移動。
+
+- **UP 内容の fingerprint を記録し、適用後の定義編集を検知できる土台を作った**（設計の詳細: [ARCHITECTURE.md](ARCHITECTURE.md) 決定 30）
+  - **発端**: 紹介記事の下書きで「down は現在の定義を実行するので、ブランチを切り替えても down して up し直せば開発に戻れる」と書いたところ、利用者から「そういえば試してない」と指摘され、実際に H2 プロジェクトとビルド済み CLI で検証した。**結果は逆で、タスクファイルを消すとノードは `status` からも `down --all` からも消え、DB のオブジェクトだけが取り残される**。記事の該当箇所を実測に合わせて修正し、孤立マイグレーションを down できるようにする作業の第一歩として fingerprint に着手した。
+  - `MigrationNode.fingerprint()` は `default null` を返すインターフェースメソッド。javadoc は**レビューで4回差し戻された** — いずれも「実装できない絶対値」を書いていたため。特に「入力が変われば必ずトークンも変わる」は `strip()` 後のハッシュでは偽（末尾改行の追加でトークンは変わらない）で、緑のテストが反例になっていた。最終形はトークンが**不透明**であること、`null` は「不明」で決して「変更なし」ではないこと、導出はプラグインの裁量、呼び出し側は**報告するだけで自動修復してはならない**ことだけを言う。
+  - `JdbcMigrationNode` は `upSql.strip()` の **SHA-256 16進**。ノードID・名前・autocommit は含めない。SQL をパースして「意味的に有意な差」を判定する道は採らず、代わりに未使用だった `upSqlFromFile` / `upSqlFromResource` / `downSqlFromFile` / `downSqlFromResource` を `@Deprecated(forRemoval, since="0.7.0")` にした（外部ファイルの改行がトークンの一部かを決めずに済む）。SnakeYAML 2.4 が CRLF を LF に正規化することを実測（CR 0 / LF 3）した上で、コード側の改行正規化は削除。
+  - 列は3方言すべてで **`TEXT`（幅を切らない）**。契約がトークン長を宣言しないため、非 strict な MySQL で黙って切り詰められると「変更なし」のノードが永久に「変更あり」と報告される。検出ガード付きステップで追加（`ALTER TABLE ADD COLUMN` に可搬な `IF NOT EXISTS` が無いため）。
+  - `ExecutionRecord` に11番目の成分を追加。**canonical constructor は 10→11 引数の破壊的変更**（呼び出し10箇所、利用者承認済み）。`upSuccess` は呼び出しが約50箇所あるため6引数オーバーロードを追加し、5引数版は `null` で委譲。
+  - `StatusService.NodeStatus.upContentChanged()` は両辺のいずれかが `null` なら `false`（「不明」を「変更あり」と描画しないため）。`StatusCommand` を `StatusService` 経由に統合した — それまで **`StatusService` には production の呼び出し元が1つも無く**、CLI とサービスが同じ計算の別実装になっていた。
+  - 鎖を端から端まで通すテストを追加（`UpCommandTest`、実 PostgreSQL で `migraphe_history.fingerprint` を生 `SELECT`）。各リンクの単体テストは既にあったが、`DagExecutor` を実 `JdbcMigrationNode` と実 `JdbcHistoryRepository` の間で回すものが1つも無かった。**リポジトリ自身のライタを通さずに列を読む唯一のテスト**でもあり、新品コンテナでは create-then-alter のスキーマステップも踏む。
+
+- **`DagExecutor` の完了会計を例外に耐えるようにした — 同じ形の欠陥3件を修正、1件は既知として残す**（設計の詳細: [ARCHITECTURE.md](ARCHITECTURE.md) 決定 31）
+  - 4件すべて同じ機構。coordinator はノード数の `CountDownLatch` がゼロになるまで回り、dispatch されたノードは仮想スレッドの `finally` で自分を数え、`propagateFailure` はスキップしたノードを数える。**「1ノードちょうど1回」から外れると、実行はハングするか早すぎる集計で終わる。**
+  - **(a) `fingerprint()` が投げるとハングした**。`recordSuccess` から無防備に呼んでいたため `processCompletion` が飛ばされ、後続が ready キューに入らないまま latch がゼロにならない。`migraphe up` が戻ってこない。契約上の「不明」である `null` に落とすようにした（DDL は既にコミット済みで、記録を失う方が悪い — 次回また適用される）。**この握り潰しは無音**（`ExecutionListener` に警告用のフックが無く、追加は別の設計変更）。
+  - **(b) `history.record()` も同じく無防備だった**。`JdbcHistoryRepository.record` は `SQLException` を `JdbcException` に包むので、ノードの DDL がコミットした直後に履歴 DB の接続が切れると同じハング。**(a) より遥かに到達しやすい**（(a) は JVM に SHA-256 が無い場合しか起きない）。`task.execute()` 以降の本体全体を try/catch で包み、catch は**リポジトリを一切呼ばずに**失敗を報告してスキップを伝播する（失敗記録を書けば同じ例外で再び落ちる）。適用は成功したが記録を失ったノードは*失敗*として扱い枝を止める — 後続を走らせると、記録の無い祖先の上に記録済みの子孫が載る。
+  - **(c) スキップと通知されたノードのマイグレーションが実際に走っていた**。coordinator の `failedNodes` チェックが `semaphore.acquire()` の**前**にあったため、チェックを通過して許可待ちしている間に他ノードの `propagateFailure` がそれをスキップ済みにし、許可が返った瞬間に dispatch されていた。**並列設定は不要** — `maxParallelism=1`（既定）では許可待ちがそのまま窓になる。必要なのは「対象集合への経路が適用済みノードを通る」形だけ（`ReadyNodeTracker` は in-degree を `targetNodes` 内で数えるが `propagateFailure` の cone はグラフ全体を辿るので、`a→b→c` で b が適用済みなら `targetNodes={a,c}` で c は最初から ready）。許可取得後に再チェックする。
+  - **(d) 未修正の既知の不具合**: **実行中**のノードがスキップされると latch が二重に減る。`propagateFailure` が数え、そのノード自身の `finally` でも数えるため、`maxParallelism >= 2`（`execution.parallel: true`。既定の `maxParallelism` は `0` = 無制限）では他ノードが DDL 途中なのに latch がゼロに達し、`execute()` が集計して戻る。仮想スレッドは daemon なので **CLI がその文の実行中に終了しうる**。同じ実行で、コンソールが skipped と表示したノードに*成功*の履歴行が書かれ、次回の `up` はそれを適用済みとして扱う。`failedNodes` の再チェックでは塞げない（チェックと `executeNode` の間の窓は原理的に消せない）ため、coordinator と `propagateFailure` のどちらか一方だけがノードの通知と countDown を所有する原子的な claim が必要。**別 PR。**
+  - 残る follow-up: catch 内の `listener.onNodeFailed` / `propagateFailure` の `onNodeSkipped` が投げた場合の同型のハング（in-tree の listener は投げない。トリガはプラグイン供給の listener）／失敗パスで `history.record(failure)` が投げると `onNodeFailed` が2回走り表示の件数が合わない（実行制御は無事）／`"applied, but recording the result failed: "` はオペレータ向けの唯一の手掛かりだがどのテストも固定しておらず、DOWN 実行でも `result.isOk()` だけを見るので「適用した」と嘘をつく／`StatusService` が `node.fingerprint()` を無防備に呼ぶ（現状 production の呼び出し元が無いので到達不能、ドリフト表示を配線する時に扱う）。
+
+- **汎用履歴リソースは PostgreSQL で動く — 「動かない」という前提が誤りだった**
+  - PostgreSQL リソースのコメントは「PostgreSQL は `information_schema` の `sql_identifier` ドメインと比較される裸のプレースホルダの型を推論できないので、明示的にキャストしている」と書いていた。これを根拠に `type="jdbc"` + PostgreSQL ドライバは壊れていると考えていたが、**誰も検証していなかった**。
+  - 実測すると普通に初期化できる。履歴テーブルを落としてから汎用リソースだけを走らせたところ、汎用の `CREATE TABLE` が宣言していない `fingerprint` 列が実行後に存在した — 検出クエリが走って「列が無い」と報告し `ALTER` が適用された場合にしかありえない。TDD サイクルとしては赤が出ないので成立していないが、汎用リソースを実 PostgreSQL に当てるテストはこれまで1本も無かったため、カバレッジの追加として残した。
+  - コメントを事実に合わせて修正。`CAST` は残した（動作に必要ではないが、比較の型をその場で明示するので害もない）。
+
+- **リリースノート**: 破壊的変更を含む（minor bump）。`ExecutionRecord` の canonical constructor が 10→11 引数になるため、**それを直接呼ぶプラグインは再コンパイルが必要**。`MigrationNode.fingerprint()` は `default` メソッドなので既存プラグインは無変更で動く。`upSuccess` の5引数版も残る。利用者向けには (b)(c) の修正が効く — どちらも既定構成（逐次実行）で踏めるもので、(b) は履歴 DB の障害でコマンドが戻らなくなる問題、(c) はスキップと表示されたマイグレーションが実際に走る問題。`fingerprint` 列は書き込まれるだけで、まだどのコマンドも表示しない（`status` への配線は次の作業）。**(d) は未修正のまま残る** — `execution.parallel: true` を使っている場合は上記を参照。
+
 ### 2026-08-21 (Session 73)
 
 - **`/tdd-cycle` を「5 subagent 直列」から「Plan/Red/Green/Tidy はメインコンテキスト + `cycle-verifier`(Opus) が事後監査」に再設計**
