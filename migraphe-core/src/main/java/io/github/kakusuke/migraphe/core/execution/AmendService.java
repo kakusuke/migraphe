@@ -43,7 +43,7 @@ public final class AmendService {
         List<AmendEntry> toRecord = new ArrayList<>();
 
         for (NodeStatus status : statusService.getStatus().nodes()) {
-            if (status.upContentState() == UpContentState.UNKNOWN) {
+            if (isDrifted(status.upContentState())) {
                 toRecord.add(entryFor(status));
             }
         }
@@ -52,17 +52,30 @@ public final class AmendService {
     }
 
     /**
-     * Builds the entry for a node whose state is {@link UpContentState#UNKNOWN}.
+     * Reports whether a state is one that amending resolves.
      *
-     * <p>That state already establishes both values this needs: it is only reached when the node
-     * has a latest record and its own fingerprint is readable and non-null.
+     * <p>Deliberately switches without a {@code default} arm: adding a state to {@link
+     * UpContentState} should stop this compiling until someone decides whether amending covers it.
+     */
+    private static boolean isDrifted(UpContentState state) {
+        return switch (state) {
+            case UNKNOWN, CHANGED -> true;
+            case NOT_APPLICABLE, UNCHANGED, UNREADABLE -> false;
+        };
+    }
+
+    /**
+     * Builds the entry for a node whose state {@link #isDrifted} accepts.
+     *
+     * <p>Both drifted states already establish the two values this needs: each is only reached when
+     * the node has a latest record and its own fingerprint is readable and non-null.
      */
     private static AmendEntry entryFor(NodeStatus status) {
         ExecutionRecord record =
-                Objects.requireNonNull(status.latestRecord(), "UNKNOWN implies a latest record");
+                Objects.requireNonNull(status.latestRecord(), "drift implies a latest record");
         String fingerprint =
                 Objects.requireNonNull(
-                        status.node().fingerprint(), "UNKNOWN implies a node fingerprint");
+                        status.node().fingerprint(), "drift implies a node fingerprint");
         return new AmendEntry(status.node(), record.id(), fingerprint);
     }
 

@@ -93,16 +93,17 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `UNREADABLE`, because a report can say "your plugin is broken" where a stored token cannot. They
   look like the same try/catch — do not unify them, and do not "simplify" the status side back to
   `null`, which would make a plugin fault indistinguishable from a plugin that opts out
-- **`StatusLineFormatter.markerFor` switches over `UpContentState` with no `default` arm on
-  purpose.** Adding a constant to the enum then fails to compile until the renderer decides how it
-  looks. Never add `default ->` to quiet that: a new state would silently render as `[✓]`, i.e. as
-  "no change detected", which is the one answer a new state is least likely to mean
+- **`StatusLineFormatter.markerFor` and `AmendService.isDrifted` switch over `UpContentState` with
+  no `default` arm on purpose.** Adding a constant to the enum then fails to compile until both
+  decide what it means. Never add `default ->` to quiet that: a new state would silently render as
+  `[✓]`, i.e. "no change detected", and would silently fall outside what `amend` resolves — the two
+  answers a new state is least likely to mean
 - **`StatusServiceTest`'s state table has three rows expecting `NOT_APPLICABLE` and none is
   redundant.** `pending` covers "never applied", `opt-out` covers "plugin returns null", and
   `pending-throwing` covers "never applied *and* the accessor throws" — the last one is the only
   thing holding `upContentState`'s `latestRecord == null` check above the `fingerprint()` read.
   Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`.
-  `AmendService.entryFor` also depends on that ordering: it reads `UNKNOWN` as proof that both
+  `AmendService.entryFor` also depends on that ordering: it reads a drifted state as proof that both
   `latestRecord()` and `node.fingerprint()` are non-null, and says so in two `requireNonNull`
   messages. Reorder `upContentState` and those become reachable failures rather than assertions
 - **`HistoryRepository` is append-only, and `HistoryFingerprintUpdater` is deliberately not part of

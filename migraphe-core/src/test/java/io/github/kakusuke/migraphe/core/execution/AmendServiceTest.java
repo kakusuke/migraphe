@@ -54,6 +54,49 @@ class AmendServiceTest {
         assertThat(entry.fingerprint()).isEqualTo("abc");
     }
 
+    @Test
+    @DisplayName("ドリフトの無いノードは対象にならない")
+    void shouldPlanNothingForNodesWithoutDrift() {
+        // Given
+        graph.addNode(new FingerprintedNode(createNode("pending", "Pending"), "def"));
+        graph.addNode(new FingerprintedNode(createNode("unchanged", "Unchanged"), "xyz"));
+        graph.addNode(createNode("opt-out", "Opt out"));
+
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("unchanged"), testEnv.id(), "Unchanged", null, 1L, "xyz"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("opt-out"), testEnv.id(), "Opt out", null, 1L, "abc"));
+
+        // When
+        AmendService.AmendPlan plan = new AmendService(graph, historyRepo).plan();
+
+        // Then
+        assertThat(plan.toRecord()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("適用後に編集されたノードも対象になり、現在の内容の fingerprint を持つ")
+    void shouldPlanAnEntryForAnEditedNode() {
+        // Given
+        graph.addNode(new FingerprintedNode(createNode("edited", "Edited"), "new"));
+        ExecutionRecord applied =
+                ExecutionRecord.upSuccess(
+                        NodeId.of("edited"), testEnv.id(), "Edited", null, 1L, "old");
+        historyRepo.record(applied);
+
+        // When
+        AmendService.AmendPlan plan = new AmendService(graph, historyRepo).plan();
+
+        // Then
+        assertThat(plan.toRecord()).hasSize(1);
+        AmendService.AmendEntry entry = plan.toRecord().get(0);
+        assertThat(entry.node().id()).isEqualTo(NodeId.of("edited"));
+        assertThat(entry.recordId()).isEqualTo(applied.id());
+        assertThat(entry.fingerprint()).isEqualTo("new");
+    }
+
     private MigrationNode createNode(String id, String name) {
         Task upTask = SimpleTask.of("UP: " + name);
         Task downTask = SimpleTask.of("DOWN: " + name);
