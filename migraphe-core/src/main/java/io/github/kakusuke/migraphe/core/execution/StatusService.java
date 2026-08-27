@@ -74,23 +74,31 @@ public final class StatusService {
             MigrationNode node, boolean executed, @Nullable ExecutionRecord latestRecord) {
 
         /**
-         * Indicates whether the node's UP content differs from what was applied.
+         * Classifies the node's current UP content against the content that was applied.
          *
-         * <p>Answers {@code false} whenever either fingerprint is {@code null}, because {@link
-         * MigrationNode#fingerprint()} defines {@code null} as "unknown" rather than "unchanged" —
-         * a plugin that produces no fingerprint, and a row written before the column existed, both
-         * read that way. Only the UP content is covered, so editing a rollback definition or an
-         * apply-mode flag is not reported here.
+         * <p>Only the UP content is covered, so editing a rollback definition or an apply-mode flag
+         * does not show up here.
          *
-         * @return {@code true} only when both fingerprints are known and differ
+         * @return the comparison outcome; see {@link UpContentState} for what each value means
          */
-        public boolean upContentChanged() {
+        public UpContentState upContentState() {
             if (latestRecord == null) {
-                return false;
+                return UpContentState.NOT_APPLICABLE;
+            }
+            String current;
+            try {
+                current = node.fingerprint();
+            } catch (RuntimeException e) {
+                return UpContentState.UNREADABLE;
+            }
+            if (current == null) {
+                return UpContentState.NOT_APPLICABLE;
             }
             String applied = latestRecord.fingerprint();
-            String current = node.fingerprint();
-            return applied != null && current != null && !applied.equals(current);
+            if (applied == null) {
+                return UpContentState.UNKNOWN;
+            }
+            return applied.equals(current) ? UpContentState.UNCHANGED : UpContentState.CHANGED;
         }
     }
 

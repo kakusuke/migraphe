@@ -451,6 +451,16 @@ Migration Status
 Summary: Total: 3 | Executed: 1 | Pending: 2
 ```
 
+**Markers:**
+
+| Marker | Meaning |
+|--------|---------|
+| `[ ]` | Not applied yet |
+| `[✓]` | Applied, and no change detected in its `up` content — also shown when the plugin supplies no fingerprint and so opts out of the comparison |
+| `[!]` | Applied, but the `up` content has been edited since |
+| `[?]` | The plugin supplies a fingerprint but the applied row carries none, so a change cannot be detected. Rows written before 0.7.0 read this way |
+| `[E]` | The plugin's fingerprint could not be read — the plugin itself is at fault |
+
 ### Execute Migrations
 
 ```bash

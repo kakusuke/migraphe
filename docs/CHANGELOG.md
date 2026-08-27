@@ -14,7 +14,7 @@ Claude session records. Newest entries first. The latest session summary also li
   - `JdbcMigrationNode` は `upSql.strip()` の **SHA-256 16進**。ノードID・名前・autocommit は含めない。SQL をパースして「意味的に有意な差」を判定する道は採らず、代わりに未使用だった `upSqlFromFile` / `upSqlFromResource` / `downSqlFromFile` / `downSqlFromResource` を `@Deprecated(forRemoval, since="0.7.0")` にした（外部ファイルの改行がトークンの一部かを決めずに済む）。SnakeYAML 2.4 が CRLF を LF に正規化することを実測（CR 0 / LF 3）した上で、コード側の改行正規化は削除。
   - 列は3方言すべてで **`TEXT`（幅を切らない）**。契約がトークン長を宣言しないため、非 strict な MySQL で黙って切り詰められると「変更なし」のノードが永久に「変更あり」と報告される。検出ガード付きステップで追加（`ALTER TABLE ADD COLUMN` に可搬な `IF NOT EXISTS` が無いため）。
   - `ExecutionRecord` に11番目の成分を追加。**canonical constructor は 10→11 引数の破壊的変更**（呼び出し10箇所、利用者承認済み）。`upSuccess` は呼び出しが約50箇所あるため6引数オーバーロードを追加し、5引数版は `null` で委譲。
-  - `StatusService.NodeStatus.upContentChanged()` は両辺のいずれかが `null` なら `false`（「不明」を「変更あり」と描画しないため）。`StatusCommand` を `StatusService` 経由に統合した — それまで **`StatusService` には production の呼び出し元が1つも無く**、CLI とサービスが同じ計算の別実装になっていた。
+  - `StatusCommand` を `StatusService` 経由に統合した — それまで **`StatusService` には production の呼び出し元が1つも無く**、CLI とサービスが同じ計算の別実装になっていた。読み取り側がこの比較をどう報告するかは下記の別項目。
   - 鎖を端から端まで通すテストを追加（`UpCommandTest`、実 PostgreSQL で `migraphe_history.fingerprint` を生 `SELECT`）。各リンクの単体テストは既にあったが、`DagExecutor` を実 `JdbcMigrationNode` と実 `JdbcHistoryRepository` の間で回すものが1つも無かった。**リポジトリ自身のライタを通さずに列を読む唯一のテスト**でもあり、新品コンテナでは create-then-alter のスキーマステップも踏む。
 
 - **`DagExecutor` の完了会計を例外に耐えるようにした — 同じ形の欠陥3件を修正、1件は既知として残す**（設計の詳細: [ARCHITECTURE.md](ARCHITECTURE.md) 決定 31）
@@ -30,7 +30,17 @@ Claude session records. Newest entries first. The latest session summary also li
   - 実測すると普通に初期化できる。履歴テーブルを落としてから汎用リソースだけを走らせたところ、汎用の `CREATE TABLE` が宣言していない `fingerprint` 列が実行後に存在した — 検出クエリが走って「列が無い」と報告し `ALTER` が適用された場合にしかありえない。TDD サイクルとしては赤が出ないので成立していないが、汎用リソースを実 PostgreSQL に当てるテストはこれまで1本も無かったため、カバレッジの追加として残した。
   - コメントを事実に合わせて修正。`CAST` は残した（動作に必要ではないが、比較の型をその場で明示するので害もない）。
 
-- **リリースノート**: 破壊的変更を含む（minor bump）。`ExecutionRecord` の canonical constructor が 10→11 引数になるため、**それを直接呼ぶプラグインは再コンパイルが必要**。`MigrationNode.fingerprint()` は `default` メソッドなので既存プラグインは無変更で動く。`upSuccess` の5引数版も残る。利用者向けには (b)(c) の修正が効く — どちらも既定構成（逐次実行）で踏めるもので、(b) は履歴 DB の障害でコマンドが戻らなくなる問題、(c) はスキップと表示されたマイグレーションが実際に走る問題。`fingerprint` 列は書き込まれるだけで、まだどのコマンドも表示しない（`status` への配線は次の作業）。**(d) は未修正のまま残る** — `execution.parallel: true` を使っている場合は上記を参照。
+- **`status` がドリフトを報告するようになった — boolean ではなく5値で**（設計の詳細: [ARCHITECTURE.md](ARCHITECTURE.md) 決定 32）
+  - **利用者の指摘で設計が変わった**: 「プラグインの契約としては fingerprint は nullable なんだよね? ということは、プラグイン側が null 返したときに期待するのは、チェックはしないから fingerprint で判断しないようにしてほしいってことなんじゃないかな? だとすると、? が出てるってのはちょっと意味がかわってくるよね。? が出てるのは状態がよくわかんないときだと思うんだ」。**null は2種類ある** — ノード側の null はプラグインの opt-out（「これで判断するな」）、履歴行側の null は「記録が無いので判らない」。`upContentChanged()` は両方を `false` に畳んでおり、boolean としては正しいが表示に必要な情報を落としていた。
+  - `UpContentState` は `NOT_APPLICABLE`（未適用、または opt-out。両者は `executed()` で区別）/ `UNKNOWN` / `UNCHANGED` / `CHANGED` / `UNREADABLE` の5値。**`UNREADABLE` を独立させた**のは、インターフェースの default 実装が `null` を返して投げないため「投げた = override している = 故障」であり、かつオペレータの取るべき行動が違う（プラグインを直す / baseline を打つ）から。
+  - **判定順序が load-bearing**: `latestRecord == null` を先に返すので、壊れたプラグインの*未適用*ノードには fingerprint を求めない。この不変条件を押さえているテスト行は1つだけなので、tidy-notes に「冗長として消すな」と記録した。
+  - マーカーは `[ ]` 未適用 / `[✓]` 変化なしまたは対象外 / `[!]` 変更あり / `[?]` 不明 / `[E]` 読めない。`[E]` を ASCII にしたのは `✓` が端末によって全角になり整列の前例を作っている一方、`×` は「このマイグレーションが失敗した」と読めてしまうため。5つとも末尾スペース込みで4文字。`switch` に `default` は置かない（列挙に値を足したらレンダラが見た目を決めるまでコンパイルが通らない方が安全）。
+  - **描画は core で共有**。まず Gradle タスクを `StatusService` 経由に統合し（レンダリングのラムダの中からリポジトリを引き、`int[]` でカウントする重複実装だった）、その結果 CLI と1文字違わなくなったことを根拠に `StatusLineFormatter` を抽出した。この抽出で **Gradle 側の実行済みブランチ（`[✓]` と `(duration, timestamp)`）に初めて単体テストの傘がかかった** — noop プロバイダが呼び出しごとに新しい `InMemoryHistoryRepository` を返すので、TestKit では `migrapheUp` と `migrapheStatus` が履歴を共有できず、そこは原理的にカバーできない。
+  - 配線の前に読み取り側の `node.fingerprint()` をガードした（マーカーを繋いだ瞬間、投げるプラグインで `status` が落ちる経路になるため）。書き込み側（`DagExecutor.fingerprintOf`）が `null` に落とすのに対し読み取り側は `UNREADABLE` を報告する、という**意図的な非対称**。
+  - boolean の `upContentChanged()` は列挙ができた時点で削除（未リリース。`validate`/`reconcile` は `CHANGED` と `UNKNOWN` を区別して警告したいはずなので、boolean は今後の作業にも形が合わない）。
+  - **アップグレードの帰結**: 列が無かった時代に適用された行はすべて `UNKNOWN` = `[?]` になり、しかもこれは一過性ではない。`up` は適用済みノードを除外するので fingerprint を埋めず、`down` は対象と**その推移的な依存元すべて**を巻き戻すので、鎖の先頭を1つ更新するには下流全部を実 DB に対して破棄して作り直すことになる。**baseline 相当の操作が無い限り `[?]` は恒久的に残る** — これが `baseline`（実行せずに現在の定義を適用済みとして記録。「DB が正しい、履歴を合わせる」）と `reconcile`（ずれているものを down して再 up。「定義が正しい、DB を合わせる」）を別物として計画している理由。
+
+- **リリースノート**: 破壊的変更を含む（minor bump）。`ExecutionRecord` の canonical constructor が 10→11 引数になるため、**それを直接呼ぶプラグインは再コンパイルが必要**。`MigrationNode.fingerprint()` は `default` メソッドなので既存プラグインは無変更で動く。`upSuccess` の5引数版も残る。利用者向けには (b)(c) の修正が効く — どちらも既定構成（逐次実行）で踏めるもので、(b) は履歴 DB の障害でコマンドが戻らなくなる問題、(c) はスキップと表示されたマイグレーションが実際に走る問題。`status` は fingerprint のずれを `[!]`、記録の無い行を `[?]` として表示する — **アップグレード直後は既存の適用済みノードが全部 `[?]` になり、`baseline` 相当の操作が入るまで解消しない**（上記参照）。**(d) は未修正のまま残る** — `execution.parallel: true` を使っている場合は上記を参照。
 
 ### 2026-08-21 (Session 73)
 

@@ -9,6 +9,7 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
+import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNode;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
@@ -141,21 +142,23 @@ class StatusServiceTest {
     }
 
     @Test
-    @DisplayName("UP 内容の変化は両方の fingerprint が判っているときだけ報告される")
-    void upContentChangedOnlyWhenBothFingerprintsAreKnown() {
+    @DisplayName("UP 内容の状態は 対象外・不明・変更なし・変更あり・読めない を区別する")
+    void upContentStateDistinguishesEveryCase() {
         // Given
-        MigrationNode same = new FingerprintedNode(createNode("same", "Same"), "abc");
-        MigrationNode edited = new FingerprintedNode(createNode("edited", "Edited"), "abc");
-        MigrationNode nodeWithout = createNode("node-without", "Node without");
-        MigrationNode recordWithout =
-                new FingerprintedNode(createNode("record-without", "Record without"), "abc");
-        MigrationNode pending = new FingerprintedNode(createNode("pending", "Pending"), "abc");
-        graph.addNode(same);
-        graph.addNode(edited);
-        graph.addNode(nodeWithout);
-        graph.addNode(recordWithout);
-        graph.addNode(pending);
+        graph.addNode(new FingerprintedNode(createNode("pending", "Pending"), "abc"));
+        graph.addNode(createNode("opt-out", "Opt out"));
+        graph.addNode(new FingerprintedNode(createNode("unknown", "Unknown"), "abc"));
+        graph.addNode(new FingerprintedNode(createNode("same", "Same"), "abc"));
+        graph.addNode(new FingerprintedNode(createNode("edited", "Edited"), "abc"));
+        graph.addNode(new ThrowingFingerprintNode(createNode("throwing", "Throwing")));
+        graph.addNode(
+                new ThrowingFingerprintNode(createNode("pending-throwing", "Pending throwing")));
 
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("opt-out"), testEnv.id(), "Opt out", null, 1L, "abc"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(NodeId.of("unknown"), testEnv.id(), "Unknown", null, 1L));
         historyRepo.record(
                 ExecutionRecord.upSuccess(
                         NodeId.of("same"), testEnv.id(), "Same", null, 1L, "abc"));
@@ -164,10 +167,7 @@ class StatusServiceTest {
                         NodeId.of("edited"), testEnv.id(), "Edited", null, 1L, "xyz"));
         historyRepo.record(
                 ExecutionRecord.upSuccess(
-                        NodeId.of("node-without"), testEnv.id(), "Node without", null, 1L, "abc"));
-        historyRepo.record(
-                ExecutionRecord.upSuccess(
-                        NodeId.of("record-without"), testEnv.id(), "Record without", null, 1L));
+                        NodeId.of("throwing"), testEnv.id(), "Throwing", null, 1L, "abc"));
 
         statusService = new StatusService(graph, historyRepo);
 
@@ -175,19 +175,21 @@ class StatusServiceTest {
         StatusService.StatusInfo status = statusService.getStatus();
 
         // Then
-        assertThat(changedFor(status, "same")).isFalse();
-        assertThat(changedFor(status, "edited")).isTrue();
-        assertThat(changedFor(status, "node-without")).isFalse();
-        assertThat(changedFor(status, "record-without")).isFalse();
-        assertThat(changedFor(status, "pending")).isFalse();
+        assertThat(stateFor(status, "pending")).isEqualTo(UpContentState.NOT_APPLICABLE);
+        assertThat(stateFor(status, "opt-out")).isEqualTo(UpContentState.NOT_APPLICABLE);
+        assertThat(stateFor(status, "unknown")).isEqualTo(UpContentState.UNKNOWN);
+        assertThat(stateFor(status, "same")).isEqualTo(UpContentState.UNCHANGED);
+        assertThat(stateFor(status, "edited")).isEqualTo(UpContentState.CHANGED);
+        assertThat(stateFor(status, "throwing")).isEqualTo(UpContentState.UNREADABLE);
+        assertThat(stateFor(status, "pending-throwing")).isEqualTo(UpContentState.NOT_APPLICABLE);
     }
 
-    private boolean changedFor(StatusService.StatusInfo status, String nodeId) {
+    private UpContentState stateFor(StatusService.StatusInfo status, String nodeId) {
         return status.nodes().stream()
                 .filter(ns -> ns.node().id().equals(NodeId.of(nodeId)))
                 .findFirst()
                 .orElseThrow()
-                .upContentChanged();
+                .upContentState();
     }
 
     private MigrationNode createNode(String id, String name) {

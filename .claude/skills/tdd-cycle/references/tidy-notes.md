@@ -81,6 +81,27 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `targetNodes` is `{a, c}`, `c` starts ready, and under parallelism `a` can mark a running `c`
   skipped (counting its latch down a second time). Never write a tidy that assumes cone membership
   implies not-yet-started
+- **The `status` summary counts one per *graph* node, while the rendered lines come from
+  `ExecutionGraphView.renderLines`.** Both the CLI command and the Gradle task now take their counts
+  from `StatusService` and their lines from the canvas, so the two agree only while every graph node is
+  laid out exactly once (`renderLines` applies the label function per non-`VirtualNode`). A layout
+  change that collapses or omits a node would make the summary disagree with what is printed, and no
+  test would say so — the existing ones use 2-3 node graphs where the sets coincide
+- **The write and read paths handle a throwing `MigrationNode.fingerprint()` differently on
+  purpose.** `DagExecutor.fingerprintOf` degrades it to `null`, because the node's DDL has already
+  committed and the record must still be written; `StatusService.NodeStatus.upContentState` reports
+  `UNREADABLE`, because a report can say "your plugin is broken" where a stored token cannot. They
+  look like the same try/catch — do not unify them, and do not "simplify" the status side back to
+  `null`, which would make a plugin fault indistinguishable from a plugin that opts out
+- **`StatusLineFormatter.markerFor` switches over `UpContentState` with no `default` arm on
+  purpose.** Adding a constant to the enum then fails to compile until the renderer decides how it
+  looks. Never add `default ->` to quiet that: a new state would silently render as `[✓]`, i.e. as
+  "no change detected", which is the one answer a new state is least likely to mean
+- **`StatusServiceTest`'s state table has three rows expecting `NOT_APPLICABLE` and none is
+  redundant.** `pending` covers "never applied", `opt-out` covers "plugin returns null", and
+  `pending-throwing` covers "never applied *and* the accessor throws" — the last one is the only
+  thing holding `upContentState`'s `latestRecord == null` check above the `fingerprint()` read.
+  Deleting it as a duplicate re-opens a hole where a broken plugin's pending node reads `UNREADABLE`
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
