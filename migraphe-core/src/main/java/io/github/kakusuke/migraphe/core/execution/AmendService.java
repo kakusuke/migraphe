@@ -2,8 +2,10 @@ package io.github.kakusuke.migraphe.core.execution;
 
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryFingerprintUpdater;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import java.util.ArrayList;
@@ -46,7 +48,7 @@ public final class AmendService {
         List<AmendEntry> toRecord = new ArrayList<>();
 
         for (NodeStatus status : statusService.getStatus().nodes()) {
-            if (isDrifted(status.upContentState())) {
+            if (isDrifted(status.upContentState()) && recordsASuccessfulApply(status)) {
                 toRecord.add(entryFor(status));
             }
         }
@@ -87,6 +89,23 @@ public final class AmendService {
             case UNKNOWN, CHANGED -> true;
             case NOT_APPLICABLE, UNCHANGED, UNREADABLE -> false;
         };
+    }
+
+    /**
+     * Reports whether the record amending would revise is one that says the node was applied.
+     *
+     * <p>{@link HistoryRepository} nowhere requires {@code wasExecuted} and {@code
+     * findLatestRecord} to agree, and {@link HistoryFingerprintUpdater} matches on the record id
+     * alone. A repository that decides "applied" by some other rule can therefore offer a rollback
+     * or a failure as the latest record, and writing a fingerprint onto that would claim content
+     * for an apply that did not happen. Both shipped repositories read the same row for both
+     * questions, so this excludes nothing they produce.
+     */
+    private static boolean recordsASuccessfulApply(NodeStatus status) {
+        ExecutionRecord record = status.latestRecord();
+        return record != null
+                && record.direction() == ExecutionDirection.UP
+                && record.status() == ExecutionStatus.SUCCESS;
     }
 
     /**

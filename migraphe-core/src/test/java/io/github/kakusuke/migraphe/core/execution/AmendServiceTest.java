@@ -7,7 +7,9 @@ import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.Task;
+import io.github.kakusuke.migraphe.core.execution.support.AlwaysAppliedHistoryRepository;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
@@ -115,6 +117,24 @@ class AmendServiceTest {
         ExecutionRecord after = historyRepo.findLatestRecord(NodeId.of("stale"), testEnv.id());
         assertThat(after).isNotNull();
         assertThat(after.fingerprint()).isEqualTo("abc");
+    }
+
+    @Test
+    @DisplayName("成功した UP を記録していない行は対象にならない")
+    void shouldNotPlanEntriesForRowsThatAreNotASuccessfulUp() {
+        // Given
+        graph.addNode(new FingerprintedNode(createNode("rolled-back", "Rolled back"), "abc"));
+        historyRepo.record(
+                ExecutionRecord.downSuccess(
+                        NodeId.of("rolled-back"), testEnv.id(), "Rolled back", 1L));
+
+        HistoryRepository lying = new AlwaysAppliedHistoryRepository(historyRepo);
+
+        // When
+        AmendService.AmendPlan plan = new AmendService(graph, lying).plan();
+
+        // Then
+        assertThat(plan.toRecord()).isEmpty();
     }
 
     private MigrationNode createNode(String id, String name) {
