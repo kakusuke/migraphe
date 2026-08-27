@@ -456,7 +456,22 @@ public final class DagExecutor implements Executor {
                 node.name(),
                 serializedDownTask,
                 duration,
-                node.fingerprint());
+                fingerprintOf(node));
+    }
+
+    /**
+     * Returns the node's fingerprint, or {@code null} when the plugin's accessor throws.
+     *
+     * <p>The node's task has already been applied by the time this is called, so a broken accessor
+     * must not cost the success record: without it the migration is applied again on the next run.
+     * {@code null} is what {@link MigrationNode#fingerprint()} already defines as "unknown".
+     */
+    private static @Nullable String fingerprintOf(MigrationNode node) {
+        try {
+            return node.fingerprint();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /**

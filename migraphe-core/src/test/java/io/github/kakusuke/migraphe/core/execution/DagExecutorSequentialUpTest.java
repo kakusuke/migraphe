@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.environment.Environment;
@@ -16,11 +17,13 @@ import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
+import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNode;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
+import java.time.Duration;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
@@ -204,6 +207,36 @@ class DagExecutorSequentialUpTest {
             assertThat(afterDown).isNotNull();
             assertThat(afterDown.direction()).isEqualTo(ExecutionDirection.DOWN);
             assertThat(afterDown.fingerprint()).isNull();
+        }
+
+        @Test
+        @DisplayName("fingerprint() が例外を投げても成功記録は unknown として残り、後続ノードも実行される")
+        void shouldRecordUnknownFingerprintWhenAccessorThrows() {
+            // Given
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(new ThrowingFingerprintNode(createNode("a", Set.of())));
+            graph.addNode(createNode("b", Set.of(NodeId.of("a"))));
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            DagExecutor executor =
+                    new DagExecutor(
+                            graph, history, new MockExecutionListener(), ExecutionDirection.UP, 1);
+
+            // When
+            ExecutionResult result =
+                    assertTimeoutPreemptively(
+                            Duration.ofSeconds(5),
+                            () -> executor.execute(Set.of(NodeId.of("a"), NodeId.of("b"))));
+
+            // Then
+            assertThat(result.success()).isTrue();
+            assertThat(result.summary().executedCount()).isEqualTo(2);
+            assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isTrue();
+            assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+
+            ExecutionRecord recordA = history.findLatestRecord(NodeId.of("a"), testEnv.id());
+            assertThat(recordA).isNotNull();
+            assertThat(recordA.fingerprint()).isNull();
         }
 
         @Test
