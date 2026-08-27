@@ -74,40 +74,45 @@ public final class StatusService {
             MigrationNode node, boolean executed, @Nullable ExecutionRecord latestRecord) {
 
         /**
+         * Classifies the node's current UP content against the content that was applied.
+         *
+         * <p>Only the UP content is covered, so editing a rollback definition or an apply-mode flag
+         * does not show up here.
+         *
+         * @return the comparison outcome; see {@link UpContentState} for what each value means
+         */
+        public UpContentState upContentState() {
+            if (latestRecord == null) {
+                return UpContentState.NOT_APPLICABLE;
+            }
+            String current;
+            try {
+                current = node.fingerprint();
+            } catch (RuntimeException e) {
+                return UpContentState.UNREADABLE;
+            }
+            if (current == null) {
+                return UpContentState.NOT_APPLICABLE;
+            }
+            String applied = latestRecord.fingerprint();
+            if (applied == null) {
+                return UpContentState.UNKNOWN;
+            }
+            return applied.equals(current) ? UpContentState.UNCHANGED : UpContentState.CHANGED;
+        }
+
+        /**
          * Indicates whether the node's UP content differs from what was applied.
          *
-         * <p>Answers {@code false} whenever either fingerprint is {@code null}, because {@link
-         * MigrationNode#fingerprint()} defines {@code null} as "unknown" rather than "unchanged" —
-         * a plugin that produces no fingerprint, and a row written before the column existed, both
-         * read that way, as does an accessor that throws. Only the UP content is covered, so
-         * editing a rollback definition or an apply-mode flag is not reported here.
+         * <p>Only {@link UpContentState#CHANGED} answers {@code true}: an unknown, unreadable or
+         * inapplicable comparison is never reported as a change, because {@link
+         * MigrationNode#fingerprint()} defines an absent token as "unknown" rather than
+         * "unchanged". Callers that need to tell those apart should read {@link #upContentState()}.
          *
          * @return {@code true} only when both fingerprints are known and differ
          */
         public boolean upContentChanged() {
-            if (latestRecord == null) {
-                return false;
-            }
-            String applied = latestRecord.fingerprint();
-            String current = currentFingerprint();
-            return applied != null && current != null && !applied.equals(current);
-        }
-
-        /**
-         * Returns the node's current fingerprint, or {@code null} when the plugin's accessor
-         * throws.
-         *
-         * <p>Reporting the node unchanged beats taking the whole status report down over an
-         * optional metadata accessor.
-         *
-         * @return the fingerprint, or {@code null} if it could not be read
-         */
-        private @Nullable String currentFingerprint() {
-            try {
-                return node.fingerprint();
-            } catch (RuntimeException e) {
-                return null;
-            }
+            return upContentState() == UpContentState.CHANGED;
         }
     }
 

@@ -201,6 +201,54 @@ class StatusServiceTest {
         assertThat(changedFor(status, "throwing")).isFalse();
     }
 
+    @Test
+    @DisplayName("UP 内容の状態は 対象外・不明・変更なし・変更あり・読めない を区別する")
+    void upContentStateDistinguishesEveryCase() {
+        // Given
+        graph.addNode(new FingerprintedNode(createNode("pending", "Pending"), "abc"));
+        graph.addNode(createNode("opt-out", "Opt out"));
+        graph.addNode(new FingerprintedNode(createNode("unknown", "Unknown"), "abc"));
+        graph.addNode(new FingerprintedNode(createNode("same", "Same"), "abc"));
+        graph.addNode(new FingerprintedNode(createNode("edited", "Edited"), "abc"));
+        graph.addNode(new ThrowingFingerprintNode(createNode("throwing", "Throwing")));
+
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("opt-out"), testEnv.id(), "Opt out", null, 1L, "abc"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(NodeId.of("unknown"), testEnv.id(), "Unknown", null, 1L));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("same"), testEnv.id(), "Same", null, 1L, "abc"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("edited"), testEnv.id(), "Edited", null, 1L, "xyz"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("throwing"), testEnv.id(), "Throwing", null, 1L, "abc"));
+
+        statusService = new StatusService(graph, historyRepo);
+
+        // When
+        StatusService.StatusInfo status = statusService.getStatus();
+
+        // Then
+        assertThat(stateFor(status, "pending")).isEqualTo(UpContentState.NOT_APPLICABLE);
+        assertThat(stateFor(status, "opt-out")).isEqualTo(UpContentState.NOT_APPLICABLE);
+        assertThat(stateFor(status, "unknown")).isEqualTo(UpContentState.UNKNOWN);
+        assertThat(stateFor(status, "same")).isEqualTo(UpContentState.UNCHANGED);
+        assertThat(stateFor(status, "edited")).isEqualTo(UpContentState.CHANGED);
+        assertThat(stateFor(status, "throwing")).isEqualTo(UpContentState.UNREADABLE);
+    }
+
+    private UpContentState stateFor(StatusService.StatusInfo status, String nodeId) {
+        return status.nodes().stream()
+                .filter(ns -> ns.node().id().equals(NodeId.of(nodeId)))
+                .findFirst()
+                .orElseThrow()
+                .upContentState();
+    }
+
     private boolean changedFor(StatusService.StatusInfo status, String nodeId) {
         return status.nodes().stream()
                 .filter(ns -> ns.node().id().equals(NodeId.of(nodeId)))
