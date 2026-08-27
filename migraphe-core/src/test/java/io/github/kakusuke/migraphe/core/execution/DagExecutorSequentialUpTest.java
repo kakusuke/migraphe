@@ -14,6 +14,7 @@ import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
+import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
@@ -313,45 +314,6 @@ class DagExecutorSequentialUpTest {
             assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
             assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
-        }
-    }
-
-    /** Wraps a node so it reports a fingerprint, which {@link SimpleMigrationNode} never does. */
-    private record FingerprintedNode(MigrationNode delegate, String fingerprint)
-            implements MigrationNode {
-        @Override
-        public NodeId id() {
-            return delegate.id();
-        }
-
-        @Override
-        public String name() {
-            return delegate.name();
-        }
-
-        @Override
-        public @Nullable String description() {
-            return delegate.description();
-        }
-
-        @Override
-        public Environment environment() {
-            return delegate.environment();
-        }
-
-        @Override
-        public Set<NodeId> dependencies() {
-            return delegate.dependencies();
-        }
-
-        @Override
-        public Task upTask() {
-            return delegate.upTask();
-        }
-
-        @Override
-        public @Nullable Task downTask() {
-            return delegate.downTask();
         }
     }
 
