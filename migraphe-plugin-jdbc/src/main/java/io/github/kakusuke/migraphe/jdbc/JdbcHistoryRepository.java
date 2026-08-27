@@ -238,10 +238,14 @@ public final class JdbcHistoryRepository implements HistoryRepository, HistoryFi
      * @param recordId the id of the record to revise
      * @param fingerprint the fingerprint to store
      * @return {@code true} if a record with that id was revised, {@code false} if none matched
+     * @throws NullPointerException if {@code recordId} or {@code fingerprint} is {@code null}
      * @throws JdbcException if the update fails
      */
     @Override
     public boolean updateFingerprint(String recordId, String fingerprint) {
+        Objects.requireNonNull(recordId, "recordId must not be null");
+        Objects.requireNonNull(fingerprint, "fingerprint must not be null");
+
         String sql = "UPDATE migraphe_history SET fingerprint = ? WHERE id = ?";
 
         try (Connection conn = environment.createConnection();

@@ -27,9 +27,15 @@ public interface HistoryFingerprintUpdater {
      * column holding it — so after this call nothing distinguishes a node whose content once
      * differed from one that never did.
      *
+     * <p>Both arguments are required. There is deliberately no way to <em>clear</em> a stored
+     * fingerprint through this method: an absent token means "unknown", and turning a known token
+     * back into an unknown one is not an operation anything needs. Passing {@code null} is a
+     * programming error, not a request.
+     *
      * @param recordId the id of the record to revise
      * @param fingerprint the fingerprint to store
      * @return {@code true} if a record with that id was revised, {@code false} if none matched
+     * @throws NullPointerException if {@code recordId} or {@code fingerprint} is {@code null}
      */
     boolean updateFingerprint(String recordId, String fingerprint);
 }

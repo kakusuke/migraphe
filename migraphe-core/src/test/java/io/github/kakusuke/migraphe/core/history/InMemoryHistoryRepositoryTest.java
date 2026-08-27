@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.history;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
@@ -63,6 +64,20 @@ class InMemoryHistoryRepositoryTest {
         assertThat(after.durationMs()).isEqualTo(record.durationMs());
         assertThat(after.serializedDownTask()).isEqualTo("DROP TABLE t");
         assertThat(after.description()).isEqualTo("Create table");
+    }
+
+    @Test
+    void shouldRejectNullFingerprintArguments() {
+        // given
+        InMemoryHistoryRepository inMemory = new InMemoryHistoryRepository();
+        ExecutionRecord record = ExecutionRecord.upSuccess(node1, envId, "Create table", null, 100);
+        inMemory.record(record);
+
+        // when & then
+        assertThatThrownBy(() -> inMemory.updateFingerprint(record.id(), null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> inMemory.updateFingerprint(null, "abc"))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test
