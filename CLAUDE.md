@@ -8,7 +8,7 @@ DAG-based migration orchestration tool for database/infrastructure migrations ac
 
 **Tech Stack**: Java 21, Gradle 9.5.1 (Kotlin DSL), MicroProfile Config + SmallRye (YAML), JUnit 5 + AssertJ, Spotless, jspecify + NullAway
 **Current Phase**: 22 (JitPack distribution) - COMPLETE; latest work: UP-content `fingerprint` recorded in history, reported by `status` as five drift states and resolved by the new `amend` command, plus three exception-safety defects fixed in `DagExecutor`'s completion accounting, a fourth knowingly left open (Session 74)
-**Tests**: 1,152, 100% passing
+**Tests**: 1,171, 100% passing
 
 ## Module Structure
 
