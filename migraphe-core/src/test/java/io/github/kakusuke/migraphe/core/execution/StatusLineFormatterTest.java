@@ -9,6 +9,8 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
+import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
+import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
@@ -38,6 +40,51 @@ class StatusLineFormatterTest {
 
         assertThat(StatusLineFormatter.format(new NodeStatus(pendingNode, false, null)))
                 .isEqualTo("[ ] db1/002_index - Add index");
+    }
+
+    @Test
+    @DisplayName("変更あり・不明・読めない はマーカーで区別される")
+    void shouldMarkChangedUnknownAndUnreadableContent() {
+        MigrationNode changedNode = createNode("db1/002_index", "Add index");
+        NodeStatus changed =
+                new NodeStatus(
+                        new FingerprintedNode(changedNode, "abc"),
+                        true,
+                        ExecutionRecord.upSuccess(
+                                changedNode.id(),
+                                testEnv.id(),
+                                changedNode.name(),
+                                null,
+                                5L,
+                                "xyz"));
+
+        MigrationNode unknownNode = createNode("db1/003_posts", "Create posts");
+        NodeStatus unknown =
+                new NodeStatus(
+                        new FingerprintedNode(unknownNode, "abc"),
+                        true,
+                        ExecutionRecord.upSuccess(
+                                unknownNode.id(), testEnv.id(), unknownNode.name(), null, 5L));
+
+        MigrationNode unreadableNode = createNode("db1/004_tags", "Create tags");
+        NodeStatus unreadable =
+                new NodeStatus(
+                        new ThrowingFingerprintNode(unreadableNode),
+                        true,
+                        ExecutionRecord.upSuccess(
+                                unreadableNode.id(),
+                                testEnv.id(),
+                                unreadableNode.name(),
+                                null,
+                                5L,
+                                "abc"));
+
+        assertThat(StatusLineFormatter.format(changed))
+                .startsWith("[!] db1/002_index - Add index (");
+        assertThat(StatusLineFormatter.format(unknown))
+                .startsWith("[?] db1/003_posts - Create posts (");
+        assertThat(StatusLineFormatter.format(unreadable))
+                .startsWith("[E] db1/004_tags - Create tags (");
     }
 
     private MigrationNode createNode(String id, String name) {

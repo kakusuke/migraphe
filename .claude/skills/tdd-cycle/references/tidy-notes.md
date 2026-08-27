@@ -93,6 +93,10 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `UNREADABLE`, because a report can say "your plugin is broken" where a stored token cannot. They
   look like the same try/catch — do not unify them, and do not "simplify" the status side back to
   `null`, which would make a plugin fault indistinguishable from a plugin that opts out
+- **`StatusLineFormatter.markerFor` switches over `UpContentState` with no `default` arm on
+  purpose.** Adding a constant to the enum then fails to compile until the renderer decides how it
+  looks. Never add `default ->` to quiet that: a new state would silently render as `[✓]`, i.e. as
+  "no change detected", which is the one answer a new state is least likely to mean
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

@@ -19,17 +19,18 @@ public final class StatusLineFormatter {
     /**
      * Formats a node's status as one display line.
      *
-     * <p>An applied node reads {@code "[✓] <id> - <name> (<duration>, <timestamp>)"}; one that has
-     * not been applied reads {@code "[ ] <id> - <name>"}. The parenthesized suffix is present
-     * exactly when the status carries a latest record, which {@link StatusService} supplies only
-     * for applied nodes.
+     * <p>The line is {@code "<marker> <id> - <name>"}, followed by {@code " (<duration>,
+     * <timestamp>)"} when the status carries a latest record. The marker is {@code [ ]} for a node
+     * that has not been applied; for one that has, it reports its {@link UpContentState} — {@code
+     * [!]} for {@code CHANGED}, {@code [?]} for {@code UNKNOWN}, {@code [E]} for {@code
+     * UNREADABLE}, and {@code [✓]} when the content matches or the comparison does not apply.
      *
      * @param status the node status to render
      * @return the rendered line
      */
     public static String format(NodeStatus status) {
         StringBuilder sb = new StringBuilder();
-        sb.append(status.executed() ? "[✓] " : "[ ] ");
+        sb.append(markerFor(status));
         sb.append(status.node().id().value()).append(" - ").append(status.node().name());
         ExecutionRecord record = status.latestRecord();
         if (record != null) {
@@ -40,5 +41,17 @@ public final class StatusLineFormatter {
                     .append(")");
         }
         return sb.toString();
+    }
+
+    private static String markerFor(NodeStatus status) {
+        if (!status.executed()) {
+            return "[ ] ";
+        }
+        return switch (status.upContentState()) {
+            case CHANGED -> "[!] ";
+            case UNKNOWN -> "[?] ";
+            case UNREADABLE -> "[E] ";
+            case NOT_APPLICABLE, UNCHANGED -> "[✓] ";
+        };
     }
 }
