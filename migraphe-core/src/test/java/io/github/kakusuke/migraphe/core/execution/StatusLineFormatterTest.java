@@ -87,6 +87,21 @@ class StatusLineFormatterTest {
                 .startsWith("[E] db1/004_tags - Create tags (");
     }
 
+    @Test
+    @DisplayName("fingerprint が一致していれば適用済みマーカーになる")
+    void shouldMarkUnchangedContentAsApplied() {
+        MigrationNode node = createNode("db1/005_roles", "Create roles");
+        NodeStatus unchanged =
+                new NodeStatus(
+                        new FingerprintedNode(node, "abc"),
+                        true,
+                        ExecutionRecord.upSuccess(
+                                node.id(), testEnv.id(), node.name(), null, 5L, "abc"));
+
+        assertThat(StatusLineFormatter.format(unchanged))
+                .startsWith("[✓] db1/005_roles - Create roles (");
+    }
+
     private MigrationNode createNode(String id, String name) {
         Task upTask = SimpleTask.of("UP: " + name);
         Task downTask = SimpleTask.of("DOWN: " + name);

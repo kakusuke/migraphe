@@ -211,6 +211,8 @@ class StatusServiceTest {
         graph.addNode(new FingerprintedNode(createNode("same", "Same"), "abc"));
         graph.addNode(new FingerprintedNode(createNode("edited", "Edited"), "abc"));
         graph.addNode(new ThrowingFingerprintNode(createNode("throwing", "Throwing")));
+        graph.addNode(
+                new ThrowingFingerprintNode(createNode("pending-throwing", "Pending throwing")));
 
         historyRepo.record(
                 ExecutionRecord.upSuccess(
@@ -239,6 +241,7 @@ class StatusServiceTest {
         assertThat(stateFor(status, "same")).isEqualTo(UpContentState.UNCHANGED);
         assertThat(stateFor(status, "edited")).isEqualTo(UpContentState.CHANGED);
         assertThat(stateFor(status, "throwing")).isEqualTo(UpContentState.UNREADABLE);
+        assertThat(stateFor(status, "pending-throwing")).isEqualTo(UpContentState.NOT_APPLICABLE);
     }
 
     private UpContentState stateFor(StatusService.StatusInfo status, String nodeId) {
