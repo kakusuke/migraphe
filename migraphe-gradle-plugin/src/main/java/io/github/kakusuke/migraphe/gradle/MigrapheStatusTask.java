@@ -1,12 +1,11 @@
 package io.github.kakusuke.migraphe.gradle;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
-import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.core.execution.StatusLineFormatter;
 import io.github.kakusuke.migraphe.core.execution.StatusService;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
 import io.github.kakusuke.migraphe.core.execution.StatusService.StatusInfo;
-import io.github.kakusuke.migraphe.core.graph.FormatUtils;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
 import java.util.HashMap;
 import java.util.List;
@@ -53,31 +52,12 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
 
                     List<String> lines =
                             graphView.renderLines(
-                                    node -> {
-                                        NodeStatus nodeStatus =
-                                                Objects.requireNonNull(
-                                                        statusByNode.get(node.id()),
-                                                        "graph node missing from status: "
-                                                                + node.id().value());
-                                        StringBuilder sb = new StringBuilder();
-                                        sb.append(nodeStatus.executed() ? "[✓] " : "[ ] ");
-                                        sb.append(node.id().value())
-                                                .append(" - ")
-                                                .append(node.name());
-                                        ExecutionRecord record = nodeStatus.latestRecord();
-                                        if (record != null) {
-                                            sb.append(" (")
-                                                    .append(
-                                                            FormatUtils.formatDuration(
-                                                                    record.durationMs()))
-                                                    .append(", ")
-                                                    .append(
-                                                            FormatUtils.formatDateTime(
-                                                                    record.executedAt()))
-                                                    .append(")");
-                                        }
-                                        return sb.toString();
-                                    });
+                                    node ->
+                                            StatusLineFormatter.format(
+                                                    Objects.requireNonNull(
+                                                            statusByNode.get(node.id()),
+                                                            "graph node missing from status: "
+                                                                    + node.id().value())));
 
                     for (String line : lines) {
                         getLogger().lifecycle(line);
