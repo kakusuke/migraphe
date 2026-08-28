@@ -13,7 +13,6 @@ import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.factory.EnvironmentFactory;
 import io.github.kakusuke.migraphe.core.factory.MigrationNodeFactory;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
-import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import java.nio.file.Path;
@@ -24,6 +23,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -56,20 +56,25 @@ public record ExecutionContext(
     /**
      * Creates the {@link HistoryRepository} for this project.
      *
-     * <p>The history target is read from {@code history.target} in the project configuration. If a
-     * matching {@link Environment} exists, the corresponding plugin's {@link
-     * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} creates the repository against
-     * that environment. If no matching target is found, an {@link InMemoryHistoryRepository} is
-     * returned as a fallback.
+     * <p>The history target is read from {@code history.target} in the project configuration and
+     * resolved against the configured targets; the matching plugin's {@link
+     * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} then creates the repository
+     * against that {@link Environment}.
      *
-     * @return the project's history repository, or an in-memory fallback when no history target is
-     *     configured
+     * @return the project's history repository
+     * @throws IllegalStateException if {@code history.target} names no configured target. Falling
+     *     back to an in-memory repository would let a run apply its migrations to the real database
+     *     and then discard the record of having done so.
      */
     public HistoryRepository createHistoryRepository() {
         String historyTarget = config.getConfigMapping(ProjectConfig.class).history().target();
         Environment historyEnv = environments.get(historyTarget);
         if (historyEnv == null) {
-            return new InMemoryHistoryRepository();
+            throw new IllegalStateException(
+                    "history.target '"
+                            + historyTarget
+                            + "' does not match any configured target. Configured targets: "
+                            + new TreeSet<>(environments.keySet()));
         }
         String type = config.getValue("target." + historyTarget + ".type", String.class);
         MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
