@@ -143,6 +143,27 @@ class StatusServiceTest {
     }
 
     @Test
+    @DisplayName("適用済みだが定義に無いノードを孤立として報告する")
+    void shouldReportNodesThatAreAppliedButNoLongerDefined() {
+        // Given: グラフには a だけ。履歴には a と b の適用記録がある
+        graph.addNode(createNode("a", "Node A"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "Node A", null, 100L));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "Node B", null, 100L));
+
+        statusService = new StatusService(graph, historyRepo);
+
+        // When
+        StatusService.StatusInfo status = statusService.getStatus();
+
+        // Then
+        assertThat(status.orphans())
+                .extracting(StatusService.OrphanStatus::nodeId)
+                .containsExactly(NodeId.of("b"));
+    }
+
+    @Test
     @DisplayName("直近の操作が失敗しても、内容の状態は適用した記録から判定する")
     void upContentStateComesFromTheRecordThatApplied() {
         // Given

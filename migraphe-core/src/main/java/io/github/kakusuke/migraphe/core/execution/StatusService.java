@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.core.execution;
 
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
+import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
@@ -10,8 +11,11 @@ import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -79,8 +83,60 @@ public final class StatusService {
             nodeStatuses.add(new NodeStatus(node, executed, latestRecord, appliedRecord));
         }
 
-        return new StatusInfo(nodeStatuses, executedCount, pendingCount);
+        return new StatusInfo(
+                nodeStatuses, executedCount, pendingCount, findOrphans(recordsByEnvironment));
     }
+
+    /**
+     * Finds the nodes the history says are applied but the definitions no longer declare.
+     *
+     * <p>This is the first thing in the tree to ask the repository what it holds rather than only
+     * asking about nodes already known from the graph, which is why these were invisible: nothing
+     * looked. Their environments are those of the declared nodes, so a target whose configuration
+     * was also deleted stays out of reach — the history is keyed by a target that can no longer be
+     * resolved.
+     */
+    private List<OrphanStatus> findOrphans(
+            Map<EnvironmentId, List<ExecutionRecord>> recordsByEnvironment) {
+        Set<NodeId> declared = new HashSet<>();
+        Set<EnvironmentId> environments = new LinkedHashSet<>();
+        for (MigrationNode node : graph.allNodes()) {
+            declared.add(node.id());
+            environments.add(node.environment().id());
+        }
+
+        List<OrphanStatus> orphans = new ArrayList<>();
+        for (EnvironmentId environmentId : environments) {
+            for (NodeId applied : historyRepository.executedNodes(environmentId)) {
+                if (declared.contains(applied)) {
+                    continue;
+                }
+                List<ExecutionRecord> records =
+                        recordsByEnvironment.computeIfAbsent(environmentId, this::orderedRecords);
+                ExecutionRecord appliedRecord = null;
+                for (ExecutionRecord record : records) {
+                    if (record.nodeId().equals(applied)
+                            && record.direction() == ExecutionDirection.UP
+                            && record.status() == ExecutionStatus.SUCCESS) {
+                        appliedRecord = record;
+                    }
+                }
+                orphans.add(new OrphanStatus(applied, environmentId, appliedRecord));
+            }
+        }
+        return List.copyOf(orphans);
+    }
+
+    /**
+     * A node the history says is applied but the definitions no longer declare.
+     *
+     * @param nodeId the identifier the history recorded
+     * @param environmentId the target it was applied against
+     * @param appliedRecord the record that applied it, or {@code null} when the history holds none
+     *     that can be read as such
+     */
+    public record OrphanStatus(
+            NodeId nodeId, EnvironmentId environmentId, @Nullable ExecutionRecord appliedRecord) {}
 
     /**
      * Reads one environment's records oldest first.
@@ -152,8 +208,13 @@ public final class StatusService {
      * @param nodes the per-node statuses
      * @param executedCount the number of nodes that have been applied
      * @param pendingCount the number of nodes not yet applied
+     * @param orphans the nodes the history says are applied but the definitions no longer declare
      */
-    public record StatusInfo(List<NodeStatus> nodes, int executedCount, int pendingCount) {
+    public record StatusInfo(
+            List<NodeStatus> nodes,
+            int executedCount,
+            int pendingCount,
+            List<OrphanStatus> orphans) {
 
         /**
          * Returns the total number of nodes (executed plus pending).

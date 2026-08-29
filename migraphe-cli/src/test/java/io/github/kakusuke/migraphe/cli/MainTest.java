@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.cli.command.Command;
+import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
@@ -311,6 +312,55 @@ class MainTest {
     }
 
     @Test
+    void downShouldRefuseWhileSomethingAppliedIsNoLongerDefined(@TempDir Path tempDir)
+            throws IOException, SQLException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        String jdbcUrl = "jdbc:h2:mem:down_orphan;DB_CLOSE_DELAY=-1";
+        writeReversiblePair(tempDir, jdbcUrl);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        Files.delete(tempDir.resolve("tasks").resolve("002_b.yaml"));
+        ExecutionContext reloaded = ExecutionContext.load(tempDir, pluginRegistry);
+
+        String[] args = {"down", "-y", "--all"};
+        Command down = Objects.requireNonNull(Main.createDownCommand(args, reloaded));
+        AtomicInteger exitCode = new AtomicInteger();
+        String stderr = captureStderr(() -> captureStdout(() -> exitCode.set(down.execute())));
+
+        assertThat(exitCode.get()).isEqualTo(1);
+        assertThat(stderr).contains("002_b");
+        try (Connection connection = DriverManager.getConnection(jdbcUrl, "sa", "");
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery(
+                                "SELECT count(*) FROM migraphe_history WHERE direction = 'DOWN'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isZero();
+        }
+    }
+
+    @Test
+    void statusShouldListWhatIsAppliedButNoLongerDefined(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeIrreversibleProject(tempDir, "status_orphan", "the rows cannot be reconstructed");
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        Files.delete(tempDir.resolve("tasks").resolve("002_b.yaml"));
+        ExecutionContext reloaded = ExecutionContext.load(tempDir, pluginRegistry);
+
+        String stdout = captureStdout(() -> new StatusCommand(reloaded).execute());
+
+        assertThat(stdout).contains("002_b");
+    }
+
+    @Test
     void upShouldRefuseATaskThatNeitherRollsBackNorSaysWhyNot(@TempDir Path tempDir)
             throws IOException {
         PluginRegistry pluginRegistry = new PluginRegistry();
@@ -369,6 +419,54 @@ class MainTest {
      * Writes a project where {@code 002_b} depends on {@code 001_a} and has no {@code down:}, so
      * neither can be rolled back: 002_b has no way back, and 001_a is what it stands on.
      */
+    /** Writes a project of two reversible tasks, {@code 002_b} depending on {@code 001_a}. */
+    private void writeReversiblePair(Path tempDir, String jdbcUrl) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: h2-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(
+                targetsDir.resolve("h2-db.yaml"),
+                """
+                type: jdbc
+                driver_class: org.h2.Driver
+                db_label: H2
+                jdbc_url: %s
+                username: sa
+                """
+                        .formatted(jdbcUrl));
+        Path tasksDir = Files.createDirectories(tempDir.resolve("tasks"));
+        Files.writeString(
+                tasksDir.resolve("001_a.yaml"),
+                """
+                name: Create a
+                target: h2-db
+                autocommit: true
+                up: |
+                  CREATE TABLE t_a (id INT PRIMARY KEY);
+                down: |
+                  DROP TABLE IF EXISTS t_a;
+                """);
+        Files.writeString(
+                tasksDir.resolve("002_b.yaml"),
+                """
+                name: Create b
+                target: h2-db
+                autocommit: true
+                dependencies:
+                  - 001_a
+                up: |
+                  CREATE TABLE t_b (id INT PRIMARY KEY);
+                down: |
+                  DROP TABLE IF EXISTS t_b;
+                """);
+    }
+
     private void writeIrreversibleProject(Path tempDir, String databaseName) throws IOException {
         writeIrreversibleProject(tempDir, databaseName, null);
     }

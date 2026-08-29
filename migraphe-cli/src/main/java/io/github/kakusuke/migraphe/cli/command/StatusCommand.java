@@ -66,6 +66,10 @@ public class StatusCommand implements Command {
                 System.out.println(line);
             }
 
+            for (String line : StatusLineFormatter.formatOrphans(status)) {
+                System.out.println(line);
+            }
+
             System.out.println();
 
             // Summary.

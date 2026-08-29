@@ -9,6 +9,7 @@ import io.github.kakusuke.migraphe.cli.util.AnsiColor;
 import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.StatusService;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
@@ -123,7 +124,15 @@ public class DownCommand implements Command {
                     new DagExecutor(
                             context.graph(), historyRepo, listener, ExecutionDirection.DOWN, 1);
 
-            // 4. Determine the nodes to roll back.
+            // 4. Refuse while anything applied is no longer defined.
+            List<StatusService.OrphanStatus> orphans =
+                    new StatusService(context.graph(), historyRepo).getStatus().orphans();
+            if (!orphans.isEmpty()) {
+                reportOrphans(orphans);
+                return 1;
+            }
+
+            // 5. Determine the nodes to roll back.
             DagExecutor.RollbackBlockers blockers = executor.rollbackBlockers();
             if (targetVersion != null && blockers.frozen().contains(targetVersion)) {
                 reportFrozenTarget(context, targetVersion, blockers);
@@ -176,6 +185,27 @@ public class DownCommand implements Command {
             e.printStackTrace();
             return 1;
         }
+    }
+
+    /**
+     * Refuses to roll anything back while the history holds nodes the definitions no longer
+     * declare.
+     *
+     * <p>An orphan may well stand on something this rollback would remove, and what it stands on is
+     * not recorded — its dependencies lived in a task file that is gone. Rolling back around it
+     * would remove that ground silently, which is the failure this command exists to stop making.
+     */
+    private void reportOrphans(List<StatusService.OrphanStatus> orphans) {
+        System.err.println(
+                "Error: "
+                        + orphans.size()
+                        + " applied migration(s) are no longer defined. What they stand on is not"
+                        + " recorded, so rolling anything back could remove it. Nothing was rolled"
+                        + " back:");
+        orphans.stream()
+                .map(orphan -> orphan.nodeId().value())
+                .sorted()
+                .forEach(id -> System.err.println("  " + id));
     }
 
     /**
