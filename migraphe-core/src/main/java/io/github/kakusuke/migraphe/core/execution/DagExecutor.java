@@ -175,7 +175,7 @@ public final class DagExecutor implements Executor {
      */
     public Set<NodeId> determineRollbackTargets(
             @Nullable NodeId targetVersion, boolean allMigrations) {
-        Set<NodeId> frozen = frozenNodes();
+        Set<NodeId> frozen = rollbackBlockers().frozen();
 
         if (allMigrations) {
             return graph.allNodes().stream()
@@ -212,19 +212,32 @@ public final class DagExecutor implements Executor {
      * a node that depends on it can still be removed, because removing it leaves the frozen node
      * untouched. The remainder is therefore closed under dependents, which is what makes rolling it
      * back in reverse order safe.
+     *
+     * @return what cannot be rolled back and what that holds down
      */
-    private Set<NodeId> frozenNodes() {
+    public RollbackBlockers rollbackBlockers() {
+        Set<NodeId> irreversible = new HashSet<>();
         Set<NodeId> frozen = new HashSet<>();
         for (MigrationNode node : graph.allNodes()) {
             if (node.downTask() != null
                     || !history.wasExecuted(node.id(), node.environment().id())) {
                 continue;
             }
+            irreversible.add(node.id());
             frozen.add(node.id());
             frozen.addAll(graph.getAllDependencies(node.id()));
         }
-        return frozen;
+        return new RollbackBlockers(Set.copyOf(irreversible), Set.copyOf(frozen));
     }
+
+    /**
+     * What stands in the way of rolling back.
+     *
+     * @param irreversible applied nodes that have no down task
+     * @param frozen {@code irreversible} together with everything those nodes transitively depend
+     *     on — the nodes no rollback may touch while they stand
+     */
+    public record RollbackBlockers(Set<NodeId> irreversible, Set<NodeId> frozen) {}
 
     /**
      * Executes the given target nodes in this executor's direction.

@@ -123,6 +123,12 @@ public class DownCommand implements Command {
                             context.graph(), historyRepo, listener, ExecutionDirection.DOWN, 1);
 
             // 4. Determine the nodes to roll back.
+            DagExecutor.RollbackBlockers blockers = executor.rollbackBlockers();
+            if (targetVersion != null && blockers.frozen().contains(targetVersion)) {
+                reportFrozenTarget(context, targetVersion, blockers);
+                return 1;
+            }
+
             Set<NodeId> targetNodes =
                     executor.determineRollbackTargets(targetVersion, allMigrations);
 
@@ -162,6 +168,31 @@ public class DownCommand implements Command {
             e.printStackTrace();
             return 1;
         }
+    }
+
+    /** Explains why the requested node cannot be rolled back, naming what is holding it. */
+    private void reportFrozenTarget(
+            ExecutionContext context, NodeId target, DagExecutor.RollbackBlockers blockers) {
+        if (blockers.irreversible().contains(target)) {
+            System.err.println(
+                    "Error: "
+                            + target.value()
+                            + " has no down migration, so it cannot be rolled"
+                            + " back.");
+            return;
+        }
+        List<String> holders =
+                blockers.irreversible().stream()
+                        .filter(id -> context.graph().getAllDependencies(id).contains(target))
+                        .map(NodeId::value)
+                        .sorted()
+                        .toList();
+        System.err.println(
+                "Error: "
+                        + target.value()
+                        + " cannot be rolled back while these are applied, because they have no"
+                        + " down migration and stand on it: "
+                        + String.join(", ", holders));
     }
 
     /** Renders the rollback plan as a reversed ASCII graph with per-node status markers. */

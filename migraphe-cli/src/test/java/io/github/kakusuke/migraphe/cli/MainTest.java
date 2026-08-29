@@ -309,6 +309,67 @@ class MainTest {
     }
 
     @Test
+    void downShouldRefuseANodeThatHasNoRollback(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        String jdbcUrl = "jdbc:h2:mem:down_frozen;DB_CLOSE_DELAY=-1";
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: h2-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(
+                targetsDir.resolve("h2-db.yaml"),
+                """
+                type: jdbc
+                driver_class: org.h2.Driver
+                db_label: H2
+                jdbc_url: %s
+                username: sa
+                """
+                        .formatted(jdbcUrl));
+        Path tasksDir = Files.createDirectories(tempDir.resolve("tasks"));
+        Files.writeString(
+                tasksDir.resolve("001_a.yaml"),
+                """
+                name: Create a
+                target: h2-db
+                autocommit: true
+                up: |
+                  CREATE TABLE t_a (id INT PRIMARY KEY);
+                down: |
+                  DROP TABLE IF EXISTS t_a;
+                """);
+        Files.writeString(
+                tasksDir.resolve("002_b.yaml"),
+                """
+                name: Create b
+                target: h2-db
+                autocommit: true
+                dependencies:
+                  - 001_a
+                up: |
+                  CREATE TABLE t_b (id INT PRIMARY KEY);
+                """);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        String[] args = {"down", "-y", "002_b"};
+        Command down = Objects.requireNonNull(Main.createDownCommand(args, context));
+        AtomicInteger exitCode = new AtomicInteger();
+        String stderr = captureStderr(() -> exitCode.set(down.execute()));
+
+        assertThat(exitCode.get()).isEqualTo(1);
+        assertThat(stderr).contains("002_b");
+    }
+
+    @Test
     void downUsageErrorShouldAdvertisePreviewFlag(@TempDir Path tempDir) throws IOException {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
