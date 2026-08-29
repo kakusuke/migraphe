@@ -28,7 +28,8 @@ import org.jspecify.annotations.Nullable;
  * table can gain columns and indexes over time without any schema-version bookkeeping. Each query
  * opens a short-lived connection from the supplied {@link JdbcEnvironment}, so the repository keeps
  * the migration history in the same database the migrations run against. A node is considered
- * applied only when its most recent record is a successful {@code UP}.
+ * applied when its most recent <strong>successful</strong> record is an {@code UP}; records that
+ * failed or were skipped never change the applied state.
  *
  * <p>"Most recent" orders by {@code executed_at} and then by {@code id}. The identifier decides
  * ties because {@link ExecutionRecord}'s factories mint time-ordered UUIDv7 values, and ties are
@@ -261,14 +262,15 @@ public final class JdbcHistoryRepository implements HistoryRepository, HistoryFi
     }
 
     /**
-     * Returns whether the node has been successfully applied in the given environment.
+     * Returns whether the node is currently applied in the given environment.
      *
-     * <p>A node counts as applied only when its most recent record (by {@code executed_at}) is a
-     * successful {@code UP}.
+     * <p>Decided by the node's most recent {@code SUCCESS} record: applied when it is an {@code
+     * UP}, not applied when it is a {@code DOWN}, and not applied when the node has no successful
+     * record. A rollback that failed leaves the node applied.
      *
      * @param nodeId the node to check
      * @param environmentId the environment to check within
-     * @return {@code true} if the latest record is a successful UP, otherwise {@code false}
+     * @return {@code true} if the node is currently applied, otherwise {@code false}
      * @throws NullPointerException if {@code nodeId} or {@code environmentId} is {@code null}
      * @throws JdbcException if the query fails
      */
@@ -305,16 +307,17 @@ public final class JdbcHistoryRepository implements HistoryRepository, HistoryFi
     /**
      * Returns the identifiers of all nodes currently applied in the given environment.
      *
-     * <p>For each node only its most recent record is considered; a node is included when that
-     * latest record is a successful {@code UP}. The result is ordered by node identifier.
+     * <p>For each node only its most recent {@code SUCCESS} record is considered; the node is
+     * included when that record is an {@code UP}. This is the set form of {@link #wasExecuted} and
+     * agrees with it for every node. The result is ordered by node identifier.
      *
-     * <p>The query deliberately avoids window functions (a correlated {@code MAX(executed_at)}
-     * subquery is used instead) so it also runs on pre-window-function servers such as MariaDB 10.1
-     * and earlier. Should several records for the same node share the maximum {@code executed_at},
-     * the node counts as applied when any of them is a successful {@code UP}.
+     * <p>The query deliberately avoids window functions (a correlated subquery selecting the latest
+     * successful {@code id} is used instead) so it also runs on pre-window-function servers such as
+     * MariaDB 10.1 and earlier. Ties on {@code executed_at} are broken by {@code id}, so exactly
+     * one record is selected per node.
      *
      * @param environmentId the environment to query
-     * @return the identifiers of nodes whose latest record is a successful UP
+     * @return the identifiers of the currently applied nodes
      * @throws NullPointerException if {@code environmentId} is {@code null}
      * @throws JdbcException if the query fails
      */
