@@ -16,9 +16,11 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Records are partitioned per {@link EnvironmentId}, so the history of multiple environments can
  * be held simultaneously. Because nothing is persisted, all history is lost when the application
- * restarts. This implementation is used in tests and as the fallback when a project configures no
- * history target (see {@link
- * io.github.kakusuke.migraphe.core.execution.ExecutionContext#createHistoryRepository()}).
+ * restarts. This implementation is used in tests and by the {@code noop} plugin, whose {@link
+ * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} returns it for every environment.
+ * It is deliberately <strong>not</strong> reachable as a fallback for a misconfigured {@code
+ * history.target}: a run that applied its migrations and then discarded the record would be worse
+ * than one that refused to start.
  *
  * <p>This class is not itself thread-safe; concurrent callers should wrap it in a {@link
  * SynchronizedHistoryRepository}.

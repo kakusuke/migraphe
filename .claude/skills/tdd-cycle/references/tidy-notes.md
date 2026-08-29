@@ -127,6 +127,11 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   runs the build in its own daemon JVM, so an in-memory H2 is invisible to the assertions
 - **Adding a Gradle task means editing `MigrapheGradlePlugin`'s class javadoc too.** It enumerates the
   task names and its `apply` javadoc counts them ("the six Migraphe tasks"); both go stale silently
+- **`ExecutionContext.createHistoryRepository()` must never return a repository that discards writes.**
+  It used to fall back to `InMemoryHistoryRepository` when `history.target` named nothing configured, so a
+  typo made every run apply its migrations to the real database and then throw the record away — silently,
+  with `validate` still exiting 0. It now throws. Any future "be lenient here" fallback re-opens that hole;
+  the only safe leniency is refusing to run
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
