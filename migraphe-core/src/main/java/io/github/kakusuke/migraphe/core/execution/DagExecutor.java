@@ -163,6 +163,10 @@ public final class DagExecutor implements Executor {
      * transitive dependents, filtered to nodes that are currently applied (per {@link
      * HistoryRepository#wasExecuted}). If neither applies, an empty set is returned.
      *
+     * <p>Either way the frozen nodes are then removed: a node with no down task, and everything it
+     * stands on. Rolling those back is impossible, and rolling back only part of them is what used
+     * to leave the history describing a node as applied while its dependencies were not.
+     *
      * @param targetVersion the node to roll back (together with its dependents), or {@code null} to
      *     defer to {@code allMigrations}
      * @param allMigrations when {@code true}, selects all currently applied nodes regardless of
@@ -171,10 +175,13 @@ public final class DagExecutor implements Executor {
      */
     public Set<NodeId> determineRollbackTargets(
             @Nullable NodeId targetVersion, boolean allMigrations) {
+        Set<NodeId> frozen = frozenNodes();
+
         if (allMigrations) {
             return graph.allNodes().stream()
                     .filter(node -> history.wasExecuted(node.id(), node.environment().id()))
                     .map(MigrationNode::id)
+                    .filter(id -> !frozen.contains(id))
                     .collect(Collectors.toSet());
         }
 
@@ -190,10 +197,33 @@ public final class DagExecutor implements Executor {
                                 if (node == null) return false;
                                 return history.wasExecuted(id, node.environment().id());
                             })
+                    .filter(id -> !frozen.contains(id))
                     .collect(Collectors.toSet());
         }
 
         return Set.of();
+    }
+
+    /**
+     * Returns the applied nodes that cannot be rolled back, together with everything they stand on.
+     *
+     * <p>A node with no down task cannot be removed, so neither can anything it depends on —
+     * removing a dependency would break the node that has to stay. This propagates downwards only:
+     * a node that depends on it can still be removed, because removing it leaves the frozen node
+     * untouched. The remainder is therefore closed under dependents, which is what makes rolling it
+     * back in reverse order safe.
+     */
+    private Set<NodeId> frozenNodes() {
+        Set<NodeId> frozen = new HashSet<>();
+        for (MigrationNode node : graph.allNodes()) {
+            if (node.downTask() != null
+                    || !history.wasExecuted(node.id(), node.environment().id())) {
+                continue;
+            }
+            frozen.add(node.id());
+            frozen.addAll(graph.getAllDependencies(node.id()));
+        }
+        return frozen;
     }
 
     /**

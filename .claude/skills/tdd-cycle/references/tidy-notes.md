@@ -145,6 +145,12 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   where a node whose rollback failed reported `[?]` (the failed row carries no fingerprint) and rendered
   its apply as having taken 0ms. `StatusService` imposes the order on `allRecords` itself rather than
   trusting it: the interface declares none, and the two shipped implementations differ
+- **A node that cannot be rolled back freezes what it stands on, never what stands on it.** Removing a
+  node's dependency breaks it; removing something that depends on it does not. So the frozen set is
+  `{no down task}` plus their transitive *dependencies*, and the remainder stays closed under
+  dependents — which is exactly what makes rolling the remainder back in reverse order safe. Reversing
+  that direction, or dropping the exclusion so a partial set runs, re-creates the corruption where
+  `down --all` removed a node's dependencies and left the node itself recorded as applied
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
