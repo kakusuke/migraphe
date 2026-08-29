@@ -132,6 +132,12 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   typo made every run apply its migrations to the real database and then throw the record away — silently,
   with `validate` still exiting 0. It now throws. Any future "be lenient here" fallback re-opens that hole;
   the only safe leniency is refusing to run
+- **The applied state is decided by the most recent *successful* record, and `wasExecuted` /
+  `executedNodes` must agree.** Non-SUCCESS records never change it: a failed rollback leaves the node
+  applied, because nothing was undone. Both used to read the latest record of any status, which made a
+  DOWN FAILURE row report the node as never applied while its objects still stood. The two are separate
+  queries in each implementation, so a change to one silently desynchronises them — the interface javadoc
+  now states the rule, and every implementation is bound by it
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

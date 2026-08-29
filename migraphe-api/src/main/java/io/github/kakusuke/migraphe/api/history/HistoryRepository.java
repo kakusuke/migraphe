@@ -39,21 +39,27 @@ public interface HistoryRepository {
     void record(ExecutionRecord record);
 
     /**
-     * Reports whether the given node has already been executed successfully in the given
-     * environment.
+     * Reports whether the given node is currently applied in the given environment.
+     *
+     * <p>The applied state is decided by the node's <strong>most recent successful</strong> record:
+     * applied if that record is an UP, not applied if it is a DOWN, and not applied if the node has
+     * no successful record at all. Records whose status is not SUCCESS never change the applied
+     * state — a rollback that failed leaves the node applied, because nothing was undone.
      *
      * @param nodeId the identifier of the node to check
      * @param environmentId the environment whose history is consulted
-     * @return {@code true} if a successful execution is recorded for the node in the environment,
-     *     {@code false} otherwise
+     * @return {@code true} if the node is currently applied in the environment, {@code false}
+     *     otherwise
      */
     boolean wasExecuted(NodeId nodeId, EnvironmentId environmentId);
 
     /**
-     * Returns the identifiers of nodes that have executed successfully in the given environment.
+     * Returns the identifiers of the nodes currently applied in the given environment.
+     *
+     * <p>This is the set form of {@link #wasExecuted} and must agree with it for every node.
      *
      * @param environmentId the environment whose history is consulted
-     * @return the list of successfully executed node identifiers, possibly empty
+     * @return the identifiers of the currently applied nodes, possibly empty
      */
     List<NodeId> executedNodes(EnvironmentId environmentId);
 

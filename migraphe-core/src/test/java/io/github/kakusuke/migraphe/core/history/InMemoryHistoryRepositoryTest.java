@@ -29,6 +29,19 @@ class InMemoryHistoryRepositoryTest {
     }
 
     @Test
+    void shouldKeepANodeAppliedWhenItsRollbackFailed() {
+        // given
+        repository.record(ExecutionRecord.upSuccess(node1, envId, "Create table", null, 100));
+        repository.record(
+                ExecutionRecord.failure(
+                        node1, envId, ExecutionDirection.DOWN, "Rollback", "constraint violation"));
+
+        // when & then
+        assertThat(repository.wasExecuted(node1, envId)).isTrue();
+        assertThat(repository.executedNodes(envId)).containsExactly(node1);
+    }
+
+    @Test
     void shouldStartWithNoRecords() {
         // when & then
         assertThat(repository.allRecords(envId)).isEmpty();
