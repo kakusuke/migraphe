@@ -186,6 +186,10 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   and the change being verified live in the same file, so restoring from HEAD throws away both. Copy
   the file to the scratchpad first and restore from the copy, or commit before mutating. This has
   already cost one file of finished work
+- **`--preview` reports what running would report, minus the execution — exit code included.**
+  Everything that refuses a run is decided before anything runs, so a preview that exits zero on a plan
+  the real run would fail is not a rehearsal, and the CI use of `--preview` silently stops working. The
+  only outcome a preview cannot predict is a failure during execution
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

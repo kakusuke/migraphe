@@ -190,6 +190,9 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                     if (dryRun) {
                         getLogger().lifecycle("");
                         getLogger().lifecycle("No changes made (dry run).");
+                        if (leftFrozen) {
+                            throw new GradleException(incompleteMessage(plan));
+                        }
                         return;
                     }
 

@@ -155,11 +155,13 @@ public class DownCommand implements Command {
                     TopologicalSort.createReverseExecutionPlanFor(context.graph(), targetNodes);
             displayRollbackPlan(context, executionPlan, historyRepo);
 
-            // 6. Stop here in dry-run mode.
+            // 6. Stop here in dry-run mode. A preview reports what running would report, minus
+            // the execution: everything that refuses a rollback is decided before anything runs,
+            // so a preview that exits zero on a plan the real run would fail is not a rehearsal.
             if (dryRun) {
                 System.out.println();
                 System.out.println("No changes made (dry run).");
-                return 0;
+                return leftFrozen ? 1 : 0;
             }
 
             // 7. Confirmation prompt (skipped with -y).
