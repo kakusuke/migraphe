@@ -121,8 +121,6 @@ public class Main {
             Command command = createCommand(commandName, args, context);
 
             if (command == null) {
-                System.err.println("Unknown command: " + commandName);
-                printUsage();
                 return 1;
             }
 
@@ -158,22 +156,30 @@ public class Main {
         return registry;
     }
 
-    /** Creates the {@link Command} instance matching the given command name, or {@code null}. */
+    /**
+     * Creates the {@link Command} instance matching the given command name, or {@code null} when
+     * the name matches no command (reported here to standard error) or the matched command rejected
+     * its arguments (reported by that command).
+     */
     private static @Nullable Command createCommand(
             String commandName, String[] args, ExecutionContext context) {
         return switch (commandName) {
             case "up" -> createUpCommand(args, context);
             case "status" -> new StatusCommand(context);
             case "down" -> createDownCommand(args, context);
-            default -> null;
+            default -> {
+                System.err.println("Unknown command: " + commandName);
+                printUsage();
+                yield null;
+            }
         };
     }
 
     /** Builds an {@link UpCommand} from the parsed arguments. */
-    private static Command createUpCommand(String[] args, ExecutionContext context) {
+    static Command createUpCommand(String[] args, ExecutionContext context) {
         List<String> argList = Arrays.asList(args);
         boolean skipConfirm = argList.contains("-y");
-        boolean dryRun = argList.contains("--dry-run");
+        boolean dryRun = parseDryRun(args);
 
         String targetId = firstPositionalArg(args);
 
@@ -185,10 +191,10 @@ public class Main {
      * Builds a {@link DownCommand} from the parsed arguments, or returns {@code null} after
      * printing an error when neither {@code --all} nor a target version is supplied.
      */
-    private static @Nullable Command createDownCommand(String[] args, ExecutionContext context) {
+    static @Nullable Command createDownCommand(String[] args, ExecutionContext context) {
         List<String> argList = Arrays.asList(args);
         boolean skipConfirm = argList.contains("-y");
-        boolean dryRun = argList.contains("--dry-run");
+        boolean dryRun = parseDryRun(args);
         boolean allMigrations = argList.contains("--all");
 
         String version = firstPositionalArg(args);
@@ -196,12 +202,25 @@ public class Main {
         // A version is required unless --all is specified.
         if (!allMigrations && version == null) {
             System.err.println("Error: Version argument or --all required for 'down' command");
-            System.err.println("Usage: migraphe down [-y] [--dry-run] [--all | <version>]");
+            System.err.println("Usage: migraphe down [-y] [--preview] [--all | <version>]");
             return null;
         }
 
         NodeId targetVersion = version != null ? NodeId.of(version) : null;
         return new DownCommand(context, targetVersion, allMigrations, skipConfirm, dryRun);
+    }
+
+    /**
+     * Returns whether dry-run mode was requested. Both {@code --preview} and its legacy alias
+     * {@code --dry-run} select it; the Gradle tasks expose only {@code --preview} because Gradle
+     * reserves {@code --dry-run} for itself.
+     *
+     * @param args the raw command-line arguments
+     * @return {@code true} when the plan should be printed without executing it
+     */
+    static boolean parseDryRun(String[] args) {
+        List<String> argList = Arrays.asList(args);
+        return argList.contains("--preview") || argList.contains("--dry-run");
     }
 
     /** Returns the value of the {@code --name} option, or {@code null} if absent. */
@@ -248,7 +267,7 @@ public class Main {
         // Value-bearing flags (skip the flag and the following token).
         Set<String> valueFlags = Set.of("--env", "--name");
         // Boolean flags (skip the flag alone).
-        Set<String> boolFlags = Set.of("-y", "--dry-run", "--all");
+        Set<String> boolFlags = Set.of("-y", "--preview", "--dry-run", "--all");
         int i = 1; // args[0] is the command word, so skip it.
         while (i < args.length) {
             String a = args[i];
@@ -353,8 +372,8 @@ public class Main {
         System.out.println("       migraphe -v | --version");
         System.out.println();
         System.out.println("Commands:");
-        System.out.println("  up [-y] [--dry-run] [<id>]          Execute migrations");
-        System.out.println("  down [-y] [--dry-run] [--all | <v>] Rollback migrations");
+        System.out.println("  up [-y] [--preview] [<id>]          Execute migrations");
+        System.out.println("  down [-y] [--preview] [--all | <v>] Rollback migrations");
         System.out.println("  status                              Show migration status");
         System.out.println(
                 "  validate                            Validate configuration (offline)");
@@ -371,13 +390,13 @@ public class Main {
         System.out.println("Up options:");
         System.out.println("  <id>           Execute migrations up to and including <id>");
         System.out.println("  -y             Skip confirmation prompt");
-        System.out.println("  --dry-run      Show plan without executing");
+        System.out.println("  --preview      Show plan without executing");
         System.out.println();
         System.out.println("Down options:");
         System.out.println("  <version>      Rollback migrations that depend on <version>");
         System.out.println("  --all          Rollback all executed migrations");
         System.out.println("  -y             Skip confirmation prompt");
-        System.out.println("  --dry-run      Show plan without executing");
+        System.out.println("  --preview      Show plan without executing");
         System.out.println();
         System.out.println("Generate options:");
         System.out.println("  --name <name>  Run only the generator with matching name");

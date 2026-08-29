@@ -86,3 +86,4 @@ Open one **only** when the cycle's diff touches its paths. If none match, you're
 |---|---|
 | [jdbc_markdown_generator.md](jdbc_markdown_generator.md) | `jdbc/markdown/**`, `postgresql/markdown/**`, `mysql/markdown/**` |
 | [jdbc_schema_info_provider.md](jdbc_schema_info_provider.md) | `jdbc/schema/JdbcSchemaInfoProvider*`, `mysql/schema/MySQLSchemaInfoProvider*` |
+| [cli_main.md](cli_main.md) | `cli/Main.java` |

@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
@@ -15,8 +16,15 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -42,18 +50,17 @@ class MainTest {
 
     @Test
     void handleExceptionShouldSuppressStackTraceForIllegalArgumentException() {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        PrintStream original = System.err;
-        System.setErr(new PrintStream(baos));
-        try {
-            int code = Main.handleException(new IllegalArgumentException("bad config"));
-            assertThat(code).isEqualTo(1);
-            String stderr = baos.toString(StandardCharsets.UTF_8);
-            assertThat(stderr).contains("Error: bad config");
-            assertThat(stderr).doesNotContain("\tat ");
-        } finally {
-            System.setErr(original);
-        }
+        AtomicInteger exitCode = new AtomicInteger();
+        String stderr =
+                captureStderr(
+                        () ->
+                                exitCode.set(
+                                        Main.handleException(
+                                                new IllegalArgumentException("bad config"))));
+
+        assertThat(exitCode.get()).isEqualTo(1);
+        assertThat(stderr).contains("Error: bad config");
+        assertThat(stderr).doesNotContain("\tat ");
     }
 
     @Test
@@ -99,16 +106,7 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        Files.writeString(
-                tempDir.resolve("migraphe.yaml"),
-                """
-                project:
-                  name: test
-                history:
-                  target: noop-db
-                """);
-        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
-        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        writeNoopProject(tempDir);
         Path environmentsDir = Files.createDirectories(tempDir.resolve("environments"));
         Files.writeString(environmentsDir.resolve("staging.yaml"), "DB_HOST: staging-host\n");
 
@@ -132,16 +130,7 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        Files.writeString(
-                tempDir.resolve("migraphe.yaml"),
-                """
-                project:
-                  name: test
-                history:
-                  target: noop-db
-                """);
-        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
-        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        writeNoopProject(tempDir);
 
         String[] args = {"up", "--env", "staging"};
 
@@ -159,17 +148,208 @@ class MainTest {
     }
 
     @Test
+    void previewFlagShouldBeAcceptedAsDryRunAlias() {
+        assertThat(Main.parseDryRun(new String[] {"up", "--preview"})).isTrue();
+        assertThat(Main.parseDryRun(new String[] {"up", "--dry-run"})).isTrue();
+        assertThat(Main.parseDryRun(new String[] {"up"})).isFalse();
+        assertThat(Main.firstPositionalArg(new String[] {"up", "--preview"})).isNull();
+        assertThat(Main.firstPositionalArg(new String[] {"down", "--preview", "db1/001"}))
+                .isEqualTo("db1/001");
+    }
+
+    @Test
+    void createUpCommandShouldRunPreviewWithoutExecuting(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeNoopProject(tempDir);
+        Path tasksDir = Files.createDirectories(tempDir.resolve("tasks"));
+        Files.writeString(
+                tasksDir.resolve("001_create_users.yaml"),
+                """
+                name: Create users
+                target: noop-db
+                up: Create the users table
+                """);
+
+        String[] args = {"up", "--preview", "-y"};
+        ExecutionContext context = Main.loadContext(tempDir, pluginRegistry, args);
+
+        String stdout = captureStdout(() -> Main.createUpCommand(args, context).execute());
+
+        assertThat(stdout).contains("[DRY RUN]");
+    }
+
+    @Test
+    void createDownCommandShouldRunPreviewWithoutExecuting(@TempDir Path tempDir)
+            throws IOException, SQLException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        String jdbcUrl = "jdbc:h2:mem:preview_down;DB_CLOSE_DELAY=-1";
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: h2-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(
+                targetsDir.resolve("h2-db.yaml"),
+                """
+                type: jdbc
+                driver_class: org.h2.Driver
+                db_label: H2
+                jdbc_url: %s
+                username: sa
+                """
+                        .formatted(jdbcUrl));
+        Path tasksDir = Files.createDirectories(tempDir.resolve("tasks"));
+        Files.writeString(
+                tasksDir.resolve("001_create_users.yaml"),
+                """
+                name: Create users
+                target: h2-db
+                autocommit: true
+                up: |
+                  CREATE TABLE users (id INT PRIMARY KEY);
+                down: |
+                  DROP TABLE IF EXISTS users;
+                """);
+
+        ExecutionContext context = Main.loadContext(tempDir, pluginRegistry, new String[] {"up"});
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        String[] downArgs = {"down", "--all", "--preview", "-y"};
+        Command downCommand = Objects.requireNonNull(Main.createDownCommand(downArgs, context));
+
+        String stdout = captureStdout(downCommand::execute);
+
+        assertThat(stdout).contains("[DRY RUN]");
+        try (Connection connection = DriverManager.getConnection(jdbcUrl, "sa", "");
+                ResultSet tables = connection.getMetaData().getTables(null, null, "USERS", null)) {
+            assertThat(tables.next()).isTrue();
+        }
+    }
+
+    @Test
+    void downUsageErrorShouldAdvertisePreviewFlag(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeNoopProject(tempDir);
+
+        String[] args = {"down"};
+        ExecutionContext context = Main.loadContext(tempDir, pluginRegistry, args);
+
+        AtomicReference<Command> created = new AtomicReference<>();
+        String stderr = captureStderr(() -> created.set(Main.createDownCommand(args, context)));
+
+        assertThat(created.get()).isNull();
+        assertThat(stderr).contains("--preview");
+        assertThat(stderr).doesNotContain("--dry-run");
+    }
+
+    @Test
+    void unknownCommandShouldBeReportedOnlyForUnrecognisedCommandWord(@TempDir Path tempDir)
+            throws IOException {
+        writeNoopProject(tempDir);
+
+        String originalUserDir = System.getProperty("user.dir");
+        System.setProperty("user.dir", tempDir.toString());
+        String downStderr;
+        String bogusStderr;
+        try {
+            downStderr = captureStderr(() -> captureStdout(() -> Main.run(new String[] {"down"})));
+            bogusStderr =
+                    captureStderr(() -> captureStdout(() -> Main.run(new String[] {"bogus"})));
+        } finally {
+            System.setProperty("user.dir", originalUserDir);
+        }
+
+        assertThat(downStderr).contains("Version argument or --all required");
+        assertThat(downStderr).doesNotContain("Unknown command");
+        assertThat(bogusStderr).contains("Unknown command: bogus");
+    }
+
+    @Test
+    void fullHelpShouldBePrintedOnlyForUnrecognisedCommandWord(@TempDir Path tempDir)
+            throws IOException {
+        writeNoopProject(tempDir);
+
+        String originalUserDir = System.getProperty("user.dir");
+        System.setProperty("user.dir", tempDir.toString());
+        String downStdout;
+        String bogusStdout;
+        try {
+            downStdout = captureStdout(() -> captureStderr(() -> Main.run(new String[] {"down"})));
+            bogusStdout =
+                    captureStdout(() -> captureStderr(() -> Main.run(new String[] {"bogus"})));
+        } finally {
+            System.setProperty("user.dir", originalUserDir);
+        }
+
+        assertThat(downStdout).doesNotContain("Migraphe - Database Migration Tool");
+        assertThat(bogusStdout).contains("Migraphe - Database Migration Tool");
+    }
+
+    @Test
+    void usageTextShouldAdvertisePreviewFlag() {
+        String stdout = captureStdout(() -> Main.run(new String[0]));
+
+        assertThat(stdout).contains("--preview");
+        assertThat(stdout).doesNotContain("--dry-run");
+    }
+
+    @Test
     void usageOutputMentionsPinCommand() {
+        String stdout = captureStdout(() -> Main.run(new String[0]));
+
+        assertThat(stdout).contains("pin");
+        assertThat(stdout).contains("--check");
+    }
+
+    /**
+     * Writes the smallest project the CLI will load: one noop target, used as the history store.
+     */
+    private static void writeNoopProject(Path baseDir) throws IOException {
+        Files.writeString(
+                baseDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: noop-db
+                """);
+        Path targetsDir = Files.createDirectories(baseDir.resolve("targets"));
+        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+    }
+
+    /** Runs {@code action} with {@code System.err} redirected and returns what it printed. */
+    private static String captureStderr(Runnable action) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        PrintStream original = System.err;
+        System.setErr(new PrintStream(baos));
+        try {
+            action.run();
+        } finally {
+            System.setErr(original);
+        }
+        return baos.toString(StandardCharsets.UTF_8);
+    }
+
+    /** Runs {@code action} with {@code System.out} redirected and returns what it printed. */
+    private static String captureStdout(Runnable action) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         PrintStream original = System.out;
         System.setOut(new PrintStream(baos));
         try {
-            Main.run(new String[0]);
-            String stdout = baos.toString(StandardCharsets.UTF_8);
-            assertThat(stdout).contains("pin");
-            assertThat(stdout).contains("--check");
+            action.run();
         } finally {
             System.setOut(original);
         }
+        return baos.toString(StandardCharsets.UTF_8);
     }
 }

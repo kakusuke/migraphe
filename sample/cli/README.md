@@ -57,7 +57,7 @@ migraphe validate
 ### マイグレーション計画のプレビュー
 
 ```bash
-migraphe up --dry-run
+migraphe up --preview
 ```
 
 PG と MySQL のタスクが単一の DAG として並び、依存順（MySQL の `currencies` → PG の `users` → MySQL の `reviews` ...）で表示されます。
