@@ -23,6 +23,32 @@ import org.junit.jupiter.api.Test;
 class PostgreSQLPluginTest {
 
     @Test
+    void migrationNodeProviderCarriesNoWayBackFromTheDefinition() {
+        SqlTaskDefinition definition =
+                new SmallRyeConfigBuilder()
+                        .withMapping(SqlTaskDefinition.class)
+                        .withDefaultValue("name", "drop_legacy")
+                        .withDefaultValue("target", "db1")
+                        .withDefaultValue("up", "ALTER TABLE users DROP COLUMN legacy")
+                        .withDefaultValue("no_way_back", "DROP COLUMN discards the data")
+                        .build()
+                        .getConfigMapping(SqlTaskDefinition.class);
+
+        MigrationNode node =
+                new PostgreSQLPlugin()
+                        .migrationNodeProvider()
+                        .createNode(
+                                NodeId.of("drop_legacy"),
+                                definition,
+                                Set.of(),
+                                PostgreSQLEnvironment.create(
+                                        "db1", "jdbc:postgresql://localhost:5432/t", "u", "p"));
+
+        assertThat(node.noWayBack()).isEqualTo("DROP COLUMN discards the data");
+        assertThat(node.downTask()).isNull();
+    }
+
+    @Test
     @SuppressWarnings("rawtypes")
     void shouldBeDiscoverableViaServiceLoader() {
         // when

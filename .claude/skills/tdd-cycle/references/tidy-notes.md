@@ -175,6 +175,13 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   sitting in the history as applied. Throwing on it took `status` and `down` down with it, so the
   project could not even be diagnosed. Keep the split: `load` throws only on cycles, `validate()`
   still reports both, and the commands that would *apply* something refuse
+- **`createNode` exists in three near-identical copies** — `JdbcMigrationNodeProvider`,
+  `PostgreSQLMigrationNodeProvider`, `MySQLMigrationNodeProvider` — differing only in the environment
+  type check and its message. Anything added to one and not the others is dropped silently for two of
+  the three shipped plugins, which is how `no_way_back` reached `validate` but not `up`. When adding a
+  field, change all three, and put the test in `MySQLPluginTest`/`PostgreSQLPluginTest` too: a test
+  written only against the provider you just edited proves nothing about the other two. Merging them
+  is not a tidy — the wrong-environment exception type and message are pinned by tests
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

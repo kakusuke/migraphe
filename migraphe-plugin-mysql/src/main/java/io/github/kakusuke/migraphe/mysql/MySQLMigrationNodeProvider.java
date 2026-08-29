@@ -70,6 +70,7 @@ public final class MySQLMigrationNodeProvider implements MigrationNodeProvider<S
 
         task.description().ifPresent(builder::description);
         task.down().filter(sql -> !sql.isBlank()).ifPresent(builder::downSql);
+        sqlTask.noWayBack().filter(reason -> !reason.isBlank()).ifPresent(builder::noWayBack);
 
         return builder.build();
     }
