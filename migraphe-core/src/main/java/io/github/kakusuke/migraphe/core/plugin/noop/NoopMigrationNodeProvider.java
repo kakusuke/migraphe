@@ -53,6 +53,9 @@ public final class NoopMigrationNodeProvider implements MigrationNodeProvider<St
         task.down()
                 .filter(s -> !s.isBlank())
                 .ifPresent(down -> builder.downTask(SimpleTask.withDownTask(down, down)));
+        if (task instanceof NoopTaskDefinition noopTask) {
+            noopTask.noWayBack().filter(r -> !r.isBlank()).ifPresent(builder::noWayBack);
+        }
 
         return builder.build();
     }

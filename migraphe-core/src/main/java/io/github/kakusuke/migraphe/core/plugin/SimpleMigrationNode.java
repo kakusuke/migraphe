@@ -28,6 +28,7 @@ public final class SimpleMigrationNode implements MigrationNode {
     private final Set<NodeId> dependencies;
     private final Task upTask;
     private final @Nullable Task downTask;
+    private final @Nullable String noWayBack;
 
     private SimpleMigrationNode(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
@@ -38,6 +39,7 @@ public final class SimpleMigrationNode implements MigrationNode {
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upTask = Objects.requireNonNull(builder.upTask, "upTask must not be null");
         this.downTask = builder.downTask;
+        this.noWayBack = builder.noWayBack;
     }
 
     @Override
@@ -68,6 +70,11 @@ public final class SimpleMigrationNode implements MigrationNode {
     @Override
     public Task upTask() {
         return upTask;
+    }
+
+    @Override
+    public @Nullable String noWayBack() {
+        return noWayBack;
     }
 
     @Override
@@ -105,6 +112,7 @@ public final class SimpleMigrationNode implements MigrationNode {
         private Set<NodeId> dependencies = Set.of();
         private @Nullable Task upTask;
         private @Nullable Task downTask;
+        private @Nullable String noWayBack;
 
         /**
          * Sets the node's unique identifier.
@@ -202,6 +210,17 @@ public final class SimpleMigrationNode implements MigrationNode {
          */
         public Builder downTask(@Nullable Task downTask) {
             this.downTask = downTask;
+            return this;
+        }
+
+        /**
+         * Declares that this migration cannot be rolled back, and why.
+         *
+         * @param reason the author's reason
+         * @return this builder
+         */
+        public Builder noWayBack(@Nullable String reason) {
+            this.noWayBack = reason;
             return this;
         }
 
