@@ -14,6 +14,7 @@ import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
+import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
@@ -167,6 +168,42 @@ class DagExecutorSequentialUpTest {
             assertThat(result.summary().executedCount()).isEqualTo(1);
             assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isTrue();
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"));
+        }
+
+        @Test
+        @DisplayName("UP 成功はノードの fingerprint を履歴に残し、DOWN 成功は残さない")
+        void shouldRecordFingerprintOnUpOnly() {
+            // Given
+            MigrationGraph upGraph = MigrationGraph.create();
+            MigrationNode fingerprinted =
+                    new FingerprintedNode(createNode("a", Set.of()), "abc123");
+            upGraph.addNode(fingerprinted);
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            new DagExecutor(upGraph, history, new MockExecutionListener(), ExecutionDirection.UP, 1)
+                    .execute(Set.of(NodeId.of("a")));
+
+            // Then
+            ExecutionRecord afterUp = history.findLatestRecord(NodeId.of("a"), testEnv.id());
+            assertThat(afterUp).isNotNull();
+            assertThat(afterUp.fingerprint()).isEqualTo("abc123");
+
+            // When rolled back
+            MigrationGraph downGraph = MigrationGraph.create();
+            downGraph.addNode(fingerprinted);
+            new DagExecutor(
+                            downGraph,
+                            history,
+                            new MockExecutionListener(),
+                            ExecutionDirection.DOWN,
+                            1)
+                    .execute(Set.of(NodeId.of("a")));
+
+            // Then
+            ExecutionRecord afterDown = history.findLatestRecord(NodeId.of("a"), testEnv.id());
+            assertThat(afterDown).isNotNull();
+            assertThat(afterDown.direction()).isEqualTo(ExecutionDirection.DOWN);
+            assertThat(afterDown.fingerprint()).isNull();
         }
 
         @Test

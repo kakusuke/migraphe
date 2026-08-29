@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.cli.command;
 import static org.assertj.core.api.Assertions.*;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
+import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
@@ -189,6 +190,33 @@ class StatusCommandTest {
         assertThat(output).contains("Total: 3");
         assertThat(output).contains("Executed: 3");
         assertThat(output).contains("Pending: 0");
+    }
+
+    @Test
+    void shouldCountOneExecutedAndOnePendingAfterTargetedExecution() throws IOException {
+        // Given: 2ノードのうち依存元の1つだけを実行
+        createTestProject(tempDir);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+
+        UpCommand upCommand =
+                new UpCommand(context, NodeId.of("test-db/001_create_users"), true, false);
+        upCommand.execute();
+
+        // 出力をリセット
+        outputStream.reset();
+
+        // When: status コマンドを実行
+        StatusCommand statusCommand = new StatusCommand(context);
+        int exitCode = statusCommand.execute();
+
+        // Then: 内訳が 1 と 1 になり、マーカーが正しいノードに付く
+        assertThat(exitCode).isEqualTo(0);
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(output).contains("Total: 2");
+        assertThat(output).contains("Executed: 1");
+        assertThat(output).contains("Pending: 1");
+        assertThat(output).contains("[✓] test-db/001_create_users");
+        assertThat(output).contains("[ ] test-db/002_add_index");
     }
 
     /** テスト用のプロジェクト構造を作成する。 */

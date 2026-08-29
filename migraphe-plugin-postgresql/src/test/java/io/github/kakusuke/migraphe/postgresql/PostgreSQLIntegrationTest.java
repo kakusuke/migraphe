@@ -535,6 +535,67 @@ class PostgreSQLIntegrationTest {
     }
 
     @Test
+    void addsFingerprintColumn() throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " current_schema() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id TEXT PRIMARY KEY,
+                        node_id TEXT NOT NULL,
+                        target_id TEXT NOT NULL,
+                        direction TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        executed_at TIMESTAMP NOT NULL,
+                        description TEXT,
+                        serialized_down_task TEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT
+                    )
+                    """);
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " current_schema() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        // The legacy shape above omits the indexes and CHECK constraints the resource
+        // declares inside CREATE TABLE, and IF NOT EXISTS will not put them back. Rebuild
+        // from scratch so the container's shared table outlives this test intact.
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+        historyRepo.initialize();
+    }
+
+    @Test
     void initializeIsIdempotent() throws Exception {
         // The PostgreSQL resource declares the table and each index as separate steps guarded only
         // by IF NOT EXISTS (CREATE TABLE since 9.1, CREATE INDEX since 9.5), so every one of them

@@ -107,6 +107,27 @@ class UpCommandTest {
     }
 
     @Test
+    void shouldRecordUpFingerprintInHistory() throws Exception {
+        // Given: テスト用のプロジェクト構造
+        createTestProject(tempDir);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        UpCommand command =
+                new UpCommand(
+                        context, null, true, false, new ByteArrayInputStream(new byte[0]), false);
+
+        // When: UP コマンドを実行
+        int exitCode = command.execute();
+
+        // Then: 各ノードの up SQL の SHA-256 が履歴の fingerprint 列に記録される
+        assertThat(exitCode).isEqualTo(0);
+        assertThat(fingerprintOf(context, "test-db/001_create_users"))
+                .isEqualTo("f5f0794a55d611246115a67e39747c887da6d6f83d79f63c3aa730fa97772942");
+        assertThat(fingerprintOf(context, "test-db/002_add_index"))
+                .isEqualTo("b7584bef34de80a0ec475a402195ee2f72ecf69d34f8e4ef898e43399a9901b4");
+    }
+
+    @Test
     void shouldSkipAlreadyExecutedMigrations() throws IOException {
         // Given: プロジェクト構造 + 既に実行済みのマイグレーション
         createTestProject(tempDir);
@@ -447,15 +468,35 @@ class UpCommandTest {
         Files.writeString(tasksDir.resolve("001_split.yaml"), taskYaml);
     }
 
-    /** クエリを実行して最初の列の int 値を返す。 */
-    private int rowCount(ExecutionContext context, String query) throws Exception {
+    /** test-db ターゲットへの接続を開く。 */
+    private Connection connect(ExecutionContext context) throws Exception {
         Environment env = context.environments().get("test-db");
         PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) env;
-        try (Connection conn = pgEnv.createConnection();
+        return pgEnv.createConnection();
+    }
+
+    /** クエリを実行して最初の列の int 値を返す。 */
+    private int rowCount(ExecutionContext context, String query) throws Exception {
+        try (Connection conn = connect(context);
                 Statement stmt = conn.createStatement();
                 java.sql.ResultSet rs = stmt.executeQuery(query)) {
             assertThat(rs.next()).isTrue();
             return rs.getInt(1);
+        }
+    }
+
+    /** 履歴テーブルに記録された UP 実行の fingerprint を返す。 */
+    private String fingerprintOf(ExecutionContext context, String nodeId) throws Exception {
+        try (Connection conn = connect(context);
+                java.sql.PreparedStatement stmt =
+                        conn.prepareStatement(
+                                "SELECT fingerprint FROM migraphe_history"
+                                        + " WHERE node_id = ? AND direction = 'UP'")) {
+            stmt.setString(1, nodeId);
+            try (java.sql.ResultSet rs = stmt.executeQuery()) {
+                assertThat(rs.next()).isTrue();
+                return rs.getString(1);
+            }
         }
     }
 

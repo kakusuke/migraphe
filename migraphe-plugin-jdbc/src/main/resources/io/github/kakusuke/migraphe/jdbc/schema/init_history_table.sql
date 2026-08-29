@@ -42,3 +42,23 @@ SELECT 1 FROM information_schema.columns
 ALTER TABLE migraphe_history ADD COLUMN target_id VARCHAR(255);
 UPDATE migraphe_history SET target_id = environment_id;
 ALTER TABLE migraphe_history DROP COLUMN environment_id;
+
+-- Records the fingerprint of the UP content a node applied, so a later run can tell that the
+-- definition was edited afterwards. Nullable: rows written before this column existed carry no
+-- fingerprint, and null must read as "unknown" rather than "unchanged".
+--
+-- TEXT, not a bounded width. MigrationNode.fingerprint() declares the token opaque and leaves its
+-- derivation to the plugin, so it declares no length either, and this is the generic resource that
+-- any plugin's token lands in: a SHA-512 hex digest is 128 characters, and a prefixed one longer
+-- still. A too-narrow column truncates silently on a non-strict MySQL, and a truncated token never
+-- again equals the freshly computed one, so an unchanged node would report as edited forever. The
+-- column is in no index, which is what a bounded width would otherwise buy.
+--
+-- ALTER TABLE ... ADD COLUMN has no portable IF NOT EXISTS, so this step needs the detection query.
+--@check add fingerprint column
+SELECT 1 FROM information_schema.columns
+ WHERE table_schema = ?
+   AND UPPER(table_name) = 'MIGRAPHE_HISTORY'
+   AND UPPER(column_name) = 'FINGERPRINT';
+--@apply
+ALTER TABLE migraphe_history ADD COLUMN fingerprint TEXT;

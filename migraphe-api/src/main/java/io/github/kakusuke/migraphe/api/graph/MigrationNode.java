@@ -79,6 +79,29 @@ public interface MigrationNode {
     @Nullable Task downTask();
 
     /**
+     * Returns an opaque token over the UP content this node would apply, or {@code null} when the
+     * plugin cannot produce one. {@code null} means "unknown", not "unchanged", so callers must
+     * skip the comparison rather than treat it as a match.
+     *
+     * <p>What counts as the UP content, and how a token is derived from it, is the plugin's choice.
+     * The token is opaque: callers may only compare two of them for equality. It must not cover the
+     * mode in which the content is applied, nor the rollback definition.
+     *
+     * <p>The token must be <strong>stable</strong>: the same node must yield the same token across
+     * JVM invocations, platforms, and plugin versions, because callers persist it and compare it
+     * much later. Deriving it from anything whose iteration order is unspecified — a {@link Set}, a
+     * {@code HashMap} — breaks that.
+     *
+     * <p>Callers must <strong>report</strong> a changed token, never auto-remediate it. The remedy
+     * is a destructive roll-back-and-re-apply, so a report has to stay declinable.
+     *
+     * @return the fingerprint, or {@code null} if this plugin does not provide one
+     */
+    default @Nullable String fingerprint() {
+        return null;
+    }
+
+    /**
      * Indicates whether this node is a root node (one with no dependencies).
      *
      * @return {@code true} if {@link #dependencies()} is empty, {@code false} otherwise

@@ -49,6 +49,61 @@ class JdbcMigrationNodeTest {
     }
 
     @Test
+    void fingerprintStripsSurroundingWhitespaceAndNothingElse() {
+        var trailingNewline = nodeBuilder().upSql("CREATE TABLE users (id INT);\n").build();
+        var padded = nodeBuilder().upSql("  CREATE TABLE users (id INT);  ").build();
+        var lf = nodeBuilder().upSql("CREATE TABLE users (\nid INT\n);").build();
+        var crlf = nodeBuilder().upSql("CREATE TABLE users (\r\nid INT\r\n);").build();
+        var other = nodeBuilder().upSql("CREATE TABLE orders (id INT);").build();
+
+        assertThat(trailingNewline.fingerprint())
+                .isEqualTo("5ea918fac5561634f4b577815b41483e5882b9c57dd3bd2351e3422d641af545");
+        assertThat(padded.fingerprint()).isEqualTo(trailingNewline.fingerprint());
+        assertThat(crlf.fingerprint()).isNotEqualTo(lf.fingerprint());
+        assertThat(other.fingerprint())
+                .isEqualTo("13d48c0dae01b9846a83a8848e24e38f31b555559f27216010f998177c0a756a");
+    }
+
+    @Test
+    void fingerprintIgnoresAutocommit() {
+        var transactional =
+                nodeBuilder().upSql("CREATE TABLE users (id INT);").autocommit(false).build();
+        var autocommitting =
+                nodeBuilder().upSql("CREATE TABLE users (id INT);").autocommit(true).build();
+
+        assertThat(autocommitting.fingerprint()).isEqualTo(transactional.fingerprint());
+    }
+
+    @Test
+    void fingerprintIgnoresDownSql() {
+        var withoutDown = nodeBuilder().upSql("CREATE TABLE users (id INT);").build();
+        var withDown =
+                nodeBuilder()
+                        .upSql("CREATE TABLE users (id INT);")
+                        .downSql("DROP TABLE users;")
+                        .build();
+
+        assertThat(withDown.fingerprint()).isEqualTo(withoutDown.fingerprint());
+    }
+
+    @Test
+    void fingerprintChangesWhenACommentIsAdded() {
+        var bare = nodeBuilder().upSql("CREATE TABLE users (id INT);").build();
+        var commented =
+                nodeBuilder().upSql("-- create users\nCREATE TABLE users (id INT);").build();
+
+        assertThat(commented.fingerprint()).isNotEqualTo(bare.fingerprint());
+    }
+
+    @Test
+    void fingerprintChangesWhenAnInteriorLineIsReindented() {
+        var flat = nodeBuilder().upSql("CREATE TABLE users (\nid INT\n);").build();
+        var indented = nodeBuilder().upSql("CREATE TABLE users (\n    id INT\n);").build();
+
+        assertThat(indented.fingerprint()).isNotEqualTo(flat.fingerprint());
+    }
+
+    @Test
     void upTaskReturnsJdbcUpTask() {
         var node =
                 JdbcMigrationNode.builder()
@@ -143,5 +198,10 @@ class JdbcMigrationNodeTest {
                         .upSql("SELECT 1")
                         .build();
         assertThat(node.dependencies()).containsExactly(NodeId.of("dep1"));
+    }
+
+    /** Builder pre-filled with the identity fields the fingerprint deliberately ignores. */
+    private JdbcMigrationNode.Builder nodeBuilder() {
+        return JdbcMigrationNode.builder().id("node1").name("Create table").environment(env);
     }
 }

@@ -71,7 +71,28 @@ public final class StatusService {
      *     been executed
      */
     public record NodeStatus(
-            MigrationNode node, boolean executed, @Nullable ExecutionRecord latestRecord) {}
+            MigrationNode node, boolean executed, @Nullable ExecutionRecord latestRecord) {
+
+        /**
+         * Indicates whether the node's UP content differs from what was applied.
+         *
+         * <p>Answers {@code false} whenever either fingerprint is {@code null}, because {@link
+         * MigrationNode#fingerprint()} defines {@code null} as "unknown" rather than "unchanged" —
+         * a plugin that produces no fingerprint, and a row written before the column existed, both
+         * read that way. Only the UP content is covered, so editing a rollback definition or an
+         * apply-mode flag is not reported here.
+         *
+         * @return {@code true} only when both fingerprints are known and differ
+         */
+        public boolean upContentChanged() {
+            if (latestRecord == null) {
+                return false;
+            }
+            String applied = latestRecord.fingerprint();
+            String current = node.fingerprint();
+            return applied != null && current != null && !applied.equals(current);
+        }
+    }
 
     /**
      * Aggregate status across all nodes in the graph.

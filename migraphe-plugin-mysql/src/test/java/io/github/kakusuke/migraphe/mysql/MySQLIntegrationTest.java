@@ -497,6 +497,67 @@ class MySQLIntegrationTest {
     }
 
     @Test
+    void addsFingerprintColumn() throws Exception {
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " DATABASE() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id VARCHAR(64) PRIMARY KEY,
+                        node_id VARCHAR(255) NOT NULL,
+                        target_id VARCHAR(255) NOT NULL,
+                        direction VARCHAR(10) NOT NULL,
+                        status VARCHAR(10) NOT NULL,
+                        executed_at TIMESTAMP(6) NOT NULL,
+                        description TEXT,
+                        serialized_down_task LONGTEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """);
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " DATABASE() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        // The legacy shape above omits the indexes and CHECK constraints the resource
+        // declares inside CREATE TABLE, and IF NOT EXISTS will not put them back. Rebuild
+        // from scratch so the container's shared table outlives this test intact.
+        try (Connection conn = environment.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+        historyRepo.initialize();
+    }
+
+    @Test
     void shouldCreateCorrectTasksFromMigrationNode() throws Exception {
         // given
         historyRepo.initialize();

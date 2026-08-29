@@ -205,8 +205,9 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 """
                 INSERT INTO migraphe_history (
                     id, node_id, target_id, direction, status,
-                    executed_at, description, serialized_down_task, duration_ms, error_message
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    executed_at, description, serialized_down_task, duration_ms, error_message,
+                    fingerprint
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         try (Connection conn = environment.createConnection();
@@ -222,6 +223,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
             pstmt.setString(8, record.serializedDownTask());
             pstmt.setLong(9, record.durationMs());
             pstmt.setString(10, record.errorMessage());
+            pstmt.setString(11, record.fingerprint());
 
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -411,6 +413,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         String serializedDownTask = rs.getString("serialized_down_task");
         long durationMs = rs.getLong("duration_ms");
         String errorMessage = rs.getString("error_message");
+        String fingerprint = rs.getString("fingerprint");
 
         return new ExecutionRecord(
                 id,
@@ -422,7 +425,8 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 description,
                 serializedDownTask,
                 durationMs,
-                errorMessage);
+                errorMessage,
+                fingerprint);
     }
 
     private String loadSchemaResource() throws IOException {

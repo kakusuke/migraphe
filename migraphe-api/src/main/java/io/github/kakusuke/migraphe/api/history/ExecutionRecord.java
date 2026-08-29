@@ -32,6 +32,10 @@ import org.jspecify.annotations.Nullable;
  * @param durationMs the execution duration in milliseconds
  * @param errorMessage the error message when the execution failed, or {@code null} otherwise
  *     (required when {@code status} is {@link ExecutionStatus#FAILURE})
+ * @param fingerprint {@link io.github.kakusuke.migraphe.api.graph.MigrationNode#fingerprint()} as
+ *     it stood when the node was applied, or {@code null} when it is not known — which is what a
+ *     record written before this field existed carries, and what a plugin that produces no
+ *     fingerprint carries. {@code null} does not mean "unchanged"
  * @see HistoryRepository
  * @see ExecutionStatus
  * @see ExecutionDirection
@@ -46,7 +50,8 @@ public record ExecutionRecord(
         String description, // human-readable task description
         @Nullable String serializedDownTask, // serialized DownTask (only present for UP executions)
         long durationMs, // execution time in milliseconds
-        @Nullable String errorMessage // error message (only present on failure)
+        @Nullable String errorMessage, // error message (only present on failure)
+        @Nullable String fingerprint // fingerprint of the applied UP content, or null if unknown
         ) {
     /**
      * Canonical constructor that validates the record invariants.
@@ -89,7 +94,8 @@ public record ExecutionRecord(
      *     null} if the step does not support rollback
      * @param durationMs the execution duration in milliseconds
      * @return a new {@code ExecutionRecord} with status {@link ExecutionStatus#SUCCESS} and
-     *     direction {@link ExecutionDirection#UP}
+     *     direction {@link ExecutionDirection#UP}, whose {@code fingerprint} is {@code null} —
+     *     meaning "unknown", never "unchanged". Use the overload taking one to record it
      */
     public static ExecutionRecord upSuccess(
             NodeId nodeId,
@@ -97,6 +103,31 @@ public record ExecutionRecord(
             String description,
             @Nullable String serializedDownTask,
             long durationMs) {
+        return upSuccess(nodeId, environmentId, description, serializedDownTask, durationMs, null);
+    }
+
+    /**
+     * Creates a record for a successful up execution, carrying the fingerprint of the content that
+     * was applied.
+     *
+     * @param nodeId the node that was executed
+     * @param environmentId the environment in which the execution took place
+     * @param description a human-readable description of the executed task
+     * @param serializedDownTask the serialized down task captured for later rollback, or {@code
+     *     null} if the step does not support rollback
+     * @param durationMs the execution duration in milliseconds
+     * @param fingerprint the node's fingerprint at apply time, or {@code null} when the plugin does
+     *     not provide one
+     * @return a new {@code ExecutionRecord} with status {@link ExecutionStatus#SUCCESS} and
+     *     direction {@link ExecutionDirection#UP}
+     */
+    public static ExecutionRecord upSuccess(
+            NodeId nodeId,
+            EnvironmentId environmentId,
+            String description,
+            @Nullable String serializedDownTask,
+            long durationMs,
+            @Nullable String fingerprint) {
         return new ExecutionRecord(
                 RecordIds.newId(),
                 nodeId,
@@ -107,7 +138,8 @@ public record ExecutionRecord(
                 description,
                 serializedDownTask,
                 durationMs,
-                null);
+                null,
+                fingerprint);
     }
 
     /**
@@ -135,6 +167,7 @@ public record ExecutionRecord(
                 description,
                 null, // DOWN executions never carry a serializedDownTask
                 durationMs,
+                null,
                 null);
     }
 
@@ -167,7 +200,8 @@ public record ExecutionRecord(
                 description,
                 null,
                 0L,
-                errorMessage);
+                errorMessage,
+                null);
     }
 
     /**
@@ -195,7 +229,8 @@ public record ExecutionRecord(
                 description,
                 null,
                 0L,
-                reason);
+                reason,
+                null);
     }
 
     /**

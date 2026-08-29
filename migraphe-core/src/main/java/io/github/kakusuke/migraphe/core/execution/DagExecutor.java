@@ -451,7 +451,12 @@ public final class DagExecutor implements Executor {
         }
         String serializedDownTask = taskResult != null ? taskResult.serializedDownTask() : null;
         return ExecutionRecord.upSuccess(
-                node.id(), node.environment().id(), node.name(), serializedDownTask, duration);
+                node.id(),
+                node.environment().id(),
+                node.name(),
+                serializedDownTask,
+                duration,
+                node.fingerprint());
     }
 
     /**

@@ -201,6 +201,53 @@ class JdbcHistoryRepositorySchemaStepsTest {
     }
 
     @Test
+    @DisplayName("fingerprint 列は新規テーブルにも既存テーブルにも作られ、再実行に耐える")
+    void addsFingerprintColumn() throws Exception {
+        JdbcEnvironment fresh = env("steps_fingerprint_fresh");
+        new JdbcHistoryRepository(fresh).initialize();
+
+        assertThat(columnExists(fresh, "FINGERPRINT")).isTrue();
+
+        JdbcEnvironment existing = env("steps_fingerprint_existing");
+        try (Connection conn = existing.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id VARCHAR(64) PRIMARY KEY,
+                        node_id VARCHAR(255) NOT NULL,
+                        target_id VARCHAR(255) NOT NULL,
+                        direction VARCHAR(10) NOT NULL,
+                        status VARCHAR(10) NOT NULL,
+                        executed_at TIMESTAMP NOT NULL,
+                        description TEXT,
+                        serialized_down_task TEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT
+                    )
+                    """);
+            stmt.execute(
+                    "INSERT INTO migraphe_history VALUES ('pre-1', 'node1', 'testdb', 'UP',"
+                            + " 'SUCCESS', CURRENT_TIMESTAMP, 'row from before the column', NULL,"
+                            + " 1, NULL)");
+        }
+
+        var repository = new JdbcHistoryRepository(existing);
+        repository.initialize();
+
+        assertThat(columnExists(existing, "FINGERPRINT")).isTrue();
+        assertThatCode(repository::initialize).doesNotThrowAnyException();
+        try (Connection conn = existing.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT fingerprint FROM migraphe_history WHERE id = 'pre-1'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getString("fingerprint")).isNull();
+        }
+    }
+
+    @Test
     @DisplayName("リネーム済みのテーブルに再実行しても壊れない")
     void renameStepIsIdempotent() throws Exception {
         JdbcEnvironment env = env("steps_rename_idempotent");

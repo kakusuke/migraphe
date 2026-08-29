@@ -275,6 +275,28 @@ class MainTest {
     }
 
     @Test
+    void downWithoutVersionOrAllExitsWithOne(@TempDir Path tempDir) throws IOException {
+        writeNoopProject(tempDir);
+
+        String originalUserDir = System.getProperty("user.dir");
+        System.setProperty("user.dir", tempDir.toString());
+        AtomicInteger exitCode = new AtomicInteger();
+        String stderr;
+        try {
+            stderr =
+                    captureStderr(
+                            () ->
+                                    captureStdout(
+                                            () -> exitCode.set(Main.run(new String[] {"down"}))));
+        } finally {
+            System.setProperty("user.dir", originalUserDir);
+        }
+
+        assertThat(exitCode.get()).isEqualTo(1);
+        assertThat(stderr).isNotEmpty();
+    }
+
+    @Test
     void fullHelpShouldBePrintedOnlyForUnrecognisedCommandWord(@TempDir Path tempDir)
             throws IOException {
         writeNoopProject(tempDir);
