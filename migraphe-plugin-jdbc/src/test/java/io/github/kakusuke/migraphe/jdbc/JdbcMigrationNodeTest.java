@@ -129,6 +129,21 @@ class JdbcMigrationNodeTest {
     }
 
     @Test
+    void aNodeDeclaredOneWayCarriesItsReasonAndHasNoDownTask() {
+        var node =
+                JdbcMigrationNode.builder()
+                        .id("node1")
+                        .name("Drop legacy column")
+                        .environment(env)
+                        .upSql("ALTER TABLE users DROP COLUMN legacy")
+                        .noWayBack("DROP COLUMN discards the data")
+                        .build();
+
+        assertThat(node.noWayBack()).isEqualTo("DROP COLUMN discards the data");
+        assertThat(node.downTask()).isNull();
+    }
+
+    @Test
     void downTaskReturnsNullWhenNoDownSql() {
         var node =
                 JdbcMigrationNode.builder()

@@ -106,6 +106,23 @@ public interface MigrationNode {
      *
      * @return {@code true} if {@link #dependencies()} is empty, {@code false} otherwise
      */
+    /**
+     * Returns why this node cannot be rolled back, or {@code null} if it can be.
+     *
+     * <p>Answers a question {@link #downTask()} alone cannot: a {@code null} down task means either
+     * that the author declared the migration one-way or that they forgot to write the rollback, and
+     * those call for opposite responses. A non-null reason here says it was declared, and is quoted
+     * back to the operator when a rollback has to leave this node standing.
+     *
+     * <p>The default returns {@code null}, so a plugin that does not model the distinction reports
+     * every missing rollback as an omission.
+     *
+     * @return the author's reason, or {@code null} if the node is not declared one-way
+     */
+    default @Nullable String noWayBack() {
+        return null;
+    }
+
     default boolean hasNoDependencies() {
         return dependencies().isEmpty();
     }

@@ -35,6 +35,7 @@ public final class JdbcMigrationNode implements MigrationNode {
     private final Set<NodeId> dependencies;
     private final String upSql;
     private final @Nullable String downSql;
+    private final @Nullable String noWayBack;
     private final boolean autocommit;
 
     private JdbcMigrationNode(Builder builder) {
@@ -46,6 +47,7 @@ public final class JdbcMigrationNode implements MigrationNode {
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upSql = Objects.requireNonNull(builder.upSql, "upSql must not be null");
         this.downSql = builder.downSql;
+        this.noWayBack = builder.noWayBack;
         this.autocommit = builder.autocommit;
 
         if (upSql.isBlank()) {
@@ -111,6 +113,16 @@ public final class JdbcMigrationNode implements MigrationNode {
     }
 
     /**
+     * Returns why this node cannot be rolled back, as declared by {@code no_way_back}.
+     *
+     * @return the author's reason, or {@code null} if the node was not declared one-way
+     */
+    @Override
+    public @Nullable String noWayBack() {
+        return noWayBack;
+    }
+
+    /**
      * Creates the rollback task that applies this node's DOWN SQL, if any.
      *
      * @return a {@link JdbcDownTask} when {@code downSql} was supplied, or {@code null} when the
@@ -152,6 +164,7 @@ public final class JdbcMigrationNode implements MigrationNode {
         private Set<NodeId> dependencies = Set.of();
         private @Nullable String upSql;
         private @Nullable String downSql;
+        private @Nullable String noWayBack;
         private boolean autocommit = false;
 
         /**
@@ -281,6 +294,18 @@ public final class JdbcMigrationNode implements MigrationNode {
          */
         public Builder downSql(@Nullable String sql) {
             this.downSql = sql;
+            return this;
+        }
+
+        /**
+         * Declares that this migration cannot be rolled back, and why.
+         *
+         * @param reason the author's reason, quoted back when a rollback has to leave the node
+         *     standing
+         * @return this builder
+         */
+        public Builder noWayBack(@Nullable String reason) {
+            this.noWayBack = reason;
             return this;
         }
 
