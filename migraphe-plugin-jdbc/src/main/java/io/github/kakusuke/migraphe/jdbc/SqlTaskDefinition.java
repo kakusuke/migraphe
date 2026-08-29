@@ -98,6 +98,7 @@ public interface SqlTaskDefinition extends TaskDefinition<String> {
      *
      * @return an {@link Optional} containing the reason, or empty when the migration is reversible
      */
+    @Override
     @WithName("no_way_back")
     Optional<String> noWayBack();
 }
