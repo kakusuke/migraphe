@@ -7,6 +7,7 @@ import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNode;
@@ -139,6 +140,31 @@ class StatusServiceTest {
             assertThat(status.pendingCount()).isEqualTo(0);
             assertThat(status.totalCount()).isEqualTo(1);
         }
+    }
+
+    @Test
+    @DisplayName("直近の操作が失敗しても、内容の状態は適用した記録から判定する")
+    void upContentStateComesFromTheRecordThatApplied() {
+        // Given
+        graph.addNode(new FingerprintedNode(createNode("a", "Node A"), "abc"));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("a"), testEnv.id(), "Node A", null, 100L, "abc"));
+        historyRepo.record(
+                ExecutionRecord.failure(
+                        NodeId.of("a"),
+                        testEnv.id(),
+                        ExecutionDirection.DOWN,
+                        "Node A",
+                        "constraint violation"));
+
+        statusService = new StatusService(graph, historyRepo);
+
+        // When
+        StatusService.StatusInfo status = statusService.getStatus();
+
+        // Then
+        assertThat(stateFor(status, "a")).isEqualTo(UpContentState.UNCHANGED);
     }
 
     @Test

@@ -33,13 +33,13 @@ class StatusLineFormatterTest {
                 ExecutionRecord.upSuccess(
                         executedNode.id(), testEnv.id(), executedNode.name(), null, 250L);
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(executedNode, true, record)))
+        assertThat(StatusLineFormatter.format(new NodeStatus(executedNode, true, record, record)))
                 .startsWith("[✓] db1/001_create - Create users (250ms, ")
                 .endsWith(")");
 
         MigrationNode pendingNode = createNode("db1/002_index", "Add index");
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(pendingNode, false, null)))
+        assertThat(StatusLineFormatter.format(new NodeStatus(pendingNode, false, null, null)))
                 .isEqualTo("[ ] db1/002_index - Add index");
     }
 
@@ -56,7 +56,10 @@ class StatusLineFormatterTest {
                         node.name(),
                         "constraint violation");
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, rollbackFailed)))
+        ExecutionRecord applied =
+                ExecutionRecord.upSuccess(node.id(), testEnv.id(), node.name(), null, 8L);
+
+        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, rollbackFailed, applied)))
                 .startsWith("[✓] db1/001_create - Create users (rollback failed ")
                 .endsWith(")");
 
@@ -68,7 +71,7 @@ class StatusLineFormatterTest {
                         node.name(),
                         "syntax error");
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, applyFailed)))
+        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, applyFailed, applied)))
                 .startsWith("[✓] db1/001_create - Create users (apply failed ");
     }
 
@@ -76,38 +79,37 @@ class StatusLineFormatterTest {
     @DisplayName("変更あり・不明・読めない はマーカーで区別される")
     void shouldMarkChangedUnknownAndUnreadableContent() {
         MigrationNode changedNode = createNode("db1/002_index", "Add index");
+        ExecutionRecord changedRecord =
+                ExecutionRecord.upSuccess(
+                        changedNode.id(), testEnv.id(), changedNode.name(), null, 5L, "xyz");
         NodeStatus changed =
                 new NodeStatus(
                         new FingerprintedNode(changedNode, "abc"),
                         true,
-                        ExecutionRecord.upSuccess(
-                                changedNode.id(),
-                                testEnv.id(),
-                                changedNode.name(),
-                                null,
-                                5L,
-                                "xyz"));
+                        changedRecord,
+                        changedRecord);
 
         MigrationNode unknownNode = createNode("db1/003_posts", "Create posts");
+        ExecutionRecord unknownRecord =
+                ExecutionRecord.upSuccess(
+                        unknownNode.id(), testEnv.id(), unknownNode.name(), null, 5L);
         NodeStatus unknown =
                 new NodeStatus(
                         new FingerprintedNode(unknownNode, "abc"),
                         true,
-                        ExecutionRecord.upSuccess(
-                                unknownNode.id(), testEnv.id(), unknownNode.name(), null, 5L));
+                        unknownRecord,
+                        unknownRecord);
 
         MigrationNode unreadableNode = createNode("db1/004_tags", "Create tags");
+        ExecutionRecord unreadableRecord =
+                ExecutionRecord.upSuccess(
+                        unreadableNode.id(), testEnv.id(), unreadableNode.name(), null, 5L, "abc");
         NodeStatus unreadable =
                 new NodeStatus(
                         new ThrowingFingerprintNode(unreadableNode),
                         true,
-                        ExecutionRecord.upSuccess(
-                                unreadableNode.id(),
-                                testEnv.id(),
-                                unreadableNode.name(),
-                                null,
-                                5L,
-                                "abc"));
+                        unreadableRecord,
+                        unreadableRecord);
 
         assertThat(StatusLineFormatter.format(changed))
                 .startsWith("[!] db1/002_index - Add index (");
@@ -121,12 +123,10 @@ class StatusLineFormatterTest {
     @DisplayName("fingerprint が一致していれば適用済みマーカーになる")
     void shouldMarkUnchangedContentAsApplied() {
         MigrationNode node = createNode("db1/005_roles", "Create roles");
+        ExecutionRecord record =
+                ExecutionRecord.upSuccess(node.id(), testEnv.id(), node.name(), null, 5L, "abc");
         NodeStatus unchanged =
-                new NodeStatus(
-                        new FingerprintedNode(node, "abc"),
-                        true,
-                        ExecutionRecord.upSuccess(
-                                node.id(), testEnv.id(), node.name(), null, 5L, "abc"));
+                new NodeStatus(new FingerprintedNode(node, "abc"), true, record, record);
 
         assertThat(StatusLineFormatter.format(unchanged))
                 .startsWith("[✓] db1/005_roles - Create roles (");

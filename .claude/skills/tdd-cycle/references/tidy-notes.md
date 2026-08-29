@@ -138,6 +138,13 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   DOWN FAILURE row report the node as never applied while its objects still stood. The two are separate
   queries in each implementation, so a change to one silently desynchronises them — the interface javadoc
   now states the rule, and every implementation is bound by it
+- **`NodeStatus` carries two records because they answer different questions.** `latestRecord` is what
+  last happened; `appliedRecord` is the most recent successful UP, which is what actually put the node in
+  its current state. Everything about the applied state — the fingerprint comparison above all — reads
+  `appliedRecord`; only the display annotation reads `latestRecord`. Collapsing them re-creates the bug
+  where a node whose rollback failed reported `[?]` (the failed row carries no fingerprint) and rendered
+  its apply as having taken 0ms. `StatusService` imposes the order on `allRecords` itself rather than
+  trusting it: the interface declares none, and the two shipped implementations differ
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
