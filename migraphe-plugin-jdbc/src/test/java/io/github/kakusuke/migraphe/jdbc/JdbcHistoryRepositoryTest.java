@@ -142,6 +142,46 @@ class JdbcHistoryRepositoryTest {
     }
 
     @Test
+    void wasExecutedStaysTrueWhenAReapplyFailed() {
+        repository.initialize();
+
+        repository.record(
+                createRecord(
+                        "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS));
+        repository.record(
+                createRecord(
+                        "rec2", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.FAILURE));
+
+        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb"))).isTrue();
+    }
+
+    @Test
+    void wasExecutedStaysFalseWhenAReRollbackFailedAfterASuccessfulOne() {
+        repository.initialize();
+
+        repository.record(
+                createRecord(
+                        "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS));
+        repository.record(
+                createRecord(
+                        "rec2",
+                        "node1",
+                        "testdb",
+                        ExecutionDirection.DOWN,
+                        ExecutionStatus.SUCCESS));
+        repository.record(
+                createRecord(
+                        "rec3",
+                        "node1",
+                        "testdb",
+                        ExecutionDirection.DOWN,
+                        ExecutionStatus.FAILURE));
+
+        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb")))
+                .isFalse();
+    }
+
+    @Test
     void wasExecutedReturnsFalseForFailure() {
         repository.initialize();
 
