@@ -5,6 +5,8 @@ import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
 import io.github.kakusuke.migraphe.core.graph.FormatUtils;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Renders one node's status as the line the {@code status} command prints.
@@ -58,6 +60,34 @@ public final class StatusLineFormatter {
         }
         String operation = record.direction() == ExecutionDirection.DOWN ? "rollback" : "apply";
         return operation + " failed " + FormatUtils.formatDateTime(record.executedAt());
+    }
+
+    /**
+     * Formats the orphan section that follows the graph, or an empty list when there is none.
+     *
+     * <p>Orphans cannot be drawn among the nodes: they are not in the graph, which is exactly what
+     * makes them orphans. They get their own block rather than a marker, so the graph above keeps
+     * meaning what it always meant.
+     *
+     * @param status the aggregate status to read the orphans from
+     * @return the lines to print after the graph, empty when nothing is orphaned
+     */
+    public static List<String> formatOrphans(StatusService.StatusInfo status) {
+        if (status.orphans().isEmpty()) {
+            return List.of();
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add("");
+        lines.add("Applied but no longer defined (" + status.orphans().size() + "):");
+        for (StatusService.OrphanStatus orphan : status.orphans()) {
+            StringBuilder sb = new StringBuilder("  ").append(orphan.nodeId().value());
+            ExecutionRecord record = orphan.appliedRecord();
+            if (record != null) {
+                sb.append(" (").append(FormatUtils.formatDateTime(record.executedAt())).append(")");
+            }
+            lines.add(sb.toString());
+        }
+        return List.copyOf(lines);
     }
 
     private static String markerFor(NodeStatus status) {

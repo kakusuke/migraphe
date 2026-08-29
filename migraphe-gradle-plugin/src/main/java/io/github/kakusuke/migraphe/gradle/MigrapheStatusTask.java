@@ -63,6 +63,10 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                         getLogger().lifecycle(line);
                     }
 
+                    for (String line : StatusLineFormatter.formatOrphans(status)) {
+                        getLogger().lifecycle(line);
+                    }
+
                     getLogger().lifecycle("");
                     getLogger()
                             .lifecycle(

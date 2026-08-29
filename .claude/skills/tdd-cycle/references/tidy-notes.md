@@ -159,6 +159,11 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   legacy-only state.** A new apply is now always either reversible or declared one-way, so a node that
   is applied, has no rollback and has no declaration can only come from history written before the
   rule. Tests for that path cannot reach it through `up` and have to write the history row directly
+- **Orphans get a footer block, never a marker.** They are not in the graph — that is what makes them
+  orphans — so `ExecutionGraphView.renderLines` has no line to hang a marker on. The graph above keeps
+  meaning exactly what it meant. Their environments come from the declared nodes, so a target whose
+  configuration was deleted along with its tasks stays undiscoverable; that is a known limit, not a bug
+  to patch by scanning something else
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

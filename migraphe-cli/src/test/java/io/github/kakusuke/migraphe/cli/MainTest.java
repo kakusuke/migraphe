@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.cli.command.Command;
+import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
@@ -308,6 +309,23 @@ class MainTest {
         String usage = captureStdout(() -> Main.run(new String[0]));
 
         assertThat(usage).contains("Common options (up, down, status, amend, validate, generate):");
+    }
+
+    @Test
+    void statusShouldListWhatIsAppliedButNoLongerDefined(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeIrreversibleProject(tempDir, "status_orphan", "the rows cannot be reconstructed");
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        Files.delete(tempDir.resolve("tasks").resolve("002_b.yaml"));
+        ExecutionContext reloaded = ExecutionContext.load(tempDir, pluginRegistry);
+
+        String stdout = captureStdout(() -> new StatusCommand(reloaded).execute());
+
+        assertThat(stdout).contains("002_b");
     }
 
     @Test
