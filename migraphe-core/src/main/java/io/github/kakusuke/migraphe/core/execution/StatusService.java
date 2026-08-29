@@ -1,11 +1,17 @@
 package io.github.kakusuke.migraphe.core.execution;
 
+import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -40,26 +46,57 @@ public final class StatusService {
      * @return a {@link StatusInfo} holding per-node statuses and aggregate counts
      */
     public StatusInfo getStatus() {
+        Map<EnvironmentId, List<ExecutionRecord>> recordsByEnvironment = new HashMap<>();
         List<NodeStatus> nodeStatuses = new ArrayList<>();
         int executedCount = 0;
         int pendingCount = 0;
 
         for (MigrationNode node : graph.allNodes()) {
-            boolean executed = historyRepository.wasExecuted(node.id(), node.environment().id());
+            EnvironmentId environmentId = node.environment().id();
+            boolean executed = historyRepository.wasExecuted(node.id(), environmentId);
             ExecutionRecord latestRecord = null;
+            ExecutionRecord appliedRecord = null;
 
             if (executed) {
-                latestRecord =
-                        historyRepository.findLatestRecord(node.id(), node.environment().id());
+                List<ExecutionRecord> records =
+                        recordsByEnvironment.computeIfAbsent(
+                                environmentId, StatusService.this::orderedRecords);
+                for (ExecutionRecord record : records) {
+                    if (!record.nodeId().equals(node.id())) {
+                        continue;
+                    }
+                    latestRecord = record;
+                    if (record.direction() == ExecutionDirection.UP
+                            && record.status() == ExecutionStatus.SUCCESS) {
+                        appliedRecord = record;
+                    }
+                }
                 executedCount++;
             } else {
                 pendingCount++;
             }
 
-            nodeStatuses.add(new NodeStatus(node, executed, latestRecord));
+            nodeStatuses.add(new NodeStatus(node, executed, latestRecord, appliedRecord));
         }
 
         return new StatusInfo(nodeStatuses, executedCount, pendingCount);
+    }
+
+    /**
+     * Reads one environment's records oldest first.
+     *
+     * <p>{@link HistoryRepository#allRecords} declares no order, and the shipped implementations
+     * differ — the JDBC one sorts, the in-memory one returns insertion order — so the order is
+     * imposed here rather than assumed. Ties on {@code executedAt} are broken by {@code id}, which
+     * sorts in creation order for records minted since 0.6.0.
+     */
+    private List<ExecutionRecord> orderedRecords(EnvironmentId environmentId) {
+        List<ExecutionRecord> records =
+                new ArrayList<>(historyRepository.allRecords(environmentId));
+        records.sort(
+                Comparator.comparing(ExecutionRecord::executedAt)
+                        .thenComparing(ExecutionRecord::id));
+        return records;
     }
 
     /**
@@ -67,11 +104,18 @@ public final class StatusService {
      *
      * @param node the migration node
      * @param executed {@code true} if the node has been successfully applied (UP)
-     * @param latestRecord the node's most recent execution record, or {@code null} if it has never
-     *     been executed
+     * @param latestRecord the node's most recent execution record whatever its outcome, or {@code
+     *     null} if it has never been executed. This is what last happened, which is not necessarily
+     *     what put the node in its current state
+     * @param appliedRecord the record that applied the node — its most recent successful UP — or
+     *     {@code null} if it is not currently applied. Everything about the applied state is read
+     *     from here, because a later failed record describes an attempt, not the state
      */
     public record NodeStatus(
-            MigrationNode node, boolean executed, @Nullable ExecutionRecord latestRecord) {
+            MigrationNode node,
+            boolean executed,
+            @Nullable ExecutionRecord latestRecord,
+            @Nullable ExecutionRecord appliedRecord) {
 
         /**
          * Classifies the node's current UP content against the content that was applied.
@@ -82,7 +126,7 @@ public final class StatusService {
          * @return the comparison outcome; see {@link UpContentState} for what each value means
          */
         public UpContentState upContentState() {
-            if (latestRecord == null) {
+            if (appliedRecord == null) {
                 return UpContentState.NOT_APPLICABLE;
             }
             String current;
@@ -94,7 +138,7 @@ public final class StatusService {
             if (current == null) {
                 return UpContentState.NOT_APPLICABLE;
             }
-            String applied = latestRecord.fingerprint();
+            String applied = appliedRecord.fingerprint();
             if (applied == null) {
                 return UpContentState.UNKNOWN;
             }
