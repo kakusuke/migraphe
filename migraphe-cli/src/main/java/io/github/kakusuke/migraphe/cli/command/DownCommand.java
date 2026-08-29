@@ -129,12 +129,19 @@ public class DownCommand implements Command {
                 return 1;
             }
 
+            boolean leftFrozen = allMigrations && !blockers.frozen().isEmpty();
+            if (leftFrozen) {
+                reportFrozenRemainder(blockers);
+            }
+
             Set<NodeId> targetNodes =
                     executor.determineRollbackTargets(targetVersion, allMigrations);
 
             if (targetNodes.isEmpty()) {
-                System.out.println("No migrations to rollback.");
-                return 0;
+                if (!leftFrozen) {
+                    System.out.println("No migrations to rollback.");
+                }
+                return leftFrozen ? 1 : 0;
             }
 
             // 5. Build the reverse execution plan and display the graph.
@@ -161,13 +168,31 @@ public class DownCommand implements Command {
             System.out.println();
 
             ExecutionResult result = executor.execute(targetNodes);
-            return result.success() ? 0 : 1;
+            return result.success() && !leftFrozen ? 0 : 1;
 
         } catch (Exception e) {
             System.err.println("Rollback failed: " + e.getMessage());
             e.printStackTrace();
             return 1;
         }
+    }
+
+    /**
+     * Reports what a full rollback had to leave behind.
+     *
+     * <p>{@code --all} cannot mean all while something has no down migration, so the run says which
+     * nodes have none and how many others they hold down, and does not exit zero.
+     */
+    private void reportFrozenRemainder(DagExecutor.RollbackBlockers blockers) {
+        List<String> irreversible =
+                blockers.irreversible().stream().map(NodeId::value).sorted().toList();
+        int held = blockers.frozen().size() - blockers.irreversible().size();
+        System.err.println(
+                "Error: "
+                        + blockers.frozen().size()
+                        + " applied migrations cannot be rolled back. No down migration: "
+                        + String.join(", ", irreversible)
+                        + (held > 0 ? "; plus " + held + " they stand on." : "."));
     }
 
     /** Explains why the requested node cannot be rolled back, naming what is holding it. */

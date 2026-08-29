@@ -313,7 +313,44 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        String jdbcUrl = "jdbc:h2:mem:down_frozen;DB_CLOSE_DELAY=-1";
+        writeIrreversibleProject(tempDir, "down_frozen");
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        String[] args = {"down", "-y", "002_b"};
+        Command down = Objects.requireNonNull(Main.createDownCommand(args, context));
+        AtomicInteger exitCode = new AtomicInteger();
+        String stderr = captureStderr(() -> exitCode.set(down.execute()));
+
+        assertThat(exitCode.get()).isEqualTo(1);
+        assertThat(stderr).contains("002_b");
+    }
+
+    @Test
+    void downAllShouldReportWhatItLeftFrozen(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeIrreversibleProject(tempDir, "down_all_frozen");
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        String[] args = {"down", "-y", "--all"};
+        Command down = Objects.requireNonNull(Main.createDownCommand(args, context));
+        AtomicInteger exitCode = new AtomicInteger();
+        String stderr = captureStderr(() -> captureStdout(() -> exitCode.set(down.execute())));
+
+        assertThat(exitCode.get()).isEqualTo(1);
+        assertThat(stderr).contains("002_b");
+    }
+
+    /**
+     * Writes a project where {@code 002_b} depends on {@code 001_a} and has no {@code down:}, so
+     * neither can be rolled back: 002_b has no way back, and 001_a is what it stands on.
+     */
+    private void writeIrreversibleProject(Path tempDir, String databaseName) throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),
                 """
@@ -329,10 +366,10 @@ class MainTest {
                 type: jdbc
                 driver_class: org.h2.Driver
                 db_label: H2
-                jdbc_url: %s
+                jdbc_url: jdbc:h2:mem:%s;DB_CLOSE_DELAY=-1
                 username: sa
                 """
-                        .formatted(jdbcUrl));
+                        .formatted(databaseName));
         Path tasksDir = Files.createDirectories(tempDir.resolve("tasks"));
         Files.writeString(
                 tasksDir.resolve("001_a.yaml"),
@@ -356,17 +393,6 @@ class MainTest {
                 up: |
                   CREATE TABLE t_b (id INT PRIMARY KEY);
                 """);
-
-        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
-        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
-
-        String[] args = {"down", "-y", "002_b"};
-        Command down = Objects.requireNonNull(Main.createDownCommand(args, context));
-        AtomicInteger exitCode = new AtomicInteger();
-        String stderr = captureStderr(() -> exitCode.set(down.execute()));
-
-        assertThat(exitCode.get()).isEqualTo(1);
-        assertThat(stderr).contains("002_b");
     }
 
     @Test
