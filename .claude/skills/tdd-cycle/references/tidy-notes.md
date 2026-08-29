@@ -145,6 +145,20 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   where a node whose rollback failed reported `[?]` (the failed row carries no fingerprint) and rendered
   its apply as having taken 0ms. `StatusService` imposes the order on `allRecords` itself rather than
   trusting it: the interface declares none, and the two shipped implementations differ
+- **A node that cannot be rolled back freezes what it stands on, never what stands on it.** Removing a
+  node's dependency breaks it; removing something that depends on it does not. So the frozen set is
+  `{no down task}` plus their transitive *dependencies*, and the remainder stays closed under
+  dependents — which is exactly what makes rolling the remainder back in reverse order safe. Reversing
+  that direction, or dropping the exclusion so a partial set runs, re-creates the corruption where
+  `down --all` removed a node's dependencies and left the node itself recorded as applied
+- **`undeclaredIrreversibleNodes` is deliberately outside `MigrationGraph.validate()`.** `validate()`
+  runs on every `ExecutionContext.load`, and a project in this state must still be able to report its
+  status — the same reason a dangling dependency taking `status` down was a defect. What stops is a run
+  that would *apply* something. Moving the check into `validate()` reintroduces that
+- **After `up` refuses an undeclared irreversible task, "the author forgot the rollback" is a
+  legacy-only state.** A new apply is now always either reversible or declared one-way, so a node that
+  is applied, has no rollback and has no declaration can only come from history written before the
+  rule. Tests for that path cannot reach it through `up` and have to write the history row directly
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

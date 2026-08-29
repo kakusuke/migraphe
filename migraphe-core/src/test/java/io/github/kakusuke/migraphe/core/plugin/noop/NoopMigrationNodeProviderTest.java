@@ -84,6 +84,30 @@ class NoopMigrationNodeProviderTest {
     }
 
     @Test
+    void noWayBackShouldReachTheNode() {
+        var config =
+                new SmallRyeConfigBuilder()
+                        .withMapping(NoopTaskDefinition.class)
+                        .withDefaultValue("name", "Drop legacy")
+                        .withDefaultValue("target", "main")
+                        .withDefaultValue("up", "drop the column")
+                        .withDefaultValue("no_way_back", "the data is discarded")
+                        .build();
+        var taskDef = config.getConfigMapping(NoopTaskDefinition.class);
+
+        var node =
+                new NoopMigrationNodeProvider()
+                        .createNode(
+                                NodeId.of("test/node"),
+                                taskDef,
+                                Set.of(),
+                                SimpleEnvironment.create("main"));
+
+        assertThat(node.noWayBack()).isEqualTo("the data is discarded");
+        assertThat(node.downTask()).isNull();
+    }
+
+    @Test
     void downTaskShouldBeNullWhenDownNotDefined() {
         var provider = new NoopMigrationNodeProvider();
         var env = SimpleEnvironment.create("main");

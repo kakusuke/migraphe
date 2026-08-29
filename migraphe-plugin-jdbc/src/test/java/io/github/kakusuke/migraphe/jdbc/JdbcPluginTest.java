@@ -3,9 +3,13 @@ package io.github.kakusuke.migraphe.jdbc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.kakusuke.migraphe.api.graph.MigrationNode;
+import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfoProvider;
+import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.ServiceLoader;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class JdbcPluginTest {
@@ -88,6 +92,30 @@ class JdbcPluginTest {
                 .isPresent()
                 .get()
                 .isInstanceOf(JdbcSchemaInfoProvider.class);
+    }
+
+    @Test
+    void migrationNodeProviderCarriesNoWayBackFromTheDefinition() {
+        SqlTaskDefinition definition =
+                new SmallRyeConfigBuilder()
+                        .withMapping(SqlTaskDefinition.class)
+                        .withDefaultValue("name", "drop_legacy")
+                        .withDefaultValue("target", "db1")
+                        .withDefaultValue("up", "ALTER TABLE users DROP COLUMN legacy")
+                        .withDefaultValue("no_way_back", "DROP COLUMN discards the data")
+                        .build()
+                        .getConfigMapping(SqlTaskDefinition.class);
+
+        JdbcEnvironment env =
+                JdbcEnvironment.create(
+                        "db1", "jdbc:h2:mem:plugin_test", "sa", "", "org.h2.Driver", "H2");
+
+        MigrationNode node =
+                plugin.migrationNodeProvider()
+                        .createNode(NodeId.of("drop_legacy"), definition, Set.of(), env);
+
+        assertThat(node.noWayBack()).isEqualTo("DROP COLUMN discards the data");
+        assertThat(node.downTask()).isNull();
     }
 
     @Test

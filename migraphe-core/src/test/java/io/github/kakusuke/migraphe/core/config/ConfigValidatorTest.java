@@ -67,6 +67,26 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldDetectATaskThatNeitherRollsBackNorSaysWhyNot() throws IOException {
+        // Given: down: も no_way_back: も無いタスク
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("002_drop_legacy.yaml"),
+                """
+                name: Drop legacy column
+                target: test-db
+                up: ALTER TABLE users DROP COLUMN legacy;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("no_way_back"));
+    }
+
+    @Test
     void shouldDetectMissingTaskName() throws IOException {
         // Given: task の name が欠落
         createProjectWithMissingTaskName(tempDir);
@@ -156,6 +176,7 @@ class ConfigValidatorTest {
                 name: Create
                 target: db1
                 up: "Create table"
+                down: "Drop table"
                 """);
 
         ConfigValidator.ValidationOutput result = validator.validate(tempDir);

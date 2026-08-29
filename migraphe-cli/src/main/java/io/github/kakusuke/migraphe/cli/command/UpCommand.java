@@ -114,6 +114,21 @@ public class UpCommand implements Command {
             Executor executor = createExecutor(context, historyRepo, listener);
 
             // 4. Determine the nodes to execute.
+            Set<NodeId> undeclared = context.graph().undeclaredIrreversibleNodes();
+            if (!undeclared.isEmpty()) {
+                System.err.println(
+                        "Error: "
+                                + undeclared.size()
+                                + " task(s) define neither down: nor no_way_back:. Write the"
+                                + " rollback, or state why there is none — once a migration has run"
+                                + " it is too late to decide:");
+                undeclared.stream()
+                        .map(NodeId::value)
+                        .sorted()
+                        .forEach(id -> System.err.println("  " + id));
+                return 1;
+            }
+
             Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
 
             if (targetNodes.isEmpty()) {

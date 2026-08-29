@@ -82,6 +82,30 @@ class DagExecutorRollbackTest {
         }
 
         @Test
+        @DisplayName("落とせないノードと、それが依存するものは対象に入らない")
+        void shouldExcludeWhatCannotBeRolledBackAndWhatItStandsOn() {
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(createNode("a", Set.of()));
+            graph.addNode(createNodeWithoutDown("b", Set.of(NodeId.of("a"))));
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
+            history.record(
+                    ExecutionRecord.upSuccess(NodeId.of("b"), testEnv.id(), "b", null, 100L));
+
+            DagExecutor executor =
+                    new DagExecutor(
+                            graph,
+                            history,
+                            new MockExecutionListener(),
+                            ExecutionDirection.DOWN,
+                            1);
+
+            assertThat(executor.determineRollbackTargets(null, true)).isEmpty();
+        }
+
+        @Test
         @DisplayName("ターゲット指定時、B + B の推移的依存元のうち実行済みのみ返す")
         void shouldReturnTargetAndExecutedTransitiveDependentsWhenTargetVersionSpecified() {
             MigrationGraph graph = MigrationGraph.create();
@@ -384,6 +408,16 @@ class DagExecutorRollbackTest {
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(downTask)
+                .build();
+    }
+
+    private MigrationNode createNodeWithoutDown(String id, Set<NodeId> dependencies) {
+        return SimpleMigrationNode.builder()
+                .id(NodeId.of(id))
+                .name(id)
+                .environment(testEnv)
+                .dependencies(dependencies)
+                .upTask(SimpleTask.of("UP: " + id))
                 .build();
     }
 

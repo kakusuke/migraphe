@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.core.plugin.noop;
 
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithName;
 import java.util.List;
 import java.util.Optional;
 
@@ -60,4 +61,16 @@ public interface NoopTaskDefinition extends TaskDefinition<String> {
      */
     @Override
     Optional<String> down();
+
+    /**
+     * Returns why this migration cannot be rolled back, when the author declared that it cannot.
+     *
+     * <p>Written as {@code no_way_back: <reason>} in place of {@code down:}, separating a
+     * deliberate one-way migration from a rollback nobody has written yet.
+     *
+     * @return an {@link Optional} containing the reason, or empty when the migration is reversible
+     */
+    @Override
+    @WithName("no_way_back")
+    Optional<String> noWayBack();
 }
