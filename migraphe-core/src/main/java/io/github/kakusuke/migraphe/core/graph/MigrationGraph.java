@@ -186,6 +186,29 @@ public final class MigrationGraph implements MigrationGraphView {
      *     an {@linkplain ValidationResult#invalid(List) invalid} result listing each cycle and/or
      *     dangling dependency reference
      */
+    /**
+     * Returns the nodes that neither roll back nor say why they cannot.
+     *
+     * <p>Applying one of these would put something into the database with no recorded way out and
+     * no record of that being a decision — and by then it is too late to ask, because the migration
+     * has run. The definition is the only place the question can still be answered.
+     *
+     * <p>Deliberately not part of {@link #validate()}: that runs on every load, and a project in
+     * this state must still be able to report its status. A run that would apply something is what
+     * stops.
+     *
+     * @return the offending node ids, empty when every node declares one or the other
+     */
+    public Set<NodeId> undeclaredIrreversibleNodes() {
+        Set<NodeId> offenders = new HashSet<>();
+        for (MigrationNode node : nodes.values()) {
+            if (node.downTask() == null && node.noWayBack() == null) {
+                offenders.add(node.id());
+            }
+        }
+        return offenders;
+    }
+
     public ValidationResult validate() {
         List<String> errors = new ArrayList<>();
 

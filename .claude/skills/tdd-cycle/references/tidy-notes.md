@@ -151,6 +151,14 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   dependents — which is exactly what makes rolling the remainder back in reverse order safe. Reversing
   that direction, or dropping the exclusion so a partial set runs, re-creates the corruption where
   `down --all` removed a node's dependencies and left the node itself recorded as applied
+- **`undeclaredIrreversibleNodes` is deliberately outside `MigrationGraph.validate()`.** `validate()`
+  runs on every `ExecutionContext.load`, and a project in this state must still be able to report its
+  status — the same reason a dangling dependency taking `status` down was a defect. What stops is a run
+  that would *apply* something. Moving the check into `validate()` reintroduces that
+- **After `up` refuses an undeclared irreversible task, "the author forgot the rollback" is a
+  legacy-only state.** A new apply is now always either reversible or declared one-way, so a node that
+  is applied, has no rollback and has no declaration can only come from history written before the
+  rule. Tests for that path cannot reach it through `up` and have to write the history row directly
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

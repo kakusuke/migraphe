@@ -172,6 +172,7 @@ class MainTest {
                 name: Create users
                 target: noop-db
                 up: Create the users table
+                down: Drop the users table
                 """);
 
         String[] args = {"up", "--preview", "-y"};
@@ -310,11 +311,28 @@ class MainTest {
     }
 
     @Test
+    void upShouldRefuseATaskThatNeitherRollsBackNorSaysWhyNot(@TempDir Path tempDir)
+            throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeIrreversibleProject(tempDir, "up_undeclared");
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        Command up = Main.createUpCommand(new String[] {"up", "-y"}, context);
+        AtomicInteger exitCode = new AtomicInteger();
+        String stderr = captureStderr(() -> captureStdout(() -> exitCode.set(up.execute())));
+
+        assertThat(exitCode.get()).isEqualTo(1);
+        assertThat(stderr).contains("002_b").contains("no_way_back");
+    }
+
+    @Test
     void downShouldRefuseANodeThatHasNoRollback(@TempDir Path tempDir) throws IOException {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        writeIrreversibleProject(tempDir, "down_frozen");
+        writeIrreversibleProject(tempDir, "down_frozen", "the rows cannot be reconstructed");
 
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
         captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
@@ -333,7 +351,7 @@ class MainTest {
         PluginRegistry pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        writeIrreversibleProject(tempDir, "down_all_frozen");
+        writeIrreversibleProject(tempDir, "down_all_frozen", "the rows cannot be reconstructed");
 
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
         captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
