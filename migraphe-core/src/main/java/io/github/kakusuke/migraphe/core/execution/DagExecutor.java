@@ -18,7 +18,6 @@ import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.history.SynchronizedHistoryRepository;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +26,6 @@ import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -124,10 +122,8 @@ public final class DagExecutor implements Executor {
     /**
      * Determines the set of nodes to execute for an UP run.
      *
-     * <p>When {@code targetId} is supplied, the candidate set is that node plus all of its
-     * transitive dependencies; otherwise every node in the graph is a candidate. The candidate set
-     * is then filtered to nodes that have not yet been successfully applied (per {@link
-     * HistoryRepository#wasExecuted}), so already-applied nodes are excluded.
+     * <p>Delegates to {@link UpService#targetNodes}, which is where the whole apply decision lives
+     * so that every front end asks the same question of it.
      *
      * @param targetId a specific target node to migrate up to, or {@code null} to consider all
      *     nodes
@@ -135,37 +131,14 @@ public final class DagExecutor implements Executor {
      */
     @Override
     public Set<NodeId> determineTargetNodes(@Nullable NodeId targetId) {
-        Set<NodeId> candidates;
-
-        if (targetId != null) {
-            candidates = new HashSet<>(graph.getAllDependencies(targetId));
-            candidates.add(targetId);
-        } else {
-            candidates =
-                    graph.allNodes().stream().map(MigrationNode::id).collect(Collectors.toSet());
-        }
-
-        return candidates.stream()
-                .filter(
-                        id -> {
-                            MigrationNode node = graph.getNode(id).orElse(null);
-                            if (node == null) return false;
-                            return !history.wasExecuted(id, node.environment().id());
-                        })
-                .collect(Collectors.toSet());
+        return new UpService(graph, history).targetNodes(targetId);
     }
 
     /**
      * Determines the set of nodes to roll back for a DOWN run.
      *
-     * <p>If {@code allMigrations} is {@code true}, every currently applied node is selected.
-     * Otherwise, if {@code targetVersion} is supplied, the selection is that node plus all of its
-     * transitive dependents, filtered to nodes that are currently applied (per {@link
-     * HistoryRepository#wasExecuted}). If neither applies, an empty set is returned.
-     *
-     * <p>Either way the frozen nodes are then removed: a node with no down task, and everything it
-     * stands on. Rolling those back is impossible, and rolling back only part of them is what used
-     * to leave the history describing a node as applied while its dependencies were not.
+     * <p>Delegates to {@link DownService#rollbackTargets}, which is where the whole rollback
+     * decision lives so that every front end asks the same question of it.
      *
      * @param targetVersion the node to roll back (together with its dependents), or {@code null} to
      *     defer to {@code allMigrations}
@@ -175,69 +148,8 @@ public final class DagExecutor implements Executor {
      */
     public Set<NodeId> determineRollbackTargets(
             @Nullable NodeId targetVersion, boolean allMigrations) {
-        Set<NodeId> frozen = rollbackBlockers().frozen();
-
-        if (allMigrations) {
-            return graph.allNodes().stream()
-                    .filter(node -> history.wasExecuted(node.id(), node.environment().id()))
-                    .map(MigrationNode::id)
-                    .filter(id -> !frozen.contains(id))
-                    .collect(Collectors.toSet());
-        }
-
-        if (targetVersion != null) {
-            Set<NodeId> targets = new HashSet<>();
-            targets.add(targetVersion);
-            targets.addAll(graph.getAllDependents(targetVersion));
-
-            return targets.stream()
-                    .filter(
-                            id -> {
-                                MigrationNode node = graph.getNode(id).orElse(null);
-                                if (node == null) return false;
-                                return history.wasExecuted(id, node.environment().id());
-                            })
-                    .filter(id -> !frozen.contains(id))
-                    .collect(Collectors.toSet());
-        }
-
-        return Set.of();
+        return new DownService(graph, history).rollbackTargets(targetVersion, allMigrations);
     }
-
-    /**
-     * Returns the applied nodes that cannot be rolled back, together with everything they stand on.
-     *
-     * <p>A node with no down task cannot be removed, so neither can anything it depends on —
-     * removing a dependency would break the node that has to stay. This propagates downwards only:
-     * a node that depends on it can still be removed, because removing it leaves the frozen node
-     * untouched. The remainder is therefore closed under dependents, which is what makes rolling it
-     * back in reverse order safe.
-     *
-     * @return what cannot be rolled back and what that holds down
-     */
-    public RollbackBlockers rollbackBlockers() {
-        Set<NodeId> irreversible = new HashSet<>();
-        Set<NodeId> frozen = new HashSet<>();
-        for (MigrationNode node : graph.allNodes()) {
-            if (node.downTask() != null
-                    || !history.wasExecuted(node.id(), node.environment().id())) {
-                continue;
-            }
-            irreversible.add(node.id());
-            frozen.add(node.id());
-            frozen.addAll(graph.getAllDependencies(node.id()));
-        }
-        return new RollbackBlockers(Set.copyOf(irreversible), Set.copyOf(frozen));
-    }
-
-    /**
-     * What stands in the way of rolling back.
-     *
-     * @param irreversible applied nodes that have no down task
-     * @param frozen {@code irreversible} together with everything those nodes transitively depend
-     *     on — the nodes no rollback may touch while they stand
-     */
-    public record RollbackBlockers(Set<NodeId> irreversible, Set<NodeId> frozen) {}
 
     /**
      * Executes the given target nodes in this executor's direction.

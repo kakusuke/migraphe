@@ -175,6 +175,21 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   sitting in the history as applied. Throwing on it took `status` and `down` down with it, so the
   project could not even be diagnosed. Keep the split: `load` throws only on cycles, `validate()`
   still reports both, and the commands that would *apply* something refuse
+- **`createNode` exists in three near-identical copies** — `JdbcMigrationNodeProvider`,
+  `PostgreSQLMigrationNodeProvider`, `MySQLMigrationNodeProvider` — differing only in the environment
+  type check and its message. Anything added to one and not the others is dropped silently for two of
+  the three shipped plugins, which is how `no_way_back` reached `validate` but not `up`. When adding a
+  field, change all three, and put the test in `MySQLPluginTest`/`PostgreSQLPluginTest` too: a test
+  written only against the provider you just edited proves nothing about the other two. Merging them
+  is not a tidy — the wrong-environment exception type and message are pinned by tests
+- **Never undo a mutation check with `git checkout --` while the work is uncommitted.** The mutation
+  and the change being verified live in the same file, so restoring from HEAD throws away both. Copy
+  the file to the scratchpad first and restore from the copy, or commit before mutating. This has
+  already cost one file of finished work
+- **`--preview` reports what running would report, minus the execution — exit code included.**
+  Everything that refuses a run is decided before anything runs, so a preview that exits zero on a plan
+  the real run would fail is not a rehearsal, and the CI use of `--preview` silently stops working. The
+  only outcome a preview cannot predict is a failure during execution
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

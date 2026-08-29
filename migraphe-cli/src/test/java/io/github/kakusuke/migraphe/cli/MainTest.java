@@ -340,6 +340,35 @@ class MainTest {
     }
 
     @Test
+    void previewShouldReportTheSameOutcomeAsRunningWould(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeIrreversibleProject(tempDir, "down_preview", "the rows cannot be reconstructed");
+        // 003_d は誰にも依存せず巻き戻せるので、凍結は一部にとどまる
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("003_d.yaml"),
+                """
+                name: Create d
+                target: h2-db
+                autocommit: true
+                up: |
+                  CREATE TABLE t_d (id INT PRIMARY KEY);
+                down: |
+                  DROP TABLE IF EXISTS t_d;
+                """);
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        String[] args = {"down", "-y", "--all", "--preview"};
+        Command preview = Objects.requireNonNull(Main.createDownCommand(args, context));
+        AtomicInteger exitCode = new AtomicInteger();
+        captureStderr(() -> captureStdout(() -> exitCode.set(preview.execute())));
+
+        assertThat(exitCode.get()).isEqualTo(1);
+    }
+
+    @Test
     void downShouldRefuseWhileSomethingAppliedIsNoLongerDefined(@TempDir Path tempDir)
             throws IOException, SQLException {
         PluginRegistry pluginRegistry = new PluginRegistry();

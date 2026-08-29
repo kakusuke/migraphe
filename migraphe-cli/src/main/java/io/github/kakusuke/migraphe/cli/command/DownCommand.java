@@ -7,15 +7,17 @@ import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.cli.listener.ConsoleExecutionListener;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
 import io.github.kakusuke.migraphe.core.execution.DagExecutor;
+import io.github.kakusuke.migraphe.core.execution.DownBlocker;
+import io.github.kakusuke.migraphe.core.execution.DownPlanFormatter;
+import io.github.kakusuke.migraphe.core.execution.DownService;
+import io.github.kakusuke.migraphe.core.execution.DownService.DownPlan;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
-import io.github.kakusuke.migraphe.core.execution.StatusService;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
@@ -124,28 +126,22 @@ public class DownCommand implements Command {
                     new DagExecutor(
                             context.graph(), historyRepo, listener, ExecutionDirection.DOWN, 1);
 
-            // 4. Refuse while anything applied is no longer defined.
-            List<StatusService.OrphanStatus> orphans =
-                    new StatusService(context.graph(), historyRepo).getStatus().orphans();
-            if (!orphans.isEmpty()) {
-                reportOrphans(orphans);
+            // 4. Decide what to roll back, and whether anything refuses the run.
+            DownPlan plan =
+                    new DownService(context.graph(), historyRepo)
+                            .plan(targetVersion, allMigrations);
+            DownBlocker blocker = plan.blocker();
+            if (blocker != null) {
+                DownPlanFormatter.format(blocker).forEach(System.err::println);
                 return 1;
             }
 
-            // 5. Determine the nodes to roll back.
-            DagExecutor.RollbackBlockers blockers = executor.rollbackBlockers();
-            if (targetVersion != null && blockers.frozen().contains(targetVersion)) {
-                reportFrozenTarget(context, targetVersion, blockers);
-                return 1;
-            }
-
-            boolean leftFrozen = allMigrations && !blockers.frozen().isEmpty();
+            boolean leftFrozen = plan.leftFrozen();
             if (leftFrozen) {
-                reportFrozenRemainder(context, blockers);
+                DownPlanFormatter.formatFrozen(plan).forEach(System.err::println);
             }
 
-            Set<NodeId> targetNodes =
-                    executor.determineRollbackTargets(targetVersion, allMigrations);
+            Set<NodeId> targetNodes = plan.targetNodes();
 
             if (targetNodes.isEmpty()) {
                 if (!leftFrozen) {
@@ -155,15 +151,17 @@ public class DownCommand implements Command {
             }
 
             // 5. Build the reverse execution plan and display the graph.
-            ExecutionPlan plan =
+            ExecutionPlan executionPlan =
                     TopologicalSort.createReverseExecutionPlanFor(context.graph(), targetNodes);
-            displayRollbackPlan(context, plan, historyRepo);
+            displayRollbackPlan(context, executionPlan, historyRepo);
 
-            // 6. Stop here in dry-run mode.
+            // 6. Stop here in dry-run mode. A preview reports what running would report, minus
+            // the execution: everything that refuses a rollback is decided before anything runs,
+            // so a preview that exits zero on a plan the real run would fail is not a rehearsal.
             if (dryRun) {
                 System.out.println();
                 System.out.println("No changes made (dry run).");
-                return 0;
+                return leftFrozen ? 1 : 0;
             }
 
             // 7. Confirmation prompt (skipped with -y).
@@ -185,89 +183,6 @@ public class DownCommand implements Command {
             e.printStackTrace();
             return 1;
         }
-    }
-
-    /**
-     * Refuses to roll anything back while the history holds nodes the definitions no longer
-     * declare.
-     *
-     * <p>An orphan may well stand on something this rollback would remove, and what it stands on is
-     * not recorded — its dependencies lived in a task file that is gone. Rolling back around it
-     * would remove that ground silently, which is the failure this command exists to stop making.
-     */
-    private void reportOrphans(List<StatusService.OrphanStatus> orphans) {
-        System.err.println(
-                "Error: "
-                        + orphans.size()
-                        + " applied migration(s) are no longer defined. What they stand on is not"
-                        + " recorded, so rolling anything back could remove it. Nothing was rolled"
-                        + " back:");
-        orphans.stream()
-                .map(orphan -> orphan.nodeId().value())
-                .sorted()
-                .forEach(id -> System.err.println("  " + id));
-    }
-
-    /**
-     * Reports what a full rollback had to leave behind.
-     *
-     * <p>{@code --all} cannot mean all while something has no down migration, so the run says which
-     * nodes have none and how many others they hold down, and does not exit zero.
-     */
-    private void reportFrozenRemainder(
-            ExecutionContext context, DagExecutor.RollbackBlockers blockers) {
-        List<NodeId> irreversible =
-                blockers.irreversible().stream()
-                        .sorted(Comparator.comparing(NodeId::value))
-                        .toList();
-        int held = blockers.frozen().size() - blockers.irreversible().size();
-        System.err.println(
-                "Error: "
-                        + blockers.frozen().size()
-                        + " applied migrations cannot be rolled back"
-                        + (held > 0 ? " (" + held + " of them held down by the rest):" : ":"));
-        for (NodeId id : irreversible) {
-            System.err.println("  " + id.value() + " — " + why(context, id));
-        }
-    }
-
-    /** Explains why the requested node cannot be rolled back, naming what is holding it. */
-    private void reportFrozenTarget(
-            ExecutionContext context, NodeId target, DagExecutor.RollbackBlockers blockers) {
-        if (blockers.irreversible().contains(target)) {
-            System.err.println(
-                    "Error: "
-                            + target.value()
-                            + " cannot be rolled back — "
-                            + why(context, target));
-            return;
-        }
-        List<String> holders =
-                blockers.irreversible().stream()
-                        .filter(id -> context.graph().getAllDependencies(id).contains(target))
-                        .map(NodeId::value)
-                        .sorted()
-                        .toList();
-        System.err.println(
-                "Error: "
-                        + target.value()
-                        + " cannot be rolled back while these are applied, because they have no"
-                        + " down migration and stand on it: "
-                        + String.join(", ", holders));
-    }
-
-    /**
-     * Says why a node has no rollback, in the author's words when they left any.
-     *
-     * <p>A declared reason and a forgotten {@code down:} look identical from the outside, and the
-     * operator's next move differs: respect the decision, or go write the rollback.
-     */
-    private static String why(ExecutionContext context, NodeId nodeId) {
-        String declared =
-                context.graph().getNode(nodeId).map(MigrationNode::noWayBack).orElse(null);
-        return declared != null
-                ? "no way back: " + declared
-                : "it has no down migration, and none was declared";
     }
 
     /** Renders the rollback plan as a reversed ASCII graph with per-node status markers. */

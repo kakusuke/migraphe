@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
@@ -20,6 +21,32 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class MySQLPluginTest {
+
+    @Test
+    void migrationNodeProviderCarriesNoWayBackFromTheDefinition() {
+        SqlTaskDefinition definition =
+                new SmallRyeConfigBuilder()
+                        .withMapping(SqlTaskDefinition.class)
+                        .withDefaultValue("name", "drop_legacy")
+                        .withDefaultValue("target", "db1")
+                        .withDefaultValue("up", "ALTER TABLE users DROP COLUMN legacy")
+                        .withDefaultValue("no_way_back", "DROP COLUMN discards the data")
+                        .build()
+                        .getConfigMapping(SqlTaskDefinition.class);
+
+        MigrationNode node =
+                new MySQLPlugin()
+                        .migrationNodeProvider()
+                        .createNode(
+                                NodeId.of("drop_legacy"),
+                                definition,
+                                Set.of(),
+                                MySQLEnvironment.create(
+                                        "db1", "jdbc:mysql://localhost:3306/t", "u", "p"));
+
+        assertThat(node.noWayBack()).isEqualTo("DROP COLUMN discards the data");
+        assertThat(node.downTask()).isNull();
+    }
 
     @Test
     @SuppressWarnings("rawtypes")
