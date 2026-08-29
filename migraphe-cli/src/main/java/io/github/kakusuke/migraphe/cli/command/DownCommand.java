@@ -14,6 +14,7 @@ import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Scanner;
@@ -131,7 +132,7 @@ public class DownCommand implements Command {
 
             boolean leftFrozen = allMigrations && !blockers.frozen().isEmpty();
             if (leftFrozen) {
-                reportFrozenRemainder(blockers);
+                reportFrozenRemainder(context, blockers);
             }
 
             Set<NodeId> targetNodes =
@@ -183,16 +184,21 @@ public class DownCommand implements Command {
      * <p>{@code --all} cannot mean all while something has no down migration, so the run says which
      * nodes have none and how many others they hold down, and does not exit zero.
      */
-    private void reportFrozenRemainder(DagExecutor.RollbackBlockers blockers) {
-        List<String> irreversible =
-                blockers.irreversible().stream().map(NodeId::value).sorted().toList();
+    private void reportFrozenRemainder(
+            ExecutionContext context, DagExecutor.RollbackBlockers blockers) {
+        List<NodeId> irreversible =
+                blockers.irreversible().stream()
+                        .sorted(Comparator.comparing(NodeId::value))
+                        .toList();
         int held = blockers.frozen().size() - blockers.irreversible().size();
         System.err.println(
                 "Error: "
                         + blockers.frozen().size()
-                        + " applied migrations cannot be rolled back. No down migration: "
-                        + String.join(", ", irreversible)
-                        + (held > 0 ? "; plus " + held + " they stand on." : "."));
+                        + " applied migrations cannot be rolled back"
+                        + (held > 0 ? " (" + held + " of them held down by the rest):" : ":"));
+        for (NodeId id : irreversible) {
+            System.err.println("  " + id.value() + " — " + why(context, id));
+        }
     }
 
     /** Explains why the requested node cannot be rolled back, naming what is holding it. */
@@ -202,8 +208,8 @@ public class DownCommand implements Command {
             System.err.println(
                     "Error: "
                             + target.value()
-                            + " has no down migration, so it cannot be rolled"
-                            + " back.");
+                            + " cannot be rolled back — "
+                            + why(context, target));
             return;
         }
         List<String> holders =
@@ -218,6 +224,20 @@ public class DownCommand implements Command {
                         + " cannot be rolled back while these are applied, because they have no"
                         + " down migration and stand on it: "
                         + String.join(", ", holders));
+    }
+
+    /**
+     * Says why a node has no rollback, in the author's words when they left any.
+     *
+     * <p>A declared reason and a forgotten {@code down:} look identical from the outside, and the
+     * operator's next move differs: respect the decision, or go write the rollback.
+     */
+    private static String why(ExecutionContext context, NodeId nodeId) {
+        String declared =
+                context.graph().getNode(nodeId).map(MigrationNode::noWayBack).orElse(null);
+        return declared != null
+                ? "no way back: " + declared
+                : "it has no down migration, and none was declared";
     }
 
     /** Renders the rollback plan as a reversed ASCII graph with per-node status markers. */

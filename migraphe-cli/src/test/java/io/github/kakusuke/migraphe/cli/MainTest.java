@@ -26,6 +26,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -351,6 +352,11 @@ class MainTest {
      * neither can be rolled back: 002_b has no way back, and 001_a is what it stands on.
      */
     private void writeIrreversibleProject(Path tempDir, String databaseName) throws IOException {
+        writeIrreversibleProject(tempDir, databaseName, null);
+    }
+
+    private void writeIrreversibleProject(
+            Path tempDir, String databaseName, @Nullable String noWayBack) throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),
                 """
@@ -392,7 +398,26 @@ class MainTest {
                   - 001_a
                 up: |
                   CREATE TABLE t_b (id INT PRIMARY KEY);
-                """);
+                """
+                        + (noWayBack == null ? "" : "no_way_back: " + noWayBack + "\n"));
+    }
+
+    @Test
+    void downShouldQuoteTheDeclaredReasonForANodeWithNoWayBack(@TempDir Path tempDir)
+            throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeIrreversibleProject(tempDir, "down_declared", "DROP COLUMN discards the data");
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        String[] args = {"down", "-y", "002_b"};
+        Command down = Objects.requireNonNull(Main.createDownCommand(args, context));
+        String stderr = captureStderr(down::execute);
+
+        assertThat(stderr).contains("DROP COLUMN discards the data");
     }
 
     @Test
