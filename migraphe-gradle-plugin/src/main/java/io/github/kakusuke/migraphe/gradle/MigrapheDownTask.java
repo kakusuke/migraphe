@@ -5,6 +5,10 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.core.execution.DagExecutor;
+import io.github.kakusuke.migraphe.core.execution.DownBlocker;
+import io.github.kakusuke.migraphe.core.execution.DownPlanFormatter;
+import io.github.kakusuke.migraphe.core.execution.DownService;
+import io.github.kakusuke.migraphe.core.execution.DownService.DownPlan;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
@@ -25,12 +29,17 @@ import org.gradle.work.DisableCachingByDefault;
  *
  * <p>Registered as {@code migrapheDown} by {@link MigrapheGradlePlugin}, the task rolls back
  * previously executed migrations, either {@linkplain #getAll() all of them} or down to a given
- * {@linkplain #getTarget() target node}. It prints the rollback plan and — unless running in
- * {@linkplain #getDryRun() dry-run} mode — executes it via a {@link DagExecutor} in the {@link
- * ExecutionDirection#DOWN} direction. Rollback always runs with a parallelism of 1.
+ * {@linkplain #getTarget() target node}. It asks {@link DownService} what rolling back would do,
+ * prints the plan and — unless running in {@linkplain #getDryRun() dry-run} mode — executes it via
+ * a {@link DagExecutor} in the {@link ExecutionDirection#DOWN} direction. Rollback always runs with
+ * a parallelism of 1.
+ *
+ * <p>Every check that can refuse a run lives in {@code DownService}, so the CLI and this task
+ * refuse the same things in the same words.
  *
  * <p>The task fails the build with a {@link GradleException} when neither {@code --all} nor {@code
- * --target} is given, when the target node is unknown, or when any rollback fails.
+ * --target} is given, when the target node is unknown, when something refuses the run, when a
+ * rollback had to leave applied migrations behind, or when any rollback fails.
  */
 @DisableCachingByDefault(
         because = "Migraphe tasks have side effects and their output cannot be cached")
@@ -101,12 +110,13 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
     /**
      * Task action that executes the rollback migrations.
      *
-     * <p>Loads the execution context, determines the rollback targets (all, or down to the target),
-     * prints the plan, and — unless in dry-run mode — runs the rollback. Initializes the history
+     * <p>Loads the execution context, asks {@link DownService} what rolling back would do, prints
+     * the plan, and — unless in dry-run mode — runs the rollback. Initializes the history
      * repository before execution.
      *
      * @throws GradleException if neither {@code --all} nor {@code --target} is specified, if the
-     *     target version is not found, or if any rollback fails
+     *     target version is not found, if something refuses the run, if applied migrations had to
+     *     be left behind, or if any rollback fails
      */
     @TaskAction
     public void down() {
@@ -145,18 +155,37 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                                     ExecutionDirection.DOWN,
                                     1);
 
-                    Set<NodeId> targetNodes =
-                            executor.determineRollbackTargets(targetVersion, allMigrations);
+                    DownPlan plan =
+                            new DownService(context.graph(), historyRepo)
+                                    .plan(targetVersion, allMigrations);
+                    DownBlocker blocker = plan.blocker();
+                    if (blocker != null) {
+                        throw new GradleException(
+                                String.join(
+                                        System.lineSeparator(), DownPlanFormatter.format(blocker)));
+                    }
+
+                    boolean leftFrozen = plan.leftFrozen();
+                    if (leftFrozen) {
+                        for (String line : DownPlanFormatter.formatFrozen(plan)) {
+                            getLogger().error(line);
+                        }
+                    }
+
+                    Set<NodeId> targetNodes = plan.targetNodes();
 
                     if (targetNodes.isEmpty()) {
+                        if (leftFrozen) {
+                            throw new GradleException(incompleteMessage(plan));
+                        }
                         getLogger().lifecycle("No migrations to rollback.");
                         return;
                     }
 
-                    ExecutionPlan plan =
+                    ExecutionPlan executionPlan =
                             TopologicalSort.createReverseExecutionPlanFor(
                                     context.graph(), targetNodes);
-                    displayRollbackPlan(context, plan, historyRepo, dryRun);
+                    displayRollbackPlan(context, executionPlan, historyRepo, dryRun);
 
                     if (dryRun) {
                         getLogger().lifecycle("");
@@ -172,12 +201,31 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                     if (!result.success()) {
                         throw new GradleException("Rollback failed.");
                     }
+                    if (leftFrozen) {
+                        throw new GradleException(incompleteMessage(plan));
+                    }
                 });
     }
 
     /** Creates the task and marks it as never up to date, since it has side effects. */
     public MigrapheDownTask() {
         getOutputs().upToDateWhen(task -> false);
+    }
+
+    /**
+     * Says the build failed because the rollback had to leave applied migrations behind.
+     *
+     * <p>Which nodes those are, and why, has already been reported by {@link
+     * DownPlanFormatter#formatFrozen}; this only carries the failure, the way the CLI carries it in
+     * an exit code.
+     */
+    private static String incompleteMessage(DownPlan plan) {
+        int count = plan.frozenAppliedCount();
+        return "Rollback incomplete: "
+                + count
+                + " applied migration"
+                + (count == 1 ? "" : "s")
+                + " could not be rolled back.";
     }
 
     private void displayRollbackPlan(

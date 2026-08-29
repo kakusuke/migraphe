@@ -182,6 +182,10 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   field, change all three, and put the test in `MySQLPluginTest`/`PostgreSQLPluginTest` too: a test
   written only against the provider you just edited proves nothing about the other two. Merging them
   is not a tidy — the wrong-environment exception type and message are pinned by tests
+- **Never undo a mutation check with `git checkout --` while the work is uncommitted.** The mutation
+  and the change being verified live in the same file, so restoring from HEAD throws away both. Copy
+  the file to the scratchpad first and restore from the copy, or commit before mutating. This has
+  already cost one file of finished work
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

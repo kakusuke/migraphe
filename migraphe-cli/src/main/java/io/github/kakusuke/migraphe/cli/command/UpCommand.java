@@ -11,6 +11,10 @@ import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.Executor;
+import io.github.kakusuke.migraphe.core.execution.UpBlocker;
+import io.github.kakusuke.migraphe.core.execution.UpPlanFormatter;
+import io.github.kakusuke.migraphe.core.execution.UpService;
+import io.github.kakusuke.migraphe.core.execution.UpService.UpPlan;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
@@ -113,42 +117,15 @@ public class UpCommand implements Command {
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
             Executor executor = createExecutor(context, historyRepo, listener);
 
-            // 4. Determine the nodes to execute.
-            var unresolved = context.graph().unresolvedDependencies();
-            if (!unresolved.isEmpty()) {
-                System.err.println(
-                        "Error: "
-                                + unresolved.size()
-                                + " task(s) depend on migrations that are not defined. Applying"
-                                + " them would build on ground nothing describes:");
-                unresolved.forEach(
-                        (nodeId, missing) ->
-                                missing.forEach(
-                                        dep ->
-                                                System.err.println(
-                                                        "  "
-                                                                + nodeId.value()
-                                                                + " → "
-                                                                + dep.value())));
+            // 4. Decide what to execute, and whether anything refuses the run.
+            UpPlan plan = new UpService(context.graph(), historyRepo).plan(targetId);
+            UpBlocker blocker = plan.blocker();
+            if (blocker != null) {
+                UpPlanFormatter.format(blocker).forEach(System.err::println);
                 return 1;
             }
 
-            Set<NodeId> undeclared = context.graph().undeclaredIrreversibleNodes();
-            if (!undeclared.isEmpty()) {
-                System.err.println(
-                        "Error: "
-                                + undeclared.size()
-                                + " task(s) define neither down: nor no_way_back:. Write the"
-                                + " rollback, or state why there is none — once a migration has run"
-                                + " it is too late to decide:");
-                undeclared.stream()
-                        .map(NodeId::value)
-                        .sorted()
-                        .forEach(id -> System.err.println("  " + id));
-                return 1;
-            }
-
-            Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
+            Set<NodeId> targetNodes = plan.targetNodes();
 
             if (targetNodes.isEmpty()) {
                 System.out.println("No migrations to execute. All migrations are up to date.");
@@ -156,9 +133,9 @@ public class UpCommand implements Command {
             }
 
             // 5. Build the ExecutionPlan and display the graph.
-            ExecutionPlan plan =
+            ExecutionPlan executionPlan =
                     TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
-            displayMigrationGraph(context, plan, historyRepo);
+            displayMigrationGraph(context, executionPlan, historyRepo);
 
             // 6. Stop here in dry-run mode.
             if (dryRun) {
