@@ -312,6 +312,34 @@ class MainTest {
     }
 
     @Test
+    void aMissingDependencyStopsApplyingButNotDiagnosing(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeReversiblePair(tempDir, "jdbc:h2:mem:dangling;DB_CLOSE_DELAY=-1");
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        captureStdout(() -> Main.createUpCommand(new String[] {"up", "-y"}, context).execute());
+
+        // 002_b が依存している 001_a のファイルを消す
+        Files.delete(tempDir.resolve("tasks").resolve("001_a.yaml"));
+        ExecutionContext reloaded = ExecutionContext.load(tempDir, pluginRegistry);
+
+        AtomicInteger statusExit = new AtomicInteger();
+        String statusOut =
+                captureStdout(() -> statusExit.set(new StatusCommand(reloaded).execute()));
+
+        assertThat(statusExit.get()).isZero();
+        assertThat(statusOut).contains("001_a");
+
+        Command up = Main.createUpCommand(new String[] {"up", "-y"}, reloaded);
+        AtomicInteger upExit = new AtomicInteger();
+        String upErr = captureStderr(() -> captureStdout(() -> upExit.set(up.execute())));
+
+        assertThat(upExit.get()).isEqualTo(1);
+        assertThat(upErr).contains("001_a");
+    }
+
+    @Test
     void downShouldRefuseWhileSomethingAppliedIsNoLongerDefined(@TempDir Path tempDir)
             throws IOException, SQLException {
         PluginRegistry pluginRegistry = new PluginRegistry();

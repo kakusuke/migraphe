@@ -212,23 +212,49 @@ public final class MigrationGraph implements MigrationGraphView {
     public ValidationResult validate() {
         List<String> errors = new ArrayList<>();
 
-        // cycle check
         if (hasCycle()) {
             errors.add("Graph contains a cycle (circular dependency)");
         }
 
-        // Ensure every dependency target exists. node.dependencies() is consulted directly (rather
-        // than the adjacency list) because fromNodesUp/Down may narrow the adjacency list to the
-        // supplied node subset, so the node itself is the source of truth.
-        for (MigrationNode node : nodes.values()) {
-            for (NodeId depId : node.dependencies()) {
-                if (!nodes.containsKey(depId)) {
-                    errors.add("Node " + node.id() + " depends on non-existent node: " + depId);
-                }
+        for (Map.Entry<NodeId, Set<NodeId>> entry : unresolvedDependencies().entrySet()) {
+            for (NodeId depId : entry.getValue()) {
+                errors.add("Node " + entry.getKey() + " depends on non-existent node: " + depId);
             }
         }
 
         return errors.isEmpty() ? ValidationResult.valid() : ValidationResult.invalid(errors);
+    }
+
+    /**
+     * Returns the declared dependencies that name no node in this graph.
+     *
+     * <p>A cycle is a defect in the graph: no order satisfies it, so nothing can run. An unresolved
+     * dependency is only incompleteness — the description points outside itself, which is what
+     * deleting a task file leaves behind, and the node it names may well be sitting in the history
+     * as applied. So this is reported rather than fatal: a project in this state must still be able
+     * to say what happened to it. What stops is applying something whose ground is not described.
+     *
+     * <p>{@code node.dependencies()} is consulted directly rather than the adjacency list, because
+     * {@link #fromNodesUp}/{@link #fromNodesDown} narrow the adjacency to the supplied subset — the
+     * node itself is the source of truth for what it declared.
+     *
+     * @return each node with unresolved dependencies mapped to the ids it names, empty when every
+     *     declared dependency resolves
+     */
+    public Map<NodeId, Set<NodeId>> unresolvedDependencies() {
+        Map<NodeId, Set<NodeId>> unresolved = new LinkedHashMap<>();
+        for (MigrationNode node : nodes.values()) {
+            Set<NodeId> missing = new LinkedHashSet<>();
+            for (NodeId depId : node.dependencies()) {
+                if (!nodes.containsKey(depId)) {
+                    missing.add(depId);
+                }
+            }
+            if (!missing.isEmpty()) {
+                unresolved.put(node.id(), missing);
+            }
+        }
+        return unresolved;
     }
 
     /** {@inheritDoc} */

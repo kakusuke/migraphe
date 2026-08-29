@@ -114,6 +114,25 @@ public class UpCommand implements Command {
             Executor executor = createExecutor(context, historyRepo, listener);
 
             // 4. Determine the nodes to execute.
+            var unresolved = context.graph().unresolvedDependencies();
+            if (!unresolved.isEmpty()) {
+                System.err.println(
+                        "Error: "
+                                + unresolved.size()
+                                + " task(s) depend on migrations that are not defined. Applying"
+                                + " them would build on ground nothing describes:");
+                unresolved.forEach(
+                        (nodeId, missing) ->
+                                missing.forEach(
+                                        dep ->
+                                                System.err.println(
+                                                        "  "
+                                                                + nodeId.value()
+                                                                + " → "
+                                                                + dep.value())));
+                return 1;
+            }
+
             Set<NodeId> undeclared = context.graph().undeclaredIrreversibleNodes();
             if (!undeclared.isEmpty()) {
                 System.err.println(

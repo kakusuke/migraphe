@@ -169,6 +169,12 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   lived in a file that is gone. That is why `down` refuses outright while any orphan exists rather
   than rolling back around them. Once applied edges are recorded, the closure can include orphans and
   this can become a narrower refusal; until then, widening it is guessing
+- **A cycle is fatal at load; an unresolved dependency is not.** No order satisfies a cycle, so nothing
+  can be built from that graph. An unresolved dependency is incompleteness — the description points
+  outside itself, which is exactly what deleting a task file leaves, and the node it names is often
+  sitting in the history as applied. Throwing on it took `status` and `down` down with it, so the
+  project could not even be diagnosed. Keep the split: `load` throws only on cycles, `validate()`
+  still reports both, and the commands that would *apply* something refuse
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 
