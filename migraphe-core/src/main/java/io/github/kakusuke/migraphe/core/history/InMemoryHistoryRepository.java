@@ -25,9 +25,9 @@ import org.jspecify.annotations.Nullable;
  * <p>This class is not itself thread-safe; concurrent callers should wrap it in a {@link
  * SynchronizedHistoryRepository}.
  *
- * <p>"Applied" semantics: a node is considered applied only when its most recent record for the
- * environment is an {@link ExecutionDirection#UP} record with status {@link
- * ExecutionStatus#SUCCESS}.
+ * <p>"Applied" semantics: a node is considered applied when its most recent record with status
+ * {@link ExecutionStatus#SUCCESS} is an {@link ExecutionDirection#UP}. Records that failed or were
+ * skipped never change the applied state, so a rollback that failed leaves the node applied.
  */
 public final class InMemoryHistoryRepository
         implements HistoryRepository, HistoryFingerprintUpdater {
@@ -83,14 +83,12 @@ public final class InMemoryHistoryRepository
         Objects.requireNonNull(nodeId, "nodeId must not be null");
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
-        // Take the latest record; treat the node as applied only if it is UP and SUCCESS.
+        // The latest successful record decides; non-SUCCESS records change nothing.
         return getRecordsForEnvironment(environmentId).stream()
                 .filter(r -> r.nodeId().equals(nodeId))
+                .filter(r -> r.status() == ExecutionStatus.SUCCESS)
                 .max(Comparator.comparing(ExecutionRecord::executedAt))
-                .map(
-                        r ->
-                                r.direction() == ExecutionDirection.UP
-                                        && r.status() == ExecutionStatus.SUCCESS)
+                .map(r -> r.direction() == ExecutionDirection.UP)
                 .orElse(false);
     }
 
@@ -98,9 +96,12 @@ public final class InMemoryHistoryRepository
     public List<NodeId> executedNodes(EnvironmentId environmentId) {
         Objects.requireNonNull(environmentId, "environmentId must not be null");
 
-        // Return only nodes whose latest record is UP and SUCCESS.
+        // Return only nodes whose latest successful record is an UP.
         Map<NodeId, ExecutionRecord> latestByNode = new HashMap<>();
         for (ExecutionRecord r : getRecordsForEnvironment(environmentId)) {
+            if (r.status() != ExecutionStatus.SUCCESS) {
+                continue;
+            }
             latestByNode.merge(
                     r.nodeId(),
                     r,
@@ -111,10 +112,7 @@ public final class InMemoryHistoryRepository
         }
 
         return latestByNode.values().stream()
-                .filter(
-                        r ->
-                                r.direction() == ExecutionDirection.UP
-                                        && r.status() == ExecutionStatus.SUCCESS)
+                .filter(r -> r.direction() == ExecutionDirection.UP)
                 .map(ExecutionRecord::nodeId)
                 .collect(Collectors.toList());
     }
