@@ -7,7 +7,6 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
-import io.github.kakusuke.migraphe.core.common.ValidationResult;
 import io.github.kakusuke.migraphe.core.config.ConfigLoader;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.factory.EnvironmentFactory;
@@ -169,11 +168,12 @@ public record ExecutionContext(
         List<MigrationNode> sortedNodes = sortNodesByDependencies(nodes);
         MigrationGraph graph = MigrationGraph.fromNodesUp(sortedNodes);
 
-        // 6. Validate graph integrity (cycles / missing dependencies).
-        ValidationResult validation = graph.validate();
-        if (!validation.isValid()) {
+        // 6. A cycle means no order exists, so nothing can be built from this. An unresolved
+        // dependency is only incompleteness, and a project in that state must still be able to
+        // report what happened to it — the commands that would apply something refuse instead.
+        if (graph.hasCycle()) {
             throw new IllegalStateException(
-                    "Migration graph is invalid: " + String.join("; ", validation.errors()));
+                    "Migration graph is invalid: Graph contains a cycle (circular dependency)");
         }
 
         return new ExecutionContext(
