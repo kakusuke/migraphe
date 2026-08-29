@@ -7,6 +7,7 @@ import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
@@ -40,6 +41,35 @@ class StatusLineFormatterTest {
 
         assertThat(StatusLineFormatter.format(new NodeStatus(pendingNode, false, null)))
                 .isEqualTo("[ ] db1/002_index - Add index");
+    }
+
+    @Test
+    @DisplayName("直近の操作が失敗したノードは、その失敗を注記に出す")
+    void shouldAnnotateAFailedLastOperation() {
+        MigrationNode node = createNode("db1/001_create", "Create users");
+
+        ExecutionRecord rollbackFailed =
+                ExecutionRecord.failure(
+                        node.id(),
+                        testEnv.id(),
+                        ExecutionDirection.DOWN,
+                        node.name(),
+                        "constraint violation");
+
+        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, rollbackFailed)))
+                .startsWith("[✓] db1/001_create - Create users (rollback failed ")
+                .endsWith(")");
+
+        ExecutionRecord applyFailed =
+                ExecutionRecord.failure(
+                        node.id(),
+                        testEnv.id(),
+                        ExecutionDirection.UP,
+                        node.name(),
+                        "syntax error");
+
+        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, applyFailed)))
+                .startsWith("[✓] db1/001_create - Create users (apply failed ");
     }
 
     @Test
