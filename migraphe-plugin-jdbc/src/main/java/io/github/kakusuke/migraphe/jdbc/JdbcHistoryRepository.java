@@ -279,8 +279,8 @@ public final class JdbcHistoryRepository implements HistoryRepository, HistoryFi
 
         String sql =
                 """
-                SELECT direction, status FROM migraphe_history
-                WHERE node_id = ? AND target_id = ?
+                SELECT direction FROM migraphe_history
+                WHERE node_id = ? AND target_id = ? AND status = 'SUCCESS'
                 ORDER BY executed_at DESC, id DESC
                 LIMIT 1
                 """;
@@ -293,9 +293,7 @@ public final class JdbcHistoryRepository implements HistoryRepository, HistoryFi
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    String direction = rs.getString("direction");
-                    String status = rs.getString("status");
-                    return "UP".equals(direction) && "SUCCESS".equals(status);
+                    return "UP".equals(rs.getString("direction"));
                 }
                 return false;
             }
@@ -332,6 +330,7 @@ public final class JdbcHistoryRepository implements HistoryRepository, HistoryFi
                   AND h.id = (
                       SELECT h2.id FROM migraphe_history h2
                       WHERE h2.target_id = h.target_id AND h2.node_id = h.node_id
+                        AND h2.status = 'SUCCESS'
                       ORDER BY h2.executed_at DESC, h2.id DESC
                       LIMIT 1
                   )

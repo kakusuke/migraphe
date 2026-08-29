@@ -105,6 +105,43 @@ class JdbcHistoryRepositoryTest {
     }
 
     @Test
+    void wasExecutedReturnsTrueWhenTheRollbackFailed() {
+        repository.initialize();
+
+        repository.record(
+                createRecord(
+                        "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS));
+        repository.record(
+                createRecord(
+                        "rec2",
+                        "node1",
+                        "testdb",
+                        ExecutionDirection.DOWN,
+                        ExecutionStatus.FAILURE));
+
+        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb"))).isTrue();
+    }
+
+    @Test
+    void executedNodesIncludesANodeWhoseRollbackFailed() {
+        repository.initialize();
+
+        repository.record(
+                createRecord(
+                        "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS));
+        repository.record(
+                createRecord(
+                        "rec2",
+                        "node1",
+                        "testdb",
+                        ExecutionDirection.DOWN,
+                        ExecutionStatus.FAILURE));
+
+        assertThat(repository.executedNodes(EnvironmentId.of("testdb")))
+                .containsExactly(NodeId.of("node1"));
+    }
+
+    @Test
     void wasExecutedReturnsFalseForFailure() {
         repository.initialize();
 
