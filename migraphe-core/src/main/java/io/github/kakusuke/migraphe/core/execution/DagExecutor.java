@@ -447,11 +447,12 @@ public final class DagExecutor implements Executor {
      *
      * <p>The node's task has already been applied by the time this is called, so a broken accessor
      * must not cost the success record: without it the migration is applied again on the next run.
-     * {@code null} is what {@link MigrationNode#fingerprint()} already defines as "unknown".
+     * {@code null} is what {@link MigrationNode#fingerprint(java.util.List)} already defines as
+     * "unknown".
      */
-    private static @Nullable String fingerprintOf(MigrationNode node) {
+    private @Nullable String fingerprintOf(MigrationNode node) {
         try {
-            return node.fingerprint();
+            return node.fingerprint(graph.canonicalTransitiveDependencies(node.id()));
         } catch (RuntimeException e) {
             return null;
         }

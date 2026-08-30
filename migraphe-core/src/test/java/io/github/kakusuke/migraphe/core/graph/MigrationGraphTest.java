@@ -391,6 +391,75 @@ class MigrationGraphTest {
     }
 
     @Test
+    void canonicalTransitiveDependencies_returnsTheClosureSortedByNodeIdValue() {
+        // given: 999_c -> 002_b -> 001_a and 999_c -> 900_z; these identifiers are chosen so that
+        // the unsorted closure iterates in an order the assertion below would reject
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId a = NodeId.of("db1/001_a");
+        NodeId b = NodeId.of("db1/002_b");
+        NodeId z = NodeId.of("db1/900_z");
+        NodeId c = NodeId.of("db1/999_c");
+
+        graph.addNode(node("db1/999_c").dependencies(b, z).build());
+        graph.addNode(node("db1/900_z").build());
+        graph.addNode(node("db1/002_b").dependencies(a).build());
+        graph.addNode(node("db1/001_a").build());
+
+        // then
+        assertThat(graph.canonicalTransitiveDependencies(c)).containsExactly(a, b, z);
+        assertThat(graph.canonicalTransitiveDependencies(a)).isEmpty();
+    }
+
+    @Test
+    void canonicalTransitiveDependencies_keepsADependencyTheGraphDoesNotContain() {
+        // given: 002_b declares 001_a, whose task file is gone — fromNodesUp drops it from the
+        // adjacency, but the node still declares it
+        MigrationNode nodeB = node("db1/002_b").dependencies(NodeId.of("db1/001_a")).build();
+
+        // when
+        MigrationGraph graph = MigrationGraph.fromNodesUp(List.of(nodeB));
+
+        // then
+        assertThat(graph.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/001_a"));
+    }
+
+    @Test
+    void canonicalTransitiveDependencies_losesWhatStoodBehindADeletedNode() {
+        // given: 002_b -> 001_a -> 000_base, and the same project with 001_a's task file deleted
+        MigrationNode base = node("db1/000_base").build();
+        MigrationNode nodeA = node("db1/001_a").dependencies(NodeId.of("db1/000_base")).build();
+        MigrationNode nodeB = node("db1/002_b").dependencies(NodeId.of("db1/001_a")).build();
+
+        // when
+        MigrationGraph whole = MigrationGraph.fromNodesUp(List.of(base, nodeA, nodeB));
+        MigrationGraph aDeleted = MigrationGraph.fromNodesUp(List.of(base, nodeB));
+
+        // then
+        assertThat(whole.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/000_base"), NodeId.of("db1/001_a"));
+        assertThat(aDeleted.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/001_a"));
+    }
+
+    @Test
+    void canonicalTransitiveDependencies_keepsWhatASecondDeclaredPathStillReaches() {
+        // given: 002_b declares both 001_a and 000_base, and 001_a's task file is deleted
+        MigrationNode base = node("db1/000_base").build();
+        MigrationNode nodeB =
+                node("db1/002_b")
+                        .dependencies(NodeId.of("db1/001_a"), NodeId.of("db1/000_base"))
+                        .build();
+
+        // when
+        MigrationGraph aDeleted = MigrationGraph.fromNodesUp(List.of(base, nodeB));
+
+        // then
+        assertThat(aDeleted.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/000_base"), NodeId.of("db1/001_a"));
+    }
+
+    @Test
     void fromNodesDown_twoNodesWithDependency_reversesAdjacency() {
         // given: B depends on A
         MigrationNode nodeA = node("node-a").build();

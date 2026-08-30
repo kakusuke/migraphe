@@ -80,7 +80,13 @@ public final class StatusService {
                 pendingCount++;
             }
 
-            nodeStatuses.add(new NodeStatus(node, executed, latestRecord, appliedRecord));
+            nodeStatuses.add(
+                    new NodeStatus(
+                            node,
+                            executed,
+                            latestRecord,
+                            appliedRecord,
+                            graph.canonicalTransitiveDependencies(node.id())));
         }
 
         return new StatusInfo(
@@ -166,18 +172,22 @@ public final class StatusService {
      * @param appliedRecord the record that applied the node — its most recent successful UP — or
      *     {@code null} if it is not currently applied. Everything about the applied state is read
      *     from here, because a later failed record describes an attempt, not the state
+     * @param transitiveDependencies what the node stands on, in canonical order, as {@link
+     *     MigrationNode#fingerprint(List)} needs it. Carried here because the record has no graph
+     *     to ask
      */
     public record NodeStatus(
             MigrationNode node,
             boolean executed,
             @Nullable ExecutionRecord latestRecord,
-            @Nullable ExecutionRecord appliedRecord) {
+            @Nullable ExecutionRecord appliedRecord,
+            List<NodeId> transitiveDependencies) {
 
         /**
-         * Classifies the node's current UP content against the content that was applied.
+         * Classifies the node's current content against the content that was applied.
          *
-         * <p>Only the UP content is covered, so editing a rollback definition or an apply-mode flag
-         * does not show up here.
+         * <p>What is compared is whatever {@link MigrationNode#fingerprint(List)} covers, which is
+         * the plugin's choice; this only compares the two tokens.
          *
          * @return the comparison outcome; see {@link UpContentState} for what each value means
          */
@@ -187,7 +197,7 @@ public final class StatusService {
             }
             String current;
             try {
-                current = node.fingerprint();
+                current = node.fingerprint(transitiveDependencies);
             } catch (RuntimeException e) {
                 return UpContentState.UNREADABLE;
             }

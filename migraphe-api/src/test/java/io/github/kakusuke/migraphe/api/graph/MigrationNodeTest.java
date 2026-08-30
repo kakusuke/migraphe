@@ -7,6 +7,7 @@ import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
+import java.util.List;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
@@ -75,6 +76,7 @@ class MigrationNodeTest {
                 };
 
         // when / then
-        assertThat(node.fingerprint()).isNull();
+        assertThat(node.fingerprint(List.of())).isNull();
+        assertThat(node.fingerprint(List.of(NodeId.of("db1/001_a")))).isNull();
     }
 }

@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -56,25 +57,56 @@ public final class JdbcMigrationNode implements MigrationNode {
     }
 
     /**
-     * Returns the SHA-256 of this node's UP SQL, hex-encoded.
+     * Returns the SHA-256, hex-encoded, of four things: this node's UP SQL, its rollback SQL, its
+     * autocommit flag, and the transitive dependencies handed in. Nothing else about the node
+     * reaches the token.
      *
-     * <p>The SQL is hashed as given, with only its leading and trailing whitespace stripped — the
-     * whitespace a YAML block scalar contributes. Nothing else is normalized: a comment-only edit
-     * changes the token, so does re-indenting an interior line, and so does a CRLF line ending
+     * <p>Each SQL text is hashed as given, with only its leading and trailing whitespace stripped —
+     * the whitespace a YAML block scalar contributes. Nothing else is normalized: a comment-only
+     * edit changes the token, so does re-indenting an interior line, and so does a CRLF line ending
      * where the same text had LF. Adding normalization would invalidate every token already
      * recorded.
      *
-     * @return the hex-encoded SHA-256 of the stripped UP SQL
+     * <p>Covering the rollback SQL and the autocommit flag has a cost, and it is the deliberate
+     * one: editing only {@code down:} moves the token even though no database object differs, so a
+     * caller that resolves drift by re-applying will rebuild for it. That trade was chosen because
+     * the caller cannot read the database and so cannot be the one to decide which side is right.
+     *
+     * <p>A missing rollback is not the same input as an empty one, so the two produce different
+     * tokens. Each SQL text and each dependency is written as its length, a colon, then its text;
+     * the autocommit flag is one character; an absent rollback is {@code -}, which no length prefix
+     * can start with. Without that framing one dependency {@code ab} and two dependencies {@code
+     * a}, {@code b} would build the same string and two different definitions would compare as
+     * unchanged.
+     *
+     * @param transitiveDependencies every node this one stands on, in the caller's canonical order
+     * @return the hex-encoded SHA-256 of this node's recorded content
      */
     @Override
-    public String fingerprint() {
-        String stripped = upSql.strip();
+    public String fingerprint(List<NodeId> transitiveDependencies) {
+        StringBuilder preimage = new StringBuilder();
+        appendLengthPrefixed(preimage, upSql.strip());
+        if (downSql == null) {
+            preimage.append('-');
+        } else {
+            appendLengthPrefixed(preimage, downSql.strip());
+        }
+        preimage.append(autocommit ? 't' : 'f');
+        for (NodeId dependency : transitiveDependencies) {
+            appendLengthPrefixed(preimage, dependency.value());
+        }
         try {
-            byte[] hash = MessageDigest.getInstance("SHA-256").digest(stripped.getBytes(UTF_8));
+            byte[] hash =
+                    MessageDigest.getInstance("SHA-256")
+                            .digest(preimage.toString().getBytes(UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 is required but unavailable", e);
         }
+    }
+
+    private static void appendLengthPrefixed(StringBuilder target, String value) {
+        target.append(value.length()).append(':').append(value);
     }
 
     @Override
@@ -248,8 +280,8 @@ public final class JdbcMigrationNode implements MigrationNode {
         /**
          * Sets the forward (UP) migration SQL from a literal string.
          *
-         * <p>{@link JdbcMigrationNode#fingerprint()} hashes this text as given. A caller that read
-         * it from a file should fold CRLF to LF first, or the same file will fingerprint
+         * <p>{@link JdbcMigrationNode#fingerprint(List)} hashes this text as given. A caller that
+         * read it from a file should fold CRLF to LF first, or the same file will fingerprint
          * differently on a CRLF checkout.
          *
          * @param sql the UP SQL
