@@ -457,8 +457,8 @@ Summary: Total: 3 | Executed: 1 | Pending: 2
 | Marker | Meaning |
 |--------|---------|
 | `[ ]` | Not applied yet |
-| `[✓]` | Applied, and no change detected in its `up` content — also shown when the plugin supplies no fingerprint and so opts out of the comparison |
-| `[!]` | Applied, but the `up` content has been edited since. Resolve it by rolling back and re-applying, or with [`migraphe amend`](#recording-definitions-as-applied-amend) |
+| `[✓]` | Applied, and no change detected in its definition — also shown when the plugin supplies no fingerprint and so opts out of the comparison |
+| `[!]` | Applied, but the definition has changed since — its `up:` SQL, its `down:` SQL, its `autocommit` setting, or what it depends on. Whether the database or the history is the side that needs moving depends on which of those you changed, so migraphe reports it instead of choosing: see [`migraphe amend`](#recording-definitions-as-applied-amend) |
 | `[?]` | The plugin supplies a fingerprint but the applied row carries none, so a change cannot be detected. Rows written before 0.7.0 read this way; [`migraphe amend`](#recording-definitions-as-applied-amend) is the only way to clear it |
 | `[E]` | The plugin's fingerprint could not be read — the plugin itself is at fault |
 
@@ -704,7 +704,9 @@ The `amend` command rewrites the **history** so that it agrees with your current
 Use it when `status` shows `[?]` or `[!]` and you have decided that what the database already contains is correct:
 
 - `[?]` — the migration was applied by a version older than 0.7.0, which recorded no fingerprint. `amend` is the only way to clear this: `up` skips migrations that are already applied, so it never fills the fingerprint in afterwards.
-- `[!]` — the `up` content was edited after it was applied, and the edit needs no rollback (a comment, a formatter run, a schema you had already fixed by hand).
+- `[!]` — the definition changed after it was applied, and the change needs no rollback.
+
+Only an `up:` edit can ever need one. Editing `down:` or `autocommit:`, or changing what the migration depends on, moves the fingerprint without changing a single database object — and the rollback a re-apply would run is the edited one either way, so `amend` is the whole fix. An `up:` edit is the case to think about: a comment or a formatter run needs no rollback either, but a changed statement does.
 
 If the *database* is the side that is wrong, roll the migration back and re-apply it (`migraphe down <id>` followed by `migraphe up`) instead. `amend` will not do that for you.
 
@@ -748,7 +750,7 @@ There is deliberately **no migration argument and no `--all`**: the scope is alw
 
 1. **The previous fingerprint is lost**: `amend` overwrites the column and keeps no history of it. Afterwards there is no record that the definition ever differed. This is intentional — see [ARCHITECTURE.md](ARCHITECTURE.md).
 2. **Only the fingerprint changes**: `executed_at`, the duration and the stored rollback SQL are left as they were, so `status` keeps reporting when the migration actually ran.
-3. **`[!]` discards evidence**: the fingerprint of what really ran is replaced by the fingerprint of what the file says now. If the edit needs to reach the database, roll back instead. This is why the plan marks those rows with a warning.
+3. **`[!]` discards evidence**: the fingerprint of what really ran is replaced by the fingerprint of what the files say now. If an `up:` edit needs to reach the database, roll back instead. This is why the plan marks those rows with a warning.
 4. **Only successful UP rows are amended**: a migration whose latest history row is a rollback or a failure is left alone.
 5. **The history repository has to support it**: the bundled JDBC, PostgreSQL, MySQL and in-memory repositories do. A third-party repository that does not implement the revision capability makes `amend` stop with an error rather than report success it did not achieve.
 
@@ -1116,10 +1118,12 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: Execution duration
 - `serialized_down_task`: Rollback SQL (UP migrations only)
 - `error_message`: Error details (FAILURE status only)
-- `fingerprint`: Fingerprint of the UP content that was applied, recorded on UP success only. The
-  JDBC, PostgreSQL and MySQL plugins use the SHA-256 hex digest of the `up:` SQL with surrounding
-  whitespace stripped. Empty on DOWN rows, on rows written before 0.7.0, and when a plugin does not
-  supply one — in every such case it means "unknown", not "unchanged".
+- `fingerprint`: Fingerprint of the definition that was applied, recorded on UP success only. The
+  JDBC, PostgreSQL and MySQL plugins hash four things together: the `up:` SQL, the `down:` SQL, the
+  `autocommit` flag, and every migration this one depends on directly or indirectly. Each SQL text
+  has its surrounding whitespace stripped and is otherwise hashed as written. Empty on DOWN rows, on
+  rows written before 0.7.0, and when a plugin does not supply one — in every such case it means
+  "unknown", not "unchanged".
 
 ## Gradle Plugin
 

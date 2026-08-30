@@ -190,6 +190,55 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   Everything that refuses a run is decided before anything runs, so a preview that exits zero on a plan
   the real run would fail is not a rehearsal, and the CI use of `--preview` silently stops working. The
   only outcome a preview cannot predict is a failure during execution
+- **`MigrationGraph` walks dependencies two ways on purpose.** `getAllDependencies`/`collectDependencies`
+  follow the **adjacency list**, which `fromNodesUp`/`fromNodesDown` narrow to the supplied subset — so
+  every id they yield is a node that exists in the graph. `canonicalTransitiveDependencies`/
+  `collectDeclaredDependencies` follow `MigrationNode.dependencies()` instead, and therefore include a
+  declared id whose node is absent. Neither can be expressed as the other. Folding them together breaks
+  one of two things: `DagExecutor.propagateFailure` builds its cone from the adjacency form and would
+  start marking ids that are not nodes, or a fingerprint over the declared form would shrink whenever a
+  task file is deleted, reporting an untouched dependent as edited.
+  The declared form still shrinks in one case: a deleted node's own declarations are gone, so a
+  dependent's closure loses whatever stood behind it *and is not also reachable along another declared
+  path* — a diamond survives the deletion untouched. Nothing in the graph recovers it, but the history
+  could: a `dependencies` column would let an absent node's declarations be read from its recorded row.
+  Weigh that against making the fingerprint depend on the history rather than the definitions alone.
+  `canonicalTransitiveDependencies_losesWhatStoodBehindADeletedNode` and
+  `canonicalTransitiveDependencies_keepsWhatASecondDeclaredPathStillReaches` pin both halves
+- **An ordering assertion over a `HashSet`-derived list can be vacuous.**
+  `MigrationGraph.getAllDependencies` returns a `HashSet`, and short ASCII identifiers below 2^16 hash
+  to ascending buckets — so `"a"`, `"b"`, `"z"` iterate in sorted order already and
+  `containsExactly(a, b, z)` passes against an implementation with no sort at all. Insertion order does
+  not help; the bucket index decides. Use identifiers whose bucket order differs (the project's real
+  `db1/001_a` form does), and prove it by deleting the `.sorted(...)` and watching the test go red — a
+  red that was only a *compile* failure never executed the assertion, so it demonstrates nothing about
+  its discriminating power
+- **A test double that ignores its argument hides a wiring bug in the caller.** `FingerprintedNode`
+  returns a fixed token and `ThrowingFingerprintNode` always throws, which is right for what each one
+  models — but it means every `StatusServiceTest` / `AmendServiceTest` case passes whatever list
+  `StatusService` hands to `fingerprint`, including the wrong one. `DependencyEchoingNode` returns the
+  argument. Two tests use it, one per direction — `upContentStateComparesAgainstTheTokenTheClosureProduces`
+  (read path, `StatusService`) and `shouldPassTheTransitiveClosureToTheFingerprint` (write path,
+  `DagExecutor`) — and each is the only test in the repo that fails when its own call site is fed
+  `List.of()` or `node.dependencies()`. Both fixtures put a node two hops away so the transitive form is
+  required, not merely the direct one. Keep all three doubles: replacing the fixed-token one with the
+  echoing one everywhere would make every expected value in `upContentStateDistinguishesEveryCase`,
+  `StatusLineFormatterTest` and `AmendServiceTest` a function of fixture graph shape, and those tests
+  would stop being about the states they are named for.
+  Three call sites now each have one such test — `StatusService`, `DagExecutor`, `AmendService` — and a
+  fingerprint fixture must put a node **two hops** away or the direct-dependency mistake passes.
+  Do not try to pin the canonical *order* from one of these call-site fixtures. `collected` is a
+  `HashSet`, so dropping the sort yields bucket order, not traversal order — whether a two-element
+  fixture then disagrees with ascending order is luck, and a fixture that happens to agree proves
+  nothing while looking like it proved something. The ordering rule has a home test that chooses its
+  ids for the purpose: `canonicalTransitiveDependencies_returnsTheClosureSortedByNodeIdValue`
+- **A signature change on `migraphe-api` is not covered by running the modules that use it.**
+  `migraphe-api` has its own tests, and they characterize the SPI's defaults — `MigrationNodeTest`
+  pins that `fingerprint`'s `default` returns null. Every other module's run only needs
+  `:migraphe-api:compileJava` and `:migraphe-api:jar`, so `:migraphe-api:compileTestJava` never
+  executes and a missed call site there stays invisible through a green core/jdbc/cli/gradle sweep.
+  After changing anything in `migraphe-api`, run `migraphe-api` itself, and grep for the old signature
+  across **every** module's `src/test`, not just the plugin modules
 - **Spotless rewrapping is expected noise**, including on pre-existing violations on lines you touched.
   Never hand-pre-format; run `run_spotless` after the edits and re-verify green
 

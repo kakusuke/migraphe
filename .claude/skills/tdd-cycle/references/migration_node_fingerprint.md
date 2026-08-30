@@ -21,8 +21,36 @@ cost of hiding a line ending inside a string literal" is checkable and honest.
 
 Before editing this javadoc, read `JdbcMigrationNodeTest`'s fingerprint tests and check the sentence you
 are about to write against each one. They currently pin: two distinct hash literals; that surrounding
-whitespace is stripped; that CRLF and LF inputs differ; `autocommit` exclusion; `downSql` exclusion; a
-comment-only edit changing the token; an interior re-indent changing the token.
+whitespace is stripped from **both** SQL texts; that CRLF and LF inputs differ; a comment-only edit
+changing the token; an interior re-indent changing the token; that the transitive dependencies handed in
+are covered, one dependency `ab` differing from two dependencies `a`, `b`; that `downSql` and
+`autocommit` are covered; and that an **absent** `downSql` differs from an **empty** one.
+
+## The dependency list comes from the caller, and the framing is unambiguous
+
+`MigrationNode.fingerprint(List<NodeId>)` receives the closure already computed and already sorted by
+`MigrationGraph.canonicalTransitiveDependencies`. A plugin that re-sorts it moves the normalization out
+of the one place that owns it. Each part is written as `<length>:<text>` precisely so that no two
+different inputs build the same pre-image — plain concatenation would let `[ab]` and `[a, b]` hash alike,
+and a separator character fails as soon as an id contains it. Changing the framing changes every token
+already recorded, and nothing in a stored token says which derivation produced it.
+
+`UpCommandTest.shouldRecordUpFingerprintInHistory` pins the whole chain against a real PostgreSQL, with
+the expected values computed from the framing rather than copied from the implementation — `002_add_index`
+declares a dependency, so passing an empty list instead of the closure fails it.
+
+## The token covers the whole recorded definition, and that is a trade
+
+`downSql` and `autocommit` are in the pre-image. The token therefore answers "does the definition still
+match what was recorded", not "would re-applying produce the same object" — editing only `down:` moves it
+although no database object differs. That was chosen deliberately: the caller cannot read the database, so
+it cannot be the one to decide which side is right, and a token that tried to mean "the object is stale"
+would be making that decision. State it that way. Do **not** justify including `autocommit` by claiming it
+changes what is applied, and do not justify excluding anything by claiming it cannot.
+
+The framing has one non-length element: an absent `downSql` is written `-`, a present one `<len>:<text>`.
+`-` is not a digit, so it cannot begin a length prefix and the two stay distinguishable. Dropping that and
+treating absent as empty would make "the rollback was deleted" and "the rollback was blanked" one state.
 
 ## Do not add normalization
 
