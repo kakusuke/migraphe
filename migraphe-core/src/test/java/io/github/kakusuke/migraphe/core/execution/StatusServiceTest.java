@@ -9,6 +9,7 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
+import io.github.kakusuke.migraphe.core.execution.support.DependencyEchoingNode;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNode;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
@@ -229,6 +230,33 @@ class StatusServiceTest {
         assertThat(stateFor(status, "edited")).isEqualTo(UpContentState.CHANGED);
         assertThat(stateFor(status, "throwing")).isEqualTo(UpContentState.UNREADABLE);
         assertThat(stateFor(status, "pending-throwing")).isEqualTo(UpContentState.NOT_APPLICABLE);
+    }
+
+    @Test
+    @DisplayName("内容の比較には、グラフから計算した推移的依存が渡される")
+    void upContentStateComparesAgainstTheTokenTheClosureProduces() {
+        // Given
+        graph.addNode(createNode("db1/000_base", "Base"));
+        graph.addNode(createNode("db1/001_a", "Node A", Set.of(NodeId.of("db1/000_base"))));
+        graph.addNode(
+                new DependencyEchoingNode(
+                        createNode("db1/002_b", "Node B", Set.of(NodeId.of("db1/001_a")))));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        NodeId.of("db1/002_b"),
+                        testEnv.id(),
+                        "Node B",
+                        null,
+                        1L,
+                        "db1/000_base,db1/001_a"));
+
+        statusService = new StatusService(graph, historyRepo);
+
+        // When
+        StatusService.StatusInfo status = statusService.getStatus();
+
+        // Then
+        assertThat(stateFor(status, "db1/002_b")).isEqualTo(UpContentState.UNCHANGED);
     }
 
     private UpContentState stateFor(StatusService.StatusInfo status, String nodeId) {

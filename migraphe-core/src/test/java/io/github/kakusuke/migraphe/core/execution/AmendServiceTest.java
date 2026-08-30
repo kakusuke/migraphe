@@ -11,6 +11,7 @@ import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.support.AlwaysAppliedHistoryRepository;
+import io.github.kakusuke.migraphe.core.execution.support.DependencyEchoingNode;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
@@ -163,14 +164,40 @@ class AmendServiceTest {
                 .hasMessageContaining(AlwaysAppliedHistoryRepository.class.getName());
     }
 
+    @Test
+    @DisplayName("記録する fingerprint は、グラフから計算した推移的依存を渡して得たもの")
+    void shouldPassTheTransitiveClosureToTheFingerprint() {
+        // Given
+        graph.addNode(createNode("db1/001_a", "A"));
+        graph.addNode(createNode("db1/900_z", "Z", Set.of(NodeId.of("db1/001_a"))));
+        graph.addNode(
+                new DependencyEchoingNode(
+                        createNode("db1/002_b", "B", Set.of(NodeId.of("db1/900_z")))));
+        historyRepo.record(
+                ExecutionRecord.upSuccess(NodeId.of("db1/002_b"), testEnv.id(), "B", null, 1L));
+
+        // When
+        AmendService.AmendPlan plan = new AmendService(graph, historyRepo).plan();
+
+        // Then
+        assertThat(plan.toRecord())
+                .singleElement()
+                .extracting(AmendService.AmendEntry::fingerprint)
+                .isEqualTo("db1/001_a,db1/900_z");
+    }
+
     private MigrationNode createNode(String id, String name) {
+        return createNode(id, name, Set.of());
+    }
+
+    private MigrationNode createNode(String id, String name, Set<NodeId> dependencies) {
         Task upTask = SimpleTask.of("UP: " + name);
         Task downTask = SimpleTask.of("DOWN: " + name);
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(name)
                 .environment(testEnv)
-                .dependencies(Set.of())
+                .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(downTask)
                 .build();

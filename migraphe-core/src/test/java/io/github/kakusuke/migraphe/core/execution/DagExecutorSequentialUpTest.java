@@ -15,6 +15,7 @@ import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
+import io.github.kakusuke.migraphe.core.execution.support.DependencyEchoingNode;
 import io.github.kakusuke.migraphe.core.execution.support.FingerprintedNode;
 import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
 import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNode;
@@ -238,6 +239,38 @@ class DagExecutorSequentialUpTest {
             ExecutionRecord recordA = history.findLatestRecord(NodeId.of("a"), testEnv.id());
             assertThat(recordA).isNotNull();
             assertThat(recordA.fingerprint()).isNull();
+        }
+
+        @Test
+        @DisplayName("記録する fingerprint は、グラフから計算した推移的依存を渡して得たもの")
+        void shouldPassTheTransitiveClosureToTheFingerprint() {
+            // Given
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(createNode("db1/000_base", Set.of()));
+            graph.addNode(createNode("db1/001_a", Set.of(NodeId.of("db1/000_base"))));
+            graph.addNode(
+                    new DependencyEchoingNode(
+                            createNode("db1/002_b", Set.of(NodeId.of("db1/001_a")))));
+
+            InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+            DagExecutor executor =
+                    new DagExecutor(
+                            graph, history, new MockExecutionListener(), ExecutionDirection.UP, 1);
+
+            // When
+            ExecutionResult result =
+                    executor.execute(
+                            Set.of(
+                                    NodeId.of("db1/000_base"),
+                                    NodeId.of("db1/001_a"),
+                                    NodeId.of("db1/002_b")));
+
+            // Then
+            assertThat(result.success()).isTrue();
+            ExecutionRecord recordB =
+                    history.findLatestRecord(NodeId.of("db1/002_b"), testEnv.id());
+            assertThat(recordB).isNotNull();
+            assertThat(recordB.fingerprint()).isEqualTo("db1/000_base,db1/001_a");
         }
 
         @Test
