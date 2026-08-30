@@ -25,7 +25,7 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.6.0
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.0
     repository: jitpack
 ```
 
