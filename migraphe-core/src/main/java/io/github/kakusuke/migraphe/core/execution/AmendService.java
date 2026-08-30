@@ -132,7 +132,8 @@ public final class AmendService {
                 Objects.requireNonNull(status.latestRecord(), "drift implies a latest record");
         String fingerprint =
                 Objects.requireNonNull(
-                        status.node().fingerprint(), "drift implies a node fingerprint");
+                        status.node().fingerprint(status.transitiveDependencies()),
+                        "drift implies a node fingerprint");
         return new AmendEntry(status.node(), record.id(), fingerprint, status.upContentState());
     }
 

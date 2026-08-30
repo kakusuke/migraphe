@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.api.graph;
 
 import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.task.Task;
+import java.util.List;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 
@@ -79,33 +80,35 @@ public interface MigrationNode {
     @Nullable Task downTask();
 
     /**
-     * Returns an opaque token over the UP content this node would apply, or {@code null} when the
-     * plugin cannot produce one. {@code null} means "unknown", not "unchanged", so callers must
-     * skip the comparison rather than treat it as a match.
+     * Returns an opaque token over what this node would apply, or {@code null} when the plugin
+     * cannot produce one. {@code null} means "unknown", not "unchanged", so callers must skip the
+     * comparison rather than treat it as a match.
      *
-     * <p>What counts as the UP content, and how a token is derived from it, is the plugin's choice.
-     * The token is opaque: callers may only compare two of them for equality. It must not cover the
-     * mode in which the content is applied, nor the rollback definition.
+     * <p>The token is opaque: callers may only compare two of them for equality. What it is derived
+     * from, beyond the dependencies handed in, is the plugin's choice.
      *
-     * <p>The token must be <strong>stable</strong>: the same node must yield the same token across
-     * JVM invocations, platforms, and plugin versions, because callers persist it and compare it
-     * much later. Deriving it from anything whose iteration order is unspecified — a {@link Set}, a
-     * {@code HashMap} — breaks that.
+     * <p>{@code transitiveDependencies} is everything this node stands on, directly or indirectly,
+     * in an order the caller has already made canonical. Fold it in as given: re-sorting it moves
+     * the normalization out of the one place that owns it. Fold it in
+     * <strong>unambiguously</strong> too — under plain concatenation {@code [ab]} and {@code [a,
+     * b]} produce one token, so two different sets of dependencies would compare as unchanged.
+     *
+     * <p>The token must be <strong>stable</strong>: the same node and the same list must yield the
+     * same token across JVM invocations, platforms, and plugin versions, because callers persist it
+     * and compare it much later. Nothing in a recorded token says which derivation produced it, so
+     * a plugin that changes its own makes every token it already wrote compare as changed — an
+     * upgrade to announce and to resolve by re-recording, not something a caller can detect.
      *
      * <p>Callers must <strong>report</strong> a changed token, never auto-remediate it. The remedy
      * is a destructive roll-back-and-re-apply, so a report has to stay declinable.
      *
+     * @param transitiveDependencies every node this one stands on, in the caller's canonical order
      * @return the fingerprint, or {@code null} if this plugin does not provide one
      */
-    default @Nullable String fingerprint() {
+    default @Nullable String fingerprint(List<NodeId> transitiveDependencies) {
         return null;
     }
 
-    /**
-     * Indicates whether this node is a root node (one with no dependencies).
-     *
-     * @return {@code true} if {@link #dependencies()} is empty, {@code false} otherwise
-     */
     /**
      * Returns why this node cannot be rolled back, or {@code null} if it can be.
      *
@@ -123,6 +126,11 @@ public interface MigrationNode {
         return null;
     }
 
+    /**
+     * Indicates whether this node is a root node (one with no dependencies).
+     *
+     * @return {@code true} if {@link #dependencies()} is empty, {@code false} otherwise
+     */
     default boolean hasNoDependencies() {
         return dependencies().isEmpty();
     }

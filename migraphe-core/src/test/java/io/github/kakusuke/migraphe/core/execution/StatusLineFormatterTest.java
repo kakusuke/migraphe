@@ -15,6 +15,7 @@ import io.github.kakusuke.migraphe.core.execution.support.ThrowingFingerprintNod
 import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,13 +34,17 @@ class StatusLineFormatterTest {
                 ExecutionRecord.upSuccess(
                         executedNode.id(), testEnv.id(), executedNode.name(), null, 250L);
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(executedNode, true, record, record)))
+        assertThat(
+                        StatusLineFormatter.format(
+                                new NodeStatus(executedNode, true, record, record, List.of())))
                 .startsWith("[✓] db1/001_create - Create users (250ms, ")
                 .endsWith(")");
 
         MigrationNode pendingNode = createNode("db1/002_index", "Add index");
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(pendingNode, false, null, null)))
+        assertThat(
+                        StatusLineFormatter.format(
+                                new NodeStatus(pendingNode, false, null, null, List.of())))
                 .isEqualTo("[ ] db1/002_index - Add index");
     }
 
@@ -59,7 +64,9 @@ class StatusLineFormatterTest {
         ExecutionRecord applied =
                 ExecutionRecord.upSuccess(node.id(), testEnv.id(), node.name(), null, 8L);
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, rollbackFailed, applied)))
+        assertThat(
+                        StatusLineFormatter.format(
+                                new NodeStatus(node, true, rollbackFailed, applied, List.of())))
                 .startsWith("[✓] db1/001_create - Create users (rollback failed ")
                 .endsWith(")");
 
@@ -71,7 +78,9 @@ class StatusLineFormatterTest {
                         node.name(),
                         "syntax error");
 
-        assertThat(StatusLineFormatter.format(new NodeStatus(node, true, applyFailed, applied)))
+        assertThat(
+                        StatusLineFormatter.format(
+                                new NodeStatus(node, true, applyFailed, applied, List.of())))
                 .startsWith("[✓] db1/001_create - Create users (apply failed ");
     }
 
@@ -87,7 +96,8 @@ class StatusLineFormatterTest {
                         new FingerprintedNode(changedNode, "abc"),
                         true,
                         changedRecord,
-                        changedRecord);
+                        changedRecord,
+                        List.of());
 
         MigrationNode unknownNode = createNode("db1/003_posts", "Create posts");
         ExecutionRecord unknownRecord =
@@ -98,7 +108,8 @@ class StatusLineFormatterTest {
                         new FingerprintedNode(unknownNode, "abc"),
                         true,
                         unknownRecord,
-                        unknownRecord);
+                        unknownRecord,
+                        List.of());
 
         MigrationNode unreadableNode = createNode("db1/004_tags", "Create tags");
         ExecutionRecord unreadableRecord =
@@ -109,7 +120,8 @@ class StatusLineFormatterTest {
                         new ThrowingFingerprintNode(unreadableNode),
                         true,
                         unreadableRecord,
-                        unreadableRecord);
+                        unreadableRecord,
+                        List.of());
 
         assertThat(StatusLineFormatter.format(changed))
                 .startsWith("[!] db1/002_index - Add index (");
@@ -126,7 +138,7 @@ class StatusLineFormatterTest {
         ExecutionRecord record =
                 ExecutionRecord.upSuccess(node.id(), testEnv.id(), node.name(), null, 5L, "abc");
         NodeStatus unchanged =
-                new NodeStatus(new FingerprintedNode(node, "abc"), true, record, record);
+                new NodeStatus(new FingerprintedNode(node, "abc"), true, record, record, List.of());
 
         assertThat(StatusLineFormatter.format(unchanged))
                 .startsWith("[✓] db1/005_roles - Create roles (");

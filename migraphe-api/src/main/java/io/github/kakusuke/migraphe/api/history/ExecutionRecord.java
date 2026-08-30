@@ -32,10 +32,11 @@ import org.jspecify.annotations.Nullable;
  * @param durationMs the execution duration in milliseconds
  * @param errorMessage the error message when the execution failed, or {@code null} otherwise
  *     (required when {@code status} is {@link ExecutionStatus#FAILURE})
- * @param fingerprint {@link io.github.kakusuke.migraphe.api.graph.MigrationNode#fingerprint()} as
- *     it stood when the node was applied, or {@code null} when it is not known — which is what a
- *     record written before this field existed carries, and what a plugin that produces no
- *     fingerprint carries. {@code null} does not mean "unchanged"
+ * @param fingerprint {@link
+ *     io.github.kakusuke.migraphe.api.graph.MigrationNode#fingerprint(java.util.List)} as it stood
+ *     when the node was applied, or {@code null} when it is not known — which is what a record
+ *     written before this field existed carries, and what a plugin that produces no fingerprint
+ *     carries. {@code null} does not mean "unchanged"
  * @see HistoryRepository
  * @see ExecutionStatus
  * @see ExecutionDirection
