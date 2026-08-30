@@ -116,6 +116,45 @@ public final class MigrationGraph implements MigrationGraphView {
         return result;
     }
 
+    /**
+     * Returns the transitive closure of what the nodes <em>declare</em>, in a stable order.
+     *
+     * <p>The order is ascending by {@link NodeId#value()}, so that a caller which folds the closure
+     * into a persisted value — a fingerprint — gets the same value for the same graph on every run.
+     * A {@link java.util.HashSet} iteration order would not survive that.
+     *
+     * <p>Unlike {@link #getAllDependencies(NodeId)} this walks {@link MigrationNode#dependencies()}
+     * rather than the adjacency list, for the same reason {@link #unresolvedDependencies()} does:
+     * {@link #fromNodesUp}/{@link #fromNodesDown} narrow the adjacency to the supplied subset, and
+     * a fingerprint describes the definition, not the subset it was loaded with.
+     *
+     * <p>A declared dependency whose node the graph does not contain is therefore kept, but the
+     * walk stops there — what that node declared went with its task file. Deleting a task file
+     * shrinks a dependent's closure by whatever stood behind it and is not also reachable along
+     * another declared path, and that dependent then compares as changed although nobody edited it.
+     * Nothing in the graph recovers it; the information left with the file.
+     *
+     * @param nodeId the identifier of the node whose transitive dependencies are requested
+     * @return the declared transitive dependencies sorted by identifier, possibly empty
+     */
+    public List<NodeId> canonicalTransitiveDependencies(NodeId nodeId) {
+        Set<NodeId> collected = new HashSet<>();
+        collectDeclaredDependencies(nodeId, collected);
+        return collected.stream().sorted(Comparator.comparing(NodeId::value)).toList();
+    }
+
+    private void collectDeclaredDependencies(NodeId nodeId, Set<NodeId> collected) {
+        MigrationNode node = nodes.get(nodeId);
+        if (node == null) {
+            return;
+        }
+        for (NodeId dependency : node.dependencies()) {
+            if (collected.add(dependency)) {
+                collectDeclaredDependencies(dependency, collected);
+            }
+        }
+    }
+
     private void collectDependencies(NodeId nodeId, Set<NodeId> collected) {
         for (NodeId dependency : getDependencies(nodeId)) {
             if (collected.add(dependency)) {
@@ -174,19 +213,6 @@ public final class MigrationGraph implements MigrationGraphView {
     }
 
     /**
-     * Validates the structural integrity of the graph.
-     *
-     * <p>Two conditions are checked: the graph must be acyclic, and every dependency declared by a
-     * node (via {@link MigrationNode#dependencies()}) must reference a node that actually exists in
-     * the graph. The node's own declared dependencies are used as the source of truth here rather
-     * than the adjacency list, because {@link #fromNodesUp(List)}/{@link #fromNodesDown(List)} may
-     * filter the adjacency list down to the supplied node subset.
-     *
-     * @return a {@linkplain ValidationResult#valid() valid} result when no problems are found, or
-     *     an {@linkplain ValidationResult#invalid(List) invalid} result listing each cycle and/or
-     *     dangling dependency reference
-     */
-    /**
      * Returns the nodes that neither roll back nor say why they cannot.
      *
      * <p>Applying one of these would put something into the database with no recorded way out and
@@ -209,6 +235,19 @@ public final class MigrationGraph implements MigrationGraphView {
         return offenders;
     }
 
+    /**
+     * Validates the structural integrity of the graph.
+     *
+     * <p>Two conditions are checked: the graph must be acyclic, and every dependency declared by a
+     * node (via {@link MigrationNode#dependencies()}) must reference a node that actually exists in
+     * the graph. The node's own declared dependencies are used as the source of truth here rather
+     * than the adjacency list, because {@link #fromNodesUp(List)}/{@link #fromNodesDown(List)} may
+     * filter the adjacency list down to the supplied node subset.
+     *
+     * @return a {@linkplain ValidationResult#valid() valid} result when no problems are found, or
+     *     an {@linkplain ValidationResult#invalid(List) invalid} result listing each cycle and/or
+     *     dangling dependency reference
+     */
     public ValidationResult validate() {
         List<String> errors = new ArrayList<>();
 
