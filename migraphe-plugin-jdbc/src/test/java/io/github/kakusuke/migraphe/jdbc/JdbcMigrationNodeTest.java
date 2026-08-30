@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -56,34 +57,46 @@ class JdbcMigrationNodeTest {
         var crlf = nodeBuilder().upSql("CREATE TABLE users (\r\nid INT\r\n);").build();
         var other = nodeBuilder().upSql("CREATE TABLE orders (id INT);").build();
 
-        assertThat(trailingNewline.fingerprint())
-                .isEqualTo("5ea918fac5561634f4b577815b41483e5882b9c57dd3bd2351e3422d641af545");
-        assertThat(padded.fingerprint()).isEqualTo(trailingNewline.fingerprint());
-        assertThat(crlf.fingerprint()).isNotEqualTo(lf.fingerprint());
-        assertThat(other.fingerprint())
-                .isEqualTo("13d48c0dae01b9846a83a8848e24e38f31b555559f27216010f998177c0a756a");
+        assertThat(trailingNewline.fingerprint(List.of()))
+                .isEqualTo("a9501f21d669144ab31c50e787daadfd638d423214e83fd3e888e0357d65f1b1");
+        assertThat(padded.fingerprint(List.of())).isEqualTo(trailingNewline.fingerprint(List.of()));
+        assertThat(crlf.fingerprint(List.of())).isNotEqualTo(lf.fingerprint(List.of()));
+        assertThat(other.fingerprint(List.of()))
+                .isEqualTo("14433318e5958632b670773711583aff3bfcdc57a719ecd5d7ff96307a86b5d6");
     }
 
     @Test
-    void fingerprintIgnoresAutocommit() {
+    void fingerprintCoversAutocommit() {
         var transactional =
                 nodeBuilder().upSql("CREATE TABLE users (id INT);").autocommit(false).build();
         var autocommitting =
                 nodeBuilder().upSql("CREATE TABLE users (id INT);").autocommit(true).build();
 
-        assertThat(autocommitting.fingerprint()).isEqualTo(transactional.fingerprint());
+        assertThat(autocommitting.fingerprint(List.of()))
+                .isNotEqualTo(transactional.fingerprint(List.of()));
     }
 
     @Test
-    void fingerprintIgnoresDownSql() {
+    void fingerprintCoversDownSqlAndDistinguishesAbsentFromEmpty() {
         var withoutDown = nodeBuilder().upSql("CREATE TABLE users (id INT);").build();
+        var emptyDown = nodeBuilder().upSql("CREATE TABLE users (id INT);").downSql("").build();
         var withDown =
                 nodeBuilder()
                         .upSql("CREATE TABLE users (id INT);")
                         .downSql("DROP TABLE users;")
                         .build();
+        var paddedDown =
+                nodeBuilder()
+                        .upSql("CREATE TABLE users (id INT);")
+                        .downSql("  DROP TABLE users;\n")
+                        .build();
 
-        assertThat(withDown.fingerprint()).isEqualTo(withoutDown.fingerprint());
+        assertThat(withDown.fingerprint(List.of()))
+                .isNotEqualTo(withoutDown.fingerprint(List.of()));
+        assertThat(emptyDown.fingerprint(List.of()))
+                .isNotEqualTo(withoutDown.fingerprint(List.of()));
+        assertThat(emptyDown.fingerprint(List.of())).isNotEqualTo(withDown.fingerprint(List.of()));
+        assertThat(paddedDown.fingerprint(List.of())).isEqualTo(withDown.fingerprint(List.of()));
     }
 
     @Test
@@ -92,7 +105,7 @@ class JdbcMigrationNodeTest {
         var commented =
                 nodeBuilder().upSql("-- create users\nCREATE TABLE users (id INT);").build();
 
-        assertThat(commented.fingerprint()).isNotEqualTo(bare.fingerprint());
+        assertThat(commented.fingerprint(List.of())).isNotEqualTo(bare.fingerprint(List.of()));
     }
 
     @Test
@@ -100,7 +113,7 @@ class JdbcMigrationNodeTest {
         var flat = nodeBuilder().upSql("CREATE TABLE users (\nid INT\n);").build();
         var indented = nodeBuilder().upSql("CREATE TABLE users (\n    id INT\n);").build();
 
-        assertThat(indented.fingerprint()).isNotEqualTo(flat.fingerprint());
+        assertThat(indented.fingerprint(List.of())).isNotEqualTo(flat.fingerprint(List.of()));
     }
 
     @Test
@@ -213,6 +226,18 @@ class JdbcMigrationNodeTest {
                         .upSql("SELECT 1")
                         .build();
         assertThat(node.dependencies()).containsExactly(NodeId.of("dep1"));
+    }
+
+    @Test
+    void fingerprintCoversTheTransitiveDependenciesItIsGiven() {
+        var node = nodeBuilder().upSql("CREATE TABLE t1 (id INT)").build();
+
+        assertThat(node.fingerprint(List.of(NodeId.of("db1/001_a"))))
+                .isNotEqualTo(node.fingerprint(List.of()));
+        assertThat(node.fingerprint(List.of(NodeId.of("db1/001_a"))))
+                .isNotEqualTo(node.fingerprint(List.of(NodeId.of("db1/002_b"))));
+        assertThat(node.fingerprint(List.of(NodeId.of("ab"))))
+                .isNotEqualTo(node.fingerprint(List.of(NodeId.of("a"), NodeId.of("b"))));
     }
 
     /** Builder pre-filled with the identity fields the fingerprint deliberately ignores. */

@@ -119,12 +119,13 @@ class UpCommandTest {
         // When: UP コマンドを実行
         int exitCode = command.execute();
 
-        // Then: 各ノードの up SQL の SHA-256 が履歴の fingerprint 列に記録される
+        // Then: 各ノードが記録する内容 — up SQL、down SQL、autocommit、推移的依存 — の SHA-256 が
+        // fingerprint 列に記録される。002 の期待値は 001 への依存を含めて計算したもので、依存を渡し損ねると一致しない。
         assertThat(exitCode).isEqualTo(0);
         assertThat(fingerprintOf(context, "test-db/001_create_users"))
-                .isEqualTo("f5f0794a55d611246115a67e39747c887da6d6f83d79f63c3aa730fa97772942");
+                .isEqualTo("b739f30263a10abdb1f990ccffa38623436b946498ee215926bc0908a7dc79f4");
         assertThat(fingerprintOf(context, "test-db/002_add_index"))
-                .isEqualTo("b7584bef34de80a0ec475a402195ee2f72ecf69d34f8e4ef898e43399a9901b4");
+                .isEqualTo("53991737b6dc0e9824c794443c03f59a5f671cfac9b4ac1a517aac041116d7bf");
     }
 
     @Test
