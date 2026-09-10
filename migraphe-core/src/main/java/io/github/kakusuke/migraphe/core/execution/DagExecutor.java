@@ -19,9 +19,11 @@ import io.github.kakusuke.migraphe.core.history.SynchronizedHistoryRepository;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.Semaphore;
@@ -58,6 +60,9 @@ import org.jspecify.annotations.Nullable;
  *       and dispatch is unbounded.
  *   <li>A {@link CountDownLatch} initialized to the total node count tracks outstanding work; the
  *       coordinator loop runs until the latch reaches zero, then awaits it before summarizing.
+ *       <strong>Exactly one countdown per node</strong>, held by whoever claims it first: too few
+ *       and the run hangs, too many and it reports itself over while a migration is still inside
+ *       {@code execute()}.
  *   <li>On task completion the node is reported back to the tracker, releasing any newly ready
  *       successors into the queue.
  * </ul>
@@ -73,6 +78,12 @@ import org.jspecify.annotations.Nullable;
  * successors (dependents for UP, dependencies for DOWN) within the target set are marked skipped
  * via {@link #propagateFailure}, and any independent branches keep running. The final {@link
  * ExecutionResult} reports failure whenever at least one node failed.
+ *
+ * <p>Propagation walks the <em>transitive</em> cone while the tracker gates on <em>direct</em>
+ * predecessors, so a cone member can already be running: its only declared predecessor may sit
+ * outside the run — applied by an earlier one — which makes it ready alongside the node that then
+ * fails above it. Such a node is left to its own completion; propagation reports and counts only
+ * the ones nobody has claimed.
  *
  * @see Executor
  * @see ReadyNodeTracker
@@ -245,7 +256,15 @@ public final class DagExecutor implements Executor {
         }
 
         CountDownLatch latch = new CountDownLatch(totalNodes);
+        // Who owns a node's single countdown. Every node is counted exactly once or the run either
+        // hangs or reports itself over: the coordinator claims a node before starting it, and
+        // failure propagation may only count the ones nobody has claimed.
+        Set<NodeId> claimed = ConcurrentHashMap.newKeySet();
         Set<NodeId> failedNodes = ConcurrentHashMap.newKeySet();
+        // Every thread this run started, so a cancellation can wait for the tasks already in
+        // flight. Waiting on the latch instead would never return: it still holds counts for
+        // nodes that were never dispatched.
+        List<Thread> dispatched = new CopyOnWriteArrayList<>();
         AtomicInteger executedCount = new AtomicInteger(0);
         AtomicInteger skippedCount = new AtomicInteger(0);
         AtomicInteger failureCount = new AtomicInteger(0);
@@ -263,6 +282,9 @@ public final class DagExecutor implements Executor {
                 }
 
                 if (isAlreadyInRequiredState(node)) {
+                    if (!claimed.add(node.id())) {
+                        continue;
+                    }
                     listener.onNodeSkipped(node, direction, requiredHistorySkipReason());
                     skippedCount.incrementAndGet();
                     processCompletion(node.id(), tracker, readyQueue);
@@ -274,31 +296,40 @@ public final class DagExecutor implements Executor {
                     semaphore.acquire();
                 }
 
-                @Nullable Semaphore sem = semaphore;
-                Thread.startVirtualThread(
-                        () -> {
-                            try {
-                                executeNode(
-                                        node,
-                                        failedNodes,
-                                        executedCount,
-                                        skippedCount,
-                                        failureCount,
-                                        tracker,
-                                        readyQueue,
-                                        latch,
-                                        selectedNodes);
-                            } finally {
-                                if (sem != null) {
-                                    sem.release();
-                                }
-                                latch.countDown();
-                            }
-                        });
+                if (!claimed.add(node.id())) {
+                    if (semaphore != null) {
+                        semaphore.release();
+                    }
+                    continue;
+                }
+
+                dispatched.add(
+                        Thread.startVirtualThread(
+                                () -> {
+                                    try {
+                                        executeNode(
+                                                node,
+                                                failedNodes,
+                                                claimed,
+                                                executedCount,
+                                                skippedCount,
+                                                failureCount,
+                                                tracker,
+                                                readyQueue,
+                                                latch,
+                                                selectedNodes);
+                                    } finally {
+                                        if (semaphore != null) {
+                                            semaphore.release();
+                                        }
+                                        latch.countDown();
+                                    }
+                                }));
             }
 
             latch.await();
         } catch (InterruptedException e) {
+            awaitDispatched(dispatched);
             Thread.currentThread().interrupt();
             ExecutionSummary summary =
                     ExecutionSummary.failure(
@@ -330,9 +361,40 @@ public final class DagExecutor implements Executor {
         return ExecutionResult.success(summary);
     }
 
+    /**
+     * Waits for the tasks already in flight, whatever the interrupt was for.
+     *
+     * <p>A cancelled run must not return while a statement is executing: the threads are virtual,
+     * hence daemon, so the JVM may exit inside it and leave the database in a state no history row
+     * describes. What is <em>not</em> waited for is the rest of the graph — nothing further is
+     * dispatched once the loop is left, and the latch cannot be awaited because it still holds
+     * counts for nodes that never started.
+     *
+     * <p>Interrupts that arrive while waiting are absorbed and re-raised on the way out, because
+     * there is nothing left to interrupt: the choice was already made to stop dispatching, and the
+     * only thing still running is work that cannot be abandoned safely.
+     */
+    private static void awaitDispatched(List<Thread> dispatched) {
+        boolean interrupted = false;
+        for (Thread thread : dispatched) {
+            while (true) {
+                try {
+                    thread.join();
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private void executeNode(
             MigrationNode node,
             Set<NodeId> failedNodes,
+            Set<NodeId> claimed,
             AtomicInteger executedCount,
             AtomicInteger skippedCount,
             AtomicInteger failureCount,
@@ -355,37 +417,50 @@ public final class DagExecutor implements Executor {
         Result<TaskResult, String> result = task.execute();
         long duration = System.currentTimeMillis() - startTime;
 
-        if (result.isOk()) {
-            listener.onNodeSucceeded(node, direction, duration);
+        try {
+            if (result.isOk()) {
+                listener.onNodeSucceeded(node, direction, duration);
 
-            TaskResult taskResult = result.value();
-            history.record(recordSuccess(node, duration, taskResult));
+                TaskResult taskResult = result.value();
+                history.record(recordSuccess(node, duration, taskResult));
 
-            executedCount.incrementAndGet();
-            processCompletion(node.id(), tracker, readyQueue);
-        } else {
-            String errorMsg = result.error();
-            String message = errorMsg != null ? errorMsg : "Unknown error";
-            String sqlContent = null;
-            if (task instanceof SqlContentProvider sqlProvider) {
-                sqlContent = sqlProvider.sqlContent();
+                executedCount.incrementAndGet();
+                processCompletion(node.id(), tracker, readyQueue);
+            } else {
+                String errorMsg = result.error();
+                String message = errorMsg != null ? errorMsg : "Unknown error";
+
+                listener.onNodeFailed(node, direction, sqlContentOf(task), message);
+
+                history.record(
+                        ExecutionRecord.failure(
+                                node.id(), node.target().id(), direction, node.name(), message));
+
+                failedNodes.add(node.id());
+                failureCount.incrementAndGet();
+                propagateFailure(
+                        node.id(), failedNodes, claimed, selectedNodes, skippedCount, latch);
             }
+        } catch (RuntimeException e) {
+            String message =
+                    (result.isOk()
+                                    ? "applied, but recording the result failed: "
+                                    : "recording the failure failed: ")
+                            + e;
 
-            listener.onNodeFailed(node, direction, sqlContent, message);
+            listener.onNodeFailed(node, direction, sqlContentOf(task), message);
 
-            history.record(
-                    ExecutionRecord.failure(
-                            node.id(), node.target().id(), direction, node.name(), message));
-
-            failedNodes.add(node.id());
-            failureCount.incrementAndGet();
-            propagateFailure(node.id(), failedNodes, selectedNodes, skippedCount, latch);
+            if (failedNodes.add(node.id())) {
+                failureCount.incrementAndGet();
+            }
+            propagateFailure(node.id(), failedNodes, claimed, selectedNodes, skippedCount, latch);
         }
     }
 
     private void propagateFailure(
             NodeId failedId,
             Set<NodeId> failedNodes,
+            Set<NodeId> claimed,
             Set<NodeId> selectedNodes,
             AtomicInteger skippedCount,
             CountDownLatch latch) {
@@ -395,6 +470,12 @@ public final class DagExecutor implements Executor {
                 continue;
             }
             if (!failedNodes.add(skipId)) {
+                continue;
+            }
+            if (!claimed.add(skipId)) {
+                // Already running, or already skipped by the coordinator. Its own completion owns
+                // the countdown; counting it here as well drops the latch to zero while its task
+                // is still inside execute(), and the run reports itself over mid-migration.
                 continue;
             }
             MigrationNode skipNode = graph.getNode(skipId).orElse(null);
@@ -423,6 +504,13 @@ public final class DagExecutor implements Executor {
      */
     private @Nullable Task taskFor(MigrationNode node) {
         return direction == ExecutionDirection.DOWN ? node.downTask() : node.upTask();
+    }
+
+    /**
+     * Returns the SQL the task would report to a failure listener, or {@code null} if it has none.
+     */
+    private static @Nullable String sqlContentOf(Task task) {
+        return task instanceof SqlContentProvider sqlProvider ? sqlProvider.sqlContent() : null;
     }
 
     /**

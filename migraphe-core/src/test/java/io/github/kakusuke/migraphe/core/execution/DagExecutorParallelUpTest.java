@@ -20,6 +20,8 @@ import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -339,6 +341,62 @@ class DagExecutorParallelUpTest {
     }
 
     @Test
+    @DisplayName("スキップ伝播済みのノードは、許可待ちの後でも実行されない")
+    void shouldNotDispatchNodeSkippedWhileWaitingForPermit() throws InterruptedException {
+        // Given: a→b→c のうち b は対象外なので c の in-degree は 0 で、a と同時にキューに乗る
+        CountDownLatch cStarted = new CountDownLatch(1);
+
+        Task slowFailingTask =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return Result.err("task failed");
+                    }
+
+                    @Override
+                    public String description() {
+                        return "SlowFailingTask";
+                    }
+                };
+
+        Task startSignalingTask =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        cStarted.countDown();
+                        return Result.ok(TaskResult.withoutDownTask("done"));
+                    }
+
+                    @Override
+                    public String description() {
+                        return "StartSignalingTask";
+                    }
+                };
+
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(createNodeWithTask("a", Set.of(), slowFailingTask));
+        graph.addNode(createNode("b", Set.of(NodeId.of("a"))));
+        graph.addNode(createNodeWithTask("c", Set.of(NodeId.of("b")), startSignalingTask));
+
+        InMemoryHistoryRepository history = new InMemoryHistoryRepository();
+        MockExecutionListener listener = new MockExecutionListener();
+        DagExecutor executor = new DagExecutor(graph, history, listener, ExecutionDirection.UP, 1);
+
+        // When: b を対象から外し、a の許可待ちで c がブロックされる状態を作る
+        ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("c")));
+
+        // Then
+        assertThat(result.success()).isFalse();
+        assertThat(listener.skippedNodes).containsExactly(NodeId.of("c"));
+        assertThat(cStarted.await(300, TimeUnit.MILLISECONDS)).isFalse();
+    }
+
+    @Test
     @DisplayName("maxParallelism=2 で同時実行数が2以下に制限される")
     void shouldLimitConcurrencyToMaxParallelism() throws InterruptedException {
         // Given: 独立した4ノードを maxParallelism=2 で実行
@@ -424,6 +482,128 @@ class DagExecutorParallelUpTest {
                 .upTask(upTask)
                 .downTask(downTask)
                 .build();
+    }
+
+    @Test
+    @DisplayName("失敗の波及が、走っているノードを完了扱いにしない — 適用中に実行が終わらない")
+    void shouldNotFinishWhileASelectedNodeIsStillApplying() throws InterruptedException {
+        // a → b → c, and b is not in this run: it was applied before. So c's only declared
+        // predecessor is outside the run, which makes it ready at the same moment as a — while
+        // a's transitive cone still names it.
+        CountDownLatch aIsFailing = new CountDownLatch(1);
+        AtomicBoolean cFinished = new AtomicBoolean(false);
+
+        Task failing =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        aIsFailing.countDown();
+                        return Result.err("a fails");
+                    }
+
+                    @Override
+                    public String description() {
+                        return "FailingTask";
+                    }
+                };
+        Task slow =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        try {
+                            aIsFailing.await(2, TimeUnit.SECONDS);
+                            Thread.sleep(200);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        cFinished.set(true);
+                        return Result.ok(TaskResult.withoutDownTask("done"));
+                    }
+
+                    @Override
+                    public String description() {
+                        return "SlowTask";
+                    }
+                };
+
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(createNodeWithTask("a", Set.of(), failing));
+        graph.addNode(createNode("b", Set.of(NodeId.of("a"))));
+        graph.addNode(createNodeWithTask("c", Set.of(NodeId.of("b")), slow));
+
+        MockExecutionListener listener = new MockExecutionListener();
+        DagExecutor executor =
+                new DagExecutor(
+                        graph, new InMemoryHistoryRepository(), listener, ExecutionDirection.UP, 2);
+
+        // The coordinator has to reach its claim before a's thread reaches propagation. It does —
+        // poll, free permit, one set insertion — but a failure here reads the same as the defect
+        // returning, so suspect scheduling before suspecting the claim.
+        ExecutionResult result = executor.execute(Set.of(NodeId.of("a"), NodeId.of("c")));
+
+        // Counting the running node as skipped drops the latch to zero while its task is still
+        // inside execute(), so the run reports itself over with a migration in flight.
+        assertThat(cFinished).isTrue();
+        assertThat(result.success()).isFalse();
+        // And it is not reported as skipped either: it ran, and the summary says so once.
+        assertThat(listener.skippedNodes).isEmpty();
+        assertThat(listener.succeededNodes).containsExactly(NodeId.of("c"));
+    }
+
+    @Test
+    @DisplayName("中断されても、起動済みノードのタスクが終わるまで戻らない")
+    void shouldNotReturnOnInterruptWhileADispatchedNodeIsStillApplying()
+            throws InterruptedException {
+        CountDownLatch aIsRunning = new CountDownLatch(1);
+        AtomicBoolean aFinished = new AtomicBoolean(false);
+
+        Task slow =
+                new Task() {
+                    @Override
+                    public Result<TaskResult, String> execute() {
+                        aIsRunning.countDown();
+                        try {
+                            Thread.sleep(300);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                        aFinished.set(true);
+                        return Result.ok(TaskResult.withoutDownTask("done"));
+                    }
+
+                    @Override
+                    public String description() {
+                        return "SlowTask";
+                    }
+                };
+
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(createNodeWithTask("a", Set.of(), slow));
+
+        DagExecutor executor =
+                new DagExecutor(
+                        graph,
+                        new InMemoryHistoryRepository(),
+                        new MockExecutionListener(),
+                        ExecutionDirection.UP,
+                        2);
+
+        AtomicBoolean finishedBeforeReturning = new AtomicBoolean(false);
+        Thread run =
+                new Thread(
+                        () -> {
+                            executor.execute(Set.of(NodeId.of("a")));
+                            finishedBeforeReturning.set(aFinished.get());
+                        });
+        run.start();
+
+        // Cancelled — a build daemon shutting down, a Ctrl-C — while the DDL is in flight. Virtual
+        // threads are daemon threads, so returning here lets the JVM exit inside the statement.
+        assertThat(aIsRunning.await(2, TimeUnit.SECONDS)).isTrue();
+        run.interrupt();
+        run.join(5_000);
+
+        assertThat(finishedBeforeReturning).isTrue();
     }
 
     private MigrationNode createNodeWithTask(String id, Set<NodeId> dependencies, Task upTask) {
