@@ -123,6 +123,27 @@ class MigrationGraphTest {
     }
 
     @Test
+    void nodesOnCyclesListsOnlyTheNodesReachableFromThemselves() {
+        // given: 001_a -> 002_b -> 900_z -> 001_a, a node that only points into that cycle, a
+        // self-loop, and an unrelated node; these identifiers are chosen so that the unfiltered
+        // iteration order is one the assertion below would reject
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(node("db1/001_a").dependencies(NodeId.of("db1/002_b")).build());
+        graph.addNode(node("db1/002_b").dependencies(NodeId.of("db1/900_z")).build());
+        graph.addNode(node("db1/900_z").dependencies(NodeId.of("db1/001_a")).build());
+        graph.addNode(node("db1/500_x").dependencies(NodeId.of("db1/001_a")).build());
+        graph.addNode(node("db1/700_self").dependencies(NodeId.of("db1/700_self")).build());
+        graph.addNode(node("db1/800_free").build());
+
+        assertThat(graph.nodesOnCycles())
+                .containsExactly(
+                        NodeId.of("db1/001_a"),
+                        NodeId.of("db1/002_b"),
+                        NodeId.of("db1/700_self"),
+                        NodeId.of("db1/900_z"));
+    }
+
+    @Test
     void shouldNotDetectCycleInAcyclicGraph() {
         // given
         MigrationGraph graph = MigrationGraph.create();

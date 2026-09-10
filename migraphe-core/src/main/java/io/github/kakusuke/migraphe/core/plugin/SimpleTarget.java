@@ -1,21 +1,24 @@
 package io.github.kakusuke.migraphe.core.plugin;
 
+import io.github.kakusuke.migraphe.api.target.DownTaskRestorer;
 import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.api.target.TargetId;
+import io.github.kakusuke.migraphe.api.task.Task;
 import java.util.Objects;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Simple, immutable reference implementation of {@link Target}.
  *
- * <p>This class carries only an {@link TargetId} and a display name, making it a convenient
- * baseline for plugins (such as the {@code noop} plugin) that do not need any backend-specific
- * connection state. Plugin developers can use it directly or study it when writing their own {@link
- * Target}. Instances are created via the {@code create} factory methods; the target's identity
- * (used by {@link #equals(Object)} and {@link #hashCode()}) is its {@link TargetId} alone.
+ * <p>This class carries only a {@link TargetId} and a display name, making it a convenient baseline
+ * for plugins (such as the {@code noop} plugin) that do not need any backend-specific connection
+ * state. Plugin developers can use it directly or study it when writing their own {@link Target}.
+ * Instances are created via the {@code create} factory methods; the target's identity (used by
+ * {@link #equals(Object)} and {@link #hashCode()}) is its {@link TargetId} alone.
  *
  * @see Target
  */
-public final class SimpleTarget implements Target {
+public final class SimpleTarget implements Target, DownTaskRestorer {
     private final TargetId id;
     private final String name;
 
@@ -32,6 +35,23 @@ public final class SimpleTarget implements Target {
     @Override
     public String name() {
         return name;
+    }
+
+    /**
+     * Rebuilds the rollback a {@link SimpleTask} recorded, which is the text itself.
+     *
+     * <p>A target that cannot do this cannot be rolled back at all: the payload the history kept is
+     * what matches the objects that exist, and nothing else may be substituted for it. This
+     * implementation is trivial because {@link SimpleTask} records its own text, and it is here
+     * because the reference target has to show a plugin what the capability is for.
+     *
+     * @param serializedDownTask the text the row kept
+     * @param pluginMetadata ignored; a {@link SimpleTask} records none
+     * @return a task that runs that text
+     */
+    @Override
+    public Task restoreDownTask(String serializedDownTask, @Nullable String pluginMetadata) {
+        return SimpleTask.of(serializedDownTask);
     }
 
     /**

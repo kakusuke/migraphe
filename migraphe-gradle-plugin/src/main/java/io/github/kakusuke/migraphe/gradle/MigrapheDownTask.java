@@ -5,11 +5,17 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.core.execution.DagExecutor;
-import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
+import io.github.kakusuke.migraphe.core.execution.DownBlocker;
+import io.github.kakusuke.migraphe.core.execution.DownPlanFormatter;
+import io.github.kakusuke.migraphe.core.execution.DownService;
+import io.github.kakusuke.migraphe.core.execution.DownService.DownPlan;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
+import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import org.gradle.api.GradleException;
@@ -25,12 +31,17 @@ import org.gradle.work.DisableCachingByDefault;
  *
  * <p>Registered as {@code migrapheDown} by {@link MigrapheGradlePlugin}, the task rolls back
  * previously executed migrations, either {@linkplain #getAll() all of them} or down to a given
- * {@linkplain #getTarget() target node}. It prints the rollback plan and — unless running in
- * {@linkplain #getDryRun() dry-run} mode — executes it via a {@link DagExecutor} in the {@link
- * ExecutionDirection#DOWN} direction. Rollback always runs with a parallelism of 1.
+ * {@linkplain #getTarget() target node}. It asks {@link DownService} what rolling back would do,
+ * prints the plan and — unless running in {@linkplain #getDryRun() dry-run} mode — executes it via
+ * a {@link DagExecutor} in the {@link ExecutionDirection#DOWN} direction. Rollback always runs with
+ * a parallelism of 1.
+ *
+ * <p>Every check that can refuse a run lives in {@code DownService}, so the CLI and this task
+ * refuse the same things in the same words.
  *
  * <p>The task fails the build with a {@link GradleException} when neither {@code --all} nor {@code
- * --target} is given, when the target node is unknown, or when any rollback fails.
+ * --target} is given, when the target node is unknown, when something refuses the run, or when any
+ * rollback fails.
  */
 @DisableCachingByDefault(
         because = "Migraphe tasks have side effects and their output cannot be cached")
@@ -101,12 +112,12 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
     /**
      * Task action that executes the rollback migrations.
      *
-     * <p>Loads the execution context, determines the rollback targets (all, or down to the target),
-     * prints the plan, and — unless in dry-run mode — runs the rollback. Initializes the history
+     * <p>Loads the execution context, asks {@link DownService} what rolling back would do, prints
+     * the plan, and — unless in dry-run mode — runs the rollback. Initializes the history
      * repository before execution.
      *
      * @throws GradleException if neither {@code --all} nor {@code --target} is specified, if the
-     *     target version is not found, or if any rollback fails
+     *     named migration is not found, if something refuses the run, or if any rollback fails
      */
     @TaskAction
     public void down() {
@@ -128,35 +139,57 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                                         + "  ./gradlew migrapheDown --target=<nodeId>");
                     }
 
-                    if (requestedNode != null && context.graph().getNode(requestedNode).isEmpty()) {
-                        throw new GradleException(
-                                "Target version not found: " + requestedNode.value());
-                    }
-
                     HistoryRepository historyRepo = context.createHistoryRepository();
                     historyRepo.initialize();
+
+                    DownPlan plan =
+                            new DownService(context.graph(), historyRepo)
+                                    .plan(requestedNode, allMigrations, context.targets().values());
+                    DownBlocker blocker = plan.blocker();
+                    if (blocker != null) {
+                        throw new GradleException(
+                                String.join(
+                                        System.lineSeparator(),
+                                        DownPlanFormatter.format(
+                                                blocker, RepairVocabulary.GRADLE)));
+                    }
+
+                    // Only now can "no such migration" be told from a migration the history still
+                    // holds: a target the definitions dropped is legitimate when the plan
+                    // synthesized a node for it, and the refusal above already spoke for one it
+                    // would not roll back.
+                    MigrationGraph runGraph = plan.graph();
+                    if (requestedNode != null
+                            && runGraph.getNode(requestedNode).isEmpty()
+                            && context.graph().getNode(requestedNode).isEmpty()) {
+                        throw new GradleException("Migration not found: " + requestedNode.value());
+                    }
 
                     GradleExecutionListener listener = new GradleExecutionListener(getLogger());
                     DagExecutor executor =
                             new DagExecutor(
-                                    context.graph(),
-                                    historyRepo,
-                                    listener,
-                                    ExecutionDirection.DOWN,
-                                    1);
+                                    runGraph, historyRepo, listener, ExecutionDirection.DOWN, 1);
 
-                    Set<NodeId> selectedNodes =
-                            executor.determineRollbackTargets(requestedNode, allMigrations);
+                    Set<NodeId> selectedNodes = plan.selectedNodes();
 
                     if (selectedNodes.isEmpty()) {
                         getLogger().lifecycle("No migrations to rollback.");
                         return;
                     }
 
-                    ExecutionPlan plan =
-                            TopologicalSort.createReverseExecutionPlanFor(
-                                    context.graph(), selectedNodes);
-                    displayRollbackPlan(context, plan, historyRepo, dryRun);
+                    ExecutionPlan executionPlan =
+                            TopologicalSort.createReverseExecutionPlanFor(runGraph, selectedNodes);
+                    // The nodes the run will execute, in a fixed order: each stands for a row, so
+                    // the tree shows what each migration stood on when it ran — the order the
+                    // rollback follows — instead of what its task file says today. Sorted because
+                    // the graph is a map and two runs over one state must lay out alike.
+                    displayRollbackPlan(
+                            runGraph.allNodes().stream()
+                                    .sorted(Comparator.comparing(node -> node.id().value()))
+                                    .toList(),
+                            executionPlan,
+                            historyRepo,
+                            dryRun);
 
                     if (dryRun) {
                         getLogger().lifecycle("");
@@ -181,7 +214,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
     }
 
     private void displayRollbackPlan(
-            ExecutionContext context,
+            List<MigrationNode> candidates,
             ExecutionPlan plan,
             HistoryRepository historyRepo,
             boolean dryRun) {
@@ -193,7 +226,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
         getLogger().lifecycle("");
 
         // Filter the plan's nodes in DFS order.
-        List<MigrationNode> sortedNodes = plan.filterNodesInOrder(context.nodes());
+        List<MigrationNode> sortedNodes = plan.filterNodesInOrder(candidates);
 
         ExecutionGraphView graphView = new ExecutionGraphView(sortedNodes, true);
         List<String> lines =

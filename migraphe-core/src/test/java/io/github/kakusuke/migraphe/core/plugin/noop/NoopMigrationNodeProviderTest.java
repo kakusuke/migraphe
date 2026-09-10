@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.task.RollbackPayloadProvider;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.Set;
@@ -128,7 +129,10 @@ class NoopMigrationNodeProviderTest {
                 provider.createNode(
                         NodeId.of("test/node"), taskDef, Set.of(), SimpleTarget.create("main"));
 
-        assertThat(node.downTask()).isNotNull();
+        // The row a successful UP writes carries what the up task reports, not what down: holds.
+        assertThat(node.upTask()).isInstanceOf(RollbackPayloadProvider.class);
+        assertThat(((RollbackPayloadProvider) node.upTask()).serializedDownTask())
+                .isEqualTo("drop table");
     }
 
     @Test
