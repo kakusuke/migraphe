@@ -10,6 +10,7 @@ import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.Executor;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
 import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.execution.UpBlocker;
 import io.github.kakusuke.migraphe.core.execution.UpPlanFormatter;
@@ -117,7 +118,18 @@ public class UpCommand implements Command {
 
             // 2. Obtain the HistoryRepository.
             HistoryRepository historyRepo = context.createHistoryRepository();
-            historyRepo.initialize();
+            // up is where a project's history should come into being, so it creates one rather
+            // than refusing. Every other command reports on migrations and must not write DDL to
+            // do it.
+            if (!historyRepo.isInitialized()) {
+                historyRepo.initialize();
+            }
+
+            List<String> notReady = HistoryReadiness.refusal(historyRepo, RepairVocabulary.CLI);
+            if (!notReady.isEmpty()) {
+                notReady.forEach(System.err::println);
+                return 1;
+            }
 
             // 3. Create the executor and listener.
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);

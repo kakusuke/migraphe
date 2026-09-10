@@ -704,7 +704,8 @@ class DownServiceTest {
                         "Error: 1 applied migration(s) were recorded by a version that did not"
                                 + " record what it applied, so nothing in those rows can be read:",
                         "  [?] db1/a",
-                        "Run 'migraphe amend <id>' for each of these.");
+                        "Run 'migraphe upgrade-history', then 'migraphe amend <id>' for any of"
+                                + " these no task file declares any more.");
     }
 
     @Test

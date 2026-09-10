@@ -192,7 +192,7 @@ class DagExecutorRollbackTest {
                 .contains("no rollback")
                 .contains("no reason");
         assertThat(listener.failureMessages.get(NodeId.of("no-fingerprint")))
-                .contains("migraphe amend");
+                .contains("migraphe upgrade-history");
         // A refusal is not an attempt: nothing is written, so upgrade still reaches
         // them.
         assertThat(history.allRecords())
@@ -751,7 +751,8 @@ class DagExecutorRollbackTest {
         assertThat(listener.failureMessages.get(NodeId.of("a")))
                 .isEqualTo(
                         "a: the row that applied it carries no fingerprint, so what it recorded"
-                                + " cannot be read at face value; run 'migraphe amend a'");
+                            + " cannot be read at face value; run 'migraphe upgrade-history', or"
+                            + " 'migraphe amend a' if no task file declares it any more");
     }
 
     private MigrationNode createNode(String id, Set<NodeId> dependencies) {

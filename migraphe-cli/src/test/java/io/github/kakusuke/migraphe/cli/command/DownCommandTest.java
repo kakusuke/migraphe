@@ -61,6 +61,7 @@ class DownCommandTest {
         try {
             createTestProject(tempDir);
             ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+            new InitCommand(context).execute();
             Target target = context.targets().get("test-db");
             if (target instanceof PostgreSQLTarget pgEnv) {
                 try (Connection conn = pgEnv.createConnection();
@@ -80,6 +81,7 @@ class DownCommandTest {
         // Given: V001 <- V002 <- V003 の依存関係
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         // まず UP を実行
         UpCommand upCommand = new UpCommand(context, null, true, false);
@@ -162,6 +164,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         // UP を実行
         UpCommand upCommand = new UpCommand(context, null, true, false);
@@ -194,6 +197,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -220,6 +224,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -242,6 +247,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -273,6 +279,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -295,6 +302,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -331,6 +339,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -353,6 +362,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         // When
         DownCommand downCommand =
@@ -378,6 +388,7 @@ class DownCommandTest {
         // Given: UP を実行せずに DOWN を実行
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         // When
         DownCommand downCommand =
@@ -395,6 +406,7 @@ class DownCommandTest {
         // Given: V001 <- V002 を実行
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -431,6 +443,7 @@ class DownCommandTest {
         // Given
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();
@@ -453,6 +466,7 @@ class DownCommandTest {
         // Given: UP -> DOWN を実行
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         // 1回目の UP
         UpCommand upCommand1 = new UpCommand(context, null, true, false);
@@ -497,6 +511,7 @@ class DownCommandTest {
         // Given: 001_create_users <- 002_add_index の依存関係で両方 UP 済み
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand = new UpCommand(context, null, true, false);
         upCommand.execute();

@@ -63,6 +63,7 @@ class StatusCommandTest {
         try {
             createTestProject(tempDir);
             ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+            new InitCommand(context).execute();
             Target target = context.targets().get("test-db");
             if (target instanceof PostgreSQLTarget pgEnv) {
                 try (Connection conn = pgEnv.createConnection();
@@ -84,6 +85,7 @@ class StatusCommandTest {
         // Given: テスト用のプロジェクト構造
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
         StatusCommand command = new StatusCommand(context);
 
         // When: status コマンドを実行
@@ -144,6 +146,7 @@ class StatusCommandTest {
         // Given: マイグレーションを実行済み
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         // 先に UP を実行
         UpCommand upCommand = new UpCommand(context, null, true, false);
@@ -174,6 +177,7 @@ class StatusCommandTest {
         // Given: テスト用のプロジェクト構造（未実行）
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
         StatusCommand command = new StatusCommand(context);
 
         // When: status コマンドを実行
@@ -192,6 +196,7 @@ class StatusCommandTest {
         // Given: テスト用のプロジェクト構造
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
         StatusCommand command = new StatusCommand(context);
 
         // When: status コマンドを実行
@@ -210,6 +215,7 @@ class StatusCommandTest {
         // Given: 一部のマイグレーションのみ実行
         createTestProjectWithThreeNodes(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         // 最初のマイグレーションのみ実行するため、UpCommand を使用
         UpCommand upCommand = new UpCommand(context, null, true, false);
@@ -238,6 +244,7 @@ class StatusCommandTest {
         // Given: 2ノードのうち依存元の1つだけを実行
         createTestProject(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        new InitCommand(context).execute();
 
         UpCommand upCommand =
                 new UpCommand(context, NodeId.of("test-db/001_create_users"), true, false);

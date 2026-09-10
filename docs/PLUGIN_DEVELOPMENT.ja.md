@@ -5,7 +5,7 @@ Migraphe のカスタムプラグイン作成方法を説明します。
 ## 概要
 
 Migraphe は Java の ServiceLoader メカニズムに基づいたプラグインシステムを使用しています。プラグインは以下を提供できます：
-- **Environment** - データベース接続管理
+- **Target** - データベース接続管理
 - **MigrationNode** - マイグレーションタスク定義
 - **HistoryRepository** - 実行履歴の永続化
 
@@ -28,9 +28,13 @@ dependencyResolutionManagement {
 ```kotlin
 // build.gradle.kts
 dependencies {
-    implementation("com.github.kakusuke.migraphe:migraphe-api:v0.6.0")
+    implementation("com.github.kakusuke.migraphe:migraphe-api:v0.7.0")
 }
 ```
+
+coordinate は実際に動かす migraphe と揃える必要があります。API は 0.7.0 で壊れており
+（[0.7.0 での変更](#070-での変更)）、古いバージョン向けにビルドされた jar は読み込まれたうえで最初の
+呼び出しで `AbstractMethodError` になります。
 
 ### 2. MigraphePlugin の実装
 
@@ -41,7 +45,7 @@ package com.example.myplugin;
 
 import io.github.kakusuke.migraphe.api.spi.*;
 
-public class MyDatabasePlugin implements MigraphePlugin {
+public class MyDatabasePlugin implements MigraphePlugin<String> {
 
     @Override
     public String type() {
@@ -49,12 +53,12 @@ public class MyDatabasePlugin implements MigraphePlugin {
     }
 
     @Override
-    public EnvironmentProvider environmentProvider() {
-        return new MyDatabaseEnvironmentProvider();
+    public TargetProvider targetProvider() {
+        return new MyDatabaseTargetProvider();
     }
 
     @Override
-    public MigrationNodeProvider migrationNodeProvider() {
+    public MigrationNodeProvider<String> migrationNodeProvider() {
         return new MyDatabaseMigrationNodeProvider();
     }
 
@@ -67,17 +71,27 @@ public class MyDatabasePlugin implements MigraphePlugin {
 
 ### 3. Provider の実装
 
-#### EnvironmentProvider
+#### TargetProvider
+
+`TargetDefinition` が持つのは `type()` だけです。`targets/*.yaml` の他のキーはサブインターフェースに置き、
+対応付けは SmallRye に任せます——名前で引くのではなく、型付きのアクセサとして読みます：
 
 ```java
-public class MyDatabaseEnvironmentProvider implements EnvironmentProvider {
+public interface MyTargetDefinition extends TargetDefinition {
+    String connectionString();
+    Optional<String> password();
+}
+
+public class MyDatabaseTargetProvider implements TargetProvider {
 
     @Override
-    public Environment createEnvironment(String name, EnvironmentConfig config) {
-        String connectionString = config.get("connection_string")
-            .orElseThrow(() -> new IllegalArgumentException("connection_string は必須です"));
+    public Target createTarget(String name, TargetDefinition definition) {
+        if (!(definition instanceof MyTargetDefinition mine)) {
+            throw new IllegalArgumentException(
+                "MyTargetDefinition を期待しましたが " + definition.getClass().getName() + " でした");
+        }
 
-        return new MyDatabaseEnvironment(name, connectionString);
+        return new MyDatabaseTarget(name, mine.connectionString(), mine.password().orElse(null));
     }
 }
 ```
@@ -85,35 +99,37 @@ public class MyDatabaseEnvironmentProvider implements EnvironmentProvider {
 #### MigrationNodeProvider
 
 フレームワークが依存関係を解決します。Provider は以下を受け取ります：
-- `TaskDefinition` - 型安全なタスク設定（name, up SQL, down SQL）
+- `TaskDefinition<T>` - 型安全なタスク設定。自前のサブインターフェースにキャストすると、そのプラグイン
+  だけが解釈するキーを読めます
 - `Set<NodeId>` - フレームワークが解決済みの依存関係
 
 ```java
-public class MyDatabaseMigrationNodeProvider implements MigrationNodeProvider {
+public class MyDatabaseMigrationNodeProvider implements MigrationNodeProvider<String> {
 
     @Override
     public MigrationNode createNode(
             NodeId nodeId,
-            TaskDefinition task,
+            TaskDefinition<String> task,
             Set<NodeId> dependencies,
-            Environment environment) {
+            Target target) {
 
-        // TaskDefinition から SQL を取得
-        String upSql = task.up().sql()
-            .orElseThrow(() -> new IllegalArgumentException("up.sql は必須です"));
+        String upSql = task.up();
+        String downSql = task.down().filter(sql -> !sql.isBlank()).orElse(null);
 
-        String downSql = task.down()
-            .flatMap(SqlDefinition::sql)
-            .orElse(null);
+        // タスクはロールバックか、それが無い理由かのどちらかを宣言します。自前の定義インターフェースへ
+        // キャストするのが、そのプラグイン固有のキーを読む方法です。
+        String noWayBack =
+            task instanceof MyTaskDefinition mine ? mine.noWayBack().orElse(null) : null;
 
         return new MyDatabaseMigrationNode(
             nodeId,
             task.name(),
-            task.description().orElse(""),
-            environment,
+            task.description().orElse(null),
+            target,
             dependencies,  // フレームワークから提供
             upSql,
-            downSql
+            downSql,
+            noWayBack
         );
     }
 }
@@ -125,8 +141,8 @@ public class MyDatabaseMigrationNodeProvider implements MigrationNodeProvider {
 public class MyDatabaseHistoryRepositoryProvider implements HistoryRepositoryProvider {
 
     @Override
-    public HistoryRepository createRepository(Environment environment) {
-        return new MyDatabaseHistoryRepository((MyDatabaseEnvironment) environment);
+    public HistoryRepository createRepository(Target target) {
+        return new MyDatabaseHistoryRepository((MyDatabaseTarget) target);
     }
 }
 ```
@@ -200,31 +216,33 @@ password: secret
 ### MigraphePlugin
 
 ```java
-public interface MigraphePlugin {
+public interface MigraphePlugin<T> {
     String type();
-    EnvironmentProvider environmentProvider();
-    MigrationNodeProvider migrationNodeProvider();
+    TargetProvider targetProvider();
+    MigrationNodeProvider<T> migrationNodeProvider();
     HistoryRepositoryProvider historyRepositoryProvider();
 }
 ```
 
-### EnvironmentProvider
+`T` は `up:` / `down:` キーが写る型です。タスクが SQL であるプラグインなら `String`。
+
+### TargetProvider
 
 ```java
-public interface EnvironmentProvider {
-    Environment createEnvironment(String name, EnvironmentConfig config);
+public interface TargetProvider {
+    Target createTarget(String name, TargetDefinition config);
 }
 ```
 
 ### MigrationNodeProvider
 
 ```java
-public interface MigrationNodeProvider {
+public interface MigrationNodeProvider<T> {
     MigrationNode createNode(
         NodeId nodeId,
-        TaskDefinition task,
+        TaskDefinition<T> task,
         Set<NodeId> dependencies,
-        Environment environment);
+        Target target);
 }
 ```
 
@@ -232,43 +250,51 @@ public interface MigrationNodeProvider {
 
 ```java
 public interface HistoryRepositoryProvider {
-    HistoryRepository createRepository(Environment environment);
+    HistoryRepository createRepository(Target target);
 }
 ```
 
 ### TaskDefinition
 
-フレームワークが提供する型安全なタスク設定：
+フレームワークが提供する型安全なタスク設定です。`T` はプラグインの `up:` / `down:` キーが保持するもの
+——JDBC 系なら素の SQL ですが、レコード型に写しても構いません：
 
 ```java
-public interface TaskDefinition {
+public interface TaskDefinition<T> {
     String name();
     Optional<String> description();
-    SqlDefinition up();
-    Optional<SqlDefinition> down();
+    String target();
+    Optional<List<String>> dependencies();
+    T up();
+    Optional<T> down();
 }
 ```
 
-### SqlDefinition
+自前の定義インターフェースでこれを継承し、そのタスクの YAML が持つ他のキーを足します。キーの対応付けは
+SmallRye が行うので、YAML 側の綴りが違う場合は `@WithName` で名前を与えます：
 
 ```java
-public interface SqlDefinition {
-    Optional<String> sql();
-    Optional<String> file();
-    Optional<String> resource();
+public interface SqlTaskDefinition extends TaskDefinition<String> {
+    Optional<Boolean> autocommit();
+
+    @WithName("autocommit.up")
+    Optional<Boolean> autocommitUp();
 }
 ```
 
 ## 実装が必要なコアインターフェース
 
-### Environment
+### Target
 
 ```java
-public interface Environment {
-    EnvironmentId id();
+public interface Target {
+    TargetId id();
     String name();
 }
 ```
+
+target は**接続**であり、それだけを意味します。（0.7.0 より前は `Environment` という名前でした。
+いまや *environment* は `environments/*.yaml` のオーバーレイだけを指します。）
 
 ### MigrationNode
 
@@ -276,18 +302,65 @@ public interface Environment {
 public interface MigrationNode {
     NodeId id();
     String name();
-    Environment environment();
+    @Nullable String description();
+    Target target();
     Set<NodeId> dependencies();
     Task upTask();
-    Optional<Task> downTask();
+    @Nullable Task downTask();
+
+    @Nullable String fingerprint(Fingerprinter fingerprinter);
+
+    default @Nullable String noWayBack() {
+        return null;
+    }
 }
 ```
+
+**`fingerprint` にデフォルト実装は無く、必ず実装します。** これは「定義と一致したままのマイグレーション」と
+「適用後に編集されたマイグレーション」を `status` が見分けるための値で、答えられないプラグインは
+`status` 以外のすべてのコマンドを止めます。自分の持ち分を `Fingerprinter` に渡し、返ってきたものを返して
+ください——枠付け・依存閉包の連結・ハッシュ化はコアが行うので、どのプラグインも同じ畳み方になります：
+
+```java
+@Override
+public @Nullable String fingerprint(Fingerprinter fingerprinter) {
+    return downTask == null
+            ? fingerprinter.over(upTask.signature())
+            : fingerprinter.over(upTask.signature(), downTask.signature());
+}
+```
+
+`null` を返すことは**辞退の手段ではありません**。設計が残している唯一の null は、履歴の行を包むコア自身の
+アダプタが「その行にトークンが無い」と報告するためのものです。宣言されたノードが null を返すのは契約違反で、
+プラグインの不具合として報告されます。
+
+`noWayBack()` は「そのマイグレーションが一方向である理由」を返し、そうでなければ `null` です。
+`downTask()` が無いだけでは答えられない問い——著者が決めたのか、書き忘れたのか——に答えます。両者は
+正反対の対応を要求するので、タスクはどちらかを必ず宣言します。すべてのタスクが宣言するまで `up` は
+プロジェクト全体を拒否します。
 
 ### Task
 
 ```java
 public interface Task {
     Result<TaskResult, String> execute();
+    String description();
+    String signature();
+}
+```
+
+**`signature` にもデフォルトはありません。** fingerprint のうちプラグインの持ち分を畳む元になるテキストで、
+そのタスクの振る舞いを変えうるものをすべて含める必要があります。複数の値から組み立てるなら**枠付け**も
+必須です——さもないと、ある値の末尾が別のフィールド名と偶然一致したときに衝突します：
+
+```java
+@Override
+public String signature() {
+    return part(sql.strip()) + part(autocommit ? "t" : "f");
+}
+
+private static String part(String text) {
+    return text.length() + ":" + text;  // 長さを前置するので、ある値が次の値を装えない
 }
 ```
 
@@ -297,18 +370,86 @@ public interface Task {
 public interface HistoryRepository {
     void initialize();
     void record(ExecutionRecord record);
-    boolean wasExecuted(NodeId nodeId, EnvironmentId environmentId);
-    List<NodeId> executedNodes(EnvironmentId environmentId);
-    List<ExecutionRecord> allRecords(EnvironmentId environmentId);
-    Optional<ExecutionRecord> findLatestRecord(NodeId nodeId, EnvironmentId environmentId);
+    boolean wasExecuted(NodeId nodeId);
+    List<NodeId> executedNodes();
+    List<ExecutionRecord> allRecords();
+    default List<ExecutionRecord> latestApplies() { /* walks allRecords() per id; override if cheaper */ }
+    @Nullable ExecutionRecord findLatestRecord(NodeId nodeId);
 }
 ```
+
+## 能力インターフェース: ロールバックされるために実装が要るもの
+
+ロールバックはタスクファイルの `down:` を実行しません。**履歴の行**が保持した payload を実行します。
+実在するオブジェクトに対応しているのはそちらだからです——ファイルが述べているのは「いま適用するなら
+何を作るか」であって、編集された瞬間に別物になります。これを担うのが 2 つの小さなインターフェースで、
+どちらも実装しないプラグインは、マイグレーションを適用できてもう二度と取り出せません。
+
+### `RollbackPayloadProvider` — up タスク側
+
+行に何を残すべきかを、適用したタスク自身が報告します：
+
+```java
+public interface RollbackPayloadProvider {
+    @Nullable String serializedDownTask();
+    @Nullable String pluginMetadata();
+}
+```
+
+`serializedDownTask` は素のテキストとして保存されます。止まったマイグレーションを調べる操作者が、列から
+そのままコピーして読めるようにするためです（JDBC 系は `down:` の SQL をそのまま入れます）。
+`pluginMetadata` はプラグインのもので、コアは中身を見ずに保存して返すだけです——符号化を知っているのは
+書いた本人だけ。JDBC 系は `java.util.Properties` を使って `autocommit` を運びます。ロールバックに必要で、
+SQL だけからは分からない値だからです。
+
+up タスクは成功時に `TaskResult` を通じてこれを報告します。あわせてこのインターフェースを実装しておくと、
+`amend` が**何も実行せずに**同じ問いを立てられます。実行されなかったマイグレーションについて完全な行を
+書けるのはそのためで、実装していないプラグインは `amend` をまったく使えません。
+
+### `DownTaskRestorer` — target 側
+
+その payload を実行可能なものに戻します：
+
+```java
+public interface DownTaskRestorer {
+    Task restoreDownTask(String serializedDownTask, @Nullable String pluginMetadata);
+}
+```
+
+`instanceof` で検出されるので、実装しない target は**そもそも何もロールバックできません**——実行の途中で
+失敗するのではなく、型の上で見えます。返された `Task` は適用時とまったく同じ executor・listener・
+履歴書き込みの経路を通ります。
+
+```java
+public final class MyTarget implements Target, DownTaskRestorer {
+    @Override
+    public Task restoreDownTask(String serializedDownTask, @Nullable String pluginMetadata) {
+        return new MyTask(this, serializedDownTask, MyOptions.decode(pluginMetadata));
+    }
+}
+```
+
+## 0.7.0 での変更
+
+0.6.x 向けに書かれたプラグインはコンパイルが通りません（それが狙いです）。また 0.6.x 向けにビルドされた
+**jar** は読み込まれたうえで最初の呼び出しで `AbstractMethodError` になるので、**再解決ではなく再ビルド**が
+必要です。
+
+| 旧 | 新 |
+|---|---|
+| `Environment`, `EnvironmentId`, `EnvironmentDefinition`, `EnvironmentProvider` | `Target`, `TargetId`, `TargetDefinition`, `TargetProvider` |
+| `Optional<Task> downTask()` | `@Nullable Task downTask()` |
+| — | `MigrationNode.fingerprint(Fingerprinter)`（必須） |
+| — | `Task.signature()`（必須） |
+| — | `MigrationNode.noWayBack()`（デフォルトあり） |
+| `HistoryRepository` の読み取りは target id を取っていた | id だけで問われる。返る行が自分の target を持つ |
+| `ExecutionRecord`, `TaskResult` | どちらも持つ要素が増えた（`origin`、`no_way_back` を含む） |
 
 ## 例: PostgreSQL プラグイン
 
 完全な実装例として `migraphe-plugin-postgresql` モジュールを参照してください：
 - `PostgreSQLPlugin` - メインプラグインクラス
-- `PostgreSQLEnvironmentProvider` - PostgreSQLEnvironment を生成
+- `PostgreSQLTargetProvider` - PostgreSQLTarget を生成
 - `PostgreSQLMigrationNodeProvider` - PostgreSQLMigrationNode を生成
 - `PostgreSQLHistoryRepositoryProvider` - PostgreSQLHistoryRepository を生成
 
@@ -320,3 +461,6 @@ public interface HistoryRepository {
 4. **テスト**: 実際のデータベースインスタンスで統合テスト（例: Testcontainers）
 5. **ServiceLoader 登録**: META-INF/services ファイルを忘れずに
 6. **依存関係の処理**: 依存関係はフレームワークに任せ、タスク実行に集中する
+7. **ロールバック**: マイグレーションが本当に一方向でない限り、`RollbackPayloadProvider` と
+   `DownTaskRestorer` を実装する。無いと、適用はできても二度と取り出せないプロジェクトになり、
+   `amend` で履歴を修復することもできません

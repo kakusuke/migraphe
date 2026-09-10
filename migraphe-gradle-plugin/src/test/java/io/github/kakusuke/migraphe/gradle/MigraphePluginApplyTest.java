@@ -46,6 +46,60 @@ class MigraphePluginApplyTest {
     }
 
     @Test
+    void shouldRegisterMigrapheInitTask() {
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("tasks", "--group=migraphe")
+                        .build();
+
+        assertThat(result.getOutput()).contains("migrapheInit");
+        assertThat(result.getOutput()).contains("Create the migration history");
+    }
+
+    @Test
+    void shouldRegisterMigrapheUpgradeHistoryTask() {
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("tasks", "--group=migraphe")
+                        .build();
+
+        assertThat(result.getOutput()).contains("migrapheUpgradeHistory");
+        assertThat(result.getOutput())
+                .contains("Bring the history to the shape this version writes");
+    }
+
+    @Test
+    void shouldRegisterMigrapheAmendTask() {
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("tasks", "--group=migraphe")
+                        .build();
+
+        assertThat(result.getOutput()).contains("migrapheAmend");
+        assertThat(result.getOutput()).contains("Record the current definitions as applied");
+    }
+
+    @Test
+    void shouldRegisterMigrapheRebuildTask() {
+        BuildResult result =
+                GradleRunner.create()
+                        .withProjectDir(testProjectDir.toFile())
+                        .withPluginClasspath()
+                        .withArguments("tasks", "--group=migraphe")
+                        .build();
+
+        assertThat(result.getOutput()).contains("migrapheRebuild");
+        assertThat(result.getOutput())
+                .contains("Roll back what drifted and apply everything again");
+    }
+
+    @Test
     void shouldRegisterMigrapheExtension() {
         // Extension が正しく登録されていればタスク一覧が表示される
         BuildResult result =

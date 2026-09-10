@@ -76,11 +76,12 @@ class MigrapheRebuildTaskFunctionalTest {
 
         BuildResult result = runTaskAndFail("migrapheRebuild");
 
-        // The row records nothing that can be read at face value, and no task file declares it
-        // any more, so the remedy named is the one that withdraws it — in the invocation this
-        // build understands, not the CLI's.
+        // upgrade fills a row from the definition naming it, so it never reaches one
+        // no definition names. Naming only that half is a loop with no exit — and naming either in
+        // a form this build cannot run is the same dead end one step later.
         assertThat(result.getOutput())
                 .contains("[?] archive/001_audit")
+                .contains("./gradlew migrapheUpgradeHistory")
                 .contains("--migration=")
                 .doesNotContain("migraphe amend");
     }
