@@ -149,6 +149,24 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                                 task.getDryRun().convention(true);
                             }
                         });
+
+        project.getTasks()
+                .register(
+                        "migrapheAmend",
+                        MigrapheAmendTask.class,
+                        task -> {
+                            task.setDescription("Record the current definitions as applied");
+                            task.setGroup("migraphe");
+                            task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
+                            task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
+                            // Fallback from -P properties (at configuration time).
+                            Object dryRunProp = project.findProperty("migraphe.amend.dryRun");
+                            if ("true".equals(String.valueOf(dryRunProp))) {
+                                task.getDryRun().convention(true);
+                            }
+                        });
     }
 
     /**
