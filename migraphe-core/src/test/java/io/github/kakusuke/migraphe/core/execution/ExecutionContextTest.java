@@ -7,7 +7,6 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
-import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 import io.github.kakusuke.migraphe.jdbc.JdbcTarget;
@@ -76,9 +75,9 @@ class ExecutionContextTest {
         Map<String, Target> targets = context.targets();
         assertThat(targets).containsKey("test-db");
 
-        Target env = Objects.requireNonNull(targets.get("test-db"));
-        assertThat(env).isInstanceOf(PostgreSQLTarget.class);
-        assertThat(env.id().value()).isEqualTo("test-db");
+        Target target = Objects.requireNonNull(targets.get("test-db"));
+        assertThat(target).isInstanceOf(PostgreSQLTarget.class);
+        assertThat(target.id().value()).isEqualTo("test-db");
     }
 
     @Test
@@ -135,16 +134,52 @@ class ExecutionContextTest {
     }
 
     @Test
-    void shouldFallbackToInMemoryHistoryRepository() throws IOException {
+    void shouldRejectAHistoryTargetThatNoConfiguredTargetMatches() throws IOException {
         // Given: history.target が存在しない環境を指すプロジェクト
         createTestProjectWithMissingHistoryTarget(tempDir);
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        // When: createHistoryRepository() を呼び出す
-        HistoryRepository historyRepo = context.createHistoryRepository();
+        // When/Then: 履歴が黙ってメモリに落ちるのではなく、ターゲット名を挙げて失敗する
+        assertThatThrownBy(context::createHistoryRepository)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("nonexistent-db")
+                .hasMessageContaining("test-db");
+    }
 
-        // Then: フォールバックとして InMemoryHistoryRepository が返される
-        assertThat(historyRepo).isInstanceOf(InMemoryHistoryRepository.class);
+    @Test
+    void maxParallelismShouldBeTheProjectsSettingOrOneWhenParallelismIsOff() throws IOException {
+        createTestProject(tempDir);
+
+        assertThat(ExecutionContext.load(tempDir, pluginRegistry).maxParallelism()).isEqualTo(1);
+
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                execution:
+                  parallel: true
+                  max-parallelism: 4
+                """);
+
+        assertThat(ExecutionContext.load(tempDir, pluginRegistry).maxParallelism()).isEqualTo(4);
+
+        // A number left behind while parallelism is off is not a behaviour change.
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                execution:
+                  parallel: false
+                  max-parallelism: 4
+                """);
+
+        assertThat(ExecutionContext.load(tempDir, pluginRegistry).maxParallelism()).isEqualTo(1);
     }
 
     /**
@@ -215,7 +250,7 @@ class ExecutionContextTest {
 
     @Test
     void shouldApplyEnvironmentOverrideToTargetConfig() throws IOException {
-        // Given: targets/test-db.yaml に ${DB_URL} を含むプロジェクトと targets/staging.yaml
+        // Given: targets/test-db.yaml に ${DB_URL} を含むプロジェクトと environments/staging.yaml
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),
                 """
@@ -244,16 +279,16 @@ class ExecutionContextTest {
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry, "staging");
 
         // Then: staging 環境の jdbc_url が Target に反映されている
-        Target env = Objects.requireNonNull(context.targets().get("test-db"));
-        assertThat(env).isInstanceOf(JdbcTarget.class);
-        assertThat(((JdbcTarget) env).getJdbcUrl())
+        Target target = Objects.requireNonNull(context.targets().get("test-db"));
+        assertThat(target).isInstanceOf(JdbcTarget.class);
+        assertThat(((JdbcTarget) target).getJdbcUrl())
                 .isEqualTo("jdbc:postgresql://staging-host:5432/stagingdb");
     }
 
     /**
      * history.target が存在しない環境を指すプロジェクト構造を作成する。
      *
-     * <p>history.target = "nonexistent-db" で、targets に存在しないため InMemory にフォールバックする。
+     * <p>history.target = "nonexistent-db" で、targets に存在しない。設定済みは test-db のみ。
      */
     private void createTestProjectWithMissingHistoryTarget(Path baseDir) throws IOException {
         // migraphe.yaml — history.target が存在しない環境を指す

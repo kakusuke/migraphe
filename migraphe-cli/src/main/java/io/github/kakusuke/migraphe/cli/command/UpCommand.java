@@ -6,11 +6,15 @@ import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.cli.listener.ConsoleExecutionListener;
 import io.github.kakusuke.migraphe.cli.util.AnsiColor;
-import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.Executor;
+import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
+import io.github.kakusuke.migraphe.core.execution.UpBlocker;
+import io.github.kakusuke.migraphe.core.execution.UpPlanFormatter;
+import io.github.kakusuke.migraphe.core.execution.UpService;
+import io.github.kakusuke.migraphe.core.execution.UpService.UpPlan;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
@@ -33,7 +37,7 @@ import org.jspecify.annotations.Nullable;
 public class UpCommand implements Command {
 
     private final ExecutionContext context;
-    private final @Nullable NodeId targetId;
+    private final @Nullable NodeId requestedNode;
     private final boolean skipConfirmation;
     private final boolean dryRun;
     private final InputStream inputStream;
@@ -56,17 +60,23 @@ public class UpCommand implements Command {
      * auto-detecting color support.
      *
      * @param context the loaded execution context (graph, config, history)
-     * @param targetId the highest node to migrate up to and including, or {@code null} to migrate
-     *     all pending nodes
+     * @param requestedNode the highest node to migrate up to and including, or {@code null} to
+     *     migrate all pending nodes
      * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
      * @param dryRun {@code true} to display the plan without executing any migration
      */
     public UpCommand(
             ExecutionContext context,
-            @Nullable NodeId targetId,
+            @Nullable NodeId requestedNode,
             boolean skipConfirmation,
             boolean dryRun) {
-        this(context, targetId, skipConfirmation, dryRun, System.in, AnsiColor.isColorEnabled());
+        this(
+                context,
+                requestedNode,
+                skipConfirmation,
+                dryRun,
+                System.in,
+                AnsiColor.isColorEnabled());
     }
 
     /**
@@ -74,8 +84,8 @@ public class UpCommand implements Command {
      * for testing.
      *
      * @param context the loaded execution context (graph, config, history)
-     * @param targetId the highest node to migrate up to and including, or {@code null} to migrate
-     *     all pending nodes
+     * @param requestedNode the highest node to migrate up to and including, or {@code null} to
+     *     migrate all pending nodes
      * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
      * @param dryRun {@code true} to display the plan without executing any migration
      * @param inputStream the stream from which the confirmation answer is read
@@ -83,13 +93,13 @@ public class UpCommand implements Command {
      */
     public UpCommand(
             ExecutionContext context,
-            @Nullable NodeId targetId,
+            @Nullable NodeId requestedNode,
             boolean skipConfirmation,
             boolean dryRun,
             InputStream inputStream,
             boolean colorEnabled) {
         this.context = context;
-        this.targetId = targetId;
+        this.requestedNode = requestedNode;
         this.skipConfirmation = skipConfirmation;
         this.dryRun = dryRun;
         this.inputStream = inputStream;
@@ -100,8 +110,8 @@ public class UpCommand implements Command {
     public int execute() {
         try {
             // 1. When a target is specified, verify the node exists.
-            if (targetId != null && context.graph().getNode(targetId).isEmpty()) {
-                System.err.println("Error: Target not found: " + targetId.value());
+            if (requestedNode != null && context.graph().getNode(requestedNode).isEmpty()) {
+                System.err.println("Error: Target not found: " + requestedNode.value());
                 return 1;
             }
 
@@ -113,8 +123,15 @@ public class UpCommand implements Command {
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
             Executor executor = createExecutor(context, historyRepo, listener);
 
-            // 4. Determine the nodes to execute.
-            Set<NodeId> selectedNodes = executor.determineTargetNodes(targetId);
+            // 4. Decide what to execute, and whether anything refuses the run.
+            UpPlan plan = new UpService(context.graph(), historyRepo).plan(requestedNode);
+            UpBlocker blocker = plan.blocker();
+            if (blocker != null) {
+                UpPlanFormatter.format(blocker, RepairVocabulary.CLI).forEach(System.err::println);
+                return 1;
+            }
+
+            Set<NodeId> selectedNodes = plan.selectedNodes();
 
             if (selectedNodes.isEmpty()) {
                 System.out.println("No migrations to execute. All migrations are up to date.");
@@ -122,9 +139,9 @@ public class UpCommand implements Command {
             }
 
             // 5. Build the ExecutionPlan and display the graph.
-            ExecutionPlan plan =
+            ExecutionPlan executionPlan =
                     TopologicalSort.createExecutionPlanFor(context.graph(), selectedNodes);
-            displayMigrationGraph(context, plan, historyRepo);
+            displayMigrationGraph(context, executionPlan, historyRepo);
 
             // 6. Stop here in dry-run mode.
             if (dryRun) {
@@ -159,11 +176,12 @@ public class UpCommand implements Command {
             ExecutionContext context,
             HistoryRepository historyRepo,
             ConsoleExecutionListener listener) {
-        ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
-        ProjectConfig.ExecutionSection execConfig = projectConfig.execution();
-        int maxParallelism = execConfig.parallel() ? execConfig.maxParallelism() : 1;
         return new DagExecutor(
-                context.graph(), historyRepo, listener, ExecutionDirection.UP, maxParallelism);
+                context.graph(),
+                historyRepo,
+                listener,
+                ExecutionDirection.UP,
+                context.maxParallelism());
     }
 
     /** Renders the migration execution plan as an ASCII graph with per-node status markers. */

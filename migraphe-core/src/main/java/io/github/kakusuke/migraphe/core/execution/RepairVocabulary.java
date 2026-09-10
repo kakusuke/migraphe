@@ -22,7 +22,7 @@ package io.github.kakusuke.migraphe.core.execution;
 public enum RepairVocabulary {
 
     /** {@code migraphe} on a command line. */
-    CLI("migraphe amend <id>", "migraphe amend"),
+    CLI("migraphe amend <id>", "migraphe amend", "migraphe down <id>"),
 
     /**
      * The Gradle tasks.
@@ -31,14 +31,19 @@ public enum RepairVocabulary {
      * --migration=<id>}, and an operator copying {@code amend <id>} into a build would get a task
      * name Gradle cannot resolve.
      */
-    GRADLE("./gradlew migrapheAmend --migration=<id>", "the migrapheAmend task");
+    GRADLE(
+            "./gradlew migrapheAmend --migration=<id>",
+            "the migrapheAmend task",
+            "./gradlew migrapheDown --target=<id>");
 
     private final String named;
     private final String plain;
+    private final String down;
 
-    RepairVocabulary(String named, String plain) {
+    RepairVocabulary(String named, String plain, String down) {
         this.named = named;
         this.plain = plain;
+        this.down = down;
     }
 
     /**
@@ -57,5 +62,14 @@ public enum RepairVocabulary {
      */
     public String plain() {
         return plain;
+    }
+
+    /**
+     * How to take one migration out, which is how a single drifted one is usually dealt with.
+     *
+     * @return the invocation, with the identifier left as a placeholder
+     */
+    public String down() {
+        return down;
     }
 }
