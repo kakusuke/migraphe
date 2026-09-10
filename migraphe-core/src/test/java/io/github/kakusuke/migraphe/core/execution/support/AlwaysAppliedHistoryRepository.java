@@ -21,6 +21,11 @@ public record AlwaysAppliedHistoryRepository(HistoryRepository delegate)
     }
 
     @Override
+    public boolean isInitialized() {
+        return delegate.isInitialized();
+    }
+
+    @Override
     public void record(ExecutionRecord executionRecord) {
         delegate.record(executionRecord);
     }

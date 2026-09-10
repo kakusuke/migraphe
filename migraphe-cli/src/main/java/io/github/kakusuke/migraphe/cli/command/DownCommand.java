@@ -13,6 +13,7 @@ import io.github.kakusuke.migraphe.core.execution.DownService;
 import io.github.kakusuke.migraphe.core.execution.DownService.DownPlan;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
 import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
@@ -115,7 +116,11 @@ public class DownCommand implements Command {
 
             // 2. Obtain the HistoryRepository.
             HistoryRepository historyRepo = context.createHistoryRepository();
-            historyRepo.initialize();
+            List<String> notReady = HistoryReadiness.refusal(historyRepo, RepairVocabulary.CLI);
+            if (!notReady.isEmpty()) {
+                notReady.forEach(System.err::println);
+                return 1;
+            }
 
             // 3. Decide what to roll back, and whether anything refuses the run.
             DownPlan plan =

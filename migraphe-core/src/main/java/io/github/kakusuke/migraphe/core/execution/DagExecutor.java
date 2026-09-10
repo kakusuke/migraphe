@@ -583,9 +583,10 @@ public final class DagExecutor implements Executor {
             // is exactly what reaches this executor as a rollback — is repaired by naming it.
             return id
                     + ": the row that applied it carries no fingerprint, so what it recorded cannot"
-                    + " be read at face value; run 'migraphe amend "
+                    + " be read at face value; run 'migraphe upgrade-history', or 'migraphe"
+                    + " amend "
                     + id
-                    + "'";
+                    + "' if no task file declares it any more";
         }
         if (applied.serializedDownTask() == null) {
             return id

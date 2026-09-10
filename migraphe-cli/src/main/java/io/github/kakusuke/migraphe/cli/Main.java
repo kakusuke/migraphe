@@ -5,10 +5,12 @@ import io.github.kakusuke.migraphe.cli.command.AmendCommand;
 import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
+import io.github.kakusuke.migraphe.cli.command.InitCommand;
 import io.github.kakusuke.migraphe.cli.command.PluginPinCommand;
 import io.github.kakusuke.migraphe.cli.command.RebuildCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
+import io.github.kakusuke.migraphe.cli.command.UpgradeHistoryCommand;
 import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
 import io.github.kakusuke.migraphe.cli.resolver.MavenPluginResolver;
 import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
@@ -160,6 +162,8 @@ public class Main {
             case "rebuild" -> createRebuildCommand(args, context);
             case "down" -> createDownCommand(args, context);
             case "amend" -> createAmendCommand(args, context);
+            case "init" -> new InitCommand(context);
+            case "upgrade-history" -> new UpgradeHistoryCommand(context);
             default -> {
                 System.err.println("Unknown command: " + commandName);
                 printUsage();
@@ -173,8 +177,8 @@ public class Main {
      *
      * <p>{@code rebuild} takes no argument. Naming one asks for {@code down <id>} followed by
      * {@code up}, which the tool already does — and reading it as "rebuild only this" would be a
-     * third meaning nobody implemented. Accepting and ignoring it is the one answer an operator
-     * cannot tell from the command having done what they meant.
+     * third meaning nobody implemented. It used to be accepted and ignored, which is the one answer
+     * an operator cannot tell from the command having done what they meant.
      *
      * @param args the raw command-line arguments
      * @param context the loaded project
@@ -192,6 +196,18 @@ public class Main {
             return null;
         }
         return new RebuildCommand(context, List.of(args).contains("-y"), parseDryRun(args));
+    }
+
+    /** Builds an {@link UpCommand} from the parsed arguments. */
+    static Command createUpCommand(String[] args, ExecutionContext context) {
+        List<String> argList = Arrays.asList(args);
+        boolean skipConfirm = argList.contains("-y");
+        boolean dryRun = parseDryRun(args);
+
+        String nodeArg = firstPositionalArg(args);
+
+        NodeId nodeId = nodeArg != null ? NodeId.of(nodeArg) : null;
+        return new UpCommand(context, nodeId, skipConfirm, dryRun);
     }
 
     /**
@@ -220,21 +236,9 @@ public class Main {
         return new AmendCommand(context, NodeId.of(migration), skipConfirm, dryRun);
     }
 
-    /** Builds an {@link UpCommand} from the parsed arguments. */
-    static Command createUpCommand(String[] args, ExecutionContext context) {
-        List<String> argList = Arrays.asList(args);
-        boolean skipConfirm = argList.contains("-y");
-        boolean dryRun = parseDryRun(args);
-
-        String targetId = firstPositionalArg(args);
-
-        NodeId nodeId = targetId != null ? NodeId.of(targetId) : null;
-        return new UpCommand(context, nodeId, skipConfirm, dryRun);
-    }
-
     /**
      * Builds a {@link DownCommand} from the parsed arguments, or returns {@code null} after
-     * printing an error when neither {@code --all} nor a target version is supplied.
+     * printing an error when neither {@code --all} nor a migration is named.
      */
     static @Nullable Command createDownCommand(String[] args, ExecutionContext context) {
         List<String> argList = Arrays.asList(args);
@@ -242,16 +246,16 @@ public class Main {
         boolean dryRun = parseDryRun(args);
         boolean allMigrations = argList.contains("--all");
 
-        String version = firstPositionalArg(args);
+        String migration = firstPositionalArg(args);
 
-        // A version is required unless --all is specified.
-        if (!allMigrations && version == null) {
-            System.err.println("Error: Version argument or --all required for 'down' command");
-            System.err.println("Usage: migraphe down [-y] [--preview] [--all | <version>]");
+        // A migration is required unless --all is specified.
+        if (!allMigrations && migration == null) {
+            System.err.println("Error: Migration argument or --all required for 'down' command");
+            System.err.println("Usage: migraphe down [-y] [--preview] [--all | <id>]");
             return null;
         }
 
-        NodeId requestedNode = version != null ? NodeId.of(version) : null;
+        NodeId requestedNode = migration != null ? NodeId.of(migration) : null;
         return new DownCommand(context, requestedNode, allMigrations, skipConfirm, dryRun);
     }
 
@@ -404,21 +408,30 @@ public class Main {
         System.out.println("       migraphe -v | --version");
         System.out.println();
         System.out.println("Commands:");
-        System.out.println("  up [-y] [--preview] [<id>]          Execute migrations");
-        System.out.println("  down [-y] [--preview] [--all | <v>] Rollback migrations");
-        System.out.println("  status [--check]                    Show migration status");
+        System.out.println("  init                                 Create the migration history");
+        System.out.println("  up [-y] [--preview] [<id>]           Execute migrations");
+        System.out.println("  down [-y] [--preview] [--all | <id>] Roll back migrations");
+        System.out.println("  status [--check]                     Show migration status");
         System.out.println(
-                "  rebuild [-y] [--preview]            Roll back what drifted and apply everything"
-                        + " again");
+                "  rebuild [-y] [--preview]             Roll back what drifted and apply"
+                        + " everything again");
         System.out.println(
-                "  validate                            Validate configuration (offline)");
-        System.out.println("  generate [--name <name>]            Run generators");
+                "  amend [-y] [--preview] <id>          Record the current definition of one"
+                        + " migration");
         System.out.println(
-                "  pin [--check]                       Generate or verify migraphe.lock.yaml");
+                "  upgrade-history                      Bring the history to the shape this"
+                        + " version writes");
+        System.out.println(
+                "  validate                             Validate configuration (offline)");
+        System.out.println("  generate [--name <name>]             Run generators");
+        System.out.println(
+                "  pin [--check]                        Generate or verify migraphe.lock.yaml");
         System.out.println();
-        System.out.println("Common options (up, down, status, validate, generate):");
         System.out.println(
-                "  --env <name>   Apply the targets/<name>.yaml overlay. Overrides target");
+                "Common options (init, up, down, status, amend, rebuild,"
+                        + " upgrade-history, validate, generate):");
+        System.out.println(
+                "  --env <name>   Apply the environments/<name>.yaml overlay. Overrides target");
         System.out.println(
                 "                 settings only; it does not partition migration history.");
         System.out.println();
@@ -428,10 +441,19 @@ public class Main {
         System.out.println("  --preview      Show plan without executing");
         System.out.println();
         System.out.println("Down options:");
-        System.out.println("  <version>      Rollback migrations that depend on <version>");
-        System.out.println("  --all          Rollback all executed migrations");
+        System.out.println("  <id>           Roll back <id> and everything standing on it");
+        System.out.println("  --all          Roll back every applied migration");
         System.out.println("  -y             Skip confirmation prompt");
         System.out.println("  --preview      Show plan without executing");
+        System.out.println();
+        System.out.println("Amend options:");
+        System.out.println("  <id>           Record the current definition of one migration");
+        System.out.println("  -y             Skip confirmation prompt");
+        System.out.println("  --preview      Show plan without recording");
+        System.out.println();
+        System.out.println("Status options:");
+        System.out.println(
+                "  --check        Exit non-zero unless the definitions and the history agree");
         System.out.println();
         System.out.println("Rebuild options:");
         System.out.println("  -y             Skip confirmation prompt");

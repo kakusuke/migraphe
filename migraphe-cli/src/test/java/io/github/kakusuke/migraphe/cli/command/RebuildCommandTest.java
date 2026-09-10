@@ -309,7 +309,7 @@ class RebuildCommandTest {
     }
 
     @Test
-    void namesTheRepairWhenARowTheDefinitionsLostCannotBeRead() throws Exception {
+    void namesBothHalvesOfTheRepairWhenARowTheDefinitionsLostCannotBeRead() throws Exception {
         writeProject();
         new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
 
@@ -337,10 +337,11 @@ class RebuildCommandTest {
         }
 
         assertThat(exitCode).isNotZero();
-        // The row records nothing that can be read at face value, and no task file declares it
-        // any more, so the remedy named is the one that withdraws it.
+        // upgrade fills a row from the definition that names it, so it never reaches
+        // one no definition names. Sending the operator there alone is a loop with no exit.
         assertThat(errors.toString(StandardCharsets.UTF_8))
                 .contains("[?] db/002_add_email")
+                .contains("migraphe upgrade-history")
                 .contains("amend <id>");
     }
 

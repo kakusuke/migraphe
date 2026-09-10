@@ -1,10 +1,13 @@
 package io.github.kakusuke.migraphe.jdbc;
 
+import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionOrigin;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.history.HistoryUpgrade;
+import io.github.kakusuke.migraphe.api.history.UpgradeContext;
 import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.io.BufferedReader;
@@ -22,14 +25,15 @@ import org.jspecify.annotations.Nullable;
  * Generic {@link HistoryRepository} that persists migration execution history in a relational
  * database via JDBC.
  *
- * <p>All records are stored in a single {@code migraphe_history} table whose schema is brought up
- * to date by {@link #initialize()} from a SQL resource on the classpath. The resource is a list of
- * {@link SchemaStep}s — each a detection query paired with the statements applying it — so the
- * table can gain columns and indexes over time without any schema-version bookkeeping. Each query
- * opens a short-lived connection from the supplied {@link JdbcTarget}, so the repository keeps the
- * migration history in the same database the migrations run against. A node is considered applied
- * when its most recent <strong>successful</strong> record is an {@code UP}; records that failed or
- * were skipped never change the applied state.
+ * <p>All records are stored in a single {@code migraphe_history} table. Two SQL resources on the
+ * classpath describe it, both lists of {@link SchemaStep}s: one that {@link #initialize()} runs to
+ * create it in the shape this version writes, and one that {@link #upgrades()} exposes for the
+ * upgrade command to bring a table an older release created up to that shape. Splitting them is
+ * what keeps a plain {@code status} from altering a history another deployment is still reading.
+ * Each query opens a short-lived connection from the supplied {@link JdbcTarget}, so the repository
+ * keeps the migration history in the same database the migrations run against. A node is considered
+ * applied when its most recent <strong>successful</strong> record is an {@code UP}; records that
+ * failed or were skipped never change the applied state.
  *
  * <p>"Most recent" orders by {@code executed_at} and then by {@code id}. The identifier decides
  * ties because {@link ExecutionRecord}'s factories mint time-ordered UUIDv7 values, and ties are
@@ -41,7 +45,7 @@ import org.jspecify.annotations.Nullable;
  * exactly as before.
  *
  * <p>The target column is named {@code target_id}. Releases before 0.6.0 called it {@code
- * environment_id}; {@link #initialize()} renames it in place. It has always held a target id, so
+ * environment_id}; the upgrade resource renames it in place. It has always held a target id, so
  * {@link ExecutionRecord#targetId()} maps onto it despite the differing name — the API-side rename
  * is a separate change.
  */
@@ -50,50 +54,70 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     private static final String DEFAULT_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql";
 
+    private static final String DEFAULT_UPGRADE_RESOURCE =
+            "/io/github/kakusuke/migraphe/jdbc/schema/upgrade_history_table.sql";
+
     private final JdbcTarget target;
     private final String schemaResourcePath;
+    private final @Nullable String upgradeResourcePath;
 
     /**
-     * Creates a repository using the bundled default schema resource.
+     * Creates a repository using the bundled default schema and upgrade resources.
      *
      * @param target the target whose database stores the history
      */
     public JdbcHistoryRepository(JdbcTarget target) {
-        this(target, DEFAULT_SCHEMA_RESOURCE);
+        this(target, DEFAULT_SCHEMA_RESOURCE, DEFAULT_UPGRADE_RESOURCE);
     }
 
     /**
-     * Creates a repository with a custom schema-initialization resource.
+     * Creates a repository with a custom creation resource and <strong>no upgrades</strong>.
      *
-     * <p>Database-specific subclasses or callers can point this at a dialect-tuned DDL script used
-     * by {@link #initialize()}.
+     * <p>A caller who supplies their own DDL has supplied only the shape to create; nothing here
+     * can guess how a table an older version of that DDL created should be carried forward, and
+     * pairing a custom creation script with the bundled upgrades would alter a table they do not
+     * describe. Use {@link #JdbcHistoryRepository(JdbcTarget, String, String)} to supply both.
      *
      * @param target the target whose database stores the history
      * @param schemaResourcePath the classpath path of the SQL resource that creates the history
      *     table
      */
     public JdbcHistoryRepository(JdbcTarget target, String schemaResourcePath) {
-        this.target = Objects.requireNonNull(target, "target must not be null");
-        this.schemaResourcePath =
-                Objects.requireNonNull(schemaResourcePath, "schemaResourcePath must not be null");
+        this(target, schemaResourcePath, null);
     }
 
     /**
-     * Brings the {@code migraphe_history} table up to date with the configured schema resource.
+     * Creates a repository with a dialect-tuned creation resource and its upgrades.
      *
-     * <p>The resource is parsed into {@link SchemaStep}s, each pairing a detection query with the
-     * statements that apply it. A step whose detection query returns at least one row is skipped,
-     * so calling this repeatedly is safe and no schema-version bookkeeping is needed. Detection
-     * queries run before the table exists, so a failing one is reported rather than treated as "not
-     * applied": mistaking a permission error for a missing table would turn it into a blind DDL
-     * attempt.
+     * @param target the target whose database stores the history
+     * @param schemaResourcePath the classpath path of the SQL resource that creates the history
+     *     table in the shape this version writes
+     * @param upgradeResourcePath the classpath path of the SQL resource whose steps carry a table
+     *     an older release created up to that shape, or {@code null} when there are none
+     */
+    public JdbcHistoryRepository(
+            JdbcTarget target, String schemaResourcePath, @Nullable String upgradeResourcePath) {
+        this.target = Objects.requireNonNull(target, "target must not be null");
+        this.schemaResourcePath =
+                Objects.requireNonNull(schemaResourcePath, "schemaResourcePath must not be null");
+        this.upgradeResourcePath = upgradeResourcePath;
+    }
+
+    /**
+     * Creates the {@code migraphe_history} table, with every column this version writes.
      *
-     * <p>When applying a step fails, the detection query runs once more. A competing process may
-     * have applied the same step in between, in which case the failure is benign and swallowed;
-     * otherwise it is reported.
+     * <p><strong>It never alters a table that already exists.</strong> The resource it runs leans
+     * on {@code IF NOT EXISTS}, so a history an older release created is left exactly as it is — a
+     * history can be shared with a deployment still running that release, and dropping a column out
+     * from under it because someone ran {@code status} is not a thing any command should do on its
+     * own. Everything that changes an existing table is an {@link
+     * io.github.kakusuke.migraphe.api.history.HistoryUpgrade}, applied by the upgrade command.
      *
-     * @throws JdbcException if the schema resource cannot be loaded, or a step cannot be detected
-     *     or applied
+     * <p>The resource is parsed into {@link SchemaStep}s. Steps here carry no detection query and
+     * always run, which is safe because each is idempotent, so calling this repeatedly costs
+     * nothing and no schema-version bookkeeping is needed.
+     *
+     * @throws JdbcException if the schema resource cannot be loaded, or a step cannot be applied
      */
     @Override
     public void initialize() {
@@ -110,6 +134,170 @@ public final class JdbcHistoryRepository implements HistoryRepository {
             }
         } catch (SQLException e) {
             throw new JdbcException("Failed to initialize history schema", e);
+        }
+    }
+
+    /**
+     * Reports whether {@code migraphe_history} is there.
+     *
+     * <p>Read from {@code information_schema.tables}, bound to the schema the connection reports,
+     * so a same-named table elsewhere on the server does not answer for this one — the same rule
+     * the upgrade resources' detection queries follow. The name is compared case-insensitively: H2
+     * folds it upward while MySQL and PostgreSQL keep it as written.
+     *
+     * @return {@code true} when the history table exists in this schema
+     * @throws JdbcException if the question cannot be asked
+     */
+    @Override
+    public boolean isInitialized() {
+        String sql =
+                "SELECT 1 FROM information_schema.tables"
+                        + " WHERE table_schema = ? AND UPPER(table_name) = 'MIGRAPHE_HISTORY'";
+        try (Connection conn = target.createConnection();
+                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, currentSchema(conn));
+            try (ResultSet rs = pstmt.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            throw new JdbcException("Failed to check whether the history table exists", e);
+        }
+    }
+
+    /**
+     * Returns one upgrade per step of the configured upgrade resource, in the order it lists them.
+     *
+     * <p>Each step is guarded by its own detection query, so an upgrade reports itself pending only
+     * while the change it makes is absent. A step written without a detection query would report
+     * pending forever and every command that refuses on a pending upgrade would refuse forever,
+     * which is why the bundled upgrade resources guard every step.
+     *
+     * @return the ordered upgrades, or an empty list when this repository was given no upgrade
+     *     resource
+     * @throws JdbcException if the upgrade resource cannot be loaded
+     */
+    @Override
+    public List<HistoryUpgrade> upgrades() {
+        if (upgradeResourcePath == null) {
+            return List.of();
+        }
+        List<SchemaStep> steps;
+        try {
+            steps = SchemaStepParser.parse(loadResource(upgradeResourcePath));
+        } catch (IOException e) {
+            throw new JdbcException("Failed to load upgrade resource", e);
+        }
+        List<HistoryUpgrade> schemaUpgrades =
+                steps.stream().map(step -> (HistoryUpgrade) new SchemaStepUpgrade(step)).toList();
+        List<HistoryUpgrade> all = new ArrayList<>(schemaUpgrades);
+        all.add(new FillFromDefinitions(schemaUpgrades));
+        return List.copyOf(all);
+    }
+
+    /**
+     * Writes what the definitions can supply into the rows an older release left incomplete.
+     *
+     * <p>It runs <strong>after</strong> every schema step, because the columns it writes are the
+     * ones those steps add. Its pending-ness is theirs: rows need filling exactly when the columns
+     * are only now arriving, which is a statement that terminates. Asking instead whether any row
+     * still carries a null fingerprint would never stop being true — a row whose task file is gone
+     * has no source for one, and every command would refuse forever over a row {@code amend <id>}
+     * is there to withdraw.
+     *
+     * <p><strong>What filling asserts.</strong> A row written before the fingerprint column says
+     * that a migration was applied and nothing about its content. Writing today's token onto it
+     * asserts that the database matches today's definition. Nothing here can verify that — the tool
+     * cannot read the database — so it is the assumption an operator makes by running the upgrade.
+     * The cost of it being wrong is a genuinely edited migration reading as unchanged, once. It is
+     * confined to columns that are <em>absent</em>: a token that is already recorded and differs is
+     * drift, and overwriting that is {@code amend}'s decision to make, not this one's.
+     */
+    private final class FillFromDefinitions implements HistoryUpgrade {
+
+        private final List<HistoryUpgrade> schemaUpgrades;
+
+        FillFromDefinitions(List<HistoryUpgrade> schemaUpgrades) {
+            this.schemaUpgrades = schemaUpgrades;
+        }
+
+        @Override
+        public String description() {
+            return "fill what the definitions still declare";
+        }
+
+        @Override
+        public boolean isPending() {
+            return schemaUpgrades.stream().anyMatch(HistoryUpgrade::isPending);
+        }
+
+        @Override
+        public void apply(UpgradeContext context) {
+            String sql =
+                    "UPDATE migraphe_history SET"
+                            + " fingerprint = COALESCE(fingerprint, ?),"
+                            + " dependencies = COALESCE(dependencies, ?),"
+                            + " no_way_back = COALESCE(no_way_back, ?)"
+                            + " WHERE id = ?";
+            try (Connection conn = target.createConnection();
+                    PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                for (ExecutionRecord row : latestApplies()) {
+                    MigrationNode node = context.definitions().getNode(row.nodeId()).orElse(null);
+                    if (node == null) {
+                        // The definitions no longer declare it, so there is nothing to fill it
+                        // from. Withdrawing such a row is what naming it in amend does.
+                        continue;
+                    }
+                    pstmt.setString(1, node.fingerprint(context.fingerprinterFor(node.id())));
+                    pstmt.setString(2, encodeDependencies(declaredDependencies(node)));
+                    pstmt.setString(3, node.noWayBack());
+                    pstmt.setString(4, row.id());
+                    pstmt.addBatch();
+                }
+                pstmt.executeBatch();
+            } catch (SQLException e) {
+                throw new JdbcException("Failed to fill the history from the definitions", e);
+            }
+        }
+
+        /** The declared edges, ordered the way an apply records them. */
+        private List<NodeId> declaredDependencies(MigrationNode node) {
+            return node.dependencies().stream()
+                    .sorted(Comparator.comparing(NodeId::value))
+                    .toList();
+        }
+    }
+
+    /** One step of the upgrade resource, presented as the upgrade the command applies. */
+    private final class SchemaStepUpgrade implements HistoryUpgrade {
+
+        private final SchemaStep step;
+
+        SchemaStepUpgrade(SchemaStep step) {
+            this.step = step;
+        }
+
+        @Override
+        public String description() {
+            return step.label();
+        }
+
+        @Override
+        public boolean isPending() {
+            try (Connection conn = target.createConnection()) {
+                return !isApplied(conn, step);
+            } catch (SQLException e) {
+                throw new JdbcException("Failed to detect schema step '" + step.label() + "'", e);
+            }
+        }
+
+        /** The context is unused: this step changes the schema, not the rows. */
+        @Override
+        public void apply(UpgradeContext context) {
+            try (Connection conn = target.createConnection()) {
+                applyStep(conn, step);
+            } catch (SQLException e) {
+                throw new JdbcException("Failed to apply schema step '" + step.label() + "'", e);
+            }
         }
     }
 
@@ -465,9 +653,13 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     private String loadSchemaResource() throws IOException {
-        try (InputStream is = getClass().getResourceAsStream(schemaResourcePath)) {
+        return loadResource(schemaResourcePath);
+    }
+
+    private String loadResource(String path) throws IOException {
+        try (InputStream is = getClass().getResourceAsStream(path)) {
             if (is == null) {
-                throw new IOException("Schema resource not found: " + schemaResourcePath);
+                throw new IOException("Schema resource not found: " + path);
             }
             try (BufferedReader reader =
                     new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {

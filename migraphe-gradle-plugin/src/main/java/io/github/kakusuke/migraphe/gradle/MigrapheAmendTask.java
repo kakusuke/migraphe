@@ -9,6 +9,8 @@ import io.github.kakusuke.migraphe.core.execution.AmendService;
 import io.github.kakusuke.migraphe.core.execution.AmendService.AmendEntry;
 import io.github.kakusuke.migraphe.core.execution.AmendService.AmendOutcome;
 import io.github.kakusuke.migraphe.core.execution.AmendService.AmendPlan;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
+import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.execution.UpContentState;
 import java.util.ArrayList;
 import java.util.List;
@@ -108,7 +110,11 @@ public abstract class MigrapheAmendTask extends AbstractMigrapheTask {
                     }
 
                     HistoryRepository historyRepo = context.createHistoryRepository();
-                    historyRepo.initialize();
+                    List<String> notReady =
+                            HistoryReadiness.refusal(historyRepo, RepairVocabulary.GRADLE);
+                    if (!notReady.isEmpty()) {
+                        throw new GradleException(String.join(System.lineSeparator(), notReady));
+                    }
 
                     AmendService service = new AmendService(context.graph(), historyRepo);
                     AmendPlan plan = service.plan(NodeId.of(migration));
