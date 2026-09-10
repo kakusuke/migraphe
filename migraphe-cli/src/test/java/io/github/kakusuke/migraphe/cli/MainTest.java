@@ -279,6 +279,37 @@ class MainTest {
     }
 
     @Test
+    void statusCheckReachesTheCommandFromTheCommandLine(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        writeNoopProject(tempDir);
+        Path tasksDir = Files.createDirectories(tempDir.resolve("tasks/noop-db"));
+        Files.writeString(
+                tasksDir.resolve("001_create.yaml"),
+                """
+                name: Create users
+                target: noop-db
+                up: CREATE TABLE users (id INT);
+                down: DROP TABLE users;
+                """);
+
+        ExecutionContext context =
+                Main.loadContext(tempDir, pluginRegistry, new String[] {"status"});
+
+        // Nothing is applied, so --check has something to disagree about; without it the exit code
+        // says nothing about whether the stores agree.
+        assertThat(Main.createCommand("status", new String[] {"status", "--check"}, context))
+                .isNotNull()
+                .extracting(Command::execute)
+                .isNotEqualTo(0);
+        assertThat(Main.createCommand("status", new String[] {"status"}, context))
+                .isNotNull()
+                .extracting(Command::execute)
+                .isEqualTo(0);
+    }
+
+    @Test
     void usageOutputMentionsPinCommand() {
         String stdout = captureStdout(() -> Main.run(new String[0]));
 

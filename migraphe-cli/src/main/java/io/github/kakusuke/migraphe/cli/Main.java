@@ -150,11 +150,11 @@ public class Main {
      * the name matches no command (reported here to standard error) or the matched command rejected
      * its arguments (reported by that command).
      */
-    private static @Nullable Command createCommand(
+    static @Nullable Command createCommand(
             String commandName, String[] args, ExecutionContext context) {
         return switch (commandName) {
             case "up" -> createUpCommand(args, context);
-            case "status" -> new StatusCommand(context);
+            case "status" -> new StatusCommand(context, List.of(args).contains("--check"));
             case "down" -> createDownCommand(args, context);
             default -> {
                 System.err.println("Unknown command: " + commandName);
@@ -256,7 +256,7 @@ public class Main {
         // Value-bearing flags (skip the flag and the following token).
         Set<String> valueFlags = Set.of("--env", "--name");
         // Boolean flags (skip the flag alone).
-        Set<String> boolFlags = Set.of("-y", "--preview", "--dry-run", "--all");
+        Set<String> boolFlags = Set.of("-y", "--preview", "--dry-run", "--all", "--check");
         int i = 1; // args[0] is the command word, so skip it.
         while (i < args.length) {
             String a = args[i];
@@ -350,7 +350,7 @@ public class Main {
         System.out.println("Commands:");
         System.out.println("  up [-y] [--preview] [<id>]          Execute migrations");
         System.out.println("  down [-y] [--preview] [--all | <v>] Rollback migrations");
-        System.out.println("  status                              Show migration status");
+        System.out.println("  status [--check]                    Show migration status");
         System.out.println(
                 "  validate                            Validate configuration (offline)");
         System.out.println("  generate [--name <name>]            Run generators");
