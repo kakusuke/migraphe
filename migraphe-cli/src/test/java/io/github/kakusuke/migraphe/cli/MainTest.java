@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.cli;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
 import io.github.kakusuke.migraphe.core.config.ConfigurationException;
@@ -131,6 +132,46 @@ class MainTest {
         assertThat(Main.firstPositionalArg(new String[] {"up", "--env", "production", "db1/001"}))
                 .isEqualTo("db1/001");
         assertThat(Main.firstPositionalArg(new String[] {"up", "--env", "production"})).isNull();
+    }
+
+    @Test
+    void statusCheckReachesTheCommandFromTheCommandLine(@TempDir Path tempDir) throws IOException {
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: noop-db
+                """);
+        Path targetsDir = Files.createDirectories(tempDir.resolve("targets"));
+        Files.writeString(targetsDir.resolve("noop-db.yaml"), "type: noop\n");
+        Path tasksDir = Files.createDirectories(tempDir.resolve("tasks/noop-db"));
+        Files.writeString(
+                tasksDir.resolve("001_create.yaml"),
+                """
+                name: Create users
+                target: noop-db
+                up: CREATE TABLE users (id INT);
+                down: DROP TABLE users;
+                """);
+
+        ExecutionContext context =
+                Main.loadContext(tempDir, pluginRegistry, new String[] {"status"});
+
+        // Nothing is applied, so --check has something to disagree about; without it the exit code
+        // says nothing about whether the stores agree.
+        assertThat(Main.createCommand("status", new String[] {"status", "--check"}, context))
+                .isNotNull()
+                .extracting(Command::execute)
+                .isNotEqualTo(0);
+        assertThat(Main.createCommand("status", new String[] {"status"}, context))
+                .isNotNull()
+                .extracting(Command::execute)
+                .isEqualTo(0);
     }
 
     @Test

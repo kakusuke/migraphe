@@ -1,11 +1,22 @@
 package io.github.kakusuke.migraphe.gradle;
 
-import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.core.graph.FormatUtils;
+import io.github.kakusuke.migraphe.core.execution.StatusLineFormatter;
+import io.github.kakusuke.migraphe.core.execution.StatusService;
+import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
+import io.github.kakusuke.migraphe.core.execution.StatusService.StatusInfo;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import org.gradle.api.GradleException;
+import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.api.tasks.options.Option;
 import org.gradle.work.DisableCachingByDefault;
 
 /**
@@ -18,6 +29,25 @@ import org.gradle.work.DisableCachingByDefault;
 @DisableCachingByDefault(
         because = "Migraphe tasks have side effects and their output cannot be cached")
 public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
+
+    /**
+     * Whether to fail the build unless the definitions and the history agree.
+     *
+     * @return the check property
+     */
+    @Input
+    @Optional
+    public abstract Property<Boolean> getCheck();
+
+    /**
+     * Turns the report into an assertion from the {@code --check} command line option.
+     *
+     * @param check {@code true} to fail the build while anything differs
+     */
+    @Option(option = "check", description = "Fail the build unless nothing differs")
+    public void setCheckOption(boolean check) {
+        getCheck().set(check);
+    }
 
     /**
      * Task action that prints the execution status of every migration node.
@@ -36,45 +66,28 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                     HistoryRepository historyRepo = context.createHistoryRepository();
                     historyRepo.initialize();
 
-                    ExecutionGraphView graphView = new ExecutionGraphView(context.graph());
+                    StatusInfo status = new StatusService(context.graph(), historyRepo).getStatus();
+                    Map<NodeId, NodeStatus> statusByNode = new HashMap<>();
+                    for (NodeStatus nodeStatus : status.nodes()) {
+                        statusByNode.put(nodeStatus.node().id(), nodeStatus);
+                    }
 
-                    int[] executedCount = {0};
-                    int[] pendingCount = {0};
+                    ExecutionGraphView graphView = new ExecutionGraphView(context.graph());
 
                     List<String> lines =
                             graphView.renderLines(
-                                    node -> {
-                                        boolean executed = historyRepo.wasExecuted(node.id());
-                                        StringBuilder sb = new StringBuilder();
-                                        if (executed) {
-                                            executedCount[0]++;
-                                            sb.append("[✓] ");
-                                        } else {
-                                            pendingCount[0]++;
-                                            sb.append("[ ] ");
-                                        }
-                                        sb.append(node.id().value())
-                                                .append(" - ")
-                                                .append(node.name());
-                                        if (executed) {
-                                            ExecutionRecord record =
-                                                    historyRepo.findLatestRecord(node.id());
-                                            if (record != null) {
-                                                sb.append(" (")
-                                                        .append(
-                                                                FormatUtils.formatDuration(
-                                                                        record.durationMs()))
-                                                        .append(", ")
-                                                        .append(
-                                                                FormatUtils.formatDateTime(
-                                                                        record.executedAt()))
-                                                        .append(")");
-                                            }
-                                        }
-                                        return sb.toString();
-                                    });
+                                    node ->
+                                            StatusLineFormatter.format(
+                                                    Objects.requireNonNull(
+                                                            statusByNode.get(node.id()),
+                                                            "graph node missing from status: "
+                                                                    + node.id().value())));
 
                     for (String line : lines) {
+                        getLogger().lifecycle(line);
+                    }
+
+                    for (String line : StatusLineFormatter.formatOrphans(status)) {
                         getLogger().lifecycle(line);
                     }
 
@@ -82,9 +95,18 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                     getLogger()
                             .lifecycle(
                                     "Summary: Total: {} | Executed: {} | Pending: {}",
-                                    executedCount[0] + pendingCount[0],
-                                    executedCount[0],
-                                    pendingCount[0]);
+                                    status.executedCount() + status.pendingCount(),
+                                    status.executedCount(),
+                                    status.pendingCount());
+
+                    // The rule for what counts as agreement lives in core, so this task and the
+                    // CLI cannot answer it differently.
+                    if (getCheck().getOrElse(false) && !status.everythingAgrees()) {
+                        throw new GradleException(
+                                "The definitions and the history do not agree. See the markers"
+                                        + " above; migraphe amend resolves drift in the history's"
+                                        + " favour.");
+                    }
                 });
     }
 
