@@ -6,6 +6,7 @@ import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
 import io.github.kakusuke.migraphe.cli.command.PluginPinCommand;
+import io.github.kakusuke.migraphe.cli.command.RebuildCommand;
 import io.github.kakusuke.migraphe.cli.command.StatusCommand;
 import io.github.kakusuke.migraphe.cli.command.UpCommand;
 import io.github.kakusuke.migraphe.cli.command.ValidateCommand;
@@ -154,10 +155,38 @@ public class Main {
         return switch (commandName) {
             case "up" -> createUpCommand(args, context);
             case "status" -> new StatusCommand(context, List.of(args).contains("--check"));
+            case "rebuild" -> createRebuildCommand(args, context);
             case "down" -> createDownCommand(args, context);
             case "amend" -> createAmendCommand(args, context);
             default -> null;
         };
+    }
+
+    /**
+     * Builds a {@link RebuildCommand}, or refuses a migration name.
+     *
+     * <p>{@code rebuild} takes no argument. Naming one asks for {@code down <id>} followed by
+     * {@code up}, which the tool already does — and reading it as "rebuild only this" would be a
+     * third meaning nobody implemented. Accepting and ignoring it is the one answer an operator
+     * cannot tell from the command having done what they meant.
+     *
+     * @param args the raw command-line arguments
+     * @param context the loaded project
+     * @return the command, or {@code null} when an argument was given and reported
+     */
+    static @Nullable Command createRebuildCommand(String[] args, ExecutionContext context) {
+        String named = firstPositionalArg(args);
+        if (named != null) {
+            System.err.println(
+                    "Error: rebuild takes no migration — it compares the whole project. Rebuilding"
+                            + " one migration is 'migraphe down "
+                            + named
+                            + "' followed by 'migraphe up'.");
+            System.err.println("Usage: migraphe rebuild [-y] [--dry-run]");
+            return null;
+        }
+        return new RebuildCommand(
+                context, List.of(args).contains("-y"), List.of(args).contains("--dry-run"));
     }
 
     /**
@@ -374,6 +403,9 @@ public class Main {
         System.out.println("  down [-y] [--dry-run] [--all | <v>] Rollback migrations");
         System.out.println("  status [--check]                    Show migration status");
         System.out.println(
+                "  rebuild [-y] [--dry-run]            Roll back what drifted and apply everything"
+                        + " again");
+        System.out.println(
                 "  validate                            Validate configuration (offline)");
         System.out.println("  generate [--name <name>]            Run generators");
         System.out.println(
@@ -393,6 +425,10 @@ public class Main {
         System.out.println("Down options:");
         System.out.println("  <version>      Rollback migrations that depend on <version>");
         System.out.println("  --all          Rollback all executed migrations");
+        System.out.println("  -y             Skip confirmation prompt");
+        System.out.println("  --dry-run      Show plan without executing");
+        System.out.println();
+        System.out.println("Rebuild options:");
         System.out.println("  -y             Skip confirmation prompt");
         System.out.println("  --dry-run      Show plan without executing");
         System.out.println();
