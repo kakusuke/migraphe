@@ -101,7 +101,7 @@ Migraphe uses a plugin architecture where database support is provided by separa
 
 Each plugin's `README.md` documents its target fields, connection examples, and database-specific behavior in full. Click a plugin name above for details.
 
-#### Method 1: Maven Coordinates (Recommended)
+#### Maven Coordinates
 
 Add a `plugins` section to `migraphe.yaml` with Maven coordinates. Migraphe plugins are distributed via JitPack — declare the JitPack repository and reference each plugin via the map form:
 
@@ -164,21 +164,6 @@ Exit code is non-zero when the lockfile is missing or differs from what re-resol
 
 If a JAR is tampered with after pinning (for example, a corrupted local cache), startup fails with a checksum mismatch error pointing to the affected coordinate.
 
-#### Method 2: plugins/ Directory (Legacy)
-
-Place plugin JAR files directly in the `plugins/` directory of your project:
-
-```
-my-project/
-├── migraphe.yaml
-├── plugins/                      # Plugin directory
-│   └── migraphe-plugin-postgresql-x.x.x.jar
-├── targets/
-└── tasks/
-```
-
-**Note:** Both methods can be used simultaneously. Maven-resolved plugins are loaded first, then `plugins/` directory.
-
 ## Project Setup
 
 ### Directory Structure
@@ -236,7 +221,7 @@ history:
 **Fields:**
 - `plugins` (optional): List of Maven coordinates (`groupId:artifactId:version`) for CLI plugin resolution
 - `project.name` (required): Project identifier
-- `project.scan-root` (optional): Base directory for locating `tasks/`, `targets/`, `environments/`, and `plugins/`. Accepts a relative path (resolved against the directory containing `migraphe.yaml`) or an absolute path. Defaults to the directory containing `migraphe.yaml`. The same setting is honored by both the CLI and the Gradle plugin.
+- `project.scan-root` (optional): Base directory for locating `tasks/`, `targets/`, and `environments/`. Accepts a relative path (resolved against the directory containing `migraphe.yaml`) or an absolute path. Defaults to the directory containing `migraphe.yaml`. The same setting is honored by both the CLI and the Gradle plugin.
 - `history.target` (required): Target name where migration history is stored
 
 **Example: `scan-root` to keep migration assets under a subdirectory**
@@ -249,7 +234,7 @@ history:
   target: main
 ```
 
-With this configuration, Migraphe reads tasks from `config/tasks/`, targets from `config/targets/`, environments from `config/environments/`, and the legacy plugin directory from `config/plugins/` — all relative to the directory containing `migraphe.yaml`.
+With this configuration, Migraphe reads tasks from `config/tasks/`, targets from `config/targets/`, and environments from `config/environments/` — all relative to the directory containing `migraphe.yaml`.
 
 ### Target Configuration
 
@@ -1146,7 +1131,7 @@ No plugins are currently loaded.
 **Solution:**
 - Add the plugin Maven coordinate to the `plugins` section in `migraphe.yaml`
 - Run `migraphe pin` to (re)generate the lockfile
-- Alternatively, place plugin JAR file in `plugins/` directory
+- With the Gradle plugin, add the coordinate to the `migraphePlugin` configuration instead
 - See [Installing Plugins](#installing-plugins) section
 
 #### 1b. "Failed to resolve plugin" Error

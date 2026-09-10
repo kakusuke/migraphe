@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kakusuke.migraphe.cli.resolver.LockFileNotFoundException;
-import io.github.kakusuke.migraphe.cli.resolver.PluginConfigParseResult;
 import io.github.kakusuke.migraphe.cli.resolver.PluginResolutionException;
 import io.github.kakusuke.migraphe.core.config.ConfigurationException;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
@@ -15,8 +14,6 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -65,32 +62,10 @@ class MainTest {
     }
 
     @Test
-    void shouldResolvePluginsDirRelativeToScanRoot() {
-        Path baseDir = Path.of("/tmp/proj");
-        PluginConfigParseResult parsed =
-                new PluginConfigParseResult(List.of(), List.of(), Optional.of("subdir"));
-
-        Path result = Main.resolvePluginsDir(baseDir, parsed);
-
-        assertThat(result).isEqualTo(Path.of("/tmp/proj/subdir/plugins"));
-    }
-
-    @Test
     void parseEnvOptionShouldReturnEnvNameOrNull() {
         assertThat(Main.parseEnvOption(new String[] {"up", "--env", "staging"}))
                 .isEqualTo("staging");
         assertThat(Main.parseEnvOption(new String[] {"up", "--dry-run"})).isNull();
-    }
-
-    @Test
-    void shouldResolvePluginsDirToBaseDirWhenScanRootIsAbsent() {
-        Path baseDir = Path.of("/tmp/proj");
-        PluginConfigParseResult parsed =
-                new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
-
-        Path result = Main.resolvePluginsDir(baseDir, parsed);
-
-        assertThat(result).isEqualTo(Path.of("/tmp/proj/plugins"));
     }
 
     @Test
