@@ -12,8 +12,8 @@ import org.junit.jupiter.api.Test;
 class UpPlanFormatterTest {
 
     @Test
-    @DisplayName("ドリフトの拒否は両方の手当てを名指し、down を先に置く")
-    void namesBothRemediesReachedForInOrder() {
+    @DisplayName("ドリフトの拒否は down を先に案内し、rebuild は一括手段として後に置く")
+    void namesTheTargetedRemedyBeforeTheSweep() {
         List<String> lines =
                 UpPlanFormatter.format(
                         new UpBlocker.EditedSinceApplied(Set.of(NodeId.of("db/002_add_email"))),
@@ -21,11 +21,10 @@ class UpPlanFormatterTest {
 
         String message = String.join("\n", lines);
         assertThat(message).contains("[!] db/002_add_email");
-        // Taking the migration out and letting up re-apply it is the move an operator reaches for
-        // first; accepting what is applied is the other way out, and neither is safe to pick for
-        // them.
+        // Taking the migration out and letting up re-apply it is the move for one drifted
+        // migration; rebuilding is how you sweep every difference at once.
         assertThat(message).contains("migraphe down <id>").contains("migraphe amend <id>");
         assertThat(message.indexOf("migraphe down <id>"))
-                .isLessThan(message.indexOf("migraphe amend <id>"));
+                .isLessThan(message.indexOf("migraphe rebuild"));
     }
 }
