@@ -16,6 +16,8 @@ import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +40,9 @@ class PostgreSQLIntegrationTest {
 
     private static final String PG_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
+
+    private static final String GENERIC_SCHEMA_RESOURCE =
+            "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql";
 
     private PostgreSQLTarget target;
     private HistoryRepository historyRepo;
@@ -188,6 +193,47 @@ class PostgreSQLIntegrationTest {
     }
 
     @Test
+    void shouldInitializeHistorySchemaFromGenericResource() throws Exception {
+        // given: 汎用リソースがゼロから作れる状態にする（共有コンテナなので finally で必ず戻す）
+        dropHistoryTable();
+        try {
+            HistoryRepository genericRepo =
+                    new JdbcHistoryRepository(target, GENERIC_SCHEMA_RESOURCE);
+
+            // when / then: type="jdbc" + PostgreSQL ドライバの組み合わせで初期化できる
+            assertThatCode(genericRepo::initialize).doesNotThrowAnyException();
+            assertThat(historyColumnNames()).contains("target_id", "fingerprint");
+        } finally {
+            dropHistoryTable();
+            historyRepo.initialize();
+        }
+    }
+
+    /** 履歴テーブルを落とす。コンテナはクラス共有なので、呼んだ後は必ず作り直すこと。 */
+    private void dropHistoryTable() throws Exception {
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history CASCADE");
+        }
+    }
+
+    /** 履歴テーブルの列名を返す。 */
+    private List<String> historyColumnNames() throws Exception {
+        List<String> names = new ArrayList<>();
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT column_name FROM information_schema.columns "
+                                        + "WHERE table_name = 'migraphe_history'")) {
+            while (rs.next()) {
+                names.add(rs.getString(1));
+            }
+        }
+        return names;
+    }
+
+    @Test
     void shouldExecuteUpMigrationAndPersistHistory() throws Exception {
         // given
         historyRepo.initialize();
@@ -232,8 +278,8 @@ class PostgreSQLIntegrationTest {
         historyRepo.record(record);
 
         // Verify history persisted
-        assertThat(historyRepo.wasExecuted(node.id(), target.id())).isTrue();
-        assertThat(historyRepo.executedNodes(target.id())).containsExactly(node.id());
+        assertThat(historyRepo.wasExecuted(node.id())).isTrue();
+        assertThat(historyRepo.executedNodes()).containsExactly(node.id());
     }
 
     @Test
@@ -346,8 +392,7 @@ class PostgreSQLIntegrationTest {
                         150));
 
         // Verify both executed
-        assertThat(historyRepo.executedNodes(target.id()))
-                .containsExactlyInAnyOrder(node1.id(), node2.id());
+        assertThat(historyRepo.executedNodes()).containsExactlyInAnyOrder(node1.id(), node2.id());
     }
 
     @Test
@@ -365,7 +410,7 @@ class PostgreSQLIntegrationTest {
         historyRepo.record(record2);
 
         // then
-        var latest = historyRepo.findLatestRecord(nodeId, target.id());
+        var latest = historyRepo.findLatestRecord(nodeId);
         assertThat(latest).isNotNull();
         assertThat(latest.id()).isEqualTo(record2.id());
     }
@@ -388,7 +433,7 @@ class PostgreSQLIntegrationTest {
         historyRepo.record(failedRecord);
 
         // then
-        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isFalse();
+        assertThat(historyRepo.wasExecuted(nodeId)).isFalse();
     }
 
     @Test
@@ -408,7 +453,7 @@ class PostgreSQLIntegrationTest {
         historyRepo.record(record2);
 
         // then
-        var allRecords = historyRepo.allRecords(target.id());
+        var allRecords = historyRepo.allRecords();
         assertThat(allRecords).hasSize(2);
         assertThat(allRecords.get(0).status()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(allRecords.get(1).status()).isEqualTo(ExecutionStatus.SUCCESS);
@@ -505,7 +550,7 @@ class PostgreSQLIntegrationTest {
                     )
                     """);
             stmt.execute(
-                    "INSERT INTO migraphe_history VALUES ('legacy-1', 'db1/legacy', 'test-env',"
+                    "INSERT INTO migraphe_history VALUES ('legacy-1', 'db1/legacy', 'test-target',"
                             + " 'UP', 'SUCCESS', NOW(), 'legacy row', NULL, 1, NULL)");
         }
 
@@ -529,8 +574,69 @@ class PostgreSQLIntegrationTest {
                         stmt.executeQuery(
                                 "SELECT target_id FROM migraphe_history WHERE id = 'legacy-1'")) {
             assertThat(rs.next()).isTrue();
-            assertThat(rs.getString(1)).isEqualTo("test-env");
+            assertThat(rs.getString(1)).isEqualTo("test-target");
         }
+    }
+
+    @Test
+    void addsFingerprintColumn() throws Exception {
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " current_schema() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id TEXT PRIMARY KEY,
+                        node_id TEXT NOT NULL,
+                        target_id TEXT NOT NULL,
+                        direction TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        executed_at TIMESTAMP NOT NULL,
+                        description TEXT,
+                        serialized_down_task TEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT
+                    )
+                    """);
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " current_schema() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        // The legacy shape above omits the indexes and CHECK constraints the resource
+        // declares inside CREATE TABLE, and IF NOT EXISTS will not put them back. Rebuild
+        // from scratch so the container's shared table outlives this test intact.
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+        historyRepo.initialize();
     }
 
     @Test

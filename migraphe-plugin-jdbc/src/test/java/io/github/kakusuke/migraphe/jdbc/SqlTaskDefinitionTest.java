@@ -40,6 +40,22 @@ class SqlTaskDefinitionTest {
     }
 
     @Test
+    void noWayBackCarriesTheDeclaredReason() {
+        SmallRyeConfig config =
+                new SmallRyeConfigBuilder()
+                        .withMapping(SqlTaskDefinition.class)
+                        .withDefaultValue("name", "drop_legacy")
+                        .withDefaultValue("target", "db1")
+                        .withDefaultValue("up", "ALTER TABLE users DROP COLUMN legacy")
+                        .withDefaultValue("no_way_back", "DROP COLUMN discards the data")
+                        .build();
+
+        SqlTaskDefinition def = config.getConfigMapping(SqlTaskDefinition.class);
+        assertThat(def.noWayBack()).hasValue("DROP COLUMN discards the data");
+        assertThat(def.down()).isEmpty();
+    }
+
+    @Test
     void autocommitDefault() {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()

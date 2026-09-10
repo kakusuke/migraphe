@@ -51,8 +51,8 @@ class DagExecutorRollbackTest {
         assertThat(result.success()).isTrue();
         assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"), NodeId.of("a"));
         assertThat(listener.completedCalled).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isFalse();
-        assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isFalse();
+        assertThat(history.wasExecuted(NodeId.of("a"))).isFalse();
+        assertThat(history.wasExecuted(NodeId.of("b"))).isFalse();
     }
 
     @Nested
@@ -399,6 +399,12 @@ class DagExecutorRollbackTest {
 
                     @Override
                     public String description() {
+                        return "FAIL DOWN: " + id;
+                    }
+
+                    @Override
+                    public String signature() {
+
                         return "FAIL DOWN: " + id;
                     }
                 };

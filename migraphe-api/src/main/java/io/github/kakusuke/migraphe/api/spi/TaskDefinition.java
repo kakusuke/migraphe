@@ -69,4 +69,20 @@ public interface TaskDefinition<T> {
      *     the task does not support rollback
      */
     Optional<T> down();
+
+    /**
+     * Returns why this migration cannot be rolled back, when the author declared that it cannot.
+     *
+     * <p>Answers a question {@link #down()} alone cannot: an absent rollback means either that the
+     * author decided the migration is one-way or that nobody has written it yet, and only one of
+     * those is something to leave alone. A task must supply one or the other.
+     *
+     * <p>The default returns empty, so a plugin that does not model the distinction reports every
+     * absent rollback as an omission.
+     *
+     * @return an {@link Optional} containing the reason, or empty when the migration is reversible
+     */
+    default Optional<String> noWayBack() {
+        return Optional.empty();
+    }
 }

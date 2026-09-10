@@ -38,18 +38,30 @@ public final class NoopMigrationNodeProvider implements MigrationNodeProvider<St
     public MigrationNode createNode(
             NodeId nodeId, TaskDefinition<String> task, Set<NodeId> dependencies, Target target) {
 
+        String rollback = task.down().filter(s -> !s.isBlank()).orElse(null);
+
         var builder =
                 SimpleMigrationNode.builder()
                         .id(nodeId)
                         .name(task.name())
                         .target(target)
                         .dependencies(dependencies)
-                        .upTask(SimpleTask.of(task.up()));
+                        // The rollback rides on the UP task: a successful UP is what writes the
+                        // history's payload, and core takes it from that task's result. Putting it
+                        // on the DOWN task instead recorded nothing, so every applied row read as
+                        // "this migration kept no rollback".
+                        .upTask(
+                                rollback == null
+                                        ? SimpleTask.of(task.up())
+                                        : SimpleTask.withDownTask(task.up(), rollback));
 
         task.description().ifPresent(builder::description);
-        task.down()
-                .filter(s -> !s.isBlank())
-                .ifPresent(down -> builder.downTask(SimpleTask.withDownTask(down, down)));
+        if (rollback != null) {
+            builder.downTask(SimpleTask.of(rollback));
+        }
+        if (task instanceof NoopTaskDefinition noopTask) {
+            noopTask.noWayBack().filter(r -> !r.isBlank()).ifPresent(builder::noWayBack);
+        }
 
         return builder.build();
     }

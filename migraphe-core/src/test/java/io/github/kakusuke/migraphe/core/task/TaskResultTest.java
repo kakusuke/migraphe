@@ -22,6 +22,20 @@ class TaskResultTest {
     }
 
     @Test
+    void pluginMetadataIsCarriedOnlyWhenTheCallerSuppliesIt() {
+        // when
+        TaskResult withMetadata =
+                TaskResult.withDownTask("UP done", "DROP TABLE t", "autocommit.down=true\n");
+        TaskResult withoutMetadata = TaskResult.withDownTask("UP done", "DROP TABLE t");
+        TaskResult noRollback = TaskResult.withoutDownTask("UP done");
+
+        // then
+        assertThat(withMetadata.pluginMetadata()).isEqualTo("autocommit.down=true\n");
+        assertThat(withoutMetadata.pluginMetadata()).isNull();
+        assertThat(noRollback.pluginMetadata()).isNull();
+    }
+
+    @Test
     void shouldCreateTaskResultWithDownTask() {
         // given
         String message = "UP migration completed";

@@ -3,14 +3,17 @@ package io.github.kakusuke.migraphe.jdbc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class JdbcMigrationNodeTest {
 
-    private final JdbcTarget env =
+    private final JdbcTarget target =
             JdbcTarget.create("testdb", "jdbc:h2:mem:node_test", "sa", "", "org.h2.Driver", "H2");
 
     @Test
@@ -19,12 +22,12 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .target(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.id()).isEqualTo(NodeId.of("node1"));
         assertThat(node.name()).isEqualTo("Create table");
-        assertThat(node.target()).isEqualTo(env);
+        assertThat(node.target()).isEqualTo(target);
         assertThat(node.dependencies()).isEmpty();
         assertThat(node.description()).isNull();
     }
@@ -36,7 +39,7 @@ class JdbcMigrationNodeTest {
                         .id("node1")
                         .name("Create table")
                         .description("Creates the main table")
-                        .target(env)
+                        .target(target)
                         .dependencies(NodeId.of("dep1"), NodeId.of("dep2"))
                         .upSql("CREATE TABLE t1 (id INT)")
                         .downSql("DROP TABLE t1")
@@ -48,12 +51,90 @@ class JdbcMigrationNodeTest {
     }
 
     @Test
+    void fingerprintHandsOverOneSignatureWhenThereIsNoRollback() {
+        var node = nodeBuilder().upSql("CREATE TABLE users (id INT);\n").build();
+
+        var recorder = new RecordingFingerprinter();
+        node.fingerprint(recorder);
+
+        assertThat(recorder.signatures).containsExactly("28:CREATE TABLE users (id INT);1:f");
+    }
+
+    @Test
+    void fingerprintHandsOverTheUpSignatureThenTheDownOne() {
+        var node =
+                nodeBuilder()
+                        .upSql("CREATE TABLE users (id INT);")
+                        .downSql("  DROP TABLE users;\n")
+                        .build();
+
+        var recorder = new RecordingFingerprinter();
+        node.fingerprint(recorder);
+
+        assertThat(recorder.signatures)
+                .containsExactly("28:CREATE TABLE users (id INT);1:f", "17:DROP TABLE users;1:f");
+    }
+
+    @Test
+    void fingerprintRefusesToSignARollbackThatCannotBeRun() {
+        var blanked = nodeBuilder().upSql("CREATE TABLE users (id INT);").downSql("").build();
+
+        assertThatThrownBy(() -> blanked.fingerprint(new RecordingFingerprinter()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("downSql must not be blank");
+    }
+
+    @Test
+    void fingerprintCarriesEachDirectionsAutocommitInThatDirectionsSignature() {
+        var node =
+                nodeBuilder()
+                        .upSql("CREATE TABLE users (id INT);")
+                        .downSql("DROP TABLE users;")
+                        .autocommitUp(true)
+                        .autocommitDown(false)
+                        .build();
+
+        var recorder = new RecordingFingerprinter();
+        node.fingerprint(recorder);
+
+        assertThat(recorder.signatures)
+                .containsExactly("28:CREATE TABLE users (id INT);1:t", "17:DROP TABLE users;1:f");
+    }
+
+    @Test
+    void fingerprintKeepsWhatIsInsideTheSqlIncludingCommentsAndIndentation() {
+        assertThat(upSignatureOf("-- create users\nCREATE TABLE users (id INT);"))
+                .isNotEqualTo(upSignatureOf("CREATE TABLE users (id INT);"));
+        assertThat(upSignatureOf("CREATE TABLE users (\n    id INT\n);"))
+                .isNotEqualTo(upSignatureOf("CREATE TABLE users (\nid INT\n);"));
+        assertThat(upSignatureOf("CREATE TABLE users (\r\nid INT\r\n);"))
+                .isNotEqualTo(upSignatureOf("CREATE TABLE users (\nid INT\n);"));
+    }
+
+    private String upSignatureOf(String upSql) {
+        var recorder = new RecordingFingerprinter();
+        nodeBuilder().upSql(upSql).build().fingerprint(recorder);
+        return recorder.signatures.get(0);
+    }
+
+    /** Captures what a node hands over, which is the node's whole contribution. */
+    private static final class RecordingFingerprinter implements Fingerprinter {
+        private final List<String> signatures = new ArrayList<>();
+
+        @Override
+        public String over(String... signatures) {
+            this.signatures.addAll(List.of(signatures));
+            return "recorded";
+        }
+    }
+
+    @Test
     void upTaskReturnsJdbcUpTask() {
         var node =
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .target(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.upTask()).isInstanceOf(JdbcUpTask.class);
@@ -65,11 +146,26 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .target(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .downSql("DROP TABLE t1")
                         .build();
         assertThat(node.downTask()).isInstanceOf(JdbcDownTask.class);
+    }
+
+    @Test
+    void aNodeDeclaredOneWayCarriesItsReasonAndHasNoDownTask() {
+        var node =
+                JdbcMigrationNode.builder()
+                        .id("node1")
+                        .name("Drop legacy column")
+                        .target(target)
+                        .upSql("ALTER TABLE users DROP COLUMN legacy")
+                        .noWayBack("DROP COLUMN discards the data")
+                        .build();
+
+        assertThat(node.noWayBack()).isEqualTo("DROP COLUMN discards the data");
+        assertThat(node.downTask()).isNull();
     }
 
     @Test
@@ -78,7 +174,7 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .target(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.downTask()).isNull();
@@ -91,7 +187,7 @@ class JdbcMigrationNodeTest {
                                 JdbcMigrationNode.builder()
                                         .id("node1")
                                         .name("Bad node")
-                                        .target(env)
+                                        .target(target)
                                         .upSql("   ")
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
@@ -103,14 +199,14 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("same")
                         .name("Node A")
-                        .target(env)
+                        .target(target)
                         .upSql("SELECT 1")
                         .build();
         var node2 =
                 JdbcMigrationNode.builder()
                         .id("same")
                         .name("Node B")
-                        .target(env)
+                        .target(target)
                         .upSql("SELECT 2")
                         .build();
         assertThat(node1).isEqualTo(node2);
@@ -123,7 +219,7 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .target(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.upTask()).isInstanceOf(SqlContentProvider.class);
@@ -137,10 +233,15 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Node")
-                        .target(env)
+                        .target(target)
                         .dependencies(Set.of(NodeId.of("dep1")))
                         .upSql("SELECT 1")
                         .build();
         assertThat(node.dependencies()).containsExactly(NodeId.of("dep1"));
+    }
+
+    /** Builder pre-filled with the identity fields the fingerprint deliberately ignores. */
+    private JdbcMigrationNode.Builder nodeBuilder() {
+        return JdbcMigrationNode.builder().id("node1").name("Create table").target(target);
     }
 }

@@ -4,10 +4,12 @@ import static io.github.kakusuke.migraphe.core.graph.TestHelpers.node;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.core.common.ValidationResult;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -388,6 +390,183 @@ class MigrationGraphTest {
 
         // then
         assertThat(allDependencies).isEmpty();
+    }
+
+    @Test
+    void fingerprinterFor_foldsInTheSignaturesAndTheNodesOwnClosure() {
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(node("a").build());
+        graph.addNode(node("b").name("same").dependencies(NodeId.of("a")).build());
+        graph.addNode(node("c").name("same").build());
+
+        Fingerprinter standsOnA = graph.fingerprinterFor(NodeId.of("b"));
+        Fingerprinter standsOnNothing = graph.fingerprinterFor(NodeId.of("c"));
+
+        assertThat(standsOnA.over("UP"))
+                .isEqualTo(graph.fingerprinterFor(NodeId.of("b")).over("UP"));
+        assertThat(standsOnA.over("UP")).isNotEqualTo(standsOnA.over("UP2"));
+        assertThat(standsOnA.over("UP")).isNotEqualTo(standsOnNothing.over("UP"));
+    }
+
+    @Test
+    void fingerprinterFor_tellsApartSignatureListsThatWouldConcatenateAlike() {
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(node("a").build());
+
+        Fingerprinter fingerprinter = graph.fingerprinterFor(NodeId.of("a"));
+
+        assertThat(fingerprinter.over("ab")).isNotEqualTo(fingerprinter.over("a", "b"));
+        assertThat(fingerprinter.over("a")).isNotEqualTo(fingerprinter.over("a", ""));
+    }
+
+    @Test
+    void fingerprinterFor_foldsTheNameTheNoWayBackReasonAndTheTargetAheadOfTheSignatures() {
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(node("a").name("same").target(new TestHelpers.TestTarget("db1")).build());
+        graph.addNode(node("b").name("same").target(new TestHelpers.TestTarget("db1")).build());
+        graph.addNode(
+                node("renamed").name("other").target(new TestHelpers.TestTarget("db1")).build());
+        graph.addNode(node("moved").name("same").target(new TestHelpers.TestTarget("db2")).build());
+        graph.addNode(
+                node("blankReason")
+                        .name("same")
+                        .target(new TestHelpers.TestTarget("db1"))
+                        .noWayBack("")
+                        .build());
+        graph.addNode(
+                node("reasoned")
+                        .name("same")
+                        .target(new TestHelpers.TestTarget("db1"))
+                        .noWayBack("DROP COLUMN discards the data")
+                        .build());
+
+        String token = graph.fingerprinterFor(NodeId.of("a")).over("UP");
+
+        assertThat(token)
+                .isEqualTo("8ea3961d863f102bee74798e0a49ac224703c5ec3aea24a064c572e13d3b9573");
+        assertThat(token).isEqualTo(graph.fingerprinterFor(NodeId.of("b")).over("UP"));
+        assertThat(token).isNotEqualTo(graph.fingerprinterFor(NodeId.of("renamed")).over("UP"));
+        assertThat(token).isNotEqualTo(graph.fingerprinterFor(NodeId.of("moved")).over("UP"));
+        assertThat(token).isNotEqualTo(graph.fingerprinterFor(NodeId.of("blankReason")).over("UP"));
+        assertThat(graph.fingerprinterFor(NodeId.of("blankReason")).over("UP"))
+                .isNotEqualTo(graph.fingerprinterFor(NodeId.of("reasoned")).over("UP"));
+    }
+
+    @Test
+    void fingerprinterFor_keepsTheSignaturesApartFromTheClosure() {
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(node("b").build());
+        graph.addNode(node("standsOnNothing").name("same").build());
+        graph.addNode(node("standsOnB").name("same").dependencies(NodeId.of("b")).build());
+
+        assertThat(graph.fingerprinterFor(NodeId.of("standsOnNothing")).over("a", "b"))
+                .isNotEqualTo(graph.fingerprinterFor(NodeId.of("standsOnB")).over("a"));
+    }
+
+    @Test
+    void transitiveReduction_dropsAnEdgeThatIsReachableTheLongWayRound() {
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId a = NodeId.of("a");
+        NodeId b = NodeId.of("b");
+        NodeId c = NodeId.of("c");
+        graph.addNode(node("a").build());
+        graph.addNode(node("b").dependencies(a).build());
+        graph.addNode(node("c").dependencies(a, b).build());
+
+        Map<NodeId, Set<NodeId>> reduced = graph.transitiveReduction();
+
+        assertThat(reduced.get(c)).containsExactly(b);
+        assertThat(reduced.get(b)).containsExactly(a);
+        assertThat(reduced.get(a)).isEmpty();
+        assertThat(graph.getDependencies(c)).containsExactlyInAnyOrder(a, b);
+    }
+
+    @Test
+    void transitiveReduction_keepsBothSidesOfADiamond() {
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId a = NodeId.of("a");
+        NodeId b = NodeId.of("b");
+        NodeId c = NodeId.of("c");
+        NodeId d = NodeId.of("d");
+        graph.addNode(node("a").build());
+        graph.addNode(node("b").dependencies(a).build());
+        graph.addNode(node("c").dependencies(a).build());
+        graph.addNode(node("d").dependencies(b, c).build());
+
+        Map<NodeId, Set<NodeId>> reduced = graph.transitiveReduction();
+
+        assertThat(reduced.get(d)).containsExactlyInAnyOrder(b, c);
+        assertThat(reduced.get(b)).containsExactly(a);
+        assertThat(reduced.get(c)).containsExactly(a);
+    }
+
+    @Test
+    void canonicalTransitiveDependencies_returnsTheClosureSortedByNodeIdValue() {
+        // given: 999_c -> 002_b -> 001_a and 999_c -> 900_z; these identifiers are chosen so that
+        // the unsorted closure iterates in an order the assertion below would reject
+        MigrationGraph graph = MigrationGraph.create();
+        NodeId a = NodeId.of("db1/001_a");
+        NodeId b = NodeId.of("db1/002_b");
+        NodeId z = NodeId.of("db1/900_z");
+        NodeId c = NodeId.of("db1/999_c");
+
+        graph.addNode(node("db1/999_c").dependencies(b, z).build());
+        graph.addNode(node("db1/900_z").build());
+        graph.addNode(node("db1/002_b").dependencies(a).build());
+        graph.addNode(node("db1/001_a").build());
+
+        // then
+        assertThat(graph.canonicalTransitiveDependencies(c)).containsExactly(a, b, z);
+        assertThat(graph.canonicalTransitiveDependencies(a)).isEmpty();
+    }
+
+    @Test
+    void canonicalTransitiveDependencies_keepsADependencyTheGraphDoesNotContain() {
+        // given: 002_b declares 001_a, whose task file is gone — fromNodesUp drops it from the
+        // adjacency, but the node still declares it
+        MigrationNode nodeB = node("db1/002_b").dependencies(NodeId.of("db1/001_a")).build();
+
+        // when
+        MigrationGraph graph = MigrationGraph.fromNodesUp(List.of(nodeB));
+
+        // then
+        assertThat(graph.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/001_a"));
+    }
+
+    @Test
+    void canonicalTransitiveDependencies_losesWhatStoodBehindADeletedNode() {
+        // given: 002_b -> 001_a -> 000_base, and the same project with 001_a's task file deleted
+        MigrationNode base = node("db1/000_base").build();
+        MigrationNode nodeA = node("db1/001_a").dependencies(NodeId.of("db1/000_base")).build();
+        MigrationNode nodeB = node("db1/002_b").dependencies(NodeId.of("db1/001_a")).build();
+
+        // when
+        MigrationGraph whole = MigrationGraph.fromNodesUp(List.of(base, nodeA, nodeB));
+        MigrationGraph aDeleted = MigrationGraph.fromNodesUp(List.of(base, nodeB));
+
+        // then
+        assertThat(whole.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/000_base"), NodeId.of("db1/001_a"));
+        assertThat(aDeleted.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/001_a"));
+    }
+
+    @Test
+    void canonicalTransitiveDependencies_keepsWhatASecondDeclaredPathStillReaches() {
+        // given: 002_b declares both 001_a and 000_base, and 001_a's task file is deleted
+        MigrationNode base = node("db1/000_base").build();
+        MigrationNode nodeB =
+                node("db1/002_b")
+                        .dependencies(NodeId.of("db1/001_a"), NodeId.of("db1/000_base"))
+                        .build();
+
+        // when
+        MigrationGraph aDeleted = MigrationGraph.fromNodesUp(List.of(base, nodeB));
+
+        // then
+        assertThat(aDeleted.canonicalTransitiveDependencies(NodeId.of("db1/002_b")))
+                .containsExactly(NodeId.of("db1/000_base"), NodeId.of("db1/001_a"));
     }
 
     @Test

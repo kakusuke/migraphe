@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.graph;
 
 import io.github.kakusuke.migraphe.api.common.Result;
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.target.Target;
@@ -9,6 +10,7 @@ import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import java.util.Objects;
 import java.util.Set;
+import org.jspecify.annotations.Nullable;
 
 /** テスト用ヘルパークラス */
 public class TestHelpers {
@@ -48,6 +50,11 @@ public class TestHelpers {
         }
 
         @Override
+        public String signature() {
+            return description;
+        }
+
+        @Override
         public String description() {
             return description;
         }
@@ -59,12 +66,33 @@ public class TestHelpers {
         private final String name;
         private final Target target;
         private final Set<NodeId> dependencies;
+        private final @Nullable String noWayBack;
 
         public TestMigrationNode(NodeId id, String name, Target target, Set<NodeId> dependencies) {
+            this(id, name, target, dependencies, null);
+        }
+
+        public TestMigrationNode(
+                NodeId id,
+                String name,
+                Target target,
+                Set<NodeId> dependencies,
+                @Nullable String noWayBack) {
             this.id = id;
             this.name = name;
             this.target = target;
             this.dependencies = dependencies;
+            this.noWayBack = noWayBack;
+        }
+
+        @Override
+        public @Nullable String noWayBack() {
+            return noWayBack;
+        }
+
+        @Override
+        public String fingerprint(Fingerprinter fingerprinter) {
+            return fingerprinter.over(id.value());
         }
 
         @Override
@@ -125,6 +153,7 @@ public class TestHelpers {
         private String name;
         private Target target = new TestTarget("test");
         private Set<NodeId> dependencies = Set.of();
+        private @Nullable String noWayBack;
 
         public TestNodeBuilder(NodeId id) {
             this.id = id;
@@ -146,8 +175,13 @@ public class TestHelpers {
             return this;
         }
 
+        public TestNodeBuilder noWayBack(@Nullable String reason) {
+            this.noWayBack = reason;
+            return this;
+        }
+
         public TestMigrationNode build() {
-            return new TestMigrationNode(id, name, target, dependencies);
+            return new TestMigrationNode(id, name, target, dependencies, noWayBack);
         }
     }
 }

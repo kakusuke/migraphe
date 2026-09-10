@@ -15,17 +15,30 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Records are partitioned per {@link TargetId}, so the history of multiple targets can be held
  * simultaneously. Because nothing is persisted, all history is lost when the application restarts.
- * This implementation is used in tests and as the fallback when a project configures no history
- * target (see {@link
- * io.github.kakusuke.migraphe.core.execution.ExecutionContext#createHistoryRepository()}).
+ * This implementation is used in tests and by the {@code noop} plugin, whose {@link
+ * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} returns it for every target. It is
+ * deliberately <strong>not</strong> reachable as a fallback for a misconfigured {@code
+ * history.target}: a run that applied its migrations and then discarded the record would be worse
+ * than one that refused to start.
  *
  * <p>This class is not itself thread-safe; concurrent callers should wrap it in a {@link
  * SynchronizedHistoryRepository}.
  *
- * <p>"Applied" semantics: a node is considered applied only when its most recent record for the
- * target is an {@link ExecutionDirection#UP} record with status {@link ExecutionStatus#SUCCESS}.
+ * <p>"Applied" semantics: a node is considered applied when its most recent record with status
+ * {@link ExecutionStatus#SUCCESS} is an {@link ExecutionDirection#UP}. Records that failed or were
+ * skipped never change the applied state, so a rollback that failed leaves the node applied.
  */
 public final class InMemoryHistoryRepository implements HistoryRepository {
+
+    /**
+     * Recency, the way the whole family defines it: {@code executedAt}, then the identifier.
+     *
+     * <p>The tie-break is not decoration. Identifiers are time-ordered, and a driver that drops
+     * sub-second precision leaves two rows of one node sharing an instant — a rollback and the
+     * re-apply after it, say. Without it the older row wins and the node reads as not applied.
+     */
+    private static final Comparator<ExecutionRecord> BY_RECENCY =
+            Comparator.comparing(ExecutionRecord::executedAt).thenComparing(ExecutionRecord::id);
 
     private final Map<TargetId, List<ExecutionRecord>> recordsByTarget;
 
@@ -46,65 +59,51 @@ public final class InMemoryHistoryRepository implements HistoryRepository {
     }
 
     @Override
-    public boolean wasExecuted(NodeId nodeId, TargetId targetId) {
+    public boolean wasExecuted(NodeId nodeId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
-        Objects.requireNonNull(targetId, "targetId must not be null");
 
-        // Take the latest record; treat the node as applied only if it is UP and SUCCESS.
-        return getRecordsForTarget(targetId).stream()
+        // The latest successful record decides; non-SUCCESS records change nothing.
+        return allRecords().stream()
                 .filter(r -> r.nodeId().equals(nodeId))
-                .max(Comparator.comparing(ExecutionRecord::executedAt))
-                .map(
-                        r ->
-                                r.direction() == ExecutionDirection.UP
-                                        && r.status() == ExecutionStatus.SUCCESS)
+                .filter(r -> r.status() == ExecutionStatus.SUCCESS)
+                .max(BY_RECENCY)
+                .map(r -> r.direction() == ExecutionDirection.UP)
                 .orElse(false);
     }
 
     @Override
-    public List<NodeId> executedNodes(TargetId targetId) {
-        Objects.requireNonNull(targetId, "targetId must not be null");
-
-        // Return only nodes whose latest record is UP and SUCCESS.
+    public List<NodeId> executedNodes() {
+        // Return only nodes whose latest successful record is an UP.
         Map<NodeId, ExecutionRecord> latestByNode = new HashMap<>();
-        for (ExecutionRecord r : getRecordsForTarget(targetId)) {
+        for (ExecutionRecord r : allRecords()) {
+            if (r.status() != ExecutionStatus.SUCCESS) {
+                continue;
+            }
             latestByNode.merge(
                     r.nodeId(),
                     r,
                     (existing, incoming) ->
-                            incoming.executedAt().isAfter(existing.executedAt())
-                                    ? incoming
-                                    : existing);
+                            BY_RECENCY.compare(incoming, existing) > 0 ? incoming : existing);
         }
 
         return latestByNode.values().stream()
-                .filter(
-                        r ->
-                                r.direction() == ExecutionDirection.UP
-                                        && r.status() == ExecutionStatus.SUCCESS)
+                .filter(r -> r.direction() == ExecutionDirection.UP)
                 .map(ExecutionRecord::nodeId)
                 .collect(Collectors.toList());
     }
 
     @Override
-    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, TargetId targetId) {
+    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
-        Objects.requireNonNull(targetId, "targetId must not be null");
 
-        return getRecordsForTarget(targetId).stream()
+        return allRecords().stream()
                 .filter(r -> r.nodeId().equals(nodeId))
-                .max(Comparator.comparing(ExecutionRecord::executedAt))
+                .max(BY_RECENCY)
                 .orElse(null);
     }
 
     @Override
-    public List<ExecutionRecord> allRecords(TargetId targetId) {
-        Objects.requireNonNull(targetId, "targetId must not be null");
-
-        return List.copyOf(getRecordsForTarget(targetId));
-    }
-
-    private List<ExecutionRecord> getRecordsForTarget(TargetId targetId) {
-        return recordsByTarget.getOrDefault(targetId, Collections.emptyList());
+    public List<ExecutionRecord> allRecords() {
+        return recordsByTarget.values().stream().flatMap(List::stream).toList();
     }
 }

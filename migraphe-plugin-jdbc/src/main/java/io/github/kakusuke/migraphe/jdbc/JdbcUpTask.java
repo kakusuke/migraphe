@@ -21,7 +21,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The optional {@code downSql} is not executed here; it is carried into the resulting {@link
  * TaskResult} as the serialized rollback so the history layer can later perform a DOWN migration.
- * As a {@link SqlContentProvider}, the task also exposes its UP SQL for inspection and generators.
+ * As a {@link SqlContentProvider}, the task also exposes its UP SQL for inspection and generators,
+ * anything, for a caller that has to record what this task would do rather than do it.
  */
 public final class JdbcUpTask implements Task, SqlContentProvider {
 
@@ -29,13 +30,19 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
     private final String upSql;
     private final @Nullable String downSql;
     private final boolean autocommit;
+    private final boolean autocommitDown;
 
     private JdbcUpTask(
-            JdbcTarget target, String upSql, @Nullable String downSql, boolean autocommit) {
+            JdbcTarget target,
+            String upSql,
+            @Nullable String downSql,
+            boolean autocommit,
+            boolean autocommitDown) {
         this.target = Objects.requireNonNull(target, "target must not be null");
         this.upSql = Objects.requireNonNull(upSql, "upSql must not be null");
         this.downSql = downSql;
         this.autocommit = autocommit;
+        this.autocommitDown = autocommitDown;
 
         if (upSql.isBlank()) {
             throw new IllegalArgumentException("upSql must not be blank");
@@ -55,7 +62,52 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
      */
     public static JdbcUpTask create(
             JdbcTarget target, String upSql, @Nullable String downSql, boolean autocommit) {
-        return new JdbcUpTask(target, upSql, downSql, autocommit);
+        return new JdbcUpTask(target, upSql, downSql, autocommit, autocommit);
+    }
+
+    /**
+     * Creates an UP task that records the rollback's own transaction mode.
+     *
+     * @param target the target whose connection runs the SQL
+     * @param upSql the forward migration SQL; must not be blank
+     * @param downSql the rollback SQL to carry into the result, or {@code null} if the task is not
+     *     reversible
+     * @param autocommit {@code true} to apply without an enclosing transaction
+     * @param autocommitDown {@code true} if the rollback must run without one
+     * @return a new {@link JdbcUpTask}
+     * @throws IllegalArgumentException if {@code upSql} is blank
+     */
+    public static JdbcUpTask create(
+            JdbcTarget target,
+            String upSql,
+            @Nullable String downSql,
+            boolean autocommit,
+            boolean autocommitDown) {
+        return new JdbcUpTask(target, upSql, downSql, autocommit, autocommitDown);
+    }
+
+    /**
+     * The plugin's own record of an execution of this task, or {@code null} when there is no
+     * rollback to describe.
+     *
+     * <p>Written in {@code java.util.Properties} syntax so an operator can read it in the history
+     * table. It exists because the recorded rollback SQL alone does not say which transaction mode
+     * to replay it in, and a migration whose rollback needs autocommit cannot be undone without it.
+     *
+     * <p>Derived entirely from the definition, so it is the same value whether or not the task has
+     * run.
+     */
+    public @Nullable String pluginMetadata() {
+        return downSql == null ? null : "autocommit.down=" + autocommitDown + "\n";
+    }
+
+    /**
+     * The rollback SQL this task would record.
+     *
+     * @return the rollback SQL, or {@code null} if this migration is not reversible
+     */
+    public @Nullable String serializedDownTask() {
+        return downSql;
     }
 
     /**
@@ -98,7 +150,8 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
                 return Result.ok(
                         TaskResult.withDownTask(
                                 "UP migration executed in " + durationMs + "ms (autocommit)",
-                                downSql));
+                                downSql,
+                                pluginMetadata()));
             } else {
                 return Result.ok(
                         TaskResult.withoutDownTask(
@@ -121,7 +174,9 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
             if (downSql != null) {
                 return Result.ok(
                         TaskResult.withDownTask(
-                                "UP migration executed in " + durationMs + "ms", downSql));
+                                "UP migration executed in " + durationMs + "ms",
+                                downSql,
+                                pluginMetadata()));
             } else {
                 return Result.ok(
                         TaskResult.withoutDownTask(
@@ -155,5 +210,20 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
     @Override
     public String sqlContent() {
         return upSql;
+    }
+
+    /**
+     * The forward SQL and the mode it runs in — not the rollback this task carries.
+     *
+     * <p>{@code downSql} and its mode are recorded by this task but signed by the DOWN task, so
+     * including them here would have them counted twice by whoever composes the two.
+     *
+     * <p>The two parts are length-prefixed rather than concatenated, because concatenating SQL with
+     * a mode marker lets a statement ending in the marker's own text stand in for the mode being
+     * set.
+     */
+    @Override
+    public String signature() {
+        return SignatureFraming.frame(upSql.strip(), autocommit);
     }
 }

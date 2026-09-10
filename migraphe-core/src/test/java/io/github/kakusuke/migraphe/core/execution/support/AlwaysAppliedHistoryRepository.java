@@ -7,11 +7,13 @@ import java.util.List;
 import org.jspecify.annotations.Nullable;
 
 /**
- * {@link HistoryRepository#record} が例外を投げるリポジトリを作るためのラッパー。
+ * 「適用済みか」の判定だけが委譲先と食い違うリポジトリを作るためのラッパー。
  *
- * <p>マイグレーション自体は適用できたのに履歴の書き込みだけが失敗する状況——接続が切れた、制約に当たった——を再現する。読み取りは委譲先がそのまま応えるので、「書き込みだけが壊れている」という壊れ方だけを切り出せる。
+ * <p>`HistoryRepository` は `wasExecuted` と `findLatestRecord`
+ * が整合することをどこにも要求していない。同梱の2実装はどちらも同じ行を見るので 食い違わないが、サードパーティ実装は別基準を使える。その状況を再現する。
  */
-public record ThrowingHistoryRepository(HistoryRepository delegate) implements HistoryRepository {
+public record AlwaysAppliedHistoryRepository(HistoryRepository delegate)
+        implements HistoryRepository {
 
     @Override
     public void initialize() {
@@ -20,12 +22,12 @@ public record ThrowingHistoryRepository(HistoryRepository delegate) implements H
 
     @Override
     public void record(ExecutionRecord executionRecord) {
-        throw new IllegalStateException("history connection lost");
+        delegate.record(executionRecord);
     }
 
     @Override
     public boolean wasExecuted(NodeId nodeId) {
-        return delegate.wasExecuted(nodeId);
+        return true;
     }
 
     @Override
