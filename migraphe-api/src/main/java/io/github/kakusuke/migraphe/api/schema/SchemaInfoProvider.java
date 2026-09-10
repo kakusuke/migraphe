@@ -1,11 +1,11 @@
 package io.github.kakusuke.migraphe.api.schema;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
+import io.github.kakusuke.migraphe.api.target.Target;
 
 /**
- * Extracts schema information from a connected {@link Environment}.
+ * Extracts schema information from a connected {@link Target}.
  *
- * <p>This functional interface lets plugins introspect a live environment (for example, by reading
+ * <p>This functional interface lets plugins introspect a live target (for example, by reading
  * database metadata) and return a typed snapshot of its schema. The resulting object is typically
  * consumed by generators to render documentation or other schema-derived output.
  *
@@ -13,16 +13,16 @@ import io.github.kakusuke.migraphe.api.environment.Environment;
  * parameter {@code T} is the concrete schema representation that the implementation returns.
  *
  * @param <T> the type of the schema information produced
- * @see Environment
+ * @see Target
  */
 @FunctionalInterface
 public interface SchemaInfoProvider<T> {
 
     /**
-     * Extracts schema information from the given environment.
+     * Extracts schema information from the given target.
      *
-     * @param environment the environment to introspect
-     * @return the schema information extracted from {@code environment}
+     * @param target the target to introspect
+     * @return the schema information extracted from {@code target}
      */
-    T getSchemaInfo(Environment environment);
+    T getSchemaInfo(Target target);
 }

@@ -3,15 +3,15 @@ package io.github.kakusuke.migraphe.core.generator.tree;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
 import io.github.kakusuke.migraphe.api.generator.SourceContext;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
-import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
+import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.ServiceLoader;
 import org.junit.jupiter.api.Test;
@@ -33,19 +33,19 @@ class MigrationTreeSourcePluginTest {
     @Test
     void extractReturnsMigrationTreeData() {
         MigrationGraph graph = MigrationGraph.create();
-        var env = SimpleEnvironment.create(EnvironmentId.of("test"), "test");
+        var target = SimpleTarget.create(TargetId.of("test"), "test");
         var nodeA =
                 SimpleMigrationNode.builder()
                         .id(NodeId.of("a"))
                         .name("a")
-                        .environment(env)
+                        .target(target)
                         .upTask(SimpleTask.of("a"))
                         .build();
         var nodeB =
                 SimpleMigrationNode.builder()
                         .id(NodeId.of("b"))
                         .name("b")
-                        .environment(env)
+                        .target(target)
                         .upTask(SimpleTask.of("b"))
                         .dependencies(NodeId.of("a"))
                         .build();
@@ -85,19 +85,19 @@ class MigrationTreeSourcePluginTest {
     @Test
     void nodeEntryIncludesNameTargetAndStatus() {
         MigrationGraph graph = MigrationGraph.create();
-        var env = SimpleEnvironment.create(EnvironmentId.of("test"), "test");
+        var target = SimpleTarget.create(TargetId.of("test"), "test");
         var nodeA =
                 SimpleMigrationNode.builder()
                         .id(NodeId.of("a"))
                         .name("a")
-                        .environment(env)
+                        .target(target)
                         .upTask(SimpleTask.of("a"))
                         .build();
         var nodeB =
                 SimpleMigrationNode.builder()
                         .id(NodeId.of("b"))
                         .name("b")
-                        .environment(env)
+                        .target(target)
                         .upTask(SimpleTask.of("b"))
                         .dependencies(NodeId.of("a"))
                         .build();
@@ -106,7 +106,7 @@ class MigrationTreeSourcePluginTest {
 
         var historyRepository = new InMemoryHistoryRepository();
         historyRepository.record(
-                ExecutionRecord.upSuccess(NodeId.of("a"), EnvironmentId.of("test"), "a", null, 0L));
+                ExecutionRecord.upSuccess(NodeId.of("a"), TargetId.of("test"), "a", null, 0L));
 
         SourceContext context = new SourceContext(null, graph, historyRepository);
         MigrationTreeData result = plugin.extract(context);

@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.core.factory;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.config.ConfigurationException;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
@@ -44,11 +44,10 @@ public class MigrationNodeFactory {
      *
      * @param taskDef the task definition describing the node's target, dependencies, and payload
      * @param nodeId the ID to assign to the created node
-     * @param environment the environment in which the node will run
+     * @param target the target in which the node will run
      * @return the created migration node
      */
-    public MigrationNode createNode(
-            TaskDefinition<?> taskDef, NodeId nodeId, Environment environment) {
+    public MigrationNode createNode(TaskDefinition<?> taskDef, NodeId nodeId, Target target) {
 
         // Read the target's type to select the plugin.
         String targetId = taskDef.target();
@@ -67,19 +66,19 @@ public class MigrationNodeFactory {
         TaskDefinition<Object> typedTaskDef = (TaskDefinition<Object>) taskDef;
         return typedPlugin
                 .migrationNodeProvider()
-                .createNode(nodeId, typedTaskDef, dependencies, environment);
+                .createNode(nodeId, typedTaskDef, dependencies, target);
     }
 
     /**
      * Builds a list of {@link MigrationNode}s from multiple task definitions.
      *
      * @param taskDefinitions map of node ID to its task definition
-     * @param environments map of target ID to its {@link Environment}
+     * @param targets map of target ID to its {@link Target}
      * @return the list of created migration nodes
-     * @throws ConfigurationException if a task's target has no corresponding {@link Environment}
+     * @throws ConfigurationException if a task's target has no corresponding {@link Target}
      */
     public List<MigrationNode> createNodes(
-            Map<NodeId, TaskDefinition<?>> taskDefinitions, Map<String, Environment> environments) {
+            Map<NodeId, TaskDefinition<?>> taskDefinitions, Map<String, Target> targets) {
 
         List<MigrationNode> nodes = new ArrayList<>();
 
@@ -87,15 +86,15 @@ public class MigrationNodeFactory {
             NodeId nodeId = entry.getKey();
             TaskDefinition<?> taskDef = entry.getValue();
 
-            // Look up the Environment by target ID.
+            // Look up the Target by target ID.
             String targetId = taskDef.target();
-            Environment environment = environments.get(targetId);
+            Target target = targets.get(targetId);
 
-            if (environment == null) {
-                throw new ConfigurationException("Environment not found for target: " + targetId);
+            if (target == null) {
+                throw new ConfigurationException("No such target: " + targetId);
             }
 
-            MigrationNode node = createNode(taskDef, nodeId, environment);
+            MigrationNode node = createNode(taskDef, nodeId, target);
             nodes.add(node);
         }
 

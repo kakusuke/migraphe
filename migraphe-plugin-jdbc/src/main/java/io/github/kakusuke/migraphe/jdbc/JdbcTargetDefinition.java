@@ -1,6 +1,6 @@
 package io.github.kakusuke.migraphe.jdbc;
 
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithName;
 import java.util.Optional;
@@ -9,10 +9,10 @@ import java.util.Optional;
  * Configuration mapping for a generic JDBC target ({@code type: jdbc}).
  *
  * <p>This is the SmallRye {@link ConfigMapping} bound to a target YAML file (for example {@code
- * targets/mydb.yaml}). {@link JdbcEnvironmentProvider} reads these values to build a {@link
- * JdbcEnvironment}. Because the JDBC plugin is database-agnostic, the driver class and a human
- * readable database label are supplied explicitly in the YAML; dialect-specific plugins
- * (PostgreSQL, MySQL) fix those values and omit them from their definitions.
+ * targets/mydb.yaml}). {@link JdbcTargetProvider} reads these values to build a {@link JdbcTarget}.
+ * Because the JDBC plugin is database-agnostic, the driver class and a human readable database
+ * label are supplied explicitly in the YAML; dialect-specific plugins (PostgreSQL, MySQL) fix those
+ * values and omit them from their definitions.
  *
  * <p>Example {@code targets/mydb.yaml}:
  *
@@ -26,7 +26,7 @@ import java.util.Optional;
  * }</pre>
  */
 @ConfigMapping(prefix = "")
-public interface JdbcEnvironmentDefinition extends EnvironmentDefinition {
+public interface JdbcTargetDefinition extends TargetDefinition {
 
     /**
      * Returns the target type discriminator, {@code "jdbc"} for this definition.

@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.core.graph;
 
 import io.github.kakusuke.migraphe.api.common.Result;
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import java.util.Objects;
@@ -14,17 +14,17 @@ import java.util.Set;
 public class TestHelpers {
 
     /** テスト用環境実装 */
-    public static class TestEnvironment implements Environment {
-        private final EnvironmentId id;
+    public static class TestTarget implements Target {
+        private final TargetId id;
         private final String name;
 
-        public TestEnvironment(String name) {
+        public TestTarget(String name) {
             this.name = name;
-            this.id = EnvironmentId.of(name);
+            this.id = TargetId.of(name);
         }
 
         @Override
-        public EnvironmentId id() {
+        public TargetId id() {
             return id;
         }
 
@@ -57,14 +57,13 @@ public class TestHelpers {
     public static class TestMigrationNode implements MigrationNode {
         private final NodeId id;
         private final String name;
-        private final Environment environment;
+        private final Target target;
         private final Set<NodeId> dependencies;
 
-        public TestMigrationNode(
-                NodeId id, String name, Environment environment, Set<NodeId> dependencies) {
+        public TestMigrationNode(NodeId id, String name, Target target, Set<NodeId> dependencies) {
             this.id = id;
             this.name = name;
-            this.environment = environment;
+            this.target = target;
             this.dependencies = dependencies;
         }
 
@@ -84,8 +83,8 @@ public class TestHelpers {
         }
 
         @Override
-        public Environment environment() {
-            return environment;
+        public Target target() {
+            return target;
         }
 
         @Override
@@ -124,7 +123,7 @@ public class TestHelpers {
     public static class TestNodeBuilder {
         private final NodeId id;
         private String name;
-        private Environment environment = new TestEnvironment("test");
+        private Target target = new TestTarget("test");
         private Set<NodeId> dependencies = Set.of();
 
         public TestNodeBuilder(NodeId id) {
@@ -137,8 +136,8 @@ public class TestHelpers {
             return this;
         }
 
-        public TestNodeBuilder environment(Environment environment) {
-            this.environment = environment;
+        public TestNodeBuilder target(Target target) {
+            this.target = target;
             return this;
         }
 
@@ -148,7 +147,7 @@ public class TestHelpers {
         }
 
         public TestMigrationNode build() {
-            return new TestMigrationNode(id, name, environment, dependencies);
+            return new TestMigrationNode(id, name, target, dependencies);
         }
     }
 }

@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.core.plugin.noop;
 
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentProvider;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 
 /**
@@ -17,9 +17,9 @@ import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
  *
  * <p>Its UP/DOWN action type is {@link String}: task {@code up}/{@code down} values are treated as
  * descriptive text rather than executable SQL. The pieces it binds together are {@link
- * NoopTaskDefinition} and {@link NoopEnvironmentDefinition} for configuration, and {@link
- * NoopEnvironmentProvider}, {@link NoopMigrationNodeProvider}, and {@link
- * NoopHistoryRepositoryProvider} for runtime objects.
+ * NoopTaskDefinition} and {@link NoopTargetDefinition} for configuration, and {@link
+ * NoopTargetProvider}, {@link NoopMigrationNodeProvider}, and {@link NoopHistoryRepositoryProvider}
+ * for runtime objects.
  *
  * <p>This plugin is registered for {@link java.util.ServiceLoader} discovery through a {@code
  * META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin} resource.
@@ -42,13 +42,13 @@ public final class NoopPlugin implements MigraphePlugin<String> {
     }
 
     @Override
-    public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
-        return NoopEnvironmentDefinition.class;
+    public Class<? extends TargetDefinition> targetDefinitionClass() {
+        return NoopTargetDefinition.class;
     }
 
     @Override
-    public EnvironmentProvider environmentProvider() {
-        return new NoopEnvironmentProvider();
+    public TargetProvider targetProvider() {
+        return new NoopTargetProvider();
     }
 
     @Override

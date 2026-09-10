@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.github.kakusuke.migraphe.mysql.MySQLEnvironment;
+import io.github.kakusuke.migraphe.mysql.MySQLTarget;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -202,10 +202,10 @@ class UpCommandMySQLTest {
 
     /** Testcontainers の接続情報で新規 JDBC 接続を開く。 */
     private Connection newConnection() throws Exception {
-        MySQLEnvironment env =
-                MySQLEnvironment.create(
+        MySQLTarget target =
+                MySQLTarget.create(
                         "cleanup", mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
-        return env.createConnection();
+        return target.createConnection();
     }
 
     private boolean tableExists(String table) throws Exception {

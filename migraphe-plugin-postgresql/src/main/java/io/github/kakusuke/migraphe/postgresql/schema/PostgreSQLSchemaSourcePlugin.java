@@ -1,14 +1,14 @@
 package io.github.kakusuke.migraphe.postgresql.schema;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
 import io.github.kakusuke.migraphe.api.generator.SourceContext;
+import io.github.kakusuke.migraphe.api.target.Target;
 import java.util.Objects;
 
 /**
  * Generator source plugin that supplies PostgreSQL schema information.
  *
- * <p>This plugin extracts a {@link PostgreSQLSchemaInfo} snapshot from the environment carried by a
+ * <p>This plugin extracts a {@link PostgreSQLSchemaInfo} snapshot from the target carried by a
  * {@link SourceContext}, delegating the actual catalog introspection to {@link
  * PostgreSQLSchemaInfoProvider}. The resulting data can be rendered by any compatible {@link
  * io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin}, such as the {@code
@@ -49,17 +49,16 @@ public final class PostgreSQLSchemaSourcePlugin
     /**
      * Extracts PostgreSQL schema information from the given context.
      *
-     * @param context the extraction context; its {@linkplain SourceContext#environment()
-     *     environment} is required and must be a PostgreSQL environment
+     * @param context the extraction context; its {@linkplain SourceContext#target() target} is
+     *     required and must be a PostgreSQL target
      * @return the extracted PostgreSQL schema information
-     * @throws NullPointerException if the context carries no environment
+     * @throws NullPointerException if the context carries no target
      */
     @Override
     public PostgreSQLSchemaInfo extract(SourceContext context) {
-        Environment environment =
+        Target target =
                 Objects.requireNonNull(
-                        context.environment(),
-                        "Environment is required for postgresql-schema source");
-        return new PostgreSQLSchemaInfoProvider().getSchemaInfo(environment);
+                        context.target(), "Target is required for postgresql-schema source");
+        return new PostgreSQLSchemaInfoProvider().getSchemaInfo(target);
     }
 }

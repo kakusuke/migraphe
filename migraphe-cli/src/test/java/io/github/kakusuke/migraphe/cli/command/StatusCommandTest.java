@@ -2,10 +2,10 @@ package io.github.kakusuke.migraphe.cli.command;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -62,8 +62,8 @@ class StatusCommandTest {
         try {
             createTestProject(tempDir);
             ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
-            Environment env = context.environments().get("test-db");
-            if (env instanceof PostgreSQLEnvironment pgEnv) {
+            Target env = context.targets().get("test-db");
+            if (env instanceof PostgreSQLTarget pgEnv) {
                 try (Connection conn = pgEnv.createConnection();
                         Statement stmt = conn.createStatement()) {
                     // Drop all user tables

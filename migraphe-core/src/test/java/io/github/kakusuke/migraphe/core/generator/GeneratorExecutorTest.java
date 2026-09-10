@@ -3,15 +3,15 @@ package io.github.kakusuke.migraphe.core.generator;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
 import io.github.kakusuke.migraphe.api.generator.OutputContext;
 import io.github.kakusuke.migraphe.api.generator.SourceContext;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
-import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
+import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -75,11 +75,9 @@ class GeneratorExecutorTest {
         var config =
                 new StubGeneratorSectionWithSource(
                         "gen1", "test-output", "output", "test-source", null);
-        var environments =
-                Map.<String, Environment>of(
-                        "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
+        var targets = Map.<String, Target>of("dev", SimpleTarget.create(TargetId.of("dev"), "dev"));
 
-        executor.executeWithSourceOutput(config, environments, null, null, tempDir);
+        executor.executeWithSourceOutput(config, targets, null, null, tempDir);
 
         assertThat(capturedData.get()).isEqualTo("extracted-data");
         assertThat(capturedOutputDir.get()).isEqualTo(tempDir.resolve("output"));
@@ -113,14 +111,12 @@ class GeneratorExecutorTest {
         var config =
                 new StubGeneratorSectionWithSource(
                         "gen1", "test-output", "output", "missing-source", null);
-        var environments =
-                Map.<String, Environment>of(
-                        "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
+        var targets = Map.<String, Target>of("dev", SimpleTarget.create(TargetId.of("dev"), "dev"));
 
         assertThatThrownBy(
                         () ->
                                 executor.executeWithSourceOutput(
-                                        config, environments, null, null, tempDir))
+                                        config, targets, null, null, tempDir))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("missing-source");
     }
@@ -150,14 +146,12 @@ class GeneratorExecutorTest {
         var config =
                 new StubGeneratorSectionWithSource(
                         "gen1", "missing-output", "output", "test-source", null);
-        var environments =
-                Map.<String, Environment>of(
-                        "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
+        var targets = Map.<String, Target>of("dev", SimpleTarget.create(TargetId.of("dev"), "dev"));
 
         assertThatThrownBy(
                         () ->
                                 executor.executeWithSourceOutput(
-                                        config, environments, null, null, tempDir))
+                                        config, targets, null, null, tempDir))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("missing-output");
     }
@@ -210,11 +204,9 @@ class GeneratorExecutorTest {
         var config =
                 new StubGeneratorSectionWithSource(
                         "gen1", "test-output", "output", "test-source", null);
-        var environments =
-                Map.<String, Environment>of(
-                        "dev", SimpleEnvironment.create(EnvironmentId.of("dev"), "dev"));
+        var targets = Map.<String, Target>of("dev", SimpleTarget.create(TargetId.of("dev"), "dev"));
 
-        executor.executeAll(List.of(config), environments, null, tempDir, null);
+        executor.executeAll(List.of(config), targets, null, tempDir, null);
 
         assertThat(capturedData.get()).isEqualTo("extracted-data");
     }

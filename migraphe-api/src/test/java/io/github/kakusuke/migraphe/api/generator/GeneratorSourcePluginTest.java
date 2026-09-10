@@ -10,7 +10,7 @@ class GeneratorSourcePluginTest {
     void sourceContextAllowsNullFields() {
         SourceContext context = new SourceContext(null, null);
 
-        assertThat(context.environment()).isNull();
+        assertThat(context.target()).isNull();
         assertThat(context.graph()).isNull();
     }
 

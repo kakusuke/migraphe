@@ -29,8 +29,8 @@ public interface Executor {
     /**
      * Executes the given set of target nodes.
      *
-     * @param targetNodes the node IDs to execute, in this executor's configured direction
+     * @param selectedNodes the node IDs to execute, in this executor's configured direction
      * @return the {@link ExecutionResult} summarizing the run
      */
-    ExecutionResult execute(Set<NodeId> targetNodes);
+    ExecutionResult execute(Set<NodeId> selectedNodes);
 }

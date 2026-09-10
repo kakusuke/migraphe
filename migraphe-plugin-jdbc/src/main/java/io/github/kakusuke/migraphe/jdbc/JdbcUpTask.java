@@ -13,11 +13,11 @@ import org.jspecify.annotations.Nullable;
 /**
  * {@link Task} that executes a forward (UP) migration over JDBC.
  *
- * <p>On {@link #execute()} the task opens a connection from its {@link JdbcEnvironment}, splits the
- * UP SQL into individual statements with the environment's {@link
- * JdbcEnvironment#statementSplitter()}, and runs each statement in order. Execution honours the
- * {@code autocommit} flag: when enabled each statement is committed immediately; otherwise all
- * statements run in a single transaction that is committed on success and rolled back on failure.
+ * <p>On {@link #execute()} the task opens a connection from its {@link JdbcTarget}, splits the UP
+ * SQL into individual statements with the target's {@link JdbcTarget#statementSplitter()}, and runs
+ * each statement in order. Execution honours the {@code autocommit} flag: when enabled each
+ * statement is committed immediately; otherwise all statements run in a single transaction that is
+ * committed on success and rolled back on failure.
  *
  * <p>The optional {@code downSql} is not executed here; it is carried into the resulting {@link
  * TaskResult} as the serialized rollback so the history layer can later perform a DOWN migration.
@@ -25,17 +25,14 @@ import org.jspecify.annotations.Nullable;
  */
 public final class JdbcUpTask implements Task, SqlContentProvider {
 
-    private final JdbcEnvironment environment;
+    private final JdbcTarget target;
     private final String upSql;
     private final @Nullable String downSql;
     private final boolean autocommit;
 
     private JdbcUpTask(
-            JdbcEnvironment environment,
-            String upSql,
-            @Nullable String downSql,
-            boolean autocommit) {
-        this.environment = Objects.requireNonNull(environment, "environment must not be null");
+            JdbcTarget target, String upSql, @Nullable String downSql, boolean autocommit) {
+        this.target = Objects.requireNonNull(target, "target must not be null");
         this.upSql = Objects.requireNonNull(upSql, "upSql must not be null");
         this.downSql = downSql;
         this.autocommit = autocommit;
@@ -48,7 +45,7 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
     /**
      * Creates an UP task.
      *
-     * @param environment the environment whose connection runs the SQL
+     * @param target the target whose connection runs the SQL
      * @param upSql the forward migration SQL; must not be blank
      * @param downSql the rollback SQL to carry into the result, or {@code null} if the task is not
      *     reversible
@@ -57,11 +54,8 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
      * @throws IllegalArgumentException if {@code upSql} is blank
      */
     public static JdbcUpTask create(
-            JdbcEnvironment environment,
-            String upSql,
-            @Nullable String downSql,
-            boolean autocommit) {
-        return new JdbcUpTask(environment, upSql, downSql, autocommit);
+            JdbcTarget target, String upSql, @Nullable String downSql, boolean autocommit) {
+        return new JdbcUpTask(target, upSql, downSql, autocommit);
     }
 
     /**
@@ -80,7 +74,7 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
     public Result<TaskResult, String> execute() {
         long startTime = System.currentTimeMillis();
 
-        try (Connection conn = environment.createConnection()) {
+        try (Connection conn = target.createConnection()) {
             if (autocommit) {
                 conn.setAutoCommit(true);
                 return executeWithAutocommit(conn, startTime);
@@ -95,7 +89,7 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
 
     private Result<TaskResult, String> executeWithAutocommit(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            for (String sql : environment.statementSplitter().split(upSql)) {
+            for (String sql : target.statementSplitter().split(upSql)) {
                 stmt.execute(sql);
             }
             long durationMs = System.currentTimeMillis() - startTime;
@@ -117,7 +111,7 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
 
     private Result<TaskResult, String> executeWithTransaction(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            for (String sql : environment.statementSplitter().split(upSql)) {
+            for (String sql : target.statementSplitter().split(upSql)) {
                 stmt.execute(sql);
             }
             conn.commit();
@@ -145,7 +139,7 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
 
     @Override
     public String description() {
-        String label = environment.getDbLabel();
+        String label = target.getDbLabel();
         return autocommit ? label + " UP migration (autocommit)" : label + " UP migration";
     }
 

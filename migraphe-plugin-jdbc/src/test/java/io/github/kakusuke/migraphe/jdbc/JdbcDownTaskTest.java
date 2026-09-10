@@ -12,12 +12,12 @@ import org.junit.jupiter.api.Test;
 
 class JdbcDownTaskTest {
 
-    private JdbcEnvironment env;
+    private JdbcTarget env;
 
     @BeforeEach
     void setUp() throws Exception {
         env =
-                JdbcEnvironment.create(
+                JdbcTarget.create(
                         "testdb",
                         "jdbc:h2:mem:downtask_test;DB_CLOSE_DELAY=-1",
                         "sa",

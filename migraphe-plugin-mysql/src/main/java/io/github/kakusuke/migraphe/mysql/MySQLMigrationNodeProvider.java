@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.mysql;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 import java.util.Set;
@@ -13,7 +13,7 @@ import java.util.Set;
  * {@link MigrationNodeProvider} that constructs MySQL {@link MigrationNode} instances.
  *
  * <p>Returned by {@link MySQLPlugin#migrationNodeProvider()}, this provider builds {@link
- * JdbcMigrationNode}s wired to a {@link MySQLEnvironment}. The task's UP and DOWN actions are SQL
+ * JdbcMigrationNode}s wired to a {@link MySQLTarget}. The task's UP and DOWN actions are SQL
  * strings ({@code String}), supplied as a {@link SqlTaskDefinition}. A blank DOWN action is treated
  * as "no rollback" and is not attached to the node.
  *
@@ -33,22 +33,18 @@ public final class MySQLMigrationNodeProvider implements MigrationNodeProvider<S
      * @param task the task definition; must be a {@link SqlTaskDefinition} carrying SQL strings
      * @param dependencies the IDs of the nodes this node depends on, already resolved by the
      *     framework
-     * @param environment the environment this node belongs to; must be a {@link MySQLEnvironment}
+     * @param target the target this node belongs to; must be a {@link MySQLTarget}
      * @return the constructed {@link JdbcMigrationNode}
-     * @throws MySQLException if {@code environment} is not a {@link MySQLEnvironment} or {@code
-     *     task} is not a {@link SqlTaskDefinition}
+     * @throws MySQLException if {@code target} is not a {@link MySQLTarget} or {@code task} is not
+     *     a {@link SqlTaskDefinition}
      */
     @Override
     public MigrationNode createNode(
-            NodeId nodeId,
-            TaskDefinition<String> task,
-            Set<NodeId> dependencies,
-            Environment environment) {
+            NodeId nodeId, TaskDefinition<String> task, Set<NodeId> dependencies, Target target) {
 
-        if (!(environment instanceof MySQLEnvironment mysqlEnv)) {
+        if (!(target instanceof MySQLTarget mysqlEnv)) {
             throw new MySQLException(
-                    "Environment must be MySQLEnvironment, got: "
-                            + environment.getClass().getName());
+                    "Target must be MySQLTarget, got: " + target.getClass().getName());
         }
 
         if (!(task instanceof SqlTaskDefinition sqlTask)) {
@@ -63,7 +59,7 @@ public final class MySQLMigrationNodeProvider implements MigrationNodeProvider<S
                 JdbcMigrationNode.builder()
                         .id(nodeId)
                         .name(task.name())
-                        .environment(mysqlEnv)
+                        .target(mysqlEnv)
                         .dependencies(dependencies)
                         .upSql(upSql)
                         .autocommit(autocommit);

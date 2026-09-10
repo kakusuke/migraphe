@@ -2,11 +2,11 @@ package io.github.kakusuke.migraphe.gradle;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.execution.ExecutionSummary;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import java.util.ArrayList;
@@ -138,11 +138,11 @@ class GradleExecutionListenerTest {
     }
 
     private MigrationNode createTestNode(String id, String name) {
-        return new TestMigrationNode(NodeId.of(id), name, EnvironmentId.of("test-db"));
+        return new TestMigrationNode(NodeId.of(id), name, TargetId.of("test-db"));
     }
 
     /** テスト用の MigrationNode 実装。 */
-    private record TestMigrationNode(NodeId id, String name, EnvironmentId envId)
+    private record TestMigrationNode(NodeId id, String name, TargetId targetId)
             implements MigrationNode {
 
         @Override
@@ -151,16 +151,16 @@ class GradleExecutionListenerTest {
         }
 
         @Override
-        public Environment environment() {
-            return new Environment() {
+        public Target target() {
+            return new Target() {
                 @Override
-                public EnvironmentId id() {
-                    return envId;
+                public TargetId id() {
+                    return targetId;
                 }
 
                 @Override
                 public String name() {
-                    return envId.value();
+                    return targetId.value();
                 }
             };
         }

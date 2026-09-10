@@ -10,9 +10,8 @@ import org.junit.jupiter.api.Test;
 
 class JdbcMigrationNodeTest {
 
-    private final JdbcEnvironment env =
-            JdbcEnvironment.create(
-                    "testdb", "jdbc:h2:mem:node_test", "sa", "", "org.h2.Driver", "H2");
+    private final JdbcTarget env =
+            JdbcTarget.create("testdb", "jdbc:h2:mem:node_test", "sa", "", "org.h2.Driver", "H2");
 
     @Test
     void buildWithRequiredFields() {
@@ -20,12 +19,12 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(env)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.id()).isEqualTo(NodeId.of("node1"));
         assertThat(node.name()).isEqualTo("Create table");
-        assertThat(node.environment()).isEqualTo(env);
+        assertThat(node.target()).isEqualTo(env);
         assertThat(node.dependencies()).isEmpty();
         assertThat(node.description()).isNull();
     }
@@ -37,7 +36,7 @@ class JdbcMigrationNodeTest {
                         .id("node1")
                         .name("Create table")
                         .description("Creates the main table")
-                        .environment(env)
+                        .target(env)
                         .dependencies(NodeId.of("dep1"), NodeId.of("dep2"))
                         .upSql("CREATE TABLE t1 (id INT)")
                         .downSql("DROP TABLE t1")
@@ -54,7 +53,7 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(env)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.upTask()).isInstanceOf(JdbcUpTask.class);
@@ -66,7 +65,7 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(env)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .downSql("DROP TABLE t1")
                         .build();
@@ -79,7 +78,7 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(env)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.downTask()).isNull();
@@ -92,7 +91,7 @@ class JdbcMigrationNodeTest {
                                 JdbcMigrationNode.builder()
                                         .id("node1")
                                         .name("Bad node")
-                                        .environment(env)
+                                        .target(env)
                                         .upSql("   ")
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
@@ -104,14 +103,14 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("same")
                         .name("Node A")
-                        .environment(env)
+                        .target(env)
                         .upSql("SELECT 1")
                         .build();
         var node2 =
                 JdbcMigrationNode.builder()
                         .id("same")
                         .name("Node B")
-                        .environment(env)
+                        .target(env)
                         .upSql("SELECT 2")
                         .build();
         assertThat(node1).isEqualTo(node2);
@@ -124,7 +123,7 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(env)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.upTask()).isInstanceOf(SqlContentProvider.class);
@@ -138,7 +137,7 @@ class JdbcMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Node")
-                        .environment(env)
+                        .target(env)
                         .dependencies(Set.of(NodeId.of("dep1")))
                         .upSql("SELECT 1")
                         .build();

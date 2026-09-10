@@ -150,7 +150,7 @@ public final class DagExecutor implements Executor {
                         id -> {
                             MigrationNode node = graph.getNode(id).orElse(null);
                             if (node == null) return false;
-                            return !history.wasExecuted(id, node.environment().id());
+                            return !history.wasExecuted(id, node.target().id());
                         })
                 .collect(Collectors.toSet());
     }
@@ -159,36 +159,36 @@ public final class DagExecutor implements Executor {
      * Determines the set of nodes to roll back for a DOWN run.
      *
      * <p>If {@code allMigrations} is {@code true}, every currently applied node is selected.
-     * Otherwise, if {@code targetVersion} is supplied, the selection is that node plus all of its
+     * Otherwise, if {@code requestedNode} is supplied, the selection is that node plus all of its
      * transitive dependents, filtered to nodes that are currently applied (per {@link
      * HistoryRepository#wasExecuted}). If neither applies, an empty set is returned.
      *
-     * @param targetVersion the node to roll back (together with its dependents), or {@code null} to
+     * @param requestedNode the node to roll back (together with its dependents), or {@code null} to
      *     defer to {@code allMigrations}
      * @param allMigrations when {@code true}, selects all currently applied nodes regardless of
-     *     {@code targetVersion}
+     *     {@code requestedNode}
      * @return the set of currently applied node IDs to roll back
      */
     public Set<NodeId> determineRollbackTargets(
-            @Nullable NodeId targetVersion, boolean allMigrations) {
+            @Nullable NodeId requestedNode, boolean allMigrations) {
         if (allMigrations) {
             return graph.allNodes().stream()
-                    .filter(node -> history.wasExecuted(node.id(), node.environment().id()))
+                    .filter(node -> history.wasExecuted(node.id(), node.target().id()))
                     .map(MigrationNode::id)
                     .collect(Collectors.toSet());
         }
 
-        if (targetVersion != null) {
+        if (requestedNode != null) {
             Set<NodeId> targets = new HashSet<>();
-            targets.add(targetVersion);
-            targets.addAll(graph.getAllDependents(targetVersion));
+            targets.add(requestedNode);
+            targets.addAll(graph.getAllDependents(requestedNode));
 
             return targets.stream()
                     .filter(
                             id -> {
                                 MigrationNode node = graph.getNode(id).orElse(null);
                                 if (node == null) return false;
-                                return history.wasExecuted(id, node.environment().id());
+                                return history.wasExecuted(id, node.target().id());
                             })
                     .collect(Collectors.toSet());
         }
@@ -209,20 +209,20 @@ public final class DagExecutor implements Executor {
      * <p>If the coordinator thread is interrupted while awaiting work, the interrupt flag is
      * restored and a failure result is returned.
      *
-     * @param targetNodes the set of node IDs to execute; typically the result of {@link
+     * @param selectedNodes the set of node IDs to execute; typically the result of {@link
      *     #determineTargetNodes} or {@link #determineRollbackTargets}
      * @return a success {@link ExecutionResult} if no node failed, otherwise a failure result; the
      *     embedded {@link ExecutionSummary} carries the executed/skipped/failed counts
      */
     @Override
-    public ExecutionResult execute(Set<NodeId> targetNodes) {
-        if (targetNodes.isEmpty()) {
+    public ExecutionResult execute(Set<NodeId> selectedNodes) {
+        if (selectedNodes.isEmpty()) {
             ExecutionSummary summary = ExecutionSummary.success(direction, 0, 0, 0);
             listener.onCompleted(summary);
             return ExecutionResult.success(summary);
         }
 
-        ExecutionPlan plan = createPlanFor(targetNodes);
+        ExecutionPlan plan = createPlanFor(selectedNodes);
         int totalNodes = plan.totalNodes();
 
         Map<NodeId, Integer> positionMap = new HashMap<>();
@@ -236,9 +236,9 @@ public final class DagExecutor implements Executor {
         Comparator<MigrationNode> orderComparator =
                 Comparator.comparingInt(n -> positionMap.getOrDefault(n.id(), Integer.MAX_VALUE));
 
-        ReadyNodeTracker tracker = new ReadyNodeTracker(graph, targetNodes, direction);
+        ReadyNodeTracker tracker = new ReadyNodeTracker(graph, selectedNodes, direction);
         PriorityBlockingQueue<MigrationNode> readyQueue =
-                new PriorityBlockingQueue<>(Math.max(1, targetNodes.size()), orderComparator);
+                new PriorityBlockingQueue<>(Math.max(1, selectedNodes.size()), orderComparator);
 
         for (NodeId readyId : tracker.initialReadyNodes()) {
             graph.getNode(readyId).ifPresent(readyQueue::put);
@@ -287,7 +287,7 @@ public final class DagExecutor implements Executor {
                                         tracker,
                                         readyQueue,
                                         latch,
-                                        targetNodes);
+                                        selectedNodes);
                             } finally {
                                 if (sem != null) {
                                     sem.release();
@@ -339,7 +339,7 @@ public final class DagExecutor implements Executor {
             ReadyNodeTracker tracker,
             PriorityBlockingQueue<MigrationNode> readyQueue,
             CountDownLatch latch,
-            Set<NodeId> targetNodes) {
+            Set<NodeId> selectedNodes) {
 
         Task task = taskFor(node);
         if (task == null) {
@@ -375,23 +375,23 @@ public final class DagExecutor implements Executor {
 
             history.record(
                     ExecutionRecord.failure(
-                            node.id(), node.environment().id(), direction, node.name(), message));
+                            node.id(), node.target().id(), direction, node.name(), message));
 
             failedNodes.add(node.id());
             failureCount.incrementAndGet();
-            propagateFailure(node.id(), failedNodes, targetNodes, skippedCount, latch);
+            propagateFailure(node.id(), failedNodes, selectedNodes, skippedCount, latch);
         }
     }
 
     private void propagateFailure(
             NodeId failedId,
             Set<NodeId> failedNodes,
-            Set<NodeId> targetNodes,
+            Set<NodeId> selectedNodes,
             AtomicInteger skippedCount,
             CountDownLatch latch) {
         Set<NodeId> cone = transitiveSuccessorsOf(failedId);
         for (NodeId skipId : cone) {
-            if (!targetNodes.contains(skipId)) {
+            if (!selectedNodes.contains(skipId)) {
                 continue;
             }
             if (!failedNodes.add(skipId)) {
@@ -436,10 +436,10 @@ public final class DagExecutor implements Executor {
     }
 
     /** Builds the execution plan for this direction (forward for UP, reverse for DOWN). */
-    private ExecutionPlan createPlanFor(Set<NodeId> targetNodes) {
+    private ExecutionPlan createPlanFor(Set<NodeId> selectedNodes) {
         return direction == ExecutionDirection.DOWN
-                ? TopologicalSort.createReverseExecutionPlanFor(graph, targetNodes)
-                : TopologicalSort.createExecutionPlanFor(graph, targetNodes);
+                ? TopologicalSort.createReverseExecutionPlanFor(graph, selectedNodes)
+                : TopologicalSort.createExecutionPlanFor(graph, selectedNodes);
     }
 
     /** Builds the success {@link ExecutionRecord} for a completed node in this direction. */
@@ -447,11 +447,11 @@ public final class DagExecutor implements Executor {
             MigrationNode node, long duration, @Nullable TaskResult taskResult) {
         if (direction == ExecutionDirection.DOWN) {
             return ExecutionRecord.downSuccess(
-                    node.id(), node.environment().id(), node.name(), duration);
+                    node.id(), node.target().id(), node.name(), duration);
         }
         String serializedDownTask = taskResult != null ? taskResult.serializedDownTask() : null;
         return ExecutionRecord.upSuccess(
-                node.id(), node.environment().id(), node.name(), serializedDownTask, duration);
+                node.id(), node.target().id(), node.name(), serializedDownTask, duration);
     }
 
     /**
@@ -459,7 +459,7 @@ public final class DagExecutor implements Executor {
      * skip when already executed; for DOWN, skip when not yet executed.
      */
     private boolean isAlreadyInRequiredState(MigrationNode node) {
-        boolean wasExecuted = history.wasExecuted(node.id(), node.environment().id());
+        boolean wasExecuted = history.wasExecuted(node.id(), node.target().id());
         return direction == ExecutionDirection.DOWN ? !wasExecuted : wasExecuted;
     }
 

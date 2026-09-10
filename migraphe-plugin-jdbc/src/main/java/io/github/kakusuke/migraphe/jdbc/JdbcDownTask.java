@@ -12,22 +12,21 @@ import java.util.Objects;
  * {@link Task} that executes a reverse (DOWN) migration over JDBC to roll back a previously applied
  * change.
  *
- * <p>On {@link #execute()} the task opens a connection from its {@link JdbcEnvironment}, splits the
- * DOWN SQL into individual statements with the environment's {@link
- * JdbcEnvironment#statementSplitter()}, and runs each statement in order. Like {@link JdbcUpTask}
- * it honours the {@code autocommit} flag: with autocommit each statement is committed immediately;
- * otherwise all statements run in a single transaction committed on success and rolled back on
- * failure. A DOWN task never produces a further rollback, so its {@link TaskResult} carries no
- * serialized down task.
+ * <p>On {@link #execute()} the task opens a connection from its {@link JdbcTarget}, splits the DOWN
+ * SQL into individual statements with the target's {@link JdbcTarget#statementSplitter()}, and runs
+ * each statement in order. Like {@link JdbcUpTask} it honours the {@code autocommit} flag: with
+ * autocommit each statement is committed immediately; otherwise all statements run in a single
+ * transaction committed on success and rolled back on failure. A DOWN task never produces a further
+ * rollback, so its {@link TaskResult} carries no serialized down task.
  */
 public final class JdbcDownTask implements Task {
 
-    private final JdbcEnvironment environment;
+    private final JdbcTarget target;
     private final String downSql;
     private final boolean autocommit;
 
-    private JdbcDownTask(JdbcEnvironment environment, String downSql, boolean autocommit) {
-        this.environment = Objects.requireNonNull(environment, "environment must not be null");
+    private JdbcDownTask(JdbcTarget target, String downSql, boolean autocommit) {
+        this.target = Objects.requireNonNull(target, "target must not be null");
         this.downSql = Objects.requireNonNull(downSql, "downSql must not be null");
         this.autocommit = autocommit;
         if (downSql.isBlank()) {
@@ -38,15 +37,14 @@ public final class JdbcDownTask implements Task {
     /**
      * Creates a DOWN task.
      *
-     * @param environment the environment whose connection runs the SQL
+     * @param target the target whose connection runs the SQL
      * @param downSql the rollback migration SQL; must not be blank
      * @param autocommit {@code true} to run without an enclosing transaction
      * @return a new {@link JdbcDownTask}
      * @throws IllegalArgumentException if {@code downSql} is blank
      */
-    public static JdbcDownTask create(
-            JdbcEnvironment environment, String downSql, boolean autocommit) {
-        return new JdbcDownTask(environment, downSql, autocommit);
+    public static JdbcDownTask create(JdbcTarget target, String downSql, boolean autocommit) {
+        return new JdbcDownTask(target, downSql, autocommit);
     }
 
     /**
@@ -64,7 +62,7 @@ public final class JdbcDownTask implements Task {
     public Result<TaskResult, String> execute() {
         long startTime = System.currentTimeMillis();
 
-        try (Connection conn = environment.createConnection()) {
+        try (Connection conn = target.createConnection()) {
             if (autocommit) {
                 conn.setAutoCommit(true);
                 return executeWithAutocommit(conn, startTime);
@@ -79,7 +77,7 @@ public final class JdbcDownTask implements Task {
 
     private Result<TaskResult, String> executeWithAutocommit(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            for (String sql : environment.statementSplitter().split(downSql)) {
+            for (String sql : target.statementSplitter().split(downSql)) {
                 stmt.execute(sql);
             }
             long durationMs = System.currentTimeMillis() - startTime;
@@ -93,7 +91,7 @@ public final class JdbcDownTask implements Task {
 
     private Result<TaskResult, String> executeWithTransaction(Connection conn, long startTime) {
         try (Statement stmt = conn.createStatement()) {
-            for (String sql : environment.statementSplitter().split(downSql)) {
+            for (String sql : target.statementSplitter().split(downSql)) {
                 stmt.execute(sql);
             }
             conn.commit();
@@ -113,7 +111,7 @@ public final class JdbcDownTask implements Task {
 
     @Override
     public String description() {
-        String label = environment.getDbLabel();
+        String label = target.getDbLabel();
         return autocommit ? label + " DOWN migration (autocommit)" : label + " DOWN migration";
     }
 }

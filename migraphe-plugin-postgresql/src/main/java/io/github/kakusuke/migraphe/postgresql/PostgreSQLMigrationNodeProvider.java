@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.postgresql;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 import java.util.Set;
@@ -14,7 +14,7 @@ import java.util.Set;
  *
  * <p>The UP/DOWN actions of a {@link TaskDefinition} are SQL strings ({@code String}), so this
  * provider is parameterized as {@code MigrationNodeProvider<String>}. It delegates to the generic
- * {@link JdbcMigrationNode} builder; only the type checks and PostgreSQL environment binding are
+ * {@link JdbcMigrationNode} builder; only the type checks and PostgreSQL target binding are
  * PostgreSQL-specific. Registered through {@link PostgreSQLPlugin}.
  */
 public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvider<String> {
@@ -32,22 +32,18 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
      * @param task the task definition supplying name, UP/DOWN SQL, description, and autocommit;
      *     must be a {@link SqlTaskDefinition}
      * @param dependencies the set of node ids this node depends on
-     * @param environment the environment to run against; must be a {@link PostgreSQLEnvironment}
+     * @param target the target to run against; must be a {@link PostgreSQLTarget}
      * @return the constructed {@link MigrationNode}
-     * @throws PostgreSQLException if {@code environment} is not a {@link PostgreSQLEnvironment} or
-     *     {@code task} is not a {@link SqlTaskDefinition}
+     * @throws PostgreSQLException if {@code target} is not a {@link PostgreSQLTarget} or {@code
+     *     task} is not a {@link SqlTaskDefinition}
      */
     @Override
     public MigrationNode createNode(
-            NodeId nodeId,
-            TaskDefinition<String> task,
-            Set<NodeId> dependencies,
-            Environment environment) {
+            NodeId nodeId, TaskDefinition<String> task, Set<NodeId> dependencies, Target target) {
 
-        if (!(environment instanceof PostgreSQLEnvironment pgEnv)) {
+        if (!(target instanceof PostgreSQLTarget pgEnv)) {
             throw new PostgreSQLException(
-                    "Environment must be PostgreSQLEnvironment, got: "
-                            + environment.getClass().getName());
+                    "Target must be PostgreSQLTarget, got: " + target.getClass().getName());
         }
 
         if (!(task instanceof SqlTaskDefinition sqlTask)) {
@@ -62,7 +58,7 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
                 JdbcMigrationNode.builder()
                         .id(nodeId)
                         .name(task.name())
-                        .environment(pgEnv)
+                        .target(pgEnv)
                         .dependencies(dependencies)
                         .upSql(upSql)
                         .autocommit(autocommit);

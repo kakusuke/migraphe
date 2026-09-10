@@ -3,22 +3,22 @@ package io.github.kakusuke.migraphe.core.execution;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.api.common.Result;
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
 import io.github.kakusuke.migraphe.api.execution.ExecutionPlanInfo;
 import io.github.kakusuke.migraphe.api.execution.ExecutionSummary;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
-import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
+import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("DagExecutor (Sequential UP)")
 class DagExecutorSequentialUpTest {
 
-    private final Environment testEnv = SimpleEnvironment.create(EnvironmentId.of("env"), "env");
+    private final Target testEnv = SimpleTarget.create(TargetId.of("env"), "env");
 
     @Test
     @DisplayName("UP / max=1 でインスタンス化できる")
@@ -60,8 +60,8 @@ class DagExecutorSequentialUpTest {
         assertThat(listener.startedNodes).containsExactly(NodeId.of("a"), NodeId.of("b"));
         assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"), NodeId.of("b"));
         assertThat(listener.completedCalled).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("a"), EnvironmentId.of("env"))).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("b"), EnvironmentId.of("env"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("a"), TargetId.of("env"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("b"), TargetId.of("env"))).isTrue();
     }
 
     @Nested
@@ -286,7 +286,7 @@ class DagExecutorSequentialUpTest {
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(id)
-                .environment(testEnv)
+                .target(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(downTask)
@@ -309,7 +309,7 @@ class DagExecutorSequentialUpTest {
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(id)
-                .environment(testEnv)
+                .target(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(SimpleTask.of("DOWN: " + id))

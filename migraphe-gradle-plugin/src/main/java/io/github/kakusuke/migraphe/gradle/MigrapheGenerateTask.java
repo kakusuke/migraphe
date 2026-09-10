@@ -91,7 +91,7 @@ public abstract class MigrapheGenerateTask extends AbstractMigrapheTask {
                 GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
                 executor.executeAll(
                         generators,
-                        context.environments(),
+                        context.targets(),
                         context.graph(),
                         context.createHistoryRepository(),
                         context.config(),

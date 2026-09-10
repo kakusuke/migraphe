@@ -1,17 +1,17 @@
 package io.github.kakusuke.migraphe.postgresql;
 
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithName;
 import java.util.Optional;
 
 /**
- * PostgreSQL-specific {@link EnvironmentDefinition} subtype.
+ * PostgreSQL-specific {@link TargetDefinition} subtype.
  *
  * <p>This is a SmallRye {@link ConfigMapping} interface mapped directly from a target YAML file
  * ({@code targets/*.yaml}); the target name is derived from the file name. {@link
- * PostgreSQLEnvironmentProvider} consumes an instance of this definition to build a {@link
- * PostgreSQLEnvironment}.
+ * PostgreSQLTargetProvider} consumes an instance of this definition to build a {@link
+ * PostgreSQLTarget}.
  *
  * <p>Example YAML ({@code targets/db1.yaml}):
  *
@@ -23,7 +23,7 @@ import java.util.Optional;
  * }</pre>
  */
 @ConfigMapping(prefix = "")
-public interface PostgreSQLEnvironmentDefinition extends EnvironmentDefinition {
+public interface PostgreSQLTargetDefinition extends TargetDefinition {
 
     /**
      * Returns the target type discriminator, which is {@code "postgresql"} for this definition.

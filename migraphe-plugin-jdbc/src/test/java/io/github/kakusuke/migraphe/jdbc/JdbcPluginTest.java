@@ -23,13 +23,13 @@ class JdbcPluginTest {
     }
 
     @Test
-    void environmentDefinitionClass() {
-        assertThat(plugin.environmentDefinitionClass()).isEqualTo(JdbcEnvironmentDefinition.class);
+    void targetDefinitionClass() {
+        assertThat(plugin.targetDefinitionClass()).isEqualTo(JdbcTargetDefinition.class);
     }
 
     @Test
-    void environmentProvider() {
-        assertThat(plugin.environmentProvider()).isInstanceOf(JdbcEnvironmentProvider.class);
+    void targetProvider() {
+        assertThat(plugin.targetProvider()).isInstanceOf(JdbcTargetProvider.class);
     }
 
     @Test
@@ -56,21 +56,21 @@ class JdbcPluginTest {
     }
 
     @Test
-    void environmentProviderRejectsWrongType() {
-        var provider = plugin.environmentProvider();
-        // Create a non-JdbcEnvironmentDefinition
-        assertThatThrownBy(() -> provider.createEnvironment("test", () -> "wrong"))
+    void targetProviderRejectsWrongType() {
+        var provider = plugin.targetProvider();
+        // Create a non-JdbcTargetDefinition
+        assertThatThrownBy(() -> provider.createTarget("test", () -> "wrong"))
                 .isInstanceOf(JdbcException.class);
     }
 
     @Test
-    void historyRepositoryProviderRejectsWrongEnvironment() {
+    void historyRepositoryProviderRejectsWrongTarget() {
         var provider = plugin.historyRepositoryProvider();
         var fakeEnv =
-                new io.github.kakusuke.migraphe.api.environment.Environment() {
+                new io.github.kakusuke.migraphe.api.target.Target() {
                     @Override
-                    public io.github.kakusuke.migraphe.api.environment.EnvironmentId id() {
-                        return io.github.kakusuke.migraphe.api.environment.EnvironmentId.of("fake");
+                    public io.github.kakusuke.migraphe.api.target.TargetId id() {
+                        return io.github.kakusuke.migraphe.api.target.TargetId.of("fake");
                     }
 
                     @Override
@@ -91,13 +91,13 @@ class JdbcPluginTest {
     }
 
     @Test
-    void migrationNodeProviderRejectsWrongEnvironment() {
+    void migrationNodeProviderRejectsWrongTarget() {
         var provider = plugin.migrationNodeProvider();
         var fakeEnv =
-                new io.github.kakusuke.migraphe.api.environment.Environment() {
+                new io.github.kakusuke.migraphe.api.target.Target() {
                     @Override
-                    public io.github.kakusuke.migraphe.api.environment.EnvironmentId id() {
-                        return io.github.kakusuke.migraphe.api.environment.EnvironmentId.of("fake");
+                    public io.github.kakusuke.migraphe.api.target.TargetId id() {
+                        return io.github.kakusuke.migraphe.api.target.TargetId.of("fake");
                     }
 
                     @Override

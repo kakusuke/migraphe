@@ -2,11 +2,11 @@ package io.github.kakusuke.migraphe.cli.listener;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.execution.ExecutionSummary;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import java.io.ByteArrayOutputStream;
@@ -68,7 +68,7 @@ class ConsoleExecutionListenerTest {
 
         // 失敗 2 件ともインデックス付きで載る
         assertThat(text).contains("[1] db1/003_create_orders");
-        assertThat(text).contains("Environment: postgres-main");
+        assertThat(text).contains("Target: postgres-main");
         assertThat(text).contains("Error: relation \"orders\" does not exist");
         assertThat(text).contains("[2] db1/005_create_invoices");
         assertThat(text).contains("Error: syntax error at or near \"INVALID\"");
@@ -99,27 +99,27 @@ class ConsoleExecutionListenerTest {
         assertThat(text).contains("Failed:     1 nodes");
     }
 
-    private MigrationNode node(String id, String name, String envId) {
-        return new TestNode(NodeId.of(id), name, EnvironmentId.of(envId));
+    private MigrationNode node(String id, String name, String targetId) {
+        return new TestNode(NodeId.of(id), name, TargetId.of(targetId));
     }
 
-    private record TestNode(NodeId id, String name, EnvironmentId envId) implements MigrationNode {
+    private record TestNode(NodeId id, String name, TargetId targetId) implements MigrationNode {
         @Override
         public @Nullable String description() {
             return null;
         }
 
         @Override
-        public Environment environment() {
-            return new Environment() {
+        public Target target() {
+            return new Target() {
                 @Override
-                public EnvironmentId id() {
-                    return envId;
+                public TargetId id() {
+                    return targetId;
                 }
 
                 @Override
                 public String name() {
-                    return envId.value();
+                    return targetId.value();
                 }
             };
         }

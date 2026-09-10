@@ -3,10 +3,10 @@ package io.github.kakusuke.migraphe.postgresql.schema;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLException;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.wait.strategy.HostPortWaitStrategy;
 import org.testcontainers.junit.jupiter.Container;
@@ -23,15 +23,15 @@ class PostgreSQLSchemaInfoProviderTest {
 
     @Test
     void shouldExtractExtensions() {
-        var env =
-                PostgreSQLEnvironment.create(
+        var target =
+                PostgreSQLTarget.create(
                         "test",
                         postgres.getJdbcUrl(),
                         postgres.getUsername(),
                         postgres.getPassword());
         var provider = new PostgreSQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(env);
+        var info = provider.getSchemaInfo(target);
 
         assertThat(info.extensions()).anyMatch(e -> e.name().equals("plpgsql"));
     }
@@ -40,7 +40,7 @@ class PostgreSQLSchemaInfoProviderTest {
     void shouldExtractEnumTypes() throws Exception {
         executeSql("CREATE TYPE mood AS ENUM ('happy', 'sad', 'ok')");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.enums()).anyMatch(e -> e.name().equals("mood"));
         var mood =
@@ -56,7 +56,7 @@ class PostgreSQLSchemaInfoProviderTest {
         executeSql(
                 "CREATE SEQUENCE test_seq START 10 INCREMENT 5 MINVALUE 1 MAXVALUE 1000 NO CYCLE");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.sequences()).anyMatch(s -> s.name().equals("test_seq"));
         var seq =
@@ -75,7 +75,7 @@ class PostgreSQLSchemaInfoProviderTest {
                 "CREATE FUNCTION add_numbers(a integer, b integer) RETURNS integer AS 'SELECT a +"
                         + " b' LANGUAGE sql");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.functions()).anyMatch(f -> f.name().equals("add_numbers"));
         var func =
@@ -93,7 +93,7 @@ class PostgreSQLSchemaInfoProviderTest {
                 "CREATE FUNCTION multiply_numbers(a integer, b integer) RETURNS integer AS"
                         + " 'SELECT a * b' LANGUAGE sql");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         var func =
                 info.functions().stream()
@@ -113,7 +113,7 @@ class PostgreSQLSchemaInfoProviderTest {
                 "CREATE TRIGGER test_trigger AFTER INSERT ON trigger_test FOR EACH ROW EXECUTE"
                         + " FUNCTION trigger_func()");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.triggers()).anyMatch(t -> t.name().equals("test_trigger"));
         var trigger =
@@ -133,7 +133,7 @@ class PostgreSQLSchemaInfoProviderTest {
                 "CREATE MATERIALIZED VIEW test_matview AS SELECT count(*) AS cnt FROM"
                         + " matview_source");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.materializedViews()).anyMatch(mv -> mv.name().equals("test_matview"));
         var mv =
@@ -150,7 +150,7 @@ class PostgreSQLSchemaInfoProviderTest {
                 "CREATE TABLE measurements (id serial, ts timestamp NOT NULL) PARTITION BY RANGE"
                         + " (ts)");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.partitions()).anyMatch(p -> p.name().equals("measurements"));
         var part =
@@ -167,7 +167,7 @@ class PostgreSQLSchemaInfoProviderTest {
         executeSql("ALTER TABLE policy_test ENABLE ROW LEVEL SECURITY");
         executeSql("CREATE POLICY owner_only ON policy_test USING (owner = current_user)");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.policies()).anyMatch(p -> p.name().equals("owner_only"));
         var policy =
@@ -183,7 +183,7 @@ class PostgreSQLSchemaInfoProviderTest {
     void shouldDelegateBaseSchemaInfoFromJdbc() throws Exception {
         executeSql("CREATE TABLE schema_delegate_test (id serial PRIMARY KEY, name text NOT NULL)");
 
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         assertThat(info.schemas()).isNotEmpty();
         var publicSchema =
@@ -228,7 +228,7 @@ class PostgreSQLSchemaInfoProviderTest {
         executeSql("CREATE POLICY docs_owner ON docs USING (owner = current_user)");
 
         // Extract
-        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        var info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
 
         // Verify all categories populated
         assertThat(info.extensions()).isNotEmpty(); // plpgsql always present
@@ -245,12 +245,12 @@ class PostgreSQLSchemaInfoProviderTest {
     }
 
     @Test
-    void shouldThrowWhenNotPostgreSQLEnvironment() {
-        var env =
-                new Environment() {
+    void shouldThrowWhenNotPostgreSQLTarget() {
+        var target =
+                new Target() {
                     @Override
-                    public EnvironmentId id() {
-                        return EnvironmentId.of("test");
+                    public TargetId id() {
+                        return TargetId.of("test");
                     }
 
                     @Override
@@ -260,17 +260,17 @@ class PostgreSQLSchemaInfoProviderTest {
                 };
         var provider = new PostgreSQLSchemaInfoProvider();
 
-        assertThatThrownBy(() -> provider.getSchemaInfo(env))
+        assertThatThrownBy(() -> provider.getSchemaInfo(target))
                 .isInstanceOf(PostgreSQLException.class);
     }
 
-    private PostgreSQLEnvironment createEnv() {
-        return PostgreSQLEnvironment.create(
+    private PostgreSQLTarget createTarget() {
+        return PostgreSQLTarget.create(
                 "test", postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
     }
 
     private void executeSql(String sql) throws Exception {
-        try (var conn = createEnv().createConnection();
+        try (var conn = createTarget().createConnection();
                 var stmt = conn.createStatement()) {
             stmt.execute(sql);
         }

@@ -3,13 +3,13 @@ package io.github.kakusuke.migraphe.postgresql;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
@@ -59,28 +59,28 @@ class PostgreSQLPluginTest {
     }
 
     @Test
-    void shouldReturnEnvironmentDefinitionClass() {
+    void shouldReturnTargetDefinitionClass() {
         // given
         PostgreSQLPlugin plugin = new PostgreSQLPlugin();
 
         // when
-        Class<? extends EnvironmentDefinition> envDefClass = plugin.environmentDefinitionClass();
+        Class<? extends TargetDefinition> envDefClass = plugin.targetDefinitionClass();
 
         // then
-        assertThat(envDefClass).isEqualTo(PostgreSQLEnvironmentDefinition.class);
+        assertThat(envDefClass).isEqualTo(PostgreSQLTargetDefinition.class);
     }
 
     @Test
-    void shouldProvideEnvironmentProvider() {
+    void shouldProvideTargetProvider() {
         // given
         PostgreSQLPlugin plugin = new PostgreSQLPlugin();
 
         // when
-        var provider = plugin.environmentProvider();
+        var provider = plugin.targetProvider();
 
         // then
         assertThat(provider).isNotNull();
-        assertThat(provider).isInstanceOf(PostgreSQLEnvironmentProvider.class);
+        assertThat(provider).isInstanceOf(PostgreSQLTargetProvider.class);
     }
 
     @Test
@@ -110,31 +110,31 @@ class PostgreSQLPluginTest {
     }
 
     @Test
-    void environmentProviderShouldCreateEnvironment() {
+    void targetProviderShouldCreateTarget() {
         // given
-        var provider = new PostgreSQLEnvironmentProvider();
+        var provider = new PostgreSQLTargetProvider();
         var definition =
-                createEnvironmentDefinition(
+                createTargetDefinition(
                         "postgresql",
                         "jdbc:postgresql://localhost:5432/test",
                         "testuser",
                         "testpass");
 
         // when
-        Environment env = provider.createEnvironment("test-db", definition);
+        Target env = provider.createTarget("test-db", definition);
 
         // then
         assertThat(env).isNotNull();
-        assertThat(env).isInstanceOf(PostgreSQLEnvironment.class);
+        assertThat(env).isInstanceOf(PostgreSQLTarget.class);
         assertThat(env.name()).isEqualTo("test-db");
     }
 
     @Test
-    void environmentProviderShouldThrowWhenGivenWrongDefinitionType() {
+    void targetProviderShouldThrowWhenGivenWrongDefinitionType() {
         // given
-        var provider = new PostgreSQLEnvironmentProvider();
+        var provider = new PostgreSQLTargetProvider();
         var wrongDefinition =
-                new EnvironmentDefinition() {
+                new TargetDefinition() {
                     @Override
                     public String type() {
                         return "other";
@@ -142,9 +142,9 @@ class PostgreSQLPluginTest {
                 };
 
         // when & then
-        assertThatThrownBy(() -> provider.createEnvironment("test", wrongDefinition))
+        assertThatThrownBy(() -> provider.createTarget("test", wrongDefinition))
                 .isInstanceOf(PostgreSQLException.class)
-                .hasMessageContaining("Expected PostgreSQLEnvironmentDefinition");
+                .hasMessageContaining("Expected PostgreSQLTargetDefinition");
     }
 
     @Test
@@ -152,7 +152,7 @@ class PostgreSQLPluginTest {
         // given
         var provider = new PostgreSQLMigrationNodeProvider();
         var env =
-                PostgreSQLEnvironment.create(
+                PostgreSQLTarget.create(
                         "test", "jdbc:postgresql://localhost:5432/test", "user", "pass");
         var nodeId = NodeId.of("V001");
 
@@ -176,14 +176,14 @@ class PostgreSQLPluginTest {
     }
 
     @Test
-    void migrationNodeProviderShouldThrowForNonPostgreSQLEnvironment() {
+    void migrationNodeProviderShouldThrowForNonPostgreSQLTarget() {
         // given
         var provider = new PostgreSQLMigrationNodeProvider();
         var nonPgEnv =
-                new Environment() {
+                new Target() {
                     @Override
-                    public io.github.kakusuke.migraphe.api.environment.EnvironmentId id() {
-                        return io.github.kakusuke.migraphe.api.environment.EnvironmentId.of("test");
+                    public io.github.kakusuke.migraphe.api.target.TargetId id() {
+                        return io.github.kakusuke.migraphe.api.target.TargetId.of("test");
                     }
 
                     @Override
@@ -197,7 +197,7 @@ class PostgreSQLPluginTest {
         // when & then
         assertThatThrownBy(() -> provider.createNode(nodeId, task, Set.of(), nonPgEnv))
                 .isInstanceOf(PostgreSQLException.class)
-                .hasMessageContaining("Environment must be PostgreSQLEnvironment");
+                .hasMessageContaining("Target must be PostgreSQLTarget");
     }
 
     @Test
@@ -205,7 +205,7 @@ class PostgreSQLPluginTest {
         // given
         var provider = new PostgreSQLHistoryRepositoryProvider();
         var env =
-                PostgreSQLEnvironment.create(
+                PostgreSQLTarget.create(
                         "test", "jdbc:postgresql://localhost:5432/test", "user", "pass");
 
         // when
@@ -217,14 +217,14 @@ class PostgreSQLPluginTest {
     }
 
     @Test
-    void historyRepositoryProviderShouldThrowForNonPostgreSQLEnvironment() {
+    void historyRepositoryProviderShouldThrowForNonPostgreSQLTarget() {
         // given
         var provider = new PostgreSQLHistoryRepositoryProvider();
         var nonPgEnv =
-                new Environment() {
+                new Target() {
                     @Override
-                    public io.github.kakusuke.migraphe.api.environment.EnvironmentId id() {
-                        return io.github.kakusuke.migraphe.api.environment.EnvironmentId.of("test");
+                    public io.github.kakusuke.migraphe.api.target.TargetId id() {
+                        return io.github.kakusuke.migraphe.api.target.TargetId.of("test");
                     }
 
                     @Override
@@ -236,7 +236,7 @@ class PostgreSQLPluginTest {
         // when & then
         assertThatThrownBy(() -> provider.createRepository(nonPgEnv))
                 .isInstanceOf(PostgreSQLException.class)
-                .hasMessageContaining("Environment must be PostgreSQLEnvironment");
+                .hasMessageContaining("Target must be PostgreSQLTarget");
     }
 
     /** テスト用の SqlTaskDefinition を作成する。 */
@@ -260,17 +260,17 @@ class PostgreSQLPluginTest {
         return config.getConfigMapping(SqlTaskDefinition.class);
     }
 
-    /** テスト用の PostgreSQLEnvironmentDefinition を作成する。 */
-    private PostgreSQLEnvironmentDefinition createEnvironmentDefinition(
+    /** テスト用の PostgreSQLTargetDefinition を作成する。 */
+    private PostgreSQLTargetDefinition createTargetDefinition(
             String type, String jdbcUrl, String username, String password) {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
-                        .withMapping(PostgreSQLEnvironmentDefinition.class)
+                        .withMapping(PostgreSQLTargetDefinition.class)
                         .withDefaultValue("type", type)
                         .withDefaultValue("jdbc_url", jdbcUrl)
                         .withDefaultValue("username", username)
                         .withDefaultValue("password", password)
                         .build();
-        return config.getConfigMapping(PostgreSQLEnvironmentDefinition.class);
+        return config.getConfigMapping(PostgreSQLTargetDefinition.class);
     }
 }

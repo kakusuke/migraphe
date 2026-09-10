@@ -109,9 +109,9 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                     GradleExecutionListener listener = new GradleExecutionListener(getLogger());
                     Executor executor = createExecutor(context, historyRepo, listener);
 
-                    Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
+                    Set<NodeId> selectedNodes = executor.determineTargetNodes(targetId);
 
-                    if (targetNodes.isEmpty()) {
+                    if (selectedNodes.isEmpty()) {
                         getLogger()
                                 .lifecycle(
                                         "No migrations to execute. All migrations are up to date.");
@@ -119,7 +119,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                     }
 
                     ExecutionPlan plan =
-                            TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
+                            TopologicalSort.createExecutionPlanFor(context.graph(), selectedNodes);
                     displayMigrationGraph(context, plan, historyRepo, dryRun);
 
                     if (dryRun) {
@@ -132,7 +132,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                     getLogger().lifecycle("Executing migrations...");
                     getLogger().lifecycle("");
 
-                    ExecutionResult result = executor.execute(targetNodes);
+                    ExecutionResult result = executor.execute(selectedNodes);
                     if (!result.success()) {
                         throw new GradleException("Migration failed.");
                     }
@@ -184,7 +184,7 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                 graphView.renderLines(
                         node -> {
                             String status =
-                                    historyRepo.wasExecuted(node.id(), node.environment().id())
+                                    historyRepo.wasExecuted(node.id(), node.target().id())
                                             ? "[✓]"
                                             : "[ ]";
                             return status + " " + node.id().value() + " - " + node.name();

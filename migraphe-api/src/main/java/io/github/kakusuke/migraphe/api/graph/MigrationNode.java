@@ -1,6 +1,6 @@
 package io.github.kakusuke.migraphe.api.graph;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.api.task.Task;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
@@ -8,8 +8,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * A single node (a migration step) in a migration graph.
  *
- * <p>A {@code MigrationNode} couples structural metadata (its identity, name, owning environment
- * and dependencies) with the {@link Task tasks} that perform the actual work. Nodes form a directed
+ * <p>A {@code MigrationNode} couples structural metadata (its identity, name, owning target and
+ * dependencies) with the {@link Task tasks} that perform the actual work. Nodes form a directed
  * acyclic graph (DAG) via their {@link #dependencies() dependencies}; Migraphe topologically sorts
  * the graph and executes nodes in dependency order when migrating forward, and in reverse order
  * when rolling back.
@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @see Task
  * @see NodeId
- * @see Environment
+ * @see Target
  */
 public interface MigrationNode {
 
@@ -48,11 +48,11 @@ public interface MigrationNode {
     @Nullable String description();
 
     /**
-     * Returns the environment this node belongs to.
+     * Returns the target this node belongs to.
      *
-     * @return the owning {@link Environment} against which this node's tasks execute
+     * @return the owning {@link Target} against which this node's tasks execute
      */
-    Environment environment();
+    Target target();
 
     /**
      * Returns the identifiers of the nodes this node directly depends on.

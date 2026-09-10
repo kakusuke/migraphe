@@ -17,7 +17,7 @@ public record MigrationTreeData(List<NodeEntry> nodes) {
      *
      * @param id the node's unique identifier
      * @param name the node's human-readable name
-     * @param target the identifier of the target environment the node runs against
+     * @param target the identifier of the target the node runs against
      * @param status the execution status, {@code "executed"} or {@code "pending"}
      * @param dependencies the identifiers of the nodes this node directly depends on, typically
      *     sorted

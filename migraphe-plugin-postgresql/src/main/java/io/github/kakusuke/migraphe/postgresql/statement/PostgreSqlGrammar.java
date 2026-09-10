@@ -8,9 +8,9 @@ import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
  * Factory for the PostgreSQL-dialect SQL splitting grammar.
  *
  * <p>Builds the {@link SqlParser} and {@link StatementSplitter} used by {@link
- * io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment} to split SQL scripts into
- * individual statements. The distinguishing feature versus the generic JDBC grammar is recognition
- * of PostgreSQL dollar-quoted bodies ({@code $tag$ ... $tag$}), which may contain semicolons and
+ * io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget} to split SQL scripts into individual
+ * statements. The distinguishing feature versus the generic JDBC grammar is recognition of
+ * PostgreSQL dollar-quoted bodies ({@code $tag$ ... $tag$}), which may contain semicolons and
  * newlines without splitting the statement. This is a stateless utility class and cannot be
  * instantiated.
  */

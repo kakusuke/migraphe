@@ -2,10 +2,10 @@ package io.github.kakusuke.migraphe.jdbc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -16,13 +16,13 @@ import org.junit.jupiter.api.Test;
 
 class JdbcHistoryRepositoryTest {
 
-    private JdbcEnvironment env;
+    private JdbcTarget env;
     private JdbcHistoryRepository repository;
 
     @BeforeEach
     void setUp() throws Exception {
         env =
-                JdbcEnvironment.create(
+                JdbcTarget.create(
                         "testdb",
                         "jdbc:h2:mem:history_test;DB_CLOSE_DELAY=-1",
                         "sa",
@@ -61,7 +61,7 @@ class JdbcHistoryRepositoryTest {
                         "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS);
         repository.record(record);
 
-        var latest = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        var latest = repository.findLatestRecord(NodeId.of("node1"), TargetId.of("testdb"));
         assertThat(latest).isNotNull();
         assertThat(latest.id()).isEqualTo("rec1");
         assertThat(latest.nodeId()).isEqualTo(NodeId.of("node1"));
@@ -78,7 +78,7 @@ class JdbcHistoryRepositoryTest {
                         "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS);
         repository.record(record);
 
-        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb"))).isTrue();
+        assertThat(repository.wasExecuted(NodeId.of("node1"), TargetId.of("testdb"))).isTrue();
     }
 
     @Test
@@ -99,8 +99,7 @@ class JdbcHistoryRepositoryTest {
                         ExecutionStatus.SUCCESS);
         repository.record(downRecord);
 
-        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb")))
-                .isFalse();
+        assertThat(repository.wasExecuted(NodeId.of("node1"), TargetId.of("testdb"))).isFalse();
     }
 
     @Test
@@ -112,15 +111,13 @@ class JdbcHistoryRepositoryTest {
                         "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.FAILURE);
         repository.record(record);
 
-        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb")))
-                .isFalse();
+        assertThat(repository.wasExecuted(NodeId.of("node1"), TargetId.of("testdb"))).isFalse();
     }
 
     @Test
     void wasExecutedReturnsFalseForUnknownNode() {
         repository.initialize();
-        assertThat(repository.wasExecuted(NodeId.of("unknown"), EnvironmentId.of("testdb")))
-                .isFalse();
+        assertThat(repository.wasExecuted(NodeId.of("unknown"), TargetId.of("testdb"))).isFalse();
     }
 
     @Test
@@ -137,14 +134,14 @@ class JdbcHistoryRepositoryTest {
                 createRecord(
                         "rec3", "node3", "testdb", ExecutionDirection.UP, ExecutionStatus.FAILURE));
 
-        List<NodeId> nodes = repository.executedNodes(EnvironmentId.of("testdb"));
+        List<NodeId> nodes = repository.executedNodes(TargetId.of("testdb"));
         assertThat(nodes).containsExactly(NodeId.of("node1"), NodeId.of("node2"));
     }
 
     @Test
     void findLatestRecordReturnsNullForUnknown() {
         repository.initialize();
-        assertThat(repository.findLatestRecord(NodeId.of("unknown"), EnvironmentId.of("testdb")))
+        assertThat(repository.findLatestRecord(NodeId.of("unknown"), TargetId.of("testdb")))
                 .isNull();
     }
 
@@ -159,7 +156,7 @@ class JdbcHistoryRepositoryTest {
                 createRecord(
                         "rec2", "node2", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS));
 
-        List<ExecutionRecord> records = repository.allRecords(EnvironmentId.of("testdb"));
+        List<ExecutionRecord> records = repository.allRecords(TargetId.of("testdb"));
         assertThat(records).hasSize(2);
         assertThat(records.get(0).id()).isEqualTo("rec1");
         assertThat(records.get(1).id()).isEqualTo("rec2");
@@ -174,7 +171,7 @@ class JdbcHistoryRepositoryTest {
         customRepo.record(
                 createRecord(
                         "rec1", "node1", "testdb", ExecutionDirection.UP, ExecutionStatus.SUCCESS));
-        assertThat(customRepo.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb"))).isTrue();
+        assertThat(customRepo.wasExecuted(NodeId.of("node1"), TargetId.of("testdb"))).isTrue();
     }
 
     // --- Ordering when executed_at ties -------------------------------------------------
@@ -198,8 +195,7 @@ class JdbcHistoryRepositoryTest {
                         sameSecond,
                         ExecutionDirection.DOWN));
 
-        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb")))
-                .isFalse();
+        assertThat(repository.wasExecuted(NodeId.of("node1"), TargetId.of("testdb"))).isFalse();
     }
 
     @Test
@@ -216,7 +212,7 @@ class JdbcHistoryRepositoryTest {
                 recordAt(
                         "00000000-0000-7000-8000-000000000002", sameSecond, ExecutionDirection.UP));
 
-        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb"))).isTrue();
+        assertThat(repository.wasExecuted(NodeId.of("node1"), TargetId.of("testdb"))).isTrue();
     }
 
     @Test
@@ -234,8 +230,7 @@ class JdbcHistoryRepositoryTest {
                 recordAt(
                         "00000000-0000-7000-8000-000000000001", sameSecond, ExecutionDirection.UP));
 
-        assertThat(repository.wasExecuted(NodeId.of("node1"), EnvironmentId.of("testdb")))
-                .isFalse();
+        assertThat(repository.wasExecuted(NodeId.of("node1"), TargetId.of("testdb"))).isFalse();
     }
 
     @Test
@@ -252,7 +247,7 @@ class JdbcHistoryRepositoryTest {
                 recordAt(
                         "00000000-0000-7000-8000-000000000001", sameSecond, ExecutionDirection.UP));
 
-        var latest = repository.findLatestRecord(NodeId.of("node1"), EnvironmentId.of("testdb"));
+        var latest = repository.findLatestRecord(NodeId.of("node1"), TargetId.of("testdb"));
         assertThat(latest).isNotNull();
         assertThat(latest.id()).isEqualTo("00000000-0000-7000-8000-000000000002");
     }
@@ -271,14 +266,14 @@ class JdbcHistoryRepositoryTest {
                         sameSecond,
                         ExecutionDirection.DOWN));
 
-        assertThat(repository.executedNodes(EnvironmentId.of("testdb"))).isEmpty();
+        assertThat(repository.executedNodes(TargetId.of("testdb"))).isEmpty();
     }
 
     private ExecutionRecord recordAt(String id, Instant executedAt, ExecutionDirection direction) {
         return new ExecutionRecord(
                 id,
                 NodeId.of("node1"),
-                EnvironmentId.of("testdb"),
+                TargetId.of("testdb"),
                 direction,
                 ExecutionStatus.SUCCESS,
                 executedAt,
@@ -297,7 +292,7 @@ class JdbcHistoryRepositoryTest {
         return new ExecutionRecord(
                 id,
                 NodeId.of(nodeId),
-                EnvironmentId.of(envId),
+                TargetId.of(envId),
                 direction,
                 status,
                 Instant.now(),

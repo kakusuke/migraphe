@@ -54,7 +54,7 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>A resource containing no directive at all is parsed as a single unconditional step labelled
  * {@code schema}, which keeps plain-SQL resources supplied through {@link
- * JdbcHistoryRepository#JdbcHistoryRepository(JdbcEnvironment, String)} working unchanged.
+ * JdbcHistoryRepository#JdbcHistoryRepository(JdbcTarget, String)} working unchanged.
  */
 final class SchemaStepParser {
 

@@ -3,13 +3,13 @@ package io.github.kakusuke.migraphe.postgresql;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import org.junit.jupiter.api.Test;
 
-class PostgreSQLEnvironmentTest {
+class PostgreSQLTargetTest {
 
     @Test
-    void shouldCreateEnvironmentWithJdbcCredentials() {
+    void shouldCreateTargetWithJdbcCredentials() {
         // given
         String name = "production";
         String jdbcUrl = "jdbc:postgresql://localhost:5432/mydb";
@@ -17,20 +17,20 @@ class PostgreSQLEnvironmentTest {
         String password = "secret";
 
         // when
-        PostgreSQLEnvironment env = PostgreSQLEnvironment.create(name, jdbcUrl, username, password);
+        PostgreSQLTarget target = PostgreSQLTarget.create(name, jdbcUrl, username, password);
 
         // then
-        assertThat(env.id()).isEqualTo(EnvironmentId.of(name));
-        assertThat(env.name()).isEqualTo(name);
-        assertThat(env.getJdbcUrl()).isEqualTo(jdbcUrl);
-        assertThat(env.getUsername()).isEqualTo(username);
-        assertThat(env.getPassword()).isEqualTo(password);
+        assertThat(target.id()).isEqualTo(TargetId.of(name));
+        assertThat(target.name()).isEqualTo(name);
+        assertThat(target.getJdbcUrl()).isEqualTo(jdbcUrl);
+        assertThat(target.getUsername()).isEqualTo(username);
+        assertThat(target.getPassword()).isEqualTo(password);
     }
 
     @Test
     void shouldThrowExceptionWhenJdbcUrlIsNull() {
         // when & then
-        assertThatThrownBy(() -> PostgreSQLEnvironment.create("test", null, "user", "pass"))
+        assertThatThrownBy(() -> PostgreSQLTarget.create("test", null, "user", "pass"))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("jdbcUrl must not be null");
     }
@@ -40,7 +40,7 @@ class PostgreSQLEnvironmentTest {
         // when & then
         assertThatThrownBy(
                         () ->
-                                PostgreSQLEnvironment.create(
+                                PostgreSQLTarget.create(
                                         "test",
                                         "jdbc:postgresql://localhost:5432/db",
                                         null,
@@ -52,11 +52,11 @@ class PostgreSQLEnvironmentTest {
     @Test
     void shouldAllowNullPassword() {
         // when
-        PostgreSQLEnvironment env =
-                PostgreSQLEnvironment.create(
+        PostgreSQLTarget target =
+                PostgreSQLTarget.create(
                         "test", "jdbc:postgresql://localhost:5432/db", "user", null);
 
         // then
-        assertThat(env.getPassword()).isNull();
+        assertThat(target.getPassword()).isNull();
     }
 }

@@ -1,17 +1,17 @@
 package io.github.kakusuke.migraphe.core.execution;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.common.ValidationResult;
 import io.github.kakusuke.migraphe.core.config.ConfigLoader;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
-import io.github.kakusuke.migraphe.core.factory.EnvironmentFactory;
 import io.github.kakusuke.migraphe.core.factory.MigrationNodeFactory;
+import io.github.kakusuke.migraphe.core.factory.TargetFactory;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
@@ -30,17 +30,17 @@ import org.jspecify.annotations.Nullable;
  * Immutable snapshot of everything needed to run migrations for a project.
  *
  * <p>An {@code ExecutionContext} bundles the loaded project configuration, the per-target {@link
- * Environment} instances, the migration nodes, the assembled {@link MigrationGraph}, and the {@link
+ * Target} instances, the migration nodes, the assembled {@link MigrationGraph}, and the {@link
  * PluginRegistry} used to resolve plugins. Instances are produced by the static {@code load}
- * factory methods, which drive the full pipeline: config loading, environment/node creation,
- * dependency sorting, graph construction, and graph validation. Commands then build an {@link
- * Executor} or {@link StatusService} from this context.
+ * factory methods, which drive the full pipeline: config loading, target/node creation, dependency
+ * sorting, graph construction, and graph validation. Commands then build an {@link Executor} or
+ * {@link StatusService} from this context.
  *
  * @param baseDir the project root directory
  * @param scanRoot the resolved scan-root directory (from {@code project.scan-root})
  * @param config the resolved MicroProfile / SmallRye configuration
  * @param pluginRegistry the registry used to look up plugins by target type
- * @param environments map of target ID to its {@link Environment}
+ * @param targets map of target ID to its {@link Target}
  * @param nodes the migration nodes, sorted in dependency order
  * @param graph the migration graph built from {@code nodes}
  */
@@ -49,7 +49,7 @@ public record ExecutionContext(
         Path scanRoot,
         SmallRyeConfig config,
         PluginRegistry pluginRegistry,
-        Map<String, Environment> environments,
+        Map<String, Target> targets,
         List<MigrationNode> nodes,
         MigrationGraph graph) {
 
@@ -57,17 +57,17 @@ public record ExecutionContext(
      * Creates the {@link HistoryRepository} for this project.
      *
      * <p>The history target is read from {@code history.target} in the project configuration. If a
-     * matching {@link Environment} exists, the corresponding plugin's {@link
+     * matching {@link Target} exists, the corresponding plugin's {@link
      * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} creates the repository against
-     * that environment. If no matching target is found, an {@link InMemoryHistoryRepository} is
-     * returned as a fallback.
+     * that target. If no matching target is found, an {@link InMemoryHistoryRepository} is returned
+     * as a fallback.
      *
      * @return the project's history repository, or an in-memory fallback when no history target is
      *     configured
      */
     public HistoryRepository createHistoryRepository() {
         String historyTarget = config.getConfigMapping(ProjectConfig.class).history().target();
-        Environment historyEnv = environments.get(historyTarget);
+        Target historyEnv = targets.get(historyTarget);
         if (historyEnv == null) {
             return new InMemoryHistoryRepository();
         }
@@ -105,7 +105,7 @@ public record ExecutionContext(
     }
 
     /**
-     * Loads an {@code ExecutionContext} from a project directory for a named environment.
+     * Loads an {@code ExecutionContext} from a project directory for a named target.
      *
      * @param baseDir the project root directory
      * @param pluginRegistry the plugin registry used to resolve plugins by target type
@@ -119,11 +119,11 @@ public record ExecutionContext(
     }
 
     /**
-     * Loads an {@code ExecutionContext} from a project directory for a named environment with
-     * override variables.
+     * Loads an {@code ExecutionContext} from a project directory for a named target with override
+     * variables.
      *
      * <p>This is the primary loader the other overloads delegate to. It loads the configuration,
-     * creates all environments and migration nodes, sorts the nodes in dependency order, builds the
+     * creates all targets and migration nodes, sorts the nodes in dependency order, builds the
      * {@link MigrationGraph}, and validates the graph.
      *
      * @param baseDir the project root directory
@@ -145,12 +145,11 @@ public record ExecutionContext(
         Path scanRoot = configLoader.resolveScanRoot(baseDir);
         SmallRyeConfig config = configLoader.loadConfig(baseDir, envName, variables);
 
-        // 2. Load environment definitions and create all Environments via EnvironmentFactory.
-        Map<String, EnvironmentDefinition> environmentDefinitions =
-                configLoader.loadEnvironmentDefinitions(config, pluginRegistry);
-        EnvironmentFactory environmentFactory = new EnvironmentFactory(pluginRegistry);
-        Map<String, Environment> environments =
-                environmentFactory.createEnvironments(environmentDefinitions);
+        // 2. Load target definitions and create all Targets via TargetFactory.
+        Map<String, TargetDefinition> targetDefinitions =
+                configLoader.loadTargetDefinitions(config, pluginRegistry);
+        TargetFactory targetFactory = new TargetFactory(pluginRegistry);
+        Map<String, Target> targets = targetFactory.createTargets(targetDefinitions);
 
         // 3. Load task definitions (mapped to each plugin's specific type) via ConfigLoader.
         Map<NodeId, TaskDefinition<?>> taskDefinitions =
@@ -158,7 +157,7 @@ public record ExecutionContext(
 
         // 4. Create migration nodes via MigrationNodeFactory.
         MigrationNodeFactory nodeFactory = new MigrationNodeFactory(pluginRegistry, config);
-        List<MigrationNode> nodes = nodeFactory.createNodes(taskDefinitions, environments);
+        List<MigrationNode> nodes = nodeFactory.createNodes(taskDefinitions, targets);
 
         // 5. Build the MigrationGraph (adding nodes in dependency order).
         List<MigrationNode> sortedNodes = sortNodesByDependencies(nodes);
@@ -172,7 +171,7 @@ public record ExecutionContext(
         }
 
         return new ExecutionContext(
-                baseDir, scanRoot, config, pluginRegistry, environments, sortedNodes, graph);
+                baseDir, scanRoot, config, pluginRegistry, targets, sortedNodes, graph);
     }
 
     /**

@@ -117,31 +117,31 @@ public final class TopologicalSort {
     /**
      * Builds a forward execution plan restricted to a subset of nodes.
      *
-     * <p>A sub-DAG is induced over {@code targetNodes}: in-degrees count only dependencies that are
-     * themselves members of {@code targetNodes}, so dependencies outside the subset are ignored.
-     * The resulting plan executes the target nodes in dependency-respecting order. Subtree-depth
-     * ordering for the in-level tiebreak is still computed against the full graph.
+     * <p>A sub-DAG is induced over {@code selectedNodes}: in-degrees count only dependencies that
+     * are themselves members of {@code selectedNodes}, so dependencies outside the subset are
+     * ignored. The resulting plan executes the target nodes in dependency-respecting order.
+     * Subtree-depth ordering for the in-level tiebreak is still computed against the full graph.
      *
      * @param graph the migration graph that the target nodes belong to
-     * @param targetNodes the identifiers of the nodes to include in the plan
+     * @param selectedNodes the identifiers of the nodes to include in the plan
      * @return a forward execution plan over the target subset, or an empty plan if {@code
-     *     targetNodes} is empty
+     *     selectedNodes} is empty
      * @throws IllegalStateException if the induced subgraph has no schedulable node (invalid or
      *     cyclic dependencies)
      */
     public static ExecutionPlan createExecutionPlanFor(
-            MigrationGraph graph, Set<NodeId> targetNodes) {
-        if (targetNodes.isEmpty()) {
+            MigrationGraph graph, Set<NodeId> selectedNodes) {
+        if (selectedNodes.isEmpty()) {
             return new ExecutionPlan(List.of());
         }
 
         // Build the sub-DAG over the target nodes only and compute in-degrees within it.
         Map<NodeId, Integer> inDegree = new HashMap<>();
-        for (NodeId nodeId : targetNodes) {
+        for (NodeId nodeId : selectedNodes) {
             // Number of this node's dependencies that are themselves target nodes.
             int count = 0;
             for (NodeId dependency : graph.getDependencies(nodeId)) {
-                if (targetNodes.contains(dependency)) {
+                if (selectedNodes.contains(dependency)) {
                     count++;
                 }
             }
@@ -198,32 +198,32 @@ public final class TopologicalSort {
      * Builds a reverse (rollback) execution plan restricted to a subset of nodes.
      *
      * <p>For rollback, dependency edges are followed in reverse: a node's effective in-degree is
-     * the number of its dependents (out-degree) that are also in {@code targetNodes}. Thus nodes
+     * the number of its dependents (out-degree) that are also in {@code selectedNodes}. Thus nodes
      * that nothing in the subset depends on are scheduled first, guaranteeing that every dependent
      * is undone before the node it relied on. Subtree-depth ordering for the in-level tiebreak is
      * computed against the full graph.
      *
      * @param graph the migration graph that the target nodes belong to
-     * @param targetNodes the identifiers of the nodes to roll back
+     * @param selectedNodes the identifiers of the nodes to roll back
      * @return a reverse execution plan over the target subset, or an empty plan if {@code
-     *     targetNodes} is empty
+     *     selectedNodes} is empty
      * @throws IllegalStateException if the induced subgraph has no schedulable node (invalid or
      *     cyclic dependencies)
      */
     public static ExecutionPlan createReverseExecutionPlanFor(
-            MigrationGraph graph, Set<NodeId> targetNodes) {
-        if (targetNodes.isEmpty()) {
+            MigrationGraph graph, Set<NodeId> selectedNodes) {
+        if (selectedNodes.isEmpty()) {
             return new ExecutionPlan(List.of());
         }
 
         // Build the sub-DAG over the target nodes and compute reverse in-degrees:
         // for rollback the in-degree is the out-degree (number of dependents).
         Map<NodeId, Integer> outDegree = new HashMap<>();
-        for (NodeId nodeId : targetNodes) {
+        for (NodeId nodeId : selectedNodes) {
             // Number of nodes within the target set that depend on this node.
             int count = 0;
             for (NodeId dependent : graph.getDependents(nodeId)) {
-                if (targetNodes.contains(dependent)) {
+                if (selectedNodes.contains(dependent)) {
                     count++;
                 }
             }

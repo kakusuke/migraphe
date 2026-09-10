@@ -1,7 +1,7 @@
 package io.github.kakusuke.migraphe.api.history;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -10,15 +10,15 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Migraphe consults a {@code HistoryRepository} to decide which nodes have already run (so they
  * can be skipped on a subsequent up) and to retrieve the serialized down task needed for a
- * rollback. History is always partitioned by {@link EnvironmentId}, so the same migration can be
- * tracked independently across environments.
+ * rollback. History is always partitioned by {@link TargetId}, so the same migration can be tracked
+ * independently across targets.
  *
  * <p>Plugins implement this interface to support different backends (in-memory, JDBC/PostgreSQL/
  * MySQL, files, object storage, and so on). Implementations are not required to be thread-safe;
  * Migraphe wraps a repository in a synchronized decorator when running migrations in parallel.
  *
  * @see ExecutionRecord
- * @see EnvironmentId
+ * @see TargetId
  * @see NodeId
  */
 public interface HistoryRepository {
@@ -39,38 +39,37 @@ public interface HistoryRepository {
     void record(ExecutionRecord record);
 
     /**
-     * Reports whether the given node has already been executed successfully in the given
-     * environment.
+     * Reports whether the given node has already been executed successfully in the given target.
      *
      * @param nodeId the identifier of the node to check
-     * @param environmentId the environment whose history is consulted
-     * @return {@code true} if a successful execution is recorded for the node in the environment,
-     *     {@code false} otherwise
+     * @param targetId the target whose history is consulted
+     * @return {@code true} if a successful execution is recorded for the node in the target, {@code
+     *     false} otherwise
      */
-    boolean wasExecuted(NodeId nodeId, EnvironmentId environmentId);
+    boolean wasExecuted(NodeId nodeId, TargetId targetId);
 
     /**
-     * Returns the identifiers of nodes that have executed successfully in the given environment.
+     * Returns the identifiers of nodes that have executed successfully in the given target.
      *
-     * @param environmentId the environment whose history is consulted
+     * @param targetId the target whose history is consulted
      * @return the list of successfully executed node identifiers, possibly empty
      */
-    List<NodeId> executedNodes(EnvironmentId environmentId);
+    List<NodeId> executedNodes(TargetId targetId);
 
     /**
-     * Returns the most recent execution record for the given node in the given environment.
+     * Returns the most recent execution record for the given node in the given target.
      *
      * @param nodeId the identifier of the node whose latest record is requested
-     * @param environmentId the environment whose history is consulted
+     * @param targetId the target whose history is consulted
      * @return the latest {@link ExecutionRecord}, or {@code null} if none exists
      */
-    @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, EnvironmentId environmentId);
+    @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, TargetId targetId);
 
     /**
-     * Returns every execution record for the given environment.
+     * Returns every execution record for the given target.
      *
-     * @param environmentId the environment whose history is consulted
-     * @return the list of all execution records for the environment, possibly empty
+     * @param targetId the target whose history is consulted
+     * @return the list of all execution records for the target, possibly empty
      */
-    List<ExecutionRecord> allRecords(EnvironmentId environmentId);
+    List<ExecutionRecord> allRecords(TargetId targetId);
 }

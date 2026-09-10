@@ -9,12 +9,12 @@ import org.jspecify.annotations.Nullable;
  * A {@link ConfigSource} backed by an in-memory {@link Map}.
  *
  * <p>Used to inject externally-supplied values into the SmallRye Config layering — for example
- * Gradle DSL {@code variables}, OS environment variables (namespaced under {@code env.}), and
+ * Gradle DSL {@code variables}, OS environment variables (namespaced under {@code target.}), and
  * system properties. The ordinal controls precedence relative to the other sources; the default
  * {@code 600} places explicitly-passed variables above the environment file ({@code 500}) and the
- * YAML configuration ({@code 100}), while {@link ConfigLoader} uses lower ordinals (300 for OS env,
- * 400 for system properties) when registering those sources. The wrapped map is defensively copied
- * so the source is immutable.
+ * YAML configuration ({@code 100}), while {@link ConfigLoader} uses lower ordinals (300 for OS
+ * target, 400 for system properties) when registering those sources. The wrapped map is defensively
+ * copied so the source is immutable.
  */
 public class MapConfigSource implements ConfigSource {
 

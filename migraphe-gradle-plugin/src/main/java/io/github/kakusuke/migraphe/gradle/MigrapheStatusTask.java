@@ -46,7 +46,7 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                                     node -> {
                                         boolean executed =
                                                 historyRepo.wasExecuted(
-                                                        node.id(), node.environment().id());
+                                                        node.id(), node.target().id());
                                         StringBuilder sb = new StringBuilder();
                                         if (executed) {
                                             executedCount[0]++;
@@ -61,7 +61,7 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
                                         if (executed) {
                                             ExecutionRecord record =
                                                     historyRepo.findLatestRecord(
-                                                            node.id(), node.environment().id());
+                                                            node.id(), node.target().id());
                                             if (record != null) {
                                                 sb.append(" (")
                                                         .append(

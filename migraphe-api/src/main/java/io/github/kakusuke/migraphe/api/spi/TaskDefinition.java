@@ -11,8 +11,8 @@ import java.util.Optional;
  * MigraphePlugin#taskDefinitionClass()} and implements it as a SmallRye {@code @ConfigMapping}
  * interface so its fields bind directly from YAML. The runtime then hands the bound definition to
  * {@link MigrationNodeProvider#createNode(io.github.kakusuke.migraphe.api.graph.NodeId,
- * TaskDefinition, java.util.Set, io.github.kakusuke.migraphe.api.environment.Environment)} to build
- * a graph node.
+ * TaskDefinition, java.util.Set, io.github.kakusuke.migraphe.api.target.Target)} to build a graph
+ * node.
  *
  * <p>Because SmallRye Config's {@code @ConfigMapping} represents optional properties as {@link
  * Optional}, this interface exposes optional fields as {@link Optional} values rather than nullable

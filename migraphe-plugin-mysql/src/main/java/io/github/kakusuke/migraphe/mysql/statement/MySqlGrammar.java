@@ -13,7 +13,7 @@ import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
  * string literals, line comments ({@code --} and {@code #}) and C-style block comments, recursive
  * compound-statement blocks, and the {@code DELIMITER} directive — so that statement delimiters
  * appearing inside those regions are not treated as boundaries. The assembled splitter is exposed
- * through {@link #splitter()} and wired into the MySQL environment's statement splitter.
+ * through {@link #splitter()} and wired into the MySQL target's statement splitter.
  *
  * <p>This class is not instantiable.
  *

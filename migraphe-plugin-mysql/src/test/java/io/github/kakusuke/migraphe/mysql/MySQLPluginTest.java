@@ -3,13 +3,13 @@ package io.github.kakusuke.migraphe.mysql;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
@@ -58,28 +58,28 @@ class MySQLPluginTest {
     }
 
     @Test
-    void shouldReturnEnvironmentDefinitionClass() {
+    void shouldReturnTargetDefinitionClass() {
         // given
         MySQLPlugin plugin = new MySQLPlugin();
 
         // when
-        Class<? extends EnvironmentDefinition> envDefClass = plugin.environmentDefinitionClass();
+        Class<? extends TargetDefinition> envDefClass = plugin.targetDefinitionClass();
 
         // then
-        assertThat(envDefClass).isEqualTo(MySQLEnvironmentDefinition.class);
+        assertThat(envDefClass).isEqualTo(MySQLTargetDefinition.class);
     }
 
     @Test
-    void shouldProvideEnvironmentProvider() {
+    void shouldProvideTargetProvider() {
         // given
         MySQLPlugin plugin = new MySQLPlugin();
 
         // when
-        var provider = plugin.environmentProvider();
+        var provider = plugin.targetProvider();
 
         // then
         assertThat(provider).isNotNull();
-        assertThat(provider).isInstanceOf(MySQLEnvironmentProvider.class);
+        assertThat(provider).isInstanceOf(MySQLTargetProvider.class);
     }
 
     @Test
@@ -109,28 +109,28 @@ class MySQLPluginTest {
     }
 
     @Test
-    void environmentProviderShouldCreateEnvironment() {
+    void targetProviderShouldCreateTarget() {
         // given
-        var provider = new MySQLEnvironmentProvider();
+        var provider = new MySQLTargetProvider();
         var definition =
-                createEnvironmentDefinition(
+                createTargetDefinition(
                         "mysql", "jdbc:mysql://localhost:3306/test", "testuser", "testpass");
 
         // when
-        Environment env = provider.createEnvironment("test-db", definition);
+        Target env = provider.createTarget("test-db", definition);
 
         // then
         assertThat(env).isNotNull();
-        assertThat(env).isInstanceOf(MySQLEnvironment.class);
+        assertThat(env).isInstanceOf(MySQLTarget.class);
         assertThat(env.name()).isEqualTo("test-db");
     }
 
     @Test
-    void environmentProviderShouldThrowWhenGivenWrongDefinitionType() {
+    void targetProviderShouldThrowWhenGivenWrongDefinitionType() {
         // given
-        var provider = new MySQLEnvironmentProvider();
+        var provider = new MySQLTargetProvider();
         var wrongDefinition =
-                new EnvironmentDefinition() {
+                new TargetDefinition() {
                     @Override
                     public String type() {
                         return "other";
@@ -138,17 +138,16 @@ class MySQLPluginTest {
                 };
 
         // when & then
-        assertThatThrownBy(() -> provider.createEnvironment("test", wrongDefinition))
+        assertThatThrownBy(() -> provider.createTarget("test", wrongDefinition))
                 .isInstanceOf(MySQLException.class)
-                .hasMessageContaining("Expected MySQLEnvironmentDefinition");
+                .hasMessageContaining("Expected MySQLTargetDefinition");
     }
 
     @Test
     void migrationNodeProviderShouldCreateNode() {
         // given
         var provider = new MySQLMigrationNodeProvider();
-        var env =
-                MySQLEnvironment.create("test", "jdbc:mysql://localhost:3306/test", "user", "pass");
+        var env = MySQLTarget.create("test", "jdbc:mysql://localhost:3306/test", "user", "pass");
         var nodeId = NodeId.of("V001");
 
         SqlTaskDefinition task =
@@ -171,14 +170,14 @@ class MySQLPluginTest {
     }
 
     @Test
-    void migrationNodeProviderShouldThrowForNonMySQLEnvironment() {
+    void migrationNodeProviderShouldThrowForNonMySQLTarget() {
         // given
         var provider = new MySQLMigrationNodeProvider();
         var nonMySqlEnv =
-                new Environment() {
+                new Target() {
                     @Override
-                    public EnvironmentId id() {
-                        return EnvironmentId.of("test");
+                    public TargetId id() {
+                        return TargetId.of("test");
                     }
 
                     @Override
@@ -192,15 +191,14 @@ class MySQLPluginTest {
         // when & then
         assertThatThrownBy(() -> provider.createNode(nodeId, task, Set.of(), nonMySqlEnv))
                 .isInstanceOf(MySQLException.class)
-                .hasMessageContaining("Environment must be MySQLEnvironment");
+                .hasMessageContaining("Target must be MySQLTarget");
     }
 
     @Test
     void historyRepositoryProviderShouldCreateRepository() {
         // given
         var provider = new MySQLHistoryRepositoryProvider();
-        var env =
-                MySQLEnvironment.create("test", "jdbc:mysql://localhost:3306/test", "user", "pass");
+        var env = MySQLTarget.create("test", "jdbc:mysql://localhost:3306/test", "user", "pass");
 
         // when
         HistoryRepository repo = provider.createRepository(env);
@@ -211,14 +209,14 @@ class MySQLPluginTest {
     }
 
     @Test
-    void historyRepositoryProviderShouldThrowForNonMySQLEnvironment() {
+    void historyRepositoryProviderShouldThrowForNonMySQLTarget() {
         // given
         var provider = new MySQLHistoryRepositoryProvider();
         var nonMySqlEnv =
-                new Environment() {
+                new Target() {
                     @Override
-                    public EnvironmentId id() {
-                        return EnvironmentId.of("test");
+                    public TargetId id() {
+                        return TargetId.of("test");
                     }
 
                     @Override
@@ -230,7 +228,7 @@ class MySQLPluginTest {
         // when & then
         assertThatThrownBy(() -> provider.createRepository(nonMySqlEnv))
                 .isInstanceOf(MySQLException.class)
-                .hasMessageContaining("Environment must be MySQLEnvironment");
+                .hasMessageContaining("Target must be MySQLTarget");
     }
 
     /** テスト用の SqlTaskDefinition を作成する。 */
@@ -254,17 +252,17 @@ class MySQLPluginTest {
         return config.getConfigMapping(SqlTaskDefinition.class);
     }
 
-    /** テスト用の MySQLEnvironmentDefinition を作成する。 */
-    private MySQLEnvironmentDefinition createEnvironmentDefinition(
+    /** テスト用の MySQLTargetDefinition を作成する。 */
+    private MySQLTargetDefinition createTargetDefinition(
             String type, String jdbcUrl, String username, String password) {
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
-                        .withMapping(MySQLEnvironmentDefinition.class)
+                        .withMapping(MySQLTargetDefinition.class)
                         .withDefaultValue("type", type)
                         .withDefaultValue("jdbc_url", jdbcUrl)
                         .withDefaultValue("username", username)
                         .withDefaultValue("password", password)
                         .build();
-        return config.getConfigMapping(MySQLEnvironmentDefinition.class);
+        return config.getConfigMapping(MySQLTargetDefinition.class);
     }
 }

@@ -11,9 +11,9 @@ import java.util.*;
  * Utility that renders a {@link MigrationGraph} as human-readable text for terminal display.
  *
  * <p>Unlike the {@link ExecutionGraphView} pipeline, which draws a compact ASCII tree, this is an
- * early-milestone text report: it lists every node with its environment, description, and
- * dependency/dependent edges, followed by the parallel execution plan and per-environment
- * statistics. This is a static utility class and cannot be instantiated.
+ * early-milestone text report: it lists every node with its target, description, and
+ * dependency/dependent edges, followed by the parallel execution plan and per-target statistics.
+ * This is a static utility class and cannot be instantiated.
  */
 public final class GraphVisualizer {
 
@@ -64,7 +64,7 @@ public final class GraphVisualizer {
         StringBuilder sb = new StringBuilder();
 
         sb.append(String.format("📦 [%s] %s\n", node.id().value(), node.name()));
-        sb.append(String.format("   Env: %s\n", node.environment().name()));
+        sb.append(String.format("   Env: %s\n", node.target().name()));
 
         if (node.description() != null && !node.description().isBlank()) {
             sb.append(String.format("   Desc: %s\n", node.description()));
@@ -105,7 +105,7 @@ public final class GraphVisualizer {
                 sb.append(
                         String.format(
                                 "  → %s [%s] @ %s\n",
-                                node.name(), node.id().value(), node.environment().name()));
+                                node.name(), node.id().value(), node.target().name()));
             }
             sb.append("\n");
         }
@@ -115,17 +115,17 @@ public final class GraphVisualizer {
 
     /**
      * Renders summary statistics for the graph: total node count, root count, and the number of
-     * nodes per environment.
+     * nodes per target.
      *
      * @param graph the migration graph to summarize
      * @return the rendered statistics text
      */
     public static String statistics(MigrationGraph graph) {
-        Map<String, Long> envCounts = new HashMap<>();
+        Map<String, Long> targetCounts = new HashMap<>();
 
         for (MigrationNode node : graph.allNodes()) {
-            String envName = node.environment().name();
-            envCounts.merge(envName, 1L, Long::sum);
+            String envName = node.target().name();
+            targetCounts.merge(envName, 1L, Long::sum);
         }
 
         StringBuilder sb = new StringBuilder();
@@ -133,8 +133,9 @@ public final class GraphVisualizer {
         sb.append("-".repeat(40)).append("\n");
         sb.append(String.format("Total Nodes: %d\n", graph.size()));
         sb.append(String.format("Root Nodes: %d\n", graph.getRoots().size()));
-        sb.append("\nNodes per Environment:\n");
-        envCounts.forEach((env, count) -> sb.append(String.format("  %s: %d\n", env, count)));
+        sb.append("\nNodes per Target:\n");
+        targetCounts.forEach(
+                (target, count) -> sb.append(String.format("  %s: %d\n", target, count)));
 
         return sb.toString();
     }

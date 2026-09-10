@@ -114,16 +114,16 @@ public class UpCommand implements Command {
             Executor executor = createExecutor(context, historyRepo, listener);
 
             // 4. Determine the nodes to execute.
-            Set<NodeId> targetNodes = executor.determineTargetNodes(targetId);
+            Set<NodeId> selectedNodes = executor.determineTargetNodes(targetId);
 
-            if (targetNodes.isEmpty()) {
+            if (selectedNodes.isEmpty()) {
                 System.out.println("No migrations to execute. All migrations are up to date.");
                 return 0;
             }
 
             // 5. Build the ExecutionPlan and display the graph.
             ExecutionPlan plan =
-                    TopologicalSort.createExecutionPlanFor(context.graph(), targetNodes);
+                    TopologicalSort.createExecutionPlanFor(context.graph(), selectedNodes);
             displayMigrationGraph(context, plan, historyRepo);
 
             // 6. Stop here in dry-run mode.
@@ -144,7 +144,7 @@ public class UpCommand implements Command {
             System.out.println("Executing migrations...");
             System.out.println();
 
-            ExecutionResult result = executor.execute(targetNodes);
+            ExecutionResult result = executor.execute(selectedNodes);
             return result.success() ? 0 : 1;
 
         } catch (Exception e) {
@@ -185,7 +185,7 @@ public class UpCommand implements Command {
                 graphView.renderLines(
                         node -> {
                             String status =
-                                    historyRepo.wasExecuted(node.id(), node.environment().id())
+                                    historyRepo.wasExecuted(node.id(), node.target().id())
                                             ? "[✓]"
                                             : "[ ]";
                             return status + " " + node.id().value() + " - " + node.name();

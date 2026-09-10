@@ -10,9 +10,9 @@ import java.util.Optional;
  * <p>A {@code MigraphePlugin} ties together, under a single {@linkplain #type() type identifier},
  * the pieces required to run migrations against a particular kind of target (for example {@code
  * "postgresql"}, {@code "mysql"}, or {@code "jdbc"}): the configuration mapping types for tasks and
- * environments, and the providers that turn that configuration into runtime objects ({@link
- * EnvironmentProvider}, {@link MigrationNodeProvider}, and {@link HistoryRepositoryProvider}). It
- * may optionally expose a {@link SchemaInfoProvider} for the generator subsystem.
+ * targets, and the providers that turn that configuration into runtime objects ({@link
+ * TargetProvider}, {@link MigrationNodeProvider}, and {@link HistoryRepositoryProvider}). It may
+ * optionally expose a {@link SchemaInfoProvider} for the generator subsystem.
  *
  * <p>Implementations are discovered at runtime through the {@link java.util.ServiceLoader}
  * mechanism. To register a plugin, list its fully qualified class name in a {@code
@@ -36,13 +36,13 @@ import java.util.Optional;
  *     }
  *
  *     @Override
- *     public Class<PostgreSQLEnvironmentDefinition> environmentDefinitionClass() {
- *         return PostgreSQLEnvironmentDefinition.class;
+ *     public Class<PostgreSQLTargetDefinition> targetDefinitionClass() {
+ *         return PostgreSQLTargetDefinition.class;
  *     }
  *
  *     @Override
- *     public EnvironmentProvider environmentProvider() {
- *         return new PostgreSQLEnvironmentProvider();
+ *     public TargetProvider targetProvider() {
+ *         return new PostgreSQLTargetProvider();
  *     }
  *
  *     @Override
@@ -59,11 +59,11 @@ import java.util.Optional;
  *
  * @param <T> the type of the UP/DOWN action carried by this plugin's {@link TaskDefinition} (for
  *     example {@code String} for SQL-based plugins such as PostgreSQL)
- * @see EnvironmentProvider
+ * @see TargetProvider
  * @see MigrationNodeProvider
  * @see HistoryRepositoryProvider
  * @see TaskDefinition
- * @see EnvironmentDefinition
+ * @see TargetDefinition
  */
 public interface MigraphePlugin<T> {
 
@@ -89,22 +89,22 @@ public interface MigraphePlugin<T> {
     Class<? extends TaskDefinition<T>> taskDefinitionClass();
 
     /**
-     * Returns the plugin-specific {@link EnvironmentDefinition} subtype.
+     * Returns the plugin-specific {@link TargetDefinition} subtype.
      *
-     * <p>The framework uses the returned class to bind environment configuration from YAML. The
-     * subtype is expected to be implemented as a SmallRye {@code @ConfigMapping} interface.
+     * <p>The framework uses the returned class to bind target configuration from YAML. The subtype
+     * is expected to be implemented as a SmallRye {@code @ConfigMapping} interface.
      *
-     * @return the {@link Class} of this plugin's {@link EnvironmentDefinition} subtype
+     * @return the {@link Class} of this plugin's {@link TargetDefinition} subtype
      */
-    Class<? extends EnvironmentDefinition> environmentDefinitionClass();
+    Class<? extends TargetDefinition> targetDefinitionClass();
 
     /**
-     * Returns the provider that constructs {@link
-     * io.github.kakusuke.migraphe.api.environment.Environment} instances for this plugin.
+     * Returns the provider that constructs {@link io.github.kakusuke.migraphe.api.target.Target}
+     * instances for this plugin.
      *
-     * @return the {@link EnvironmentProvider} for this plugin
+     * @return the {@link TargetProvider} for this plugin
      */
-    EnvironmentProvider environmentProvider();
+    TargetProvider targetProvider();
 
     /**
      * Returns the provider that constructs {@link
@@ -126,8 +126,8 @@ public interface MigraphePlugin<T> {
      * Returns this plugin's {@link SchemaInfoProvider}, if any.
      *
      * <p>A schema-info provider lets the generator subsystem extract schema information from an
-     * environment. Plugins that do not support schema extraction can rely on the default, which
-     * returns {@link Optional#empty()}.
+     * target. Plugins that do not support schema extraction can rely on the default, which returns
+     * {@link Optional#empty()}.
      *
      * @return an {@link Optional} containing the plugin's {@link SchemaInfoProvider}, or an empty
      *     {@link Optional} if the plugin does not provide one

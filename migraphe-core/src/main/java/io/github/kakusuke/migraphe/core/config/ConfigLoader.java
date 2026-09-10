@@ -1,8 +1,8 @@
 package io.github.kakusuke.migraphe.core.config;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.ConfigMapping;
@@ -40,8 +40,8 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Only {@link ProjectConfig} is bound via {@code withMapping}; the dynamically-keyed {@code
  * target.*} and {@code task.*} entries are read programmatically through {@link
- * #loadEnvironmentDefinitions} and {@link #loadTaskDefinitions}, which map each entry onto the
- * relevant plugin's definition type via {@link PrefixedConfigSource}.
+ * #loadTargetDefinitions} and {@link #loadTaskDefinitions}, which map each entry onto the relevant
+ * plugin's definition type via {@link PrefixedConfigSource}.
  */
 public class ConfigLoader {
 
@@ -245,48 +245,47 @@ public class ConfigLoader {
     }
 
     /**
-     * Loads an {@link EnvironmentDefinition} for every target.
+     * Loads a {@link TargetDefinition} for every target.
      *
      * <p>Target ids are discovered from the {@code target.*} keys of the merged config; each
      * target's {@code type} identifies the plugin, and the target's properties are mapped onto that
-     * plugin's environment-definition type.
+     * plugin's target-definition type.
      *
      * @param mainConfig the merged main config containing the {@code target.*} entries
      * @param pluginRegistry the registry used to resolve plugins by type
-     * @return a map from target id to its loaded {@link EnvironmentDefinition}
+     * @return a map from target id to its loaded {@link TargetDefinition}
      * @throws ConfigurationException if a target's type is missing or unknown
      */
-    public Map<String, EnvironmentDefinition> loadEnvironmentDefinitions(
+    public Map<String, TargetDefinition> loadTargetDefinitions(
             SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
 
-        Map<String, EnvironmentDefinition> environmentDefinitions = new LinkedHashMap<>();
+        Map<String, TargetDefinition> targetDefinitions = new LinkedHashMap<>();
 
         // 1. Extract target ids from the target.* prefixed properties.
         Set<String> targetIds = extractTargetIds(mainConfig);
 
         for (String targetId : targetIds) {
-            EnvironmentDefinition envDef =
-                    loadEnvironmentDefinition(targetId, mainConfig, pluginRegistry);
-            environmentDefinitions.put(targetId, envDef);
+            TargetDefinition targetDef = loadTargetDefinition(targetId, mainConfig, pluginRegistry);
+            targetDefinitions.put(targetId, targetDef);
         }
 
-        return environmentDefinitions;
+        return targetDefinitions;
     }
 
     /**
-     * Loads the {@link EnvironmentDefinition} for a single target.
+     * Loads the {@link TargetDefinition} for a single target.
      *
      * <p>Reads {@code target.<targetId>.type}, resolves the corresponding plugin, then maps the
      * target's properties (exposed prefix-stripped via {@link PrefixedConfigSource}) onto the
-     * plugin's {@link MigraphePlugin#environmentDefinitionClass()}.
+     * plugin's {@link MigraphePlugin#targetDefinitionClass()}.
      *
      * @param targetId the target id
      * @param mainConfig the merged main config containing this target's properties
      * @param pluginRegistry the registry used to resolve the plugin by type
-     * @return the loaded environment definition
+     * @return the loaded target definition
      * @throws ConfigurationException if the target's {@code type} is missing
      */
-    public EnvironmentDefinition loadEnvironmentDefinition(
+    public TargetDefinition loadTargetDefinition(
             String targetId, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
 
         String prefix = "target." + targetId + ".";
@@ -300,16 +299,16 @@ public class ConfigLoader {
         // 2. Resolve the plugin.
         MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
 
-        // 3. Map onto the plugin's EnvironmentDefinition class.
+        // 3. Map onto the plugin's TargetDefinition class.
         // Build it from a prefix-stripped view of this target's properties.
         SmallRyeConfig envConfig =
                 new SmallRyeConfigBuilder()
                         .withSources(new PrefixedConfigSource(mainConfig, prefix))
-                        .withMapping(plugin.environmentDefinitionClass())
+                        .withMapping(plugin.targetDefinitionClass())
                         .withValidateUnknown(false)
                         .build();
 
-        return envConfig.getConfigMapping(plugin.environmentDefinitionClass());
+        return envConfig.getConfigMapping(plugin.targetDefinitionClass());
     }
 
     /**

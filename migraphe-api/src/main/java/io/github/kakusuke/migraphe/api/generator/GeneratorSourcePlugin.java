@@ -51,13 +51,13 @@ public interface GeneratorSourcePlugin<T> {
      * Extracts the data object for this generator from the given context.
      *
      * <p>The {@link SourceContext} supplies the inputs a source may need — an {@link
-     * io.github.kakusuke.migraphe.api.environment.Environment}, a {@link
+     * io.github.kakusuke.migraphe.api.target.Target}, a {@link
      * io.github.kakusuke.migraphe.api.graph.MigrationGraphView}, and a {@link
      * io.github.kakusuke.migraphe.api.history.HistoryRepository} — any of which may be absent
      * depending on the kind of generator being run. Implementations should read only the fields
      * they require and validate their presence.
      *
-     * @param context the extraction context carrying the optional environment, migration graph, and
+     * @param context the extraction context carrying the optional target, migration graph, and
      *     history repository
      * @return the extracted data object, to be passed to a compatible {@link GeneratorOutputPlugin}
      */

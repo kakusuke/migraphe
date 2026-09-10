@@ -7,9 +7,9 @@ import io.github.kakusuke.migraphe.jdbc.JdbcException;
  *
  * <p>Extends {@link JdbcException} so that callers handling generic JDBC-plugin failures also catch
  * PostgreSQL-specific ones. It is thrown for PostgreSQL plugin misconfiguration and type
- * mismatches, such as receiving a non-{@link PostgreSQLEnvironment} {@link
- * io.github.kakusuke.migraphe.api.environment.Environment} or an unexpected {@link
- * io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition}/{@link
+ * mismatches, such as receiving a non-{@link PostgreSQLTarget} {@link
+ * io.github.kakusuke.migraphe.api.target.Target} or an unexpected {@link
+ * io.github.kakusuke.migraphe.api.spi.TargetDefinition}/{@link
  * io.github.kakusuke.migraphe.api.spi.TaskDefinition} subtype.
  */
 public class PostgreSQLException extends JdbcException {

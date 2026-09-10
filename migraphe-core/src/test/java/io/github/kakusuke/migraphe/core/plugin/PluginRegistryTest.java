@@ -3,11 +3,11 @@ package io.github.kakusuke.migraphe.core.plugin;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentProvider;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -142,12 +142,12 @@ class PluginRegistryTest {
                     }
 
                     @Override
-                    public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
+                    public Class<? extends TargetDefinition> targetDefinitionClass() {
                         return null;
                     }
 
                     @Override
-                    public EnvironmentProvider environmentProvider() {
+                    public TargetProvider targetProvider() {
                         return null;
                     }
 
@@ -254,23 +254,23 @@ class PluginRegistryTest {
             }
 
             @Override
-            public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
+            public Class<? extends TargetDefinition> targetDefinitionClass() {
                 return null;
             }
 
             @Override
-            public EnvironmentProvider environmentProvider() {
+            public TargetProvider targetProvider() {
                 return (name, definition) -> null;
             }
 
             @Override
             public MigrationNodeProvider<Object> migrationNodeProvider() {
-                return (nodeId, task, dependencies, environment) -> null;
+                return (nodeId, task, dependencies, target) -> null;
             }
 
             @Override
             public HistoryRepositoryProvider historyRepositoryProvider() {
-                return (environment) -> null;
+                return (target) -> null;
             }
         };
     }

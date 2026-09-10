@@ -12,7 +12,7 @@ import java.util.Set;
  * Tracks which migration nodes are ready to execute as a direction-aware DAG is traversed.
  *
  * <p>This is the dispatch driver behind {@link DagExecutor}. It maintains a per-node in-degree
- * counter restricted to the {@code targetNodes} set: a node's in-degree is the number of its
+ * counter restricted to the {@code selectedNodes} set: a node's in-degree is the number of its
  * predecessors (in the configured {@link ExecutionDirection}) that are also targets. A node becomes
  * ready when its in-degree drops to zero. {@link #initialReadyNodes} returns the nodes that start
  * ready, and {@link #markCompleted} decrements the in-degrees of a completed node's successors and
@@ -29,7 +29,7 @@ import java.util.Set;
 public final class ReadyNodeTracker {
 
     private final MigrationGraph graph;
-    private final Set<NodeId> targetNodes;
+    private final Set<NodeId> selectedNodes;
     private final Map<NodeId, Integer> inDegrees;
     private final ExecutionDirection direction;
 
@@ -37,32 +37,32 @@ public final class ReadyNodeTracker {
      * Creates a tracker for an UP traversal.
      *
      * @param graph the migration graph whose edges define dependency order
-     * @param targetNodes the set of nodes participating in this run; in-degree counting is confined
-     *     to this set
+     * @param selectedNodes the set of nodes participating in this run; in-degree counting is
+     *     confined to this set
      */
-    public ReadyNodeTracker(MigrationGraph graph, Set<NodeId> targetNodes) {
-        this(graph, targetNodes, ExecutionDirection.UP);
+    public ReadyNodeTracker(MigrationGraph graph, Set<NodeId> selectedNodes) {
+        this(graph, selectedNodes, ExecutionDirection.UP);
     }
 
     /**
      * Creates a tracker for the given traversal direction.
      *
      * @param graph the migration graph whose edges define dependency order
-     * @param targetNodes the set of nodes participating in this run; in-degree counting is confined
-     *     to this set
+     * @param selectedNodes the set of nodes participating in this run; in-degree counting is
+     *     confined to this set
      * @param direction the traversal direction that determines predecessor/successor orientation
      */
     public ReadyNodeTracker(
-            MigrationGraph graph, Set<NodeId> targetNodes, ExecutionDirection direction) {
+            MigrationGraph graph, Set<NodeId> selectedNodes, ExecutionDirection direction) {
         this.graph = graph;
-        this.targetNodes = Set.copyOf(targetNodes);
+        this.selectedNodes = Set.copyOf(selectedNodes);
         this.inDegrees = new HashMap<>();
         this.direction = direction;
 
-        for (NodeId nodeId : targetNodes) {
+        for (NodeId nodeId : selectedNodes) {
             int count = 0;
             for (NodeId dep : predecessors(nodeId)) {
-                if (targetNodes.contains(dep)) {
+                if (selectedNodes.contains(dep)) {
                     count++;
                 }
             }
@@ -101,7 +101,7 @@ public final class ReadyNodeTracker {
     public synchronized Set<NodeId> markCompleted(NodeId nodeId) {
         Set<NodeId> newlyReady = new HashSet<>();
         for (NodeId dependent : successors(nodeId)) {
-            if (!targetNodes.contains(dependent)) {
+            if (!selectedNodes.contains(dependent)) {
                 continue;
             }
             int newCount = inDegrees.merge(dependent, -1, Integer::sum);

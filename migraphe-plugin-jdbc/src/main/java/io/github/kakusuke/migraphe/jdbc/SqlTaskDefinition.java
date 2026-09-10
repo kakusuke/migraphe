@@ -45,7 +45,7 @@ public interface SqlTaskDefinition extends TaskDefinition<String> {
     /**
      * Returns the target identifier this task runs against.
      *
-     * @return the target (environment) identifier
+     * @return the target (target) identifier
      */
     @Override
     String target();

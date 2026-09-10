@@ -68,7 +68,7 @@ public abstract class AbstractMigrapheTask extends DefaultTask {
     public abstract MapProperty<String, String> getVariables();
 
     /**
-     * Returns the deployment-environment name whose {@code environments/<env>.yaml} overlay is
+     * Returns the deployment-environment name whose {@code environments/<target>.yaml} overlay is
      * applied on top of the base configuration.
      *
      * <p>Settable in the {@code migraphe { ... }} block, via {@code -Pmigraphe.env=...}, or with

@@ -2,11 +2,11 @@ package io.github.kakusuke.migraphe.cli.command;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -64,8 +64,8 @@ class UpCommandTest {
         try {
             createTestProject(tempDir);
             ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
-            Environment env = context.environments().get("test-db");
-            if (env instanceof PostgreSQLEnvironment pgEnv) {
+            Target env = context.targets().get("test-db");
+            if (env instanceof PostgreSQLTarget pgEnv) {
                 try (Connection conn = pgEnv.createConnection();
                         Statement stmt = conn.createStatement()) {
                     // Drop all user tables
@@ -449,8 +449,8 @@ class UpCommandTest {
 
     /** クエリを実行して最初の列の int 値を返す。 */
     private int rowCount(ExecutionContext context, String query) throws Exception {
-        Environment env = context.environments().get("test-db");
-        PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) env;
+        Target env = context.targets().get("test-db");
+        PostgreSQLTarget pgEnv = (PostgreSQLTarget) env;
         try (Connection conn = pgEnv.createConnection();
                 Statement stmt = conn.createStatement();
                 java.sql.ResultSet rs = stmt.executeQuery(query)) {

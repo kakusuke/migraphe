@@ -1,13 +1,12 @@
 package io.github.kakusuke.migraphe.mysql.schema;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
 import io.github.kakusuke.migraphe.api.generator.SourceContext;
+import io.github.kakusuke.migraphe.api.target.Target;
 import java.util.Objects;
 
 /**
- * Generator source plugin that extracts MySQL-specific schema information from a connected
- * environment.
+ * Generator source plugin that extracts MySQL-specific schema information from a connected target.
  *
  * <p>This is the MySQL implementation of {@link GeneratorSourcePlugin}; it is selected when a
  * generator's {@code source.type} is {@code "mysql-schema"} and produces a {@link MySQLSchemaInfo}
@@ -49,20 +48,20 @@ public final class MySQLSchemaSourcePlugin implements GeneratorSourcePlugin<MySQ
     }
 
     /**
-     * Extracts MySQL schema information from the environment carried by the given context.
+     * Extracts MySQL schema information from the target carried by the given context.
      *
-     * @param context the extraction context; its {@link SourceContext#environment() environment}
-     *     must be present and must be a MySQL environment
+     * @param context the extraction context; its {@link SourceContext#target() target} must be
+     *     present and must be a MySQL target
      * @return the extracted MySQL schema snapshot
-     * @throws NullPointerException if the context carries no environment
-     * @throws io.github.kakusuke.migraphe.mysql.MySQLException if the environment is not a {@code
-     *     MySQLEnvironment} or schema introspection fails
+     * @throws NullPointerException if the context carries no target
+     * @throws io.github.kakusuke.migraphe.mysql.MySQLException if the target is not a {@code
+     *     MySQLTarget} or schema introspection fails
      */
     @Override
     public MySQLSchemaInfo extract(SourceContext context) {
-        Environment environment =
+        Target target =
                 Objects.requireNonNull(
-                        context.environment(), "Environment is required for mysql-schema source");
-        return new MySQLSchemaInfoProvider().getSchemaInfo(environment);
+                        context.target(), "Target is required for mysql-schema source");
+        return new MySQLSchemaInfoProvider().getSchemaInfo(target);
     }
 }

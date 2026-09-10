@@ -1,17 +1,17 @@
 package io.github.kakusuke.migraphe.mysql;
 
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithName;
 import java.util.Optional;
 
 /**
- * MySQL-specific {@link EnvironmentDefinition} subtype.
+ * MySQL-specific {@link TargetDefinition} subtype.
  *
  * <p>This is the configuration view of a single MySQL target. It is a SmallRye
  * {@code @ConfigMapping} interface whose properties bind directly from a target's YAML file; the
- * target name is derived from the file name. {@link MySQLEnvironmentProvider} consumes a bound
- * instance to build a {@link MySQLEnvironment}.
+ * target name is derived from the file name. {@link MySQLTargetProvider} consumes a bound instance
+ * to build a {@link MySQLTarget}.
  *
  * <p>Example {@code targets/db1.yaml}:
  *
@@ -22,16 +22,16 @@ import java.util.Optional;
  * password: secret
  * }</pre>
  *
- * @see MySQLPlugin#environmentDefinitionClass()
- * @see MySQLEnvironmentProvider
+ * @see MySQLPlugin#targetDefinitionClass()
+ * @see MySQLTargetProvider
  */
 @ConfigMapping(prefix = "")
-public interface MySQLEnvironmentDefinition extends EnvironmentDefinition {
+public interface MySQLTargetDefinition extends TargetDefinition {
 
     /**
      * Returns the target type, which is {@code "mysql"} for MySQL targets.
      *
-     * @return the environment type identifier
+     * @return the target type identifier
      */
     @Override
     String type();

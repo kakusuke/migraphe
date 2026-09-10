@@ -1,7 +1,7 @@
 package io.github.kakusuke.migraphe.mysql.schema;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.schema.SchemaInfoProvider;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcColumnInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcForeignKeyInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcIndexColumn;
@@ -10,8 +10,8 @@ import io.github.kakusuke.migraphe.jdbc.schema.JdbcPrimaryKeyInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaDetail;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcTableInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcViewInfo;
-import io.github.kakusuke.migraphe.mysql.MySQLEnvironment;
 import io.github.kakusuke.migraphe.mysql.MySQLException;
+import io.github.kakusuke.migraphe.mysql.MySQLTarget;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
@@ -24,10 +24,10 @@ import java.util.Map;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Extracts a {@link MySQLSchemaInfo} snapshot from a connected MySQL environment.
+ * Extracts a {@link MySQLSchemaInfo} snapshot from a connected MySQL target.
  *
  * <p>This is the MySQL implementation of {@link SchemaInfoProvider}. It opens a connection through
- * the supplied {@link MySQLEnvironment}, reads the portable structure (tables, views, columns,
+ * the supplied {@link MySQLTarget}, reads the portable structure (tables, views, columns,
  * primary/foreign keys, indexes) through {@link DatabaseMetaData}, and supplements it with
  * MySQL-only objects queried directly from {@code information_schema}: storage engines, table
  * metadata, triggers, stored routines, scheduled events, table partitions, and view definers. The
@@ -46,18 +46,18 @@ public class MySQLSchemaInfoProvider implements SchemaInfoProvider<MySQLSchemaIn
     public MySQLSchemaInfoProvider() {}
 
     /**
-     * Connects to the given environment and extracts a complete MySQL schema snapshot.
+     * Connects to the given target and extracts a complete MySQL schema snapshot.
      *
-     * @param environment the environment to introspect; must be a {@link MySQLEnvironment}
+     * @param target the target to introspect; must be a {@link MySQLTarget}
      * @return the extracted MySQL schema information for the connection's current database
-     * @throws MySQLException if {@code environment} is not a {@link MySQLEnvironment}, or if a
-     *     {@link SQLException} occurs while reading metadata or {@code information_schema}
+     * @throws MySQLException if {@code target} is not a {@link MySQLTarget}, or if a {@link
+     *     SQLException} occurs while reading metadata or {@code information_schema}
      */
     @Override
-    public MySQLSchemaInfo getSchemaInfo(Environment environment) {
-        if (!(environment instanceof MySQLEnvironment mysqlEnv)) {
+    public MySQLSchemaInfo getSchemaInfo(Target target) {
+        if (!(target instanceof MySQLTarget mysqlEnv)) {
             throw new MySQLException(
-                    "Environment must be a MySQLEnvironment: " + environment.getClass().getName());
+                    "Target must be a MySQLTarget: " + target.getClass().getName());
         }
         try (Connection conn = mysqlEnv.createConnection()) {
             DatabaseMetaData meta = conn.getMetaData();

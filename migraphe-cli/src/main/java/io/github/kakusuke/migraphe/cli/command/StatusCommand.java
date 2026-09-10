@@ -11,7 +11,7 @@ import java.util.List;
  * The {@code status} command, which reports the execution state of every migration.
  *
  * <p>Renders the whole migration graph and, for each node, marks whether it has been executed
- * against its environment. Executed nodes additionally show the most recent run's duration and
+ * against its target. Executed nodes additionally show the most recent run's duration and
  * timestamp. A summary line tallies the total, executed, and pending counts.
  */
 public class StatusCommand implements Command {
@@ -48,7 +48,7 @@ public class StatusCommand implements Command {
                     graphView.renderLines(
                             node -> {
                                 boolean executed =
-                                        historyRepo.wasExecuted(node.id(), node.environment().id());
+                                        historyRepo.wasExecuted(node.id(), node.target().id());
                                 StringBuilder sb = new StringBuilder();
                                 if (executed) {
                                     executedCount[0]++;
@@ -61,7 +61,7 @@ public class StatusCommand implements Command {
                                 if (executed) {
                                     ExecutionRecord record =
                                             historyRepo.findLatestRecord(
-                                                    node.id(), node.environment().id());
+                                                    node.id(), node.target().id());
                                     if (record != null) {
                                         sb.append(" (")
                                                 .append(

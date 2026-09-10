@@ -1,29 +1,29 @@
-package io.github.kakusuke.migraphe.core.environment;
+package io.github.kakusuke.migraphe.core.target;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import org.junit.jupiter.api.Test;
 
-class EnvironmentIdTest {
+class TargetIdTest {
 
     @Test
-    void shouldCreateEnvironmentIdWithValidValue() {
+    void shouldCreateTargetIdWithValidValue() {
         // given
         String value = "dev";
 
         // when
-        EnvironmentId envId = EnvironmentId.of(value);
+        TargetId targetId = TargetId.of(value);
 
         // then
-        assertThat(envId.value()).isEqualTo(value);
+        assertThat(targetId.value()).isEqualTo(value);
     }
 
     @Test
     void shouldThrowExceptionWhenValueIsNull() {
         // when & then
-        assertThatThrownBy(() -> EnvironmentId.of(null))
+        assertThatThrownBy(() -> TargetId.of(null))
                 .isInstanceOf(NullPointerException.class)
                 .hasMessageContaining("value must not be null");
     }
@@ -31,20 +31,20 @@ class EnvironmentIdTest {
     @Test
     void shouldThrowExceptionWhenValueIsBlank() {
         // when & then
-        assertThatThrownBy(() -> EnvironmentId.of(""))
+        assertThatThrownBy(() -> TargetId.of(""))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("EnvironmentId value must not be blank");
+                .hasMessageContaining("TargetId value must not be blank");
 
-        assertThatThrownBy(() -> EnvironmentId.of("   "))
+        assertThatThrownBy(() -> TargetId.of("   "))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("EnvironmentId value must not be blank");
+                .hasMessageContaining("TargetId value must not be blank");
     }
 
     @Test
     void shouldBeEqualWhenValuesAreSame() {
         // given
-        EnvironmentId envId1 = EnvironmentId.of("production");
-        EnvironmentId envId2 = EnvironmentId.of("production");
+        TargetId envId1 = TargetId.of("production");
+        TargetId envId2 = TargetId.of("production");
 
         // when & then
         assertThat(envId1).isEqualTo(envId2);
@@ -54,8 +54,8 @@ class EnvironmentIdTest {
     @Test
     void shouldNotBeEqualWhenValuesAreDifferent() {
         // given
-        EnvironmentId envId1 = EnvironmentId.of("dev");
-        EnvironmentId envId2 = EnvironmentId.of("staging");
+        TargetId envId1 = TargetId.of("dev");
+        TargetId envId2 = TargetId.of("staging");
 
         // when & then
         assertThat(envId1).isNotEqualTo(envId2);

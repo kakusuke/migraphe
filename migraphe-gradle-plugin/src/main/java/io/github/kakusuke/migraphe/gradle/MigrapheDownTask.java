@@ -112,15 +112,15 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
     public void down() {
         withExecutionContext(
                 context -> {
-                    NodeId targetVersion = null;
+                    NodeId requestedNode = null;
                     if (getTarget().isPresent()) {
-                        targetVersion = NodeId.of(getTarget().get());
+                        requestedNode = NodeId.of(getTarget().get());
                     }
 
                     boolean allMigrations = getAll().getOrElse(false);
                     boolean dryRun = getDryRun().getOrElse(false);
 
-                    if (!allMigrations && targetVersion == null) {
+                    if (!allMigrations && requestedNode == null) {
                         throw new GradleException(
                                 "Either --all or --target must be specified.\n"
                                         + "Usage:\n"
@@ -128,9 +128,9 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                                         + "  ./gradlew migrapheDown --target=<nodeId>");
                     }
 
-                    if (targetVersion != null && context.graph().getNode(targetVersion).isEmpty()) {
+                    if (requestedNode != null && context.graph().getNode(requestedNode).isEmpty()) {
                         throw new GradleException(
-                                "Target version not found: " + targetVersion.value());
+                                "Target version not found: " + requestedNode.value());
                     }
 
                     HistoryRepository historyRepo = context.createHistoryRepository();
@@ -145,17 +145,17 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                                     ExecutionDirection.DOWN,
                                     1);
 
-                    Set<NodeId> targetNodes =
-                            executor.determineRollbackTargets(targetVersion, allMigrations);
+                    Set<NodeId> selectedNodes =
+                            executor.determineRollbackTargets(requestedNode, allMigrations);
 
-                    if (targetNodes.isEmpty()) {
+                    if (selectedNodes.isEmpty()) {
                         getLogger().lifecycle("No migrations to rollback.");
                         return;
                     }
 
                     ExecutionPlan plan =
                             TopologicalSort.createReverseExecutionPlanFor(
-                                    context.graph(), targetNodes);
+                                    context.graph(), selectedNodes);
                     displayRollbackPlan(context, plan, historyRepo, dryRun);
 
                     if (dryRun) {
@@ -168,7 +168,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                     getLogger().lifecycle("Executing rollback...");
                     getLogger().lifecycle("");
 
-                    ExecutionResult result = executor.execute(targetNodes);
+                    ExecutionResult result = executor.execute(selectedNodes);
                     if (!result.success()) {
                         throw new GradleException("Rollback failed.");
                     }
@@ -200,7 +200,7 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                 graphView.renderLines(
                         node -> {
                             String status =
-                                    historyRepo.wasExecuted(node.id(), node.environment().id())
+                                    historyRepo.wasExecuted(node.id(), node.target().id())
                                             ? "[✓]"
                                             : "[ ]";
                             return status + " " + node.id().value() + " - " + node.name();

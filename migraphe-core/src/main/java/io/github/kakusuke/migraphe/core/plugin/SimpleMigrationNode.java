@@ -1,8 +1,8 @@
 package io.github.kakusuke.migraphe.core.plugin;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.api.task.Task;
 import java.util.Objects;
 import java.util.Set;
@@ -18,13 +18,13 @@ import org.jspecify.annotations.Nullable;
  *
  * @see MigrationNode
  * @see SimpleTask
- * @see SimpleEnvironment
+ * @see SimpleTarget
  */
 public final class SimpleMigrationNode implements MigrationNode {
     private final NodeId id;
     private final String name;
     private final @Nullable String description;
-    private final Environment environment;
+    private final Target target;
     private final Set<NodeId> dependencies;
     private final Task upTask;
     private final @Nullable Task downTask;
@@ -33,8 +33,7 @@ public final class SimpleMigrationNode implements MigrationNode {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
         this.name = Objects.requireNonNull(builder.name, "name must not be null");
         this.description = builder.description;
-        this.environment =
-                Objects.requireNonNull(builder.environment, "environment must not be null");
+        this.target = Objects.requireNonNull(builder.target, "target must not be null");
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upTask = Objects.requireNonNull(builder.upTask, "upTask must not be null");
         this.downTask = builder.downTask;
@@ -56,8 +55,8 @@ public final class SimpleMigrationNode implements MigrationNode {
     }
 
     @Override
-    public Environment environment() {
-        return environment;
+    public Target target() {
+        return target;
     }
 
     @Override
@@ -88,10 +87,10 @@ public final class SimpleMigrationNode implements MigrationNode {
      * Fluent builder for {@link SimpleMigrationNode}.
      *
      * <p>At minimum the {@linkplain #id(NodeId) id}, {@linkplain #name(String) name}, {@linkplain
-     * #environment(Environment) environment}, and {@linkplain #upTask(Task) up task} must be set
-     * before {@link #build()} is called; otherwise {@code build()} throws {@link
-     * NullPointerException}. Dependencies default to the empty set and {@code description}/{@code
-     * downTask} default to {@code null}.
+     * #target(Target) target}, and {@linkplain #upTask(Task) up task} must be set before {@link
+     * #build()} is called; otherwise {@code build()} throws {@link NullPointerException}.
+     * Dependencies default to the empty set and {@code description}/{@code downTask} default to
+     * {@code null}.
      */
     public static class Builder {
 
@@ -101,7 +100,7 @@ public final class SimpleMigrationNode implements MigrationNode {
         private @Nullable NodeId id;
         private @Nullable String name;
         private @Nullable String description;
-        private @Nullable Environment environment;
+        private @Nullable Target target;
         private Set<NodeId> dependencies = Set.of();
         private @Nullable Task upTask;
         private @Nullable Task downTask;
@@ -151,13 +150,13 @@ public final class SimpleMigrationNode implements MigrationNode {
         }
 
         /**
-         * Sets the environment (target) the node runs against.
+         * Sets the target (target) the node runs against.
          *
-         * @param environment the environment
+         * @param target the target
          * @return this builder
          */
-        public Builder environment(Environment environment) {
-            this.environment = environment;
+        public Builder target(Target target) {
+            this.target = target;
             return this;
         }
 
@@ -209,7 +208,7 @@ public final class SimpleMigrationNode implements MigrationNode {
          * Builds the {@link SimpleMigrationNode} from this builder's current state.
          *
          * @return the constructed node
-         * @throws NullPointerException if {@code id}, {@code name}, {@code environment}, or {@code
+         * @throws NullPointerException if {@code id}, {@code name}, {@code target}, or {@code
          *     upTask} has not been set
          */
         public SimpleMigrationNode build() {
@@ -237,8 +236,8 @@ public final class SimpleMigrationNode implements MigrationNode {
                 + ", name='"
                 + name
                 + '\''
-                + ", environment="
-                + environment.name()
+                + ", target="
+                + target.name()
                 + ", dependencies="
                 + dependencies.size()
                 + '}';

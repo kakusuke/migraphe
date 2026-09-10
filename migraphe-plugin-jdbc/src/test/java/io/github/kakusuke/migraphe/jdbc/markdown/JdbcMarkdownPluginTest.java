@@ -6,7 +6,7 @@ import io.github.kakusuke.migraphe.api.generator.DefinitionResolver;
 import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.OutputContext;
-import io.github.kakusuke.migraphe.jdbc.JdbcEnvironment;
+import io.github.kakusuke.migraphe.jdbc.JdbcTarget;
 import io.github.kakusuke.migraphe.jdbc.schema.DefaultJdbcSchemaInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfo;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfoProvider;
@@ -103,15 +103,15 @@ class JdbcMarkdownPluginTest {
     }
 
     private JdbcSchemaInfo schemaInfoWithUsersAndOrders(String dbName) throws Exception {
-        JdbcEnvironment env =
-                JdbcEnvironment.create(
+        JdbcTarget target =
+                JdbcTarget.create(
                         dbName,
                         "jdbc:h2:mem:" + dbName + ";DB_CLOSE_DELAY=-1",
                         "sa",
                         "",
                         "org.h2.Driver",
                         "H2");
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP TABLE IF EXISTS orders");
             stmt.execute("DROP TABLE IF EXISTS users");
@@ -123,7 +123,7 @@ class JdbcMarkdownPluginTest {
                             + "CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES"
                             + " users(id))");
         }
-        return new JdbcSchemaInfoProvider().getSchemaInfo(env);
+        return new JdbcSchemaInfoProvider().getSchemaInfo(target);
     }
 
     @Test

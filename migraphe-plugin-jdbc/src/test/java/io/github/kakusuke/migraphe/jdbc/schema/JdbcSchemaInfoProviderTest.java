@@ -2,7 +2,7 @@ package io.github.kakusuke.migraphe.jdbc.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.jdbc.JdbcEnvironment;
+import io.github.kakusuke.migraphe.jdbc.JdbcTarget;
 import java.sql.Connection;
 import java.sql.Statement;
 import org.junit.jupiter.api.AfterEach;
@@ -11,20 +11,20 @@ import org.junit.jupiter.api.Test;
 
 class JdbcSchemaInfoProviderTest {
 
-    private JdbcEnvironment env;
+    private JdbcTarget target;
     private JdbcSchemaInfoProvider provider;
 
     @BeforeEach
     void setUp() throws Exception {
-        env =
-                JdbcEnvironment.create(
+        target =
+                JdbcTarget.create(
                         "schema_info_test",
                         "jdbc:h2:mem:schema_info_test;DB_CLOSE_DELAY=-1",
                         "sa",
                         "",
                         "org.h2.Driver",
                         "H2");
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP VIEW IF EXISTS active_users");
             stmt.execute("DROP TABLE IF EXISTS orders");
@@ -52,7 +52,7 @@ class JdbcSchemaInfoProviderTest {
 
     @AfterEach
     void tearDown() throws Exception {
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP VIEW IF EXISTS active_users");
             stmt.execute("DROP TABLE IF EXISTS orders");
@@ -62,7 +62,7 @@ class JdbcSchemaInfoProviderTest {
 
     @Test
     void getSchemaInfoReturnsTablesWithColumns() {
-        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
         assertThat(schemaInfo.schemas()).isNotEmpty();
         JdbcSchemaDetail schema = schemaInfo.schemas().get(0);
@@ -99,7 +99,7 @@ class JdbcSchemaInfoProviderTest {
 
     @Test
     void getSchemaInfoReturnsPrimaryKey() {
-        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
         JdbcTableInfo usersTable =
                 schemaInfo.schemas().get(0).tables().stream()
@@ -113,7 +113,7 @@ class JdbcSchemaInfoProviderTest {
 
     @Test
     void getSchemaInfoReturnsForeignKeys() {
-        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
         JdbcTableInfo ordersTable =
                 schemaInfo.schemas().get(0).tables().stream()
@@ -131,7 +131,7 @@ class JdbcSchemaInfoProviderTest {
 
     @Test
     void getSchemaInfoReturnsExportedKeys() {
-        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
         JdbcTableInfo usersTable =
                 schemaInfo.schemas().get(0).tables().stream()
@@ -148,7 +148,7 @@ class JdbcSchemaInfoProviderTest {
     @Test
     void getSchemaInfoReturnsExportedKeysForChildTablesInDifferentSchemasWithSameConstraintName()
             throws Exception {
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP SCHEMA IF EXISTS s1 CASCADE");
             stmt.execute("DROP SCHEMA IF EXISTS s2 CASCADE");
@@ -170,7 +170,7 @@ class JdbcSchemaInfoProviderTest {
                             + " PUBLIC.parent(id))");
 
             try {
-                JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+                JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
                 JdbcTableInfo parentTable = findTable(schemaInfo, "parent");
                 assertThat(parentTable.exportedKeys()).hasSize(2);
@@ -188,7 +188,7 @@ class JdbcSchemaInfoProviderTest {
 
     @Test
     void getSchemaInfoAggregatesMultiColumnForeignKeyIntoSingleEntry() throws Exception {
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP TABLE IF EXISTS child_composite");
             stmt.execute("DROP TABLE IF EXISTS parent_composite");
@@ -203,7 +203,7 @@ class JdbcSchemaInfoProviderTest {
                             + " parent_composite(a, b))");
 
             try {
-                JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+                JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
                 JdbcTableInfo childTable = findTable(schemaInfo, "child_composite");
                 assertThat(childTable.foreignKeys()).hasSize(1);
@@ -230,7 +230,7 @@ class JdbcSchemaInfoProviderTest {
 
     @Test
     void getSchemaInfoReturnsIndexes() {
-        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
         JdbcTableInfo ordersTable =
                 schemaInfo.schemas().get(0).tables().stream()
@@ -255,7 +255,7 @@ class JdbcSchemaInfoProviderTest {
 
     @Test
     void getSchemaInfoReturnsViews() {
-        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(env);
+        JdbcSchemaInfo schemaInfo = provider.getSchemaInfo(target);
 
         JdbcSchemaDetail schema = schemaInfo.schemas().get(0);
         assertThat(schema.views())

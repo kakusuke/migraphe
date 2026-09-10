@@ -1,7 +1,7 @@
 package io.github.kakusuke.migraphe.api.history;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.time.Instant;
 import java.util.Objects;
@@ -21,7 +21,7 @@ import org.jspecify.annotations.Nullable;
  *     that order and can break ties between records sharing an {@code executedAt} value; a record
  *     constructed directly may carry any unique string
  * @param nodeId the identifier of the node that was executed
- * @param environmentId the environment in which the execution took place
+ * @param targetId the target in which the execution took place
  * @param direction whether the execution was {@link ExecutionDirection#UP} or {@link
  *     ExecutionDirection#DOWN}
  * @param status the outcome of the execution
@@ -39,7 +39,7 @@ import org.jspecify.annotations.Nullable;
 public record ExecutionRecord(
         String id, // unique ID of this execution record
         NodeId nodeId, // ID of the node that was executed
-        EnvironmentId environmentId, // environment the node ran against
+        TargetId targetId, // target the node ran against
         ExecutionDirection direction, // UP or DOWN
         ExecutionStatus status, // SUCCESS, FAILURE, SKIPPED
         Instant executedAt, // timestamp of the execution
@@ -51,7 +51,7 @@ public record ExecutionRecord(
     /**
      * Canonical constructor that validates the record invariants.
      *
-     * @throws NullPointerException if {@code id}, {@code nodeId}, {@code environmentId}, {@code
+     * @throws NullPointerException if {@code id}, {@code nodeId}, {@code targetId}, {@code
      *     direction}, {@code status}, {@code executedAt}, or {@code description} is {@code null}
      * @throws IllegalArgumentException if {@code status} is {@link ExecutionStatus#FAILURE} but
      *     {@code errorMessage} is {@code null}, or if {@code direction} is {@link
@@ -60,7 +60,7 @@ public record ExecutionRecord(
     public ExecutionRecord {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(nodeId, "nodeId must not be null");
-        Objects.requireNonNull(environmentId, "environmentId must not be null");
+        Objects.requireNonNull(targetId, "targetId must not be null");
         Objects.requireNonNull(direction, "direction must not be null");
         Objects.requireNonNull(status, "status must not be null");
         Objects.requireNonNull(executedAt, "executedAt must not be null");
@@ -83,7 +83,7 @@ public record ExecutionRecord(
      * instant.
      *
      * @param nodeId the identifier of the executed node
-     * @param environmentId the environment in which the execution took place
+     * @param targetId the target in which the execution took place
      * @param description a human-readable description of the executed task
      * @param serializedDownTask the serialized down task captured for later rollback, or {@code
      *     null} if the step does not support rollback
@@ -93,14 +93,14 @@ public record ExecutionRecord(
      */
     public static ExecutionRecord upSuccess(
             NodeId nodeId,
-            EnvironmentId environmentId,
+            TargetId targetId,
             String description,
             @Nullable String serializedDownTask,
             long durationMs) {
         return new ExecutionRecord(
                 RecordIds.newId(),
                 nodeId,
-                environmentId,
+                targetId,
                 ExecutionDirection.UP,
                 ExecutionStatus.SUCCESS,
                 Instant.now(),
@@ -117,18 +117,18 @@ public record ExecutionRecord(
      * instant. Down records never carry a serialized down task.
      *
      * @param nodeId the identifier of the executed node
-     * @param environmentId the environment in which the execution took place
+     * @param targetId the target in which the execution took place
      * @param description a human-readable description of the executed task
      * @param durationMs the execution duration in milliseconds
      * @return a new {@code ExecutionRecord} with status {@link ExecutionStatus#SUCCESS} and
      *     direction {@link ExecutionDirection#DOWN}
      */
     public static ExecutionRecord downSuccess(
-            NodeId nodeId, EnvironmentId environmentId, String description, long durationMs) {
+            NodeId nodeId, TargetId targetId, String description, long durationMs) {
         return new ExecutionRecord(
                 RecordIds.newId(),
                 nodeId,
-                environmentId,
+                targetId,
                 ExecutionDirection.DOWN,
                 ExecutionStatus.SUCCESS,
                 Instant.now(),
@@ -145,7 +145,7 @@ public record ExecutionRecord(
      * instant, and its duration is recorded as zero.
      *
      * @param nodeId the identifier of the executed node
-     * @param environmentId the environment in which the execution took place
+     * @param targetId the target in which the execution took place
      * @param direction whether the failed execution was up or down
      * @param description a human-readable description of the executed task
      * @param errorMessage the error message describing the failure; must be non-{@code null}
@@ -153,14 +153,14 @@ public record ExecutionRecord(
      */
     public static ExecutionRecord failure(
             NodeId nodeId,
-            EnvironmentId environmentId,
+            TargetId targetId,
             ExecutionDirection direction,
             String description,
             String errorMessage) {
         return new ExecutionRecord(
                 RecordIds.newId(),
                 nodeId,
-                environmentId,
+                targetId,
                 direction,
                 ExecutionStatus.FAILURE,
                 Instant.now(),
@@ -178,17 +178,17 @@ public record ExecutionRecord(
      * recorded as zero. The skip reason is stored in the error message field.
      *
      * @param nodeId the identifier of the skipped node
-     * @param environmentId the environment in which the skip occurred
+     * @param targetId the target in which the skip occurred
      * @param description a human-readable description of the task
      * @param reason the reason the execution was skipped (for example, already applied)
      * @return a new {@code ExecutionRecord} with status {@link ExecutionStatus#SKIPPED}
      */
     public static ExecutionRecord skipped(
-            NodeId nodeId, EnvironmentId environmentId, String description, String reason) {
+            NodeId nodeId, TargetId targetId, String description, String reason) {
         return new ExecutionRecord(
                 RecordIds.newId(),
                 nodeId,
-                environmentId,
+                targetId,
                 ExecutionDirection.UP, // a skip is normally recorded in the UP direction
                 ExecutionStatus.SKIPPED,
                 Instant.now(),

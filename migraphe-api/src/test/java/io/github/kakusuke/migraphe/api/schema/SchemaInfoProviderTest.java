@@ -2,20 +2,20 @@ package io.github.kakusuke.migraphe.api.schema;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import org.junit.jupiter.api.Test;
 
 class SchemaInfoProviderTest {
 
     @Test
-    void shouldReturnSchemaInfoFromEnvironment() {
+    void shouldReturnSchemaInfoFromTarget() {
         // given
-        Environment environment =
-                new Environment() {
+        Target target =
+                new Target() {
                     @Override
-                    public EnvironmentId id() {
-                        return EnvironmentId.of("test");
+                    public TargetId id() {
+                        return TargetId.of("test");
                     }
 
                     @Override
@@ -23,10 +23,10 @@ class SchemaInfoProviderTest {
                         return "test";
                     }
                 };
-        SchemaInfoProvider<String> provider = env -> env.name();
+        SchemaInfoProvider<String> provider = source -> source.name();
 
         // when
-        String schemaInfo = provider.getSchemaInfo(environment);
+        String schemaInfo = provider.getSchemaInfo(target);
 
         // then
         assertThat(schemaInfo).isEqualTo("test");

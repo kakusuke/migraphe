@@ -3,7 +3,7 @@ package io.github.kakusuke.migraphe.core.plugin.noop;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
-import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
+import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -24,7 +24,7 @@ class NoopMigrationNodeProviderTest {
     @Test
     void shouldCreateNodeWithCorrectId() {
         var provider = new NoopMigrationNodeProvider();
-        var env = SimpleEnvironment.create("main");
+        var env = SimpleTarget.create("main");
         var nodeId = NodeId.of("test/node");
         var taskDef = createTaskDef("Test Node", "create table");
 
@@ -32,14 +32,14 @@ class NoopMigrationNodeProviderTest {
 
         assertThat(node.id()).isEqualTo(nodeId);
         assertThat(node.name()).isEqualTo("Test Node");
-        assertThat(node.environment()).isEqualTo(env);
+        assertThat(node.target()).isEqualTo(env);
         assertThat(node.dependencies()).isEmpty();
     }
 
     @Test
     void shouldCreateNodeWithDependencies() {
         var provider = new NoopMigrationNodeProvider();
-        var env = SimpleEnvironment.create("main");
+        var env = SimpleTarget.create("main");
         var nodeId = NodeId.of("test/node");
         var dep1 = NodeId.of("test/dep1");
         var dep2 = NodeId.of("test/dep2");
@@ -53,7 +53,7 @@ class NoopMigrationNodeProviderTest {
     @Test
     void upTaskShouldReturnSuccess() {
         var provider = new NoopMigrationNodeProvider();
-        var env = SimpleEnvironment.create("main");
+        var env = SimpleTarget.create("main");
         var nodeId = NodeId.of("test/node");
         var taskDef = createTaskDef("Test Node", "create table");
 
@@ -76,7 +76,7 @@ class NoopMigrationNodeProviderTest {
         var taskDef = config.getConfigMapping(NoopTaskDefinition.class);
 
         var provider = new NoopMigrationNodeProvider();
-        var env = SimpleEnvironment.create("main");
+        var env = SimpleTarget.create("main");
         var node = provider.createNode(NodeId.of("test/node"), taskDef, Set.of(), env);
 
         assertThat(node.downTask()).isNotNull();
@@ -86,7 +86,7 @@ class NoopMigrationNodeProviderTest {
     @Test
     void downTaskShouldBeNullWhenDownNotDefined() {
         var provider = new NoopMigrationNodeProvider();
-        var env = SimpleEnvironment.create("main");
+        var env = SimpleTarget.create("main");
         var taskDef = createTaskDef("Test Node", "create table");
 
         var node = provider.createNode(NodeId.of("test/node"), taskDef, Set.of(), env);

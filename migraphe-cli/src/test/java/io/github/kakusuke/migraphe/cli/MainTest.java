@@ -123,7 +123,7 @@ class MainTest {
         assertThat(contextWithEnv.config().getValue("DB_HOST", String.class))
                 .isEqualTo("staging-host");
         assertThat(contextWithoutEnv.config().getOptionalValue("DB_HOST", String.class)).isEmpty();
-        assertThat(contextWithEnv.environments()).containsKey("noop-db");
+        assertThat(contextWithEnv.targets()).containsKey("noop-db");
     }
 
     @Test

@@ -4,11 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcForeignKeyInfo;
-import io.github.kakusuke.migraphe.mysql.MySQLEnvironment;
 import io.github.kakusuke.migraphe.mysql.MySQLException;
+import io.github.kakusuke.migraphe.mysql.MySQLTarget;
 import java.sql.Connection;
 import java.sql.Statement;
 import org.junit.jupiter.api.Test;
@@ -25,26 +25,26 @@ class MySQLSchemaInfoProviderTest {
                     .withDatabaseName("migraphe_test")
                     .withCommand("--log-bin-trust-function-creators=1", "--event-scheduler=ON");
 
-    private MySQLEnvironment createEnv() {
-        return MySQLEnvironment.create(
+    private MySQLTarget createTarget() {
+        return MySQLTarget.create(
                 "test", mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
     }
 
     private void executeSql(String sql) throws Exception {
-        var env = createEnv();
-        try (Connection conn = env.createConnection();
+        var target = createTarget();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
         }
     }
 
     @Test
-    void shouldThrowWhenNotMySQLEnvironment() {
-        var env =
-                new Environment() {
+    void shouldThrowWhenNotMySQLTarget() {
+        var target =
+                new Target() {
                     @Override
-                    public EnvironmentId id() {
-                        return EnvironmentId.of("test");
+                    public TargetId id() {
+                        return TargetId.of("test");
                     }
 
                     @Override
@@ -54,7 +54,7 @@ class MySQLSchemaInfoProviderTest {
                 };
         var provider = new MySQLSchemaInfoProvider();
 
-        assertThatThrownBy(() -> provider.getSchemaInfo(env)).isInstanceOf(MySQLException.class);
+        assertThatThrownBy(() -> provider.getSchemaInfo(target)).isInstanceOf(MySQLException.class);
     }
 
     @Test
@@ -66,7 +66,7 @@ class MySQLSchemaInfoProviderTest {
                         + "email VARCHAR(200))");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.schemas()).isNotEmpty();
         assertThat(info.schemas()).anyMatch(s -> s.name().equals("migraphe_test"));
@@ -88,7 +88,7 @@ class MySQLSchemaInfoProviderTest {
     void shouldExtractStorageEngines() {
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.storageEngines()).isNotEmpty();
         assertThat(info.storageEngines())
@@ -100,7 +100,7 @@ class MySQLSchemaInfoProviderTest {
         executeSql("CREATE TABLE IF NOT EXISTS meta_test (" + "id INT PRIMARY KEY) ENGINE=InnoDB");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.tableMeta()).isNotEmpty();
         assertThat(info.tableMeta())
@@ -121,7 +121,7 @@ class MySQLSchemaInfoProviderTest {
                         + " FOR EACH ROW SET NEW.val = NEW.val + 1");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.triggers()).isNotEmpty();
         assertThat(info.triggers())
@@ -141,7 +141,7 @@ class MySQLSchemaInfoProviderTest {
         executeSql("CREATE PROCEDURE test_proc(IN x INT) BEGIN SELECT x; END");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.routines()).isNotEmpty();
         assertThat(info.routines())
@@ -163,7 +163,7 @@ class MySQLSchemaInfoProviderTest {
                         + " BEGIN SET b = 'x'; END");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         var routine = findRoutine(info, "test_param_proc", "PROCEDURE");
         assertThat(routine.parameters())
@@ -185,7 +185,7 @@ class MySQLSchemaInfoProviderTest {
                         + " BEGIN RETURN CONCAT('v', n); END");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         var routine = findRoutine(info, "test_param_func", "FUNCTION");
         assertThat(routine.parameters())
@@ -199,7 +199,7 @@ class MySQLSchemaInfoProviderTest {
         executeSql("CREATE PROCEDURE test_def_proc(IN x INT) BEGIN SELECT x + 41; END");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(findRoutine(info, "test_def_proc", "PROCEDURE").definition())
                 .contains("SELECT x + 41");
@@ -215,7 +215,7 @@ class MySQLSchemaInfoProviderTest {
                         + " BEGIN RETURN f1; END");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(findRoutine(info, "dual_name", "PROCEDURE").parameters())
                 .extracting(MySQLParameterInfo::name)
@@ -238,7 +238,7 @@ class MySQLSchemaInfoProviderTest {
         executeSql("CREATE EVENT test_event ON SCHEDULE EVERY 1 DAY" + " DO SELECT 1");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.events()).isNotEmpty();
         assertThat(info.events())
@@ -258,7 +258,7 @@ class MySQLSchemaInfoProviderTest {
         executeSql("CREATE VIEW test_view AS SELECT id FROM view_src");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.viewDefiners()).isNotEmpty();
         assertThat(info.viewDefiners()).containsKey("migraphe_test.test_view");
@@ -267,8 +267,7 @@ class MySQLSchemaInfoProviderTest {
 
     @Test
     void shouldReportOneExportedKeyPerChildTableWhenConstraintNamesCollide() throws Exception {
-        var rootEnv =
-                MySQLEnvironment.create("root", mysql.getJdbcUrl(), "root", mysql.getPassword());
+        var rootEnv = MySQLTarget.create("root", mysql.getJdbcUrl(), "root", mysql.getPassword());
         try (Connection conn = rootEnv.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP DATABASE IF EXISTS migraphe_fk_alt");
@@ -312,7 +311,7 @@ class MySQLSchemaInfoProviderTest {
                         + "PARTITION p2025 VALUES LESS THAN (2026))");
         var provider = new MySQLSchemaInfoProvider();
 
-        var info = provider.getSchemaInfo(createEnv());
+        var info = provider.getSchemaInfo(createTarget());
 
         assertThat(info.partitions()).isNotEmpty();
         assertThat(info.partitions())
