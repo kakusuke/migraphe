@@ -15,6 +15,8 @@ import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -239,8 +241,8 @@ class MySQLIntegrationTest {
         historyRepo.record(record);
 
         // Verify history persisted
-        assertThat(historyRepo.wasExecuted(node.id(), target.id())).isTrue();
-        assertThat(historyRepo.executedNodes(target.id())).containsExactly(node.id());
+        assertThat(historyRepo.wasExecuted(node.id())).isTrue();
+        assertThat(historyRepo.executedNodes()).containsExactly(node.id());
     }
 
     @Test
@@ -355,8 +357,39 @@ class MySQLIntegrationTest {
                         150));
 
         // Verify both executed
-        assertThat(historyRepo.executedNodes(target.id()))
-                .containsExactlyInAnyOrder(node1.id(), node2.id());
+        assertThat(historyRepo.executedNodes()).containsExactlyInAnyOrder(node1.id(), node2.id());
+    }
+
+    @Test
+    void shouldStoreDependenciesLargerThanTextCanHold() {
+        // given: a fan-in wide enough that the encoded dependencies exceed TEXT's 65,535 bytes
+        historyRepo.initialize();
+
+        List<NodeId> dependencies = new ArrayList<>();
+        for (int i = 0; i < 3000; i++) {
+            dependencies.add(NodeId.of(String.format("db1/%05d_migration_step", i)));
+        }
+        int encodedBytes = dependencies.size() * 24 - 1;
+        assertThat(encodedBytes).isGreaterThan(65535);
+
+        NodeId nodeId = NodeId.of("db1/03000_last");
+
+        // when
+        historyRepo.record(
+                ExecutionRecord.upSuccess(
+                        nodeId,
+                        target.id(),
+                        "Last step",
+                        "DROP TABLE t",
+                        100,
+                        null,
+                        null,
+                        dependencies));
+
+        // then
+        var stored = historyRepo.findLatestRecord(nodeId);
+        assertThat(stored).isNotNull();
+        assertThat(stored.dependencies()).isEqualTo(dependencies);
     }
 
     @Test
@@ -374,7 +407,7 @@ class MySQLIntegrationTest {
         historyRepo.record(record2);
 
         // then
-        var latest = historyRepo.findLatestRecord(nodeId, target.id());
+        var latest = historyRepo.findLatestRecord(nodeId);
         assertThat(latest).isNotNull();
         assertThat(latest.id()).isEqualTo(record2.id());
     }
@@ -397,7 +430,7 @@ class MySQLIntegrationTest {
         historyRepo.record(failedRecord);
 
         // then
-        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isFalse();
+        assertThat(historyRepo.wasExecuted(nodeId)).isFalse();
     }
 
     @Test
@@ -417,7 +450,7 @@ class MySQLIntegrationTest {
         historyRepo.record(record2);
 
         // then
-        var allRecords = historyRepo.allRecords(target.id());
+        var allRecords = historyRepo.allRecords();
         assertThat(allRecords).hasSize(2);
         assertThat(allRecords.get(0).status()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(allRecords.get(1).status()).isEqualTo(ExecutionStatus.SUCCESS);
@@ -493,6 +526,67 @@ class MySQLIntegrationTest {
                                         + "AND table_schema = 'migraphe_test'")) {
             assertThat(rs.next()).isFalse();
         }
+    }
+
+    @Test
+    void addsFingerprintColumn() throws Exception {
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " DATABASE() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+            stmt.execute(
+                    """
+                    CREATE TABLE migraphe_history (
+                        id VARCHAR(64) PRIMARY KEY,
+                        node_id VARCHAR(255) NOT NULL,
+                        target_id VARCHAR(255) NOT NULL,
+                        direction VARCHAR(10) NOT NULL,
+                        status VARCHAR(10) NOT NULL,
+                        executed_at TIMESTAMP(6) NOT NULL,
+                        description TEXT,
+                        serialized_down_task LONGTEXT,
+                        duration_ms BIGINT,
+                        error_message TEXT
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                    """);
+        }
+
+        historyRepo.initialize();
+
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement();
+                ResultSet rs =
+                        stmt.executeQuery(
+                                "SELECT 1 FROM information_schema.columns WHERE table_schema ="
+                                        + " DATABASE() AND table_name = 'migraphe_history'"
+                                        + " AND column_name = 'fingerprint'")) {
+            assertThat(rs.next()).isTrue();
+        }
+
+        // The legacy shape above omits the indexes and CHECK constraints the resource
+        // declares inside CREATE TABLE, and IF NOT EXISTS will not put them back. Rebuild
+        // from scratch so the container's shared table outlives this test intact.
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
+        historyRepo.initialize();
     }
 
     @Test

@@ -39,4 +39,27 @@ public interface Task {
      * @return the task description
      */
     String description();
+
+    /**
+     * Returns a stable rendering of what this task would do, for comparing one definition against
+     * another.
+     *
+     * <p>Each task signs <strong>its own direction only</strong>. A task that happens to carry the
+     * other direction's content — an UP task holding the rollback it will record — leaves it out,
+     * because whoever composes the two signatures asks the other task for that half and would
+     * otherwise count it twice.
+     *
+     * <p>Two tasks built from the same definition must return the same text, on every run and on
+     * every machine, because what is built from this is persisted and compared much later. Nothing
+     * here is hashed or delimited: the caller frames and folds these, so an implementation returns
+     * content rather than a digest.
+     *
+     * <p>An implementation that cannot render its content that way throws rather than returning
+     * something unstable. It is called when a comparison is being made, not when the task is built,
+     * so a task that cannot be signed can still be executed.
+     *
+     * @return the signature of this task's own content
+     * @throws RuntimeException if this task's content has no stable rendering
+     */
+    String signature();
 }

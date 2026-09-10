@@ -64,8 +64,8 @@ class UpCommandTest {
         try {
             createTestProject(tempDir);
             ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
-            Target env = context.targets().get("test-db");
-            if (env instanceof PostgreSQLTarget pgEnv) {
+            Target target = context.targets().get("test-db");
+            if (target instanceof PostgreSQLTarget pgEnv) {
                 try (Connection conn = pgEnv.createConnection();
                         Statement stmt = conn.createStatement()) {
                     // Drop all user tables
@@ -104,6 +104,29 @@ class UpCommandTest {
         // 出力にマイグレーション実行結果が含まれる
         String output = outputStream.toString(StandardCharsets.UTF_8);
         assertThat(output).contains("Executing migrations");
+    }
+
+    @Test
+    void shouldRecordUpFingerprintInHistory() throws Exception {
+        // Given: テスト用のプロジェクト構造
+        createTestProject(tempDir);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+        UpCommand command =
+                new UpCommand(
+                        context, null, true, false, new ByteArrayInputStream(new byte[0]), false);
+
+        // When: UP コマンドを実行
+        int exitCode = command.execute();
+
+        // Then: core が畳んだ SHA-256 が fingerprint 列に記録される。畳む対象は name / no_way_back / target id と、
+        // 各タスクの署名 — up SQL / down SQL とそれぞれの autocommit — と推移的依存。002 の期待値は 001 への依存を
+        // 含めて計算したもので、依存を渡し損ねると一致しない。
+        assertThat(exitCode).isEqualTo(0);
+        assertThat(fingerprintOf(context, "test-db/001_create_users"))
+                .isEqualTo("57d91a085b66b8a700d72267cf4b3e80d14ec3bbd414a7c3d3cc18db0abb9af4");
+        assertThat(fingerprintOf(context, "test-db/002_add_index"))
+                .isEqualTo("16a5dc13a65a0497df5c56e80d29aa6ce2c9bd422968204b002db5d36718e1e7");
     }
 
     @Test
@@ -447,15 +470,35 @@ class UpCommandTest {
         Files.writeString(tasksDir.resolve("001_split.yaml"), taskYaml);
     }
 
+    /** test-db ターゲットへの接続を開く。 */
+    private Connection connect(ExecutionContext context) throws Exception {
+        Target target = context.targets().get("test-db");
+        PostgreSQLTarget pgEnv = (PostgreSQLTarget) target;
+        return pgEnv.createConnection();
+    }
+
     /** クエリを実行して最初の列の int 値を返す。 */
     private int rowCount(ExecutionContext context, String query) throws Exception {
-        Target env = context.targets().get("test-db");
-        PostgreSQLTarget pgEnv = (PostgreSQLTarget) env;
-        try (Connection conn = pgEnv.createConnection();
+        try (Connection conn = connect(context);
                 Statement stmt = conn.createStatement();
                 java.sql.ResultSet rs = stmt.executeQuery(query)) {
             assertThat(rs.next()).isTrue();
             return rs.getInt(1);
+        }
+    }
+
+    /** 履歴テーブルに記録された UP 実行の fingerprint を返す。 */
+    private String fingerprintOf(ExecutionContext context, String nodeId) throws Exception {
+        try (Connection conn = connect(context);
+                java.sql.PreparedStatement stmt =
+                        conn.prepareStatement(
+                                "SELECT fingerprint FROM migraphe_history"
+                                        + " WHERE node_id = ? AND direction = 'UP'")) {
+            stmt.setString(1, nodeId);
+            try (java.sql.ResultSet rs = stmt.executeQuery()) {
+                assertThat(rs.next()).isTrue();
+                return rs.getString(1);
+            }
         }
     }
 

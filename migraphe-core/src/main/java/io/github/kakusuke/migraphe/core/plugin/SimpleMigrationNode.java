@@ -1,5 +1,6 @@
 package io.github.kakusuke.migraphe.core.plugin;
 
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.target.Target;
@@ -28,6 +29,7 @@ public final class SimpleMigrationNode implements MigrationNode {
     private final Set<NodeId> dependencies;
     private final Task upTask;
     private final @Nullable Task downTask;
+    private final @Nullable String noWayBack;
 
     private SimpleMigrationNode(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
@@ -37,6 +39,7 @@ public final class SimpleMigrationNode implements MigrationNode {
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upTask = Objects.requireNonNull(builder.upTask, "upTask must not be null");
         this.downTask = builder.downTask;
+        this.noWayBack = builder.noWayBack;
     }
 
     @Override
@@ -67,6 +70,11 @@ public final class SimpleMigrationNode implements MigrationNode {
     @Override
     public Task upTask() {
         return upTask;
+    }
+
+    @Override
+    public @Nullable String noWayBack() {
+        return noWayBack;
     }
 
     @Override
@@ -104,6 +112,7 @@ public final class SimpleMigrationNode implements MigrationNode {
         private Set<NodeId> dependencies = Set.of();
         private @Nullable Task upTask;
         private @Nullable Task downTask;
+        private @Nullable String noWayBack;
 
         /**
          * Sets the node's unique identifier.
@@ -205,6 +214,17 @@ public final class SimpleMigrationNode implements MigrationNode {
         }
 
         /**
+         * Declares that this migration cannot be rolled back, and why.
+         *
+         * @param reason the author's reason
+         * @return this builder
+         */
+        public Builder noWayBack(@Nullable String reason) {
+            this.noWayBack = reason;
+            return this;
+        }
+
+        /**
          * Builds the {@link SimpleMigrationNode} from this builder's current state.
          *
          * @return the constructed node
@@ -214,6 +234,20 @@ public final class SimpleMigrationNode implements MigrationNode {
         public SimpleMigrationNode build() {
             return new SimpleMigrationNode(this);
         }
+    }
+
+    /**
+     * Hands over its tasks' signatures: one when there is no rollback, two when there is.
+     *
+     * <p>The tasks hold what this node was defined by, so asking them is what keeps a single answer
+     * to "what does this node do". Arity carries the difference between a rollback that is absent
+     * and one that is empty, so neither this nor the fingerprinter needs a marker for it.
+     */
+    @Override
+    public String fingerprint(Fingerprinter fingerprinter) {
+        return downTask == null
+                ? fingerprinter.over(upTask.signature())
+                : fingerprinter.over(upTask.signature(), downTask.signature());
     }
 
     @Override

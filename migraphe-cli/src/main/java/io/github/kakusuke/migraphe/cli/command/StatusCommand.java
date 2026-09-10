@@ -47,8 +47,7 @@ public class StatusCommand implements Command {
             List<String> lines =
                     graphView.renderLines(
                             node -> {
-                                boolean executed =
-                                        historyRepo.wasExecuted(node.id(), node.target().id());
+                                boolean executed = historyRepo.wasExecuted(node.id());
                                 StringBuilder sb = new StringBuilder();
                                 if (executed) {
                                     executedCount[0]++;
@@ -60,8 +59,7 @@ public class StatusCommand implements Command {
                                 sb.append(node.id().value()).append(" - ").append(node.name());
                                 if (executed) {
                                     ExecutionRecord record =
-                                            historyRepo.findLatestRecord(
-                                                    node.id(), node.target().id());
+                                            historyRepo.findLatestRecord(node.id());
                                     if (record != null) {
                                         sb.append(" (")
                                                 .append(

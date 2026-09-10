@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.history.ExecutionOrigin;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
@@ -27,7 +28,8 @@ import org.jspecify.annotations.Nullable;
  * table can gain columns and indexes over time without any schema-version bookkeeping. Each query
  * opens a short-lived connection from the supplied {@link JdbcTarget}, so the repository keeps the
  * migration history in the same database the migrations run against. A node is considered applied
- * only when its most recent record is a successful {@code UP}.
+ * when its most recent <strong>successful</strong> record is an {@code UP}; records that failed or
+ * were skipped never change the applied state.
  *
  * <p>"Most recent" orders by {@code executed_at} and then by {@code id}. The identifier decides
  * ties because {@link ExecutionRecord}'s factories mint time-ordered UUIDv7 values, and ties are
@@ -205,8 +207,9 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 """
                 INSERT INTO migraphe_history (
                     id, node_id, target_id, direction, status,
-                    executed_at, description, serialized_down_task, duration_ms, error_message
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    executed_at, description, serialized_down_task, duration_ms, error_message,
+                    fingerprint, plugin_metadata, dependencies, origin, no_way_back
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
         try (Connection conn = target.createConnection();
@@ -222,6 +225,11 @@ public final class JdbcHistoryRepository implements HistoryRepository {
             pstmt.setString(8, record.serializedDownTask());
             pstmt.setLong(9, record.durationMs());
             pstmt.setString(10, record.errorMessage());
+            pstmt.setString(11, record.fingerprint());
+            pstmt.setString(12, record.pluginMetadata());
+            pstmt.setString(13, encodeDependencies(record.dependencies()));
+            pstmt.setString(14, record.origin().name());
+            pstmt.setString(15, record.noWayBack());
 
             pstmt.executeUpdate();
         } catch (SQLException e) {
@@ -230,26 +238,26 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Returns whether the node has been successfully applied in the given target.
+     * Returns whether the migration is currently applied.
      *
-     * <p>A node counts as applied only when its most recent record (by {@code executed_at}) is a
-     * successful {@code UP}.
+     * <p>Decided by its most recent {@code SUCCESS} row: applied when that is an {@code UP}, not
+     * applied when it is a {@code DOWN}, and not applied when there is no successful row. A
+     * rollback that failed leaves it applied. The query names no target — an identifier is unique
+     * across the project, so every row for it is a row about it.
      *
-     * @param nodeId the node to check
-     * @param targetId the target to check within
-     * @return {@code true} if the latest record is a successful UP, otherwise {@code false}
-     * @throws NullPointerException if {@code nodeId} or {@code targetId} is {@code null}
+     * @param nodeId the migration to check
+     * @return {@code true} if the migration is currently applied, otherwise {@code false}
+     * @throws NullPointerException if {@code nodeId} is {@code null}
      * @throws JdbcException if the query fails
      */
     @Override
-    public boolean wasExecuted(NodeId nodeId, TargetId targetId) {
+    public boolean wasExecuted(NodeId nodeId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
-        Objects.requireNonNull(targetId, "targetId must not be null");
 
         String sql =
                 """
-                SELECT direction, status FROM migraphe_history
-                WHERE node_id = ? AND target_id = ?
+                SELECT direction FROM migraphe_history
+                WHERE node_id = ? AND status = 'SUCCESS'
                 ORDER BY executed_at DESC, id DESC
                 LIMIT 1
                 """;
@@ -258,13 +266,10 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, nodeId.value());
-            pstmt.setString(2, targetId.value());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
-                    String direction = rs.getString("direction");
-                    String status = rs.getString("status");
-                    return "UP".equals(direction) && "SUCCESS".equals(status);
+                    return "UP".equals(rs.getString("direction"));
                 }
                 return false;
             }
@@ -276,31 +281,27 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     /**
      * Returns the identifiers of all nodes currently applied in the given target.
      *
-     * <p>For each node only its most recent record is considered; a node is included when that
-     * latest record is a successful {@code UP}. The result is ordered by node identifier.
+     * <p>For each node only its most recent {@code SUCCESS} record is considered; the node is
+     * included when that record is an {@code UP}. This is the set form of {@link #wasExecuted} and
+     * agrees with it for every node. The result is ordered by node identifier.
      *
-     * <p>The query deliberately avoids window functions (a correlated {@code MAX(executed_at)}
-     * subquery is used instead) so it also runs on pre-window-function servers such as MariaDB 10.1
-     * and earlier. Should several records for the same node share the maximum {@code executed_at},
-     * the node counts as applied when any of them is a successful {@code UP}.
+     * <p>The query deliberately avoids window functions (a correlated subquery selecting the latest
+     * successful {@code id} is used instead) so it also runs on pre-window-function servers such as
+     * MariaDB 10.1 and earlier. Ties on {@code executed_at} are broken by {@code id}, so exactly
+     * one record is selected per node.
      *
-     * @param targetId the target to query
-     * @return the identifiers of nodes whose latest record is a successful UP
-     * @throws NullPointerException if {@code targetId} is {@code null}
+     * @return the identifiers of the currently applied migrations
      * @throws JdbcException if the query fails
      */
     @Override
-    public List<NodeId> executedNodes(TargetId targetId) {
-        Objects.requireNonNull(targetId, "targetId must not be null");
-
+    public List<NodeId> executedNodes() {
         String sql =
                 """
                 SELECT h.node_id FROM migraphe_history h
-                WHERE h.target_id = ?
-                  AND h.direction = 'UP' AND h.status = 'SUCCESS'
+                WHERE h.direction = 'UP' AND h.status = 'SUCCESS'
                   AND h.id = (
                       SELECT h2.id FROM migraphe_history h2
-                      WHERE h2.target_id = h.target_id AND h2.node_id = h.node_id
+                      WHERE h2.node_id = h.node_id AND h2.status = 'SUCCESS'
                       ORDER BY h2.executed_at DESC, h2.id DESC
                       LIMIT 1
                   )
@@ -309,8 +310,6 @@ public final class JdbcHistoryRepository implements HistoryRepository {
 
         try (Connection conn = target.createConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
-
-            pstmt.setString(1, targetId.value());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 List<NodeId> nodes = new ArrayList<>();
@@ -325,24 +324,21 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Returns the most recent execution record for the node in the given target.
+     * Returns the most recent execution record for the node, whatever target wrote it.
      *
      * @param nodeId the node to look up
-     * @param targetId the target to look up within
-     * @return the latest {@link ExecutionRecord}, or {@code null} if the node has no history in
-     *     this target
-     * @throws NullPointerException if {@code nodeId} or {@code targetId} is {@code null}
+     * @return the latest {@link ExecutionRecord}, or {@code null} if the node has no history
+     * @throws NullPointerException if {@code nodeId} is {@code null}
      * @throws JdbcException if the query fails
      */
     @Override
-    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, TargetId targetId) {
+    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
-        Objects.requireNonNull(targetId, "targetId must not be null");
 
         String sql =
                 """
                 SELECT * FROM migraphe_history
-                WHERE node_id = ? AND target_id = ?
+                WHERE node_id = ?
                 ORDER BY executed_at DESC, id DESC
                 LIMIT 1
                 """;
@@ -351,7 +347,6 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, nodeId.value());
-            pstmt.setString(2, targetId.value());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
@@ -365,30 +360,27 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Returns every execution record for the given target, oldest first.
+     * Returns every execution record in the history table, oldest first.
      *
-     * @param targetId the target to query
+     * <p>One table holds every target's rows — {@code history.target} names the one connection the
+     * history lives on — so this needs no predicate. The rows carry their own {@code target_id} and
+     * the caller filters.
+     *
      * @return all {@link ExecutionRecord}s ordered by {@code executed_at} ascending
-     * @throws NullPointerException if {@code targetId} is {@code null}
      * @throws JdbcException if the query fails
      */
     @Override
-    public List<ExecutionRecord> allRecords(TargetId targetId) {
-        Objects.requireNonNull(targetId, "targetId must not be null");
-
+    public List<ExecutionRecord> allRecords() {
         String sql =
                 """
                 SELECT * FROM migraphe_history
-                WHERE target_id = ?
                 ORDER BY executed_at, id
                 """;
 
         try (Connection conn = target.createConnection();
-                PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                Statement stmt = conn.createStatement()) {
 
-            pstmt.setString(1, targetId.value());
-
-            try (ResultSet rs = pstmt.executeQuery()) {
+            try (ResultSet rs = stmt.executeQuery(sql)) {
                 List<ExecutionRecord> records = new ArrayList<>();
                 while (rs.next()) {
                     records.add(mapToExecutionRecord(rs));
@@ -403,7 +395,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     private ExecutionRecord mapToExecutionRecord(ResultSet rs) throws SQLException {
         String id = rs.getString("id");
         NodeId nodeId = NodeId.of(rs.getString("node_id"));
-        TargetId envId = TargetId.of(rs.getString("target_id"));
+        TargetId targetId = TargetId.of(rs.getString("target_id"));
         ExecutionDirection direction = ExecutionDirection.valueOf(rs.getString("direction"));
         ExecutionStatus status = ExecutionStatus.valueOf(rs.getString("status"));
         Instant executedAt = rs.getTimestamp("executed_at").toInstant();
@@ -411,18 +403,65 @@ public final class JdbcHistoryRepository implements HistoryRepository {
         String serializedDownTask = rs.getString("serialized_down_task");
         long durationMs = rs.getLong("duration_ms");
         String errorMessage = rs.getString("error_message");
+        String fingerprint = rs.getString("fingerprint");
+        String pluginMetadata = rs.getString("plugin_metadata");
+        List<NodeId> dependencies = decodeDependencies(rs.getString("dependencies"));
+        ExecutionOrigin origin = decodeOrigin(rs.getString("origin"));
+        String noWayBack = rs.getString("no_way_back");
 
         return new ExecutionRecord(
                 id,
                 nodeId,
-                envId,
+                targetId,
                 direction,
                 status,
                 executedAt,
                 description,
                 serializedDownTask,
                 durationMs,
-                errorMessage);
+                errorMessage,
+                fingerprint,
+                pluginMetadata,
+                dependencies,
+                origin,
+                noWayBack);
+    }
+
+    /**
+     * Reads the {@code origin} column, treating an absent value as {@link
+     * ExecutionOrigin#EXECUTED}.
+     *
+     * <p>Every version that could write a row before this column existed wrote it by running
+     * something, so there is no third state to represent.
+     */
+    private static ExecutionOrigin decodeOrigin(@Nullable String stored) {
+        return stored == null ? ExecutionOrigin.EXECUTED : ExecutionOrigin.valueOf(stored);
+    }
+
+    /**
+     * Encodes recorded dependencies for the {@code dependencies} column, or {@code null} to leave
+     * it unrecorded.
+     *
+     * <p>Newline-separated because a node id is derived from a file path and so cannot contain one.
+     * An empty list encodes as the empty string rather than {@code null}: the column has to keep
+     * "stood on nothing" apart from "nobody wrote it down".
+     */
+    private static @Nullable String encodeDependencies(@Nullable List<NodeId> dependencies) {
+        if (dependencies == null) {
+            return null;
+        }
+        return dependencies.stream().map(NodeId::value).collect(Collectors.joining("\n"));
+    }
+
+    /** Reads back what {@link #encodeDependencies} wrote. */
+    private static @Nullable List<NodeId> decodeDependencies(@Nullable String encoded) {
+        if (encoded == null) {
+            return null;
+        }
+        if (encoded.isEmpty()) {
+            return List.of();
+        }
+        return Arrays.stream(encoded.split("\n", -1)).map(NodeId::of).toList();
     }
 
     private String loadSchemaResource() throws IOException {

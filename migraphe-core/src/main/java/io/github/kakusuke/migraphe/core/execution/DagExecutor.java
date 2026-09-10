@@ -161,7 +161,7 @@ public final class DagExecutor implements Executor {
                         id -> {
                             MigrationNode node = graph.getNode(id).orElse(null);
                             if (node == null) return false;
-                            return !history.wasExecuted(id, node.target().id());
+                            return !history.wasExecuted(id);
                         })
                 .collect(Collectors.toSet());
     }
@@ -184,7 +184,7 @@ public final class DagExecutor implements Executor {
             @Nullable NodeId requestedNode, boolean allMigrations) {
         if (allMigrations) {
             return graph.allNodes().stream()
-                    .filter(node -> history.wasExecuted(node.id(), node.target().id()))
+                    .filter(node -> history.wasExecuted(node.id()))
                     .map(MigrationNode::id)
                     .collect(Collectors.toSet());
         }
@@ -199,7 +199,7 @@ public final class DagExecutor implements Executor {
                             id -> {
                                 MigrationNode node = graph.getNode(id).orElse(null);
                                 if (node == null) return false;
-                                return history.wasExecuted(id, node.target().id());
+                                return history.wasExecuted(id);
                             })
                     .collect(Collectors.toSet());
         }
@@ -538,8 +538,39 @@ public final class DagExecutor implements Executor {
                     node.id(), node.target().id(), node.name(), duration);
         }
         String serializedDownTask = taskResult != null ? taskResult.serializedDownTask() : null;
+        String pluginMetadata = taskResult != null ? taskResult.pluginMetadata() : null;
         return ExecutionRecord.upSuccess(
-                node.id(), node.target().id(), node.name(), serializedDownTask, duration);
+                node.id(),
+                node.target().id(),
+                node.name(),
+                serializedDownTask,
+                duration,
+                fingerprintOf(node),
+                pluginMetadata,
+                canonicalDirectDependencies(node),
+                node.noWayBack());
+    }
+
+    /**
+     * What the node declares it stands on directly, ordered so the column reads the same each run.
+     */
+    private static List<NodeId> canonicalDirectDependencies(MigrationNode node) {
+        return node.dependencies().stream().sorted(Comparator.comparing(NodeId::value)).toList();
+    }
+
+    /**
+     * Returns the node's fingerprint, or {@code null} when the plugin's accessor throws.
+     *
+     * <p>The node's task has already been applied by the time this is called, so a broken accessor
+     * must not cost the success record: without it the migration is applied again on the next run.
+     * {@code null} is what {@link MigrationNode#fingerprint} already defines as "unknown".
+     */
+    private @Nullable String fingerprintOf(MigrationNode node) {
+        try {
+            return node.fingerprint(graph.fingerprinterFor(node.id()));
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /**
@@ -547,7 +578,7 @@ public final class DagExecutor implements Executor {
      * skip when already executed; for DOWN, skip when not yet executed.
      */
     private boolean isAlreadyInRequiredState(MigrationNode node) {
-        boolean wasExecuted = history.wasExecuted(node.id(), node.target().id());
+        boolean wasExecuted = history.wasExecuted(node.id());
         return direction == ExecutionDirection.DOWN ? !wasExecuted : wasExecuted;
     }
 

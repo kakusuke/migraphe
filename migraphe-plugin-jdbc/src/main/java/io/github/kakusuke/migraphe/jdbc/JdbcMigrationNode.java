@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.jdbc;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.target.Target;
@@ -18,10 +19,10 @@ import org.jspecify.annotations.Nullable;
  * files, or classpath resources.
  *
  * <p>A node ties together an identifier, an owning {@link JdbcTarget}, its dependency set, and the
- * UP/DOWN SQL plus the {@code autocommit} flag. It is an immutable structural record of the
- * migration; the actual execution logic is produced on demand by {@link #upTask()} (always present)
- * and {@link #downTask()} (present only when {@code downSql} was supplied). Node identity is
- * defined solely by {@link #id()} for use in the migration graph.
+ * UP/DOWN SQL plus an {@code autocommit} flag per direction. It is an immutable structural record
+ * of the migration; the actual execution logic is produced on demand by {@link #upTask()} (always
+ * present) and {@link #downTask()} (present only when {@code downSql} was supplied). Node identity
+ * is defined solely by {@link #id()} for use in the migration graph.
  */
 public final class JdbcMigrationNode implements MigrationNode {
 
@@ -32,7 +33,9 @@ public final class JdbcMigrationNode implements MigrationNode {
     private final Set<NodeId> dependencies;
     private final String upSql;
     private final @Nullable String downSql;
-    private final boolean autocommit;
+    private final @Nullable String noWayBack;
+    private final boolean autocommitUp;
+    private final boolean autocommitDown;
 
     private JdbcMigrationNode(Builder builder) {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
@@ -42,11 +45,32 @@ public final class JdbcMigrationNode implements MigrationNode {
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upSql = Objects.requireNonNull(builder.upSql, "upSql must not be null");
         this.downSql = builder.downSql;
-        this.autocommit = builder.autocommit;
+        this.noWayBack = builder.noWayBack;
+        this.autocommitUp = builder.autocommitUp;
+        this.autocommitDown = builder.autocommitDown;
 
         if (upSql.isBlank()) {
             throw new IllegalArgumentException("upSql must not be blank");
         }
+    }
+
+    /**
+     * Hands over its tasks' signatures: the UP task's, and the DOWN task's when there is one.
+     *
+     * <p>Each task signs its own direction, so the rollback's SQL and mode arrive from the DOWN
+     * task rather than from the UP task that also carries them. Whether a rollback is absent or
+     * merely empty is carried by how many signatures are handed over, and the framing and the
+     * digest are the {@link Fingerprinter}'s.
+     *
+     * @param fingerprinter folds the signatures, and holds the closure this node stands on
+     * @return this node's fingerprint
+     */
+    @Override
+    public String fingerprint(Fingerprinter fingerprinter) {
+        Task down = downTask();
+        return down == null
+                ? fingerprinter.over(upTask().signature())
+                : fingerprinter.over(upTask().signature(), down.signature());
     }
 
     @Override
@@ -81,7 +105,17 @@ public final class JdbcMigrationNode implements MigrationNode {
      */
     @Override
     public Task upTask() {
-        return JdbcUpTask.create(target, upSql, downSql, autocommit);
+        return JdbcUpTask.create(target, upSql, downSql, autocommitUp, autocommitDown);
+    }
+
+    /**
+     * Returns why this node cannot be rolled back, as declared by {@code no_way_back}.
+     *
+     * @return the author's reason, or {@code null} if the node was not declared one-way
+     */
+    @Override
+    public @Nullable String noWayBack() {
+        return noWayBack;
     }
 
     /**
@@ -93,7 +127,7 @@ public final class JdbcMigrationNode implements MigrationNode {
     @Override
     public @Nullable Task downTask() {
         if (downSql != null) {
-            return JdbcDownTask.create(target, downSql, autocommit);
+            return JdbcDownTask.create(target, downSql, autocommitDown);
         }
         return null;
     }
@@ -126,7 +160,9 @@ public final class JdbcMigrationNode implements MigrationNode {
         private Set<NodeId> dependencies = Set.of();
         private @Nullable String upSql;
         private @Nullable String downSql;
-        private boolean autocommit = false;
+        private @Nullable String noWayBack;
+        private boolean autocommitUp = false;
+        private boolean autocommitDown = false;
 
         /**
          * Sets the node identifier from a string value.
@@ -209,6 +245,10 @@ public final class JdbcMigrationNode implements MigrationNode {
         /**
          * Sets the forward (UP) migration SQL from a literal string.
          *
+         * <p>The task built from this text signs it as given. A caller that read it from a file
+         * should fold CRLF to LF first, or the same file will fingerprint differently on a CRLF
+         * checkout.
+         *
          * @param sql the UP SQL
          * @return this builder
          */
@@ -224,6 +264,7 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          * @throws IOException if the file cannot be read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder upSqlFromFile(Path path) throws IOException {
             this.upSql = Files.readString(path);
             return this;
@@ -236,6 +277,7 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          * @throws IOException if the resource cannot be found or read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder upSqlFromResource(String resourcePath) throws IOException {
             this.upSql = loadResource(resourcePath);
             return this;
@@ -253,12 +295,25 @@ public final class JdbcMigrationNode implements MigrationNode {
         }
 
         /**
+         * Declares that this migration cannot be rolled back, and why.
+         *
+         * @param reason the author's reason, quoted back when a rollback has to leave the node
+         *     standing
+         * @return this builder
+         */
+        public Builder noWayBack(@Nullable String reason) {
+            this.noWayBack = reason;
+            return this;
+        }
+
+        /**
          * Sets the rollback (DOWN) migration SQL by reading it from a file.
          *
          * @param path the file to read the DOWN SQL from
          * @return this builder
          * @throws IOException if the file cannot be read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder downSqlFromFile(Path path) throws IOException {
             this.downSql = Files.readString(path);
             return this;
@@ -271,6 +326,7 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          * @throws IOException if the resource cannot be found or read
          */
+        @Deprecated(forRemoval = true, since = "0.7.0")
         public Builder downSqlFromResource(String resourcePath) throws IOException {
             this.downSql = loadResource(resourcePath);
             return this;
@@ -283,7 +339,30 @@ public final class JdbcMigrationNode implements MigrationNode {
          * @return this builder
          */
         public Builder autocommit(boolean autocommit) {
-            this.autocommit = autocommit;
+            this.autocommitUp = autocommit;
+            this.autocommitDown = autocommit;
+            return this;
+        }
+
+        /**
+         * Sets whether the node's UP task runs in autocommit mode.
+         *
+         * @param autocommitUp {@code true} to apply without an enclosing transaction
+         * @return this builder
+         */
+        public Builder autocommitUp(boolean autocommitUp) {
+            this.autocommitUp = autocommitUp;
+            return this;
+        }
+
+        /**
+         * Sets whether the node's DOWN task runs in autocommit mode.
+         *
+         * @param autocommitDown {@code true} to roll back without an enclosing transaction
+         * @return this builder
+         */
+        public Builder autocommitDown(boolean autocommitDown) {
+            this.autocommitDown = autocommitDown;
             return this;
         }
 

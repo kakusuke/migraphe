@@ -2,6 +2,7 @@ package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithName;
 import java.util.List;
 import java.util.Optional;
 
@@ -86,4 +87,38 @@ public interface SqlTaskDefinition extends TaskDefinition<String> {
      *     unspecified (treated as {@code false})
      */
     Optional<Boolean> autocommit();
+
+    /**
+     * Returns whether the forward (UP) migration runs in autocommit mode, when the task named that
+     * direction specifically.
+     *
+     * @return an {@link Optional} containing the UP setting, or empty when the task did not write
+     *     {@code autocommit.up}
+     */
+    @WithName("autocommit.up")
+    Optional<Boolean> autocommitUp();
+
+    /**
+     * Returns whether the rollback (DOWN) migration runs in autocommit mode, when the task named
+     * that direction specifically.
+     *
+     * @return an {@link Optional} containing the DOWN setting, or empty when the task did not write
+     *     {@code autocommit.down}
+     */
+    @WithName("autocommit.down")
+    Optional<Boolean> autocommitDown();
+
+    /**
+     * Returns why this migration cannot be rolled back, when the author declared that it cannot.
+     *
+     * <p>Written as {@code no_way_back: <reason>} in place of {@code down:}. It separates a
+     * deliberate one-way migration from a rollback the author simply has not written — the two look
+     * identical otherwise, and only one of them is something to leave alone. The reason is quoted
+     * back when a rollback has to stop at this node.
+     *
+     * @return an {@link Optional} containing the reason, or empty when the migration is reversible
+     */
+    @Override
+    @WithName("no_way_back")
+    Optional<String> noWayBack();
 }

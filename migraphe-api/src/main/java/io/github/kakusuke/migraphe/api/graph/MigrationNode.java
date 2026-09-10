@@ -79,6 +79,50 @@ public interface MigrationNode {
     @Nullable Task downTask();
 
     /**
+     * Returns an opaque token over what this node would apply, by handing the given {@link
+     * Fingerprinter} the signatures that describe it.
+     *
+     * <p>Every plugin supplies one. There is no {@code default} deliberately: an inherited opt-out
+     * would mean an absent token had two possible causes — a plugin that declines, and a record
+     * written before the history had a column to hold one — and only the second has a remedy.
+     *
+     * <p>An implementation decides <em>what</em> describes it and hands those over; the {@link
+     * Fingerprinter} decides how that becomes a token. So there is nothing here about digests,
+     * about delimiting one part from the next, or about the dependencies this node stands on — a
+     * node cannot get those wrong because it never handles them. Typically the signatures are its
+     * tasks': one when there is no rollback, two when there is.
+     *
+     * <p>{@code null} is not "this implementation has nothing to offer". It is reserved for a node
+     * that stands for something already recorded and finds no token there — core's own adapter over
+     * a history row is the case that exists. A plugin describing a task file always has content.
+     *
+     * <p>Callers must <strong>report</strong> a changed token, never auto-remediate it. The remedy
+     * is a destructive roll-back-and-re-apply, so a report has to stay declinable.
+     *
+     * @param fingerprinter folds the signatures, and holds the closure this node stands on
+     * @return the fingerprint, or {@code null} only when this node stands for a record that carries
+     *     none
+     */
+    @Nullable String fingerprint(Fingerprinter fingerprinter);
+
+    /**
+     * Returns why this node cannot be rolled back, or {@code null} if it can be.
+     *
+     * <p>Answers a question {@link #downTask()} alone cannot: a {@code null} down task means either
+     * that the author declared the migration one-way or that they forgot to write the rollback, and
+     * those call for opposite responses. A non-null reason here says it was declared, and is quoted
+     * back to the operator when a rollback has to leave this node standing.
+     *
+     * <p>The default returns {@code null}, so a plugin that does not model the distinction reports
+     * every missing rollback as an omission.
+     *
+     * @return the author's reason, or {@code null} if the node is not declared one-way
+     */
+    default @Nullable String noWayBack() {
+        return null;
+    }
+
+    /**
      * Indicates whether this node is a root node (one with no dependencies).
      *
      * @return {@code true} if {@link #dependencies()} is empty, {@code false} otherwise
