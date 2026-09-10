@@ -1,7 +1,7 @@
 package io.github.kakusuke.migraphe.jdbc;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -10,7 +10,7 @@ import java.util.Objects;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Generic JDBC implementation of {@link Environment} responsible for connection management.
+ * Generic JDBC implementation of {@link Target} responsible for connection management.
  *
  * <p>An instance holds everything needed to open a {@link Connection} to a single database: the
  * JDBC URL, credentials, and the driver class name. It is the central object the rest of the JDBC
@@ -20,12 +20,12 @@ import org.jspecify.annotations.Nullable;
  * <p>This class is the reference implementation for database-specific plugins. PostgreSQL and MySQL
  * plugins subclass it, fixing the driver class name and database label and overriding {@link
  * #statementSplitter()} to supply a dialect-aware SQL splitter. The constructor is {@code
- * protected} so subclasses can supply those fixed values, while end users create plain JDBC
- * environments through {@link #create}.
+ * protected} so subclasses can supply those fixed values, while end users create plain JDBC targets
+ * through {@link #create}.
  */
-public class JdbcEnvironment implements Environment {
+public class JdbcTarget implements Target {
 
-    private final EnvironmentId id;
+    private final TargetId id;
     private final String name;
     private final String jdbcUrl;
     private final String username;
@@ -34,12 +34,12 @@ public class JdbcEnvironment implements Environment {
     private final String dbLabel;
 
     /**
-     * Creates a JDBC environment with all connection attributes supplied explicitly.
+     * Creates a JDBC target with all connection attributes supplied explicitly.
      *
      * <p>Intended for subclasses (dialect-specific plugins) that pin the driver class name and
      * label. General callers should use {@link #create}.
      *
-     * @param id the unique environment identifier
+     * @param id the unique target identifier
      * @param name the human readable environment name
      * @param jdbcUrl the JDBC connection URL
      * @param username the database user name
@@ -47,8 +47,8 @@ public class JdbcEnvironment implements Environment {
      * @param driverClassName the fully qualified JDBC driver class name to load before connecting
      * @param dbLabel a human readable database label used in description/log messages
      */
-    protected JdbcEnvironment(
-            EnvironmentId id,
+    protected JdbcTarget(
+            TargetId id,
             String name,
             String jdbcUrl,
             String username,
@@ -66,32 +66,31 @@ public class JdbcEnvironment implements Environment {
     }
 
     /**
-     * Creates a JDBC environment from connection attributes.
+     * Creates a JDBC target from connection attributes.
      *
-     * <p>The environment identifier is derived from {@code name} via {@link
-     * EnvironmentId#of(String)}.
+     * <p>The target identifier is derived from {@code name} via {@link TargetId#of(String)}.
      *
-     * @param name the environment name (also used to derive the environment identifier)
+     * @param name the target name (also used to derive the target identifier)
      * @param jdbcUrl the JDBC connection URL
      * @param username the database user name
      * @param password the database password, or {@code null} for no password
      * @param driverClassName the fully qualified JDBC driver class name to load before connecting
      * @param dbLabel a human readable database label used in description/log messages
-     * @return a new JDBC environment
+     * @return a new JDBC target
      */
-    public static JdbcEnvironment create(
+    public static JdbcTarget create(
             String name,
             String jdbcUrl,
             String username,
             @Nullable String password,
             String driverClassName,
             String dbLabel) {
-        EnvironmentId id = EnvironmentId.of(name);
-        return new JdbcEnvironment(id, name, jdbcUrl, username, password, driverClassName, dbLabel);
+        TargetId id = TargetId.of(name);
+        return new JdbcTarget(id, name, jdbcUrl, username, password, driverClassName, dbLabel);
     }
 
     @Override
-    public EnvironmentId id() {
+    public TargetId id() {
         return id;
     }
 
@@ -169,7 +168,7 @@ public class JdbcEnvironment implements Environment {
      * BEGIN}/{@code END} blocks and {@code DELIMITER}) override this method to supply a
      * grammar-aware splitter.
      *
-     * @return the statement splitter for this environment's SQL dialect
+     * @return the statement splitter for this target's SQL dialect
      */
     public StatementSplitter statementSplitter() {
         return StatementSplitter.standard();

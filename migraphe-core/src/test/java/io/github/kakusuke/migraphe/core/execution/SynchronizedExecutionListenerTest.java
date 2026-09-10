@@ -2,14 +2,14 @@ package io.github.kakusuke.migraphe.core.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
 import io.github.kakusuke.migraphe.api.execution.ExecutionPlanInfo;
 import io.github.kakusuke.migraphe.api.execution.ExecutionSummary;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
-import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
+import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +30,7 @@ class SynchronizedExecutionListenerTest {
                 SimpleMigrationNode.builder()
                         .id("test-node")
                         .name("Test Node")
-                        .environment(SimpleEnvironment.create(EnvironmentId.of("test"), "Test Env"))
+                        .target(SimpleTarget.create(TargetId.of("test"), "Test Env"))
                         .upTask(SimpleTask.of("noop"))
                         .build();
 

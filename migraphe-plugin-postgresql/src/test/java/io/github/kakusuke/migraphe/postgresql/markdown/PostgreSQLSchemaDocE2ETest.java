@@ -3,7 +3,7 @@ package io.github.kakusuke.migraphe.postgresql.markdown;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.jdbc.markdown.JdbcMarkdownDefinition;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSchemaInfo;
 import io.github.kakusuke.migraphe.postgresql.schema.PostgreSQLSchemaInfoProvider;
 import java.nio.file.Files;
@@ -64,7 +64,8 @@ class PostgreSQLSchemaDocE2ETest {
                 "CREATE TABLE sales.order_items (order_id bigint PRIMARY KEY REFERENCES"
                         + " sales.orders(id))");
 
-        PostgreSQLSchemaInfo info = new PostgreSQLSchemaInfoProvider().getSchemaInfo(createEnv());
+        PostgreSQLSchemaInfo info =
+                new PostgreSQLSchemaInfoProvider().getSchemaInfo(createTarget());
         new PostgreSQLMarkdownGenerator(
                         "maindb", info, List.<JdbcMarkdownDefinition.ExcludePattern>of())
                 .generate(tempDir);
@@ -110,13 +111,13 @@ class PostgreSQLSchemaDocE2ETest {
         assertThat(salesOrders).contains("[user_accounts](../../account/tables/user_accounts.md)");
     }
 
-    private PostgreSQLEnvironment createEnv() {
-        return PostgreSQLEnvironment.create(
+    private PostgreSQLTarget createTarget() {
+        return PostgreSQLTarget.create(
                 "test", postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
     }
 
     private void executeSql(String sql) throws Exception {
-        try (var conn = createEnv().createConnection();
+        try (var conn = createTarget().createConnection();
                 var stmt = conn.createStatement()) {
             stmt.execute(sql);
         }

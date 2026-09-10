@@ -1,15 +1,14 @@
 package io.github.kakusuke.migraphe.jdbc;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
+import io.github.kakusuke.migraphe.api.target.Target;
 
 /**
- * {@link HistoryRepositoryProvider} that creates a {@link JdbcHistoryRepository} for a JDBC
- * environment.
+ * {@link HistoryRepositoryProvider} that creates a {@link JdbcHistoryRepository} for a JDBC target.
  *
  * <p>Returned by {@link JdbcPlugin#historyRepositoryProvider()}. The migration history is persisted
- * in the same database described by the supplied {@link JdbcEnvironment}.
+ * in the same database described by the supplied {@link JdbcTarget}.
  */
 public final class JdbcHistoryRepositoryProvider implements HistoryRepositoryProvider {
 
@@ -17,19 +16,17 @@ public final class JdbcHistoryRepositoryProvider implements HistoryRepositoryPro
     public JdbcHistoryRepositoryProvider() {}
 
     /**
-     * Builds a {@link JdbcHistoryRepository} backed by the given environment.
+     * Builds a {@link JdbcHistoryRepository} backed by the given target.
      *
-     * @param environment the environment whose database stores the history; must be a {@link
-     *     JdbcEnvironment}
+     * @param target the target whose database stores the history; must be a {@link JdbcTarget}
      * @return a new {@link JdbcHistoryRepository}
-     * @throws JdbcException if {@code environment} is not a {@link JdbcEnvironment}
+     * @throws JdbcException if {@code target} is not a {@link JdbcTarget}
      */
     @Override
-    public HistoryRepository createRepository(Environment environment) {
-        if (!(environment instanceof JdbcEnvironment jdbcEnv)) {
+    public HistoryRepository createRepository(Target target) {
+        if (!(target instanceof JdbcTarget jdbcEnv)) {
             throw new JdbcException(
-                    "Environment must be JdbcEnvironment, got: "
-                            + environment.getClass().getName());
+                    "Target must be JdbcTarget, got: " + target.getClass().getName());
         }
 
         return new JdbcHistoryRepository(jdbcEnv);

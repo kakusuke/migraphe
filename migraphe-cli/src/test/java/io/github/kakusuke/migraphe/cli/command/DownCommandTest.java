@@ -2,11 +2,11 @@ package io.github.kakusuke.migraphe.cli.command;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -61,8 +61,8 @@ class DownCommandTest {
         try {
             createTestProject(tempDir);
             ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
-            Environment env = context.environments().get("test-db");
-            if (env instanceof PostgreSQLEnvironment pgEnv) {
+            Target env = context.targets().get("test-db");
+            if (env instanceof PostgreSQLTarget pgEnv) {
                 try (Connection conn = pgEnv.createConnection();
                         Statement stmt = conn.createStatement()) {
                     stmt.execute("DROP TABLE IF EXISTS users CASCADE");
@@ -118,8 +118,8 @@ class DownCommandTest {
         downCommand.execute();
 
         // Then: V001 のテーブル (users) も削除されている
-        Environment env = context.environments().get("test-db");
-        if (env instanceof PostgreSQLEnvironment pgEnv) {
+        Target env = context.targets().get("test-db");
+        if (env instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =
@@ -255,8 +255,8 @@ class DownCommandTest {
         assertThat(output).contains("No changes made (dry run)");
 
         // インデックスがまだ存在することを確認
-        Environment env = context.environments().get("test-db");
-        if (env instanceof PostgreSQLEnvironment pgEnv) {
+        Target env = context.targets().get("test-db");
+        if (env instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =
@@ -355,8 +355,8 @@ class DownCommandTest {
         assertThat(output).contains("Rollback completed successfully");
 
         // 全テーブルが削除されていることを確認
-        Environment env = context.environments().get("test-db");
-        if (env instanceof PostgreSQLEnvironment pgEnv) {
+        Target env = context.targets().get("test-db");
+        if (env instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =
@@ -421,8 +421,8 @@ class DownCommandTest {
         assertThat(output).doesNotContain("[SKIP]"); // スキップされずに実行される
 
         // テーブルが存在することを確認
-        Environment env = context.environments().get("test-db");
-        if (env instanceof PostgreSQLEnvironment pgEnv) {
+        Target env = context.targets().get("test-db");
+        if (env instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =

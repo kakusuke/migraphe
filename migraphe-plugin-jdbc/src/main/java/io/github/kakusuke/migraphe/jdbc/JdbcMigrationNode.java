@@ -2,9 +2,9 @@ package io.github.kakusuke.migraphe.jdbc;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.api.task.Task;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -17,8 +17,8 @@ import org.jspecify.annotations.Nullable;
  * JDBC implementation of {@link MigrationNode}, built through its {@link Builder} from SQL strings,
  * files, or classpath resources.
  *
- * <p>A node ties together an identifier, an owning {@link JdbcEnvironment}, its dependency set, and
- * the UP/DOWN SQL plus the {@code autocommit} flag. It is an immutable structural record of the
+ * <p>A node ties together an identifier, an owning {@link JdbcTarget}, its dependency set, and the
+ * UP/DOWN SQL plus the {@code autocommit} flag. It is an immutable structural record of the
  * migration; the actual execution logic is produced on demand by {@link #upTask()} (always present)
  * and {@link #downTask()} (present only when {@code downSql} was supplied). Node identity is
  * defined solely by {@link #id()} for use in the migration graph.
@@ -28,7 +28,7 @@ public final class JdbcMigrationNode implements MigrationNode {
     private final NodeId id;
     private final String name;
     private final @Nullable String description;
-    private final JdbcEnvironment environment;
+    private final JdbcTarget target;
     private final Set<NodeId> dependencies;
     private final String upSql;
     private final @Nullable String downSql;
@@ -38,8 +38,7 @@ public final class JdbcMigrationNode implements MigrationNode {
         this.id = Objects.requireNonNull(builder.id, "id must not be null");
         this.name = Objects.requireNonNull(builder.name, "name must not be null");
         this.description = builder.description;
-        this.environment =
-                Objects.requireNonNull(builder.environment, "environment must not be null");
+        this.target = Objects.requireNonNull(builder.target, "target must not be null");
         this.dependencies = Set.copyOf(builder.dependencies);
         this.upSql = Objects.requireNonNull(builder.upSql, "upSql must not be null");
         this.downSql = builder.downSql;
@@ -66,8 +65,8 @@ public final class JdbcMigrationNode implements MigrationNode {
     }
 
     @Override
-    public Environment environment() {
-        return environment;
+    public Target target() {
+        return target;
     }
 
     @Override
@@ -82,7 +81,7 @@ public final class JdbcMigrationNode implements MigrationNode {
      */
     @Override
     public Task upTask() {
-        return JdbcUpTask.create(environment, upSql, downSql, autocommit);
+        return JdbcUpTask.create(target, upSql, downSql, autocommit);
     }
 
     /**
@@ -94,7 +93,7 @@ public final class JdbcMigrationNode implements MigrationNode {
     @Override
     public @Nullable Task downTask() {
         if (downSql != null) {
-            return JdbcDownTask.create(environment, downSql, autocommit);
+            return JdbcDownTask.create(target, downSql, autocommit);
         }
         return null;
     }
@@ -111,9 +110,9 @@ public final class JdbcMigrationNode implements MigrationNode {
     /**
      * Fluent builder for {@link JdbcMigrationNode}.
      *
-     * <p>The identifier, name, environment, and UP SQL are required; the description, dependencies,
-     * DOWN SQL, and autocommit flag are optional. UP/DOWN SQL may be supplied as a literal string,
-     * read from a file, or loaded from a classpath resource.
+     * <p>The identifier, name, target, and UP SQL are required; the description, dependencies, DOWN
+     * SQL, and autocommit flag are optional. UP/DOWN SQL may be supplied as a literal string, read
+     * from a file, or loaded from a classpath resource.
      */
     public static class Builder {
 
@@ -123,7 +122,7 @@ public final class JdbcMigrationNode implements MigrationNode {
         private @Nullable NodeId id;
         private @Nullable String name;
         private @Nullable String description;
-        private @Nullable JdbcEnvironment environment;
+        private @Nullable JdbcTarget target;
         private Set<NodeId> dependencies = Set.of();
         private @Nullable String upSql;
         private @Nullable String downSql;
@@ -174,13 +173,13 @@ public final class JdbcMigrationNode implements MigrationNode {
         }
 
         /**
-         * Sets the owning JDBC environment.
+         * Sets the owning JDBC target.
          *
-         * @param environment the environment the node runs against
+         * @param target the target the node runs against
          * @return this builder
          */
-        public Builder environment(JdbcEnvironment environment) {
-            this.environment = environment;
+        public Builder target(JdbcTarget target) {
+            this.target = target;
             return this;
         }
 
@@ -292,8 +291,8 @@ public final class JdbcMigrationNode implements MigrationNode {
          * Builds the immutable {@link JdbcMigrationNode}.
          *
          * @return a new {@link JdbcMigrationNode}
-         * @throws NullPointerException if a required attribute (id, name, environment, or UP SQL)
-         *     was not set
+         * @throws NullPointerException if a required attribute (id, name, target, or UP SQL) was
+         *     not set
          * @throws IllegalArgumentException if the UP SQL is blank
          */
         public JdbcMigrationNode build() {
@@ -329,8 +328,8 @@ public final class JdbcMigrationNode implements MigrationNode {
                 + id
                 + ", name='"
                 + name
-                + "', environment="
-                + environment.name()
+                + "', target="
+                + target.name()
                 + ", dependencies="
                 + dependencies.size()
                 + '}';

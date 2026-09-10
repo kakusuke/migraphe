@@ -2,14 +2,14 @@ package io.github.kakusuke.migraphe.core.factory;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.*;
@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class MigrationNodeFactoryTest {
 
     private PluginRegistry pluginRegistry;
-    private Environment environment;
+    private Target target;
 
     @BeforeEach
     void setUp() {
@@ -29,9 +29,9 @@ class MigrationNodeFactoryTest {
         pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
 
-        // テスト用の Environment を作成
-        environment =
-                PostgreSQLEnvironment.create(
+        // テスト用の Target を作成
+        target =
+                PostgreSQLTarget.create(
                         "test-db", "jdbc:postgresql://localhost:5432/test", "user", "pass");
     }
 
@@ -71,13 +71,13 @@ class MigrationNodeFactoryTest {
         NodeId nodeId = NodeId.of("task-001");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, target);
 
         // Then: 正しく生成されている
         assertThat(node).isInstanceOf(JdbcMigrationNode.class);
         assertThat(node.id()).isEqualTo(nodeId);
         assertThat(node.name()).isEqualTo("test-task");
-        assertThat(node.environment()).isEqualTo(environment);
+        assertThat(node.target()).isEqualTo(target);
         assertThat(node.dependencies()).isEmpty();
     }
 
@@ -101,7 +101,7 @@ class MigrationNodeFactoryTest {
         NodeId nodeId = NodeId.of("task-003");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, target);
 
         // Then: 依存関係が設定されている
         assertThat(node.dependencies())
@@ -118,7 +118,7 @@ class MigrationNodeFactoryTest {
         NodeId nodeId = NodeId.of("task-001");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, target);
 
         // Then: downTask()がnullを返す
         assertThat(node.downTask()).isNull();
@@ -143,7 +143,7 @@ class MigrationNodeFactoryTest {
         NodeId nodeId = NodeId.of("task-001");
 
         // When: ノードを生成
-        MigrationNode node = factory.createNode(taskDef, nodeId, environment);
+        MigrationNode node = factory.createNode(taskDef, nodeId, target);
 
         // Then: downTask()が存在する
         assertThat(node.downTask()).isNotNull();
@@ -178,10 +178,10 @@ class MigrationNodeFactoryTest {
         taskDefinitions.put(
                 NodeId.of("task-002"), config2.getConfigMapping(SqlTaskDefinition.class));
 
-        Map<String, Environment> environments = Map.of("test-db", environment);
+        Map<String, Target> targets = Map.of("test-db", target);
 
         // When: 一括生成
-        List<MigrationNode> nodes = factory.createNodes(taskDefinitions, environments);
+        List<MigrationNode> nodes = factory.createNodes(taskDefinitions, targets);
 
         // Then: 2つのノードが生成される
         assertThat(nodes).hasSize(2);

@@ -6,8 +6,8 @@ import io.github.kakusuke.migraphe.jdbc.JdbcException;
  * Unchecked exception raised by the MySQL plugin.
  *
  * <p>Extends {@link JdbcException} so callers can catch the common JDBC supertype while still
- * distinguishing MySQL-specific failures, such as configuration mismatches (a non-MySQL environment
- * or task definition) or low-level errors surfaced while operating against a MySQL target.
+ * distinguishing MySQL-specific failures, such as configuration mismatches (a non-MySQL target or
+ * task definition) or low-level errors surfaced while operating against a MySQL target.
  *
  * @see JdbcException
  */

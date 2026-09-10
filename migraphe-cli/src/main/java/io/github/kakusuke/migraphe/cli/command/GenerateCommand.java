@@ -119,7 +119,7 @@ public class GenerateCommand implements Command {
                 GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
                 executor.executeAll(
                         generators,
-                        context.environments(),
+                        context.targets(),
                         context.graph(),
                         context.createHistoryRepository(),
                         context.config(),

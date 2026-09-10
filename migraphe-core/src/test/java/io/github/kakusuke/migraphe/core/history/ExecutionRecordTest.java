@@ -3,10 +3,10 @@ package io.github.kakusuke.migraphe.core.history;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import org.junit.jupiter.api.Test;
 
@@ -16,7 +16,7 @@ class ExecutionRecordTest {
     void shouldCreateUpSuccessRecord() {
         // given
         NodeId nodeId = NodeId.of("node-1");
-        EnvironmentId envId = EnvironmentId.of("dev");
+        TargetId envId = TargetId.of("dev");
         String description = "Create users table";
         String serializedDownTask = "{\"rollback\":\"drop table\"}";
         long durationMs = 100;
@@ -28,7 +28,7 @@ class ExecutionRecordTest {
 
         // then
         assertThat(record.nodeId()).isEqualTo(nodeId);
-        assertThat(record.environmentId()).isEqualTo(envId);
+        assertThat(record.targetId()).isEqualTo(envId);
         assertThat(record.direction()).isEqualTo(ExecutionDirection.UP);
         assertThat(record.status()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(record.description()).isEqualTo(description);
@@ -45,7 +45,7 @@ class ExecutionRecordTest {
     void shouldCreateDownSuccessRecord() {
         // given
         NodeId nodeId = NodeId.of("node-1");
-        EnvironmentId envId = EnvironmentId.of("dev");
+        TargetId envId = TargetId.of("dev");
         String description = "Drop users table";
         long durationMs = 50;
 
@@ -66,7 +66,7 @@ class ExecutionRecordTest {
     void shouldCreateFailureRecord() {
         // given
         NodeId nodeId = NodeId.of("node-1");
-        EnvironmentId envId = EnvironmentId.of("staging");
+        TargetId envId = TargetId.of("staging");
         String description = "Failed migration";
         String errorMessage = "Connection timeout";
 
@@ -85,7 +85,7 @@ class ExecutionRecordTest {
     void shouldCreateSkippedRecord() {
         // given
         NodeId nodeId = NodeId.of("node-1");
-        EnvironmentId envId = EnvironmentId.of("prod");
+        TargetId envId = TargetId.of("prod");
         String description = "Already executed";
         String reason = "Migration already applied";
 
@@ -107,7 +107,7 @@ class ExecutionRecordTest {
                                 new ExecutionRecord(
                                         "id-1",
                                         NodeId.of("node-1"),
-                                        EnvironmentId.of("dev"),
+                                        TargetId.of("dev"),
                                         ExecutionDirection.UP,
                                         ExecutionStatus.FAILURE,
                                         java.time.Instant.now(),
@@ -127,7 +127,7 @@ class ExecutionRecordTest {
                                 new ExecutionRecord(
                                         "id-1",
                                         NodeId.of("node-1"),
-                                        EnvironmentId.of("dev"),
+                                        TargetId.of("dev"),
                                         ExecutionDirection.DOWN,
                                         ExecutionStatus.SUCCESS,
                                         java.time.Instant.now(),
@@ -144,7 +144,7 @@ class ExecutionRecordTest {
         // when
         ExecutionRecord record =
                 ExecutionRecord.upSuccess(
-                        NodeId.of("node-1"), EnvironmentId.of("dev"), "desc", null, 100);
+                        NodeId.of("node-1"), TargetId.of("dev"), "desc", null, 100);
 
         // then
         assertThat(record.serializedDownTask()).isNull();

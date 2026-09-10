@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.postgresql;
 
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentProvider;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 
@@ -12,8 +12,8 @@ import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
  * PostgreSQL plugin implementation ({@code type="postgresql"}).
  *
  * <p>Bundles every piece needed to drive PostgreSQL migrations: the type discriminator, the
- * configuration definition classes, and the providers for environments, migration nodes, and the
- * history repository. Discovered at runtime via {@link java.util.ServiceLoader} (declared in {@code
+ * configuration definition classes, and the providers for targets, migration nodes, and the history
+ * repository. Discovered at runtime via {@link java.util.ServiceLoader} (declared in {@code
  * META-INF/services/io.github.kakusuke.migraphe.api.spi.MigraphePlugin}) and registered into the
  * core {@code PluginRegistry}.
  *
@@ -46,23 +46,23 @@ public final class PostgreSQLPlugin implements MigraphePlugin<String> {
     }
 
     /**
-     * Returns the {@link EnvironmentDefinition} subtype this plugin binds target YAML to.
+     * Returns the {@link TargetDefinition} subtype this plugin binds target YAML to.
      *
-     * @return {@link PostgreSQLEnvironmentDefinition}{@code .class}
+     * @return {@link PostgreSQLTargetDefinition}{@code .class}
      */
     @Override
-    public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
-        return PostgreSQLEnvironmentDefinition.class;
+    public Class<? extends TargetDefinition> targetDefinitionClass() {
+        return PostgreSQLTargetDefinition.class;
     }
 
     /**
-     * Returns the provider that creates {@link PostgreSQLEnvironment} instances.
+     * Returns the provider that creates {@link PostgreSQLTarget} instances.
      *
-     * @return a new {@link PostgreSQLEnvironmentProvider}
+     * @return a new {@link PostgreSQLTargetProvider}
      */
     @Override
-    public EnvironmentProvider environmentProvider() {
-        return new PostgreSQLEnvironmentProvider();
+    public TargetProvider targetProvider() {
+        return new PostgreSQLTargetProvider();
     }
 
     /**

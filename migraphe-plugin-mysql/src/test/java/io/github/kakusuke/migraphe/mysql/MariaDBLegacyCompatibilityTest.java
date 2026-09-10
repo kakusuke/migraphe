@@ -32,8 +32,8 @@ import org.testcontainers.utility.DockerImageName;
  * publish arm64 images.
  *
  * <p>The image is driven through {@link MySQLContainer} rather than {@code MariaDBContainer} so the
- * container hands out a {@code jdbc:mysql://} URL, which is what {@link MySQLEnvironment}'s fixed
- * MySQL driver can open.
+ * container hands out a {@code jdbc:mysql://} URL, which is what {@link MySQLTarget}'s fixed MySQL
+ * driver can open.
  */
 @Testcontainers
 class MariaDBLegacyCompatibilityTest {
@@ -48,18 +48,18 @@ class MariaDBLegacyCompatibilityTest {
     private static final String MYSQL_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/mysql/schema/init_history_table.sql";
 
-    private MySQLEnvironment environment;
+    private MySQLTarget target;
     private HistoryRepository historyRepo;
 
     @BeforeEach
     void setUp() throws Exception {
-        environment =
-                MySQLEnvironment.create(
+        target =
+                MySQLTarget.create(
                         "test", mariadb.getJdbcUrl(), mariadb.getUsername(), mariadb.getPassword());
-        historyRepo = new JdbcHistoryRepository(environment, MYSQL_SCHEMA_RESOURCE);
+        historyRepo = new JdbcHistoryRepository(target, MYSQL_SCHEMA_RESOURCE);
 
         // The container is shared by every test, so start each one from an empty history.
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP TABLE IF EXISTS migraphe_history");
         }
@@ -69,7 +69,7 @@ class MariaDBLegacyCompatibilityTest {
     void serverEnforcesLegacyInnoDbKeyLimit() throws Exception {
         // Canary: if a future image stops enforcing the 767-byte limit, the DDL test below would
         // silently stop proving anything.
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery("SELECT @@innodb_large_prefix")) {
             assertThat(rs.next()).isTrue();
@@ -84,9 +84,9 @@ class MariaDBLegacyCompatibilityTest {
         NodeId nodeId = NodeId.of("db1/create_table");
         historyRepo.record(
                 ExecutionRecord.upSuccess(
-                        nodeId, environment.id(), "create table", "DROP TABLE users", 10));
+                        nodeId, target.id(), "create table", "DROP TABLE users", 10));
 
-        assertThat(historyRepo.wasExecuted(nodeId, environment.id())).isTrue();
+        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isTrue();
     }
 
     @Test
@@ -98,11 +98,10 @@ class MariaDBLegacyCompatibilityTest {
 
         NodeId nodeId = NodeId.of("ユーザ作成");
         historyRepo.record(
-                ExecutionRecord.upSuccess(
-                        nodeId, environment.id(), "ユーザ作成", "DROP TABLE users", 10));
+                ExecutionRecord.upSuccess(nodeId, target.id(), "ユーザ作成", "DROP TABLE users", 10));
 
-        assertThat(historyRepo.wasExecuted(nodeId, environment.id())).isTrue();
-        ExecutionRecord latest = historyRepo.findLatestRecord(nodeId, environment.id());
+        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isTrue();
+        ExecutionRecord latest = historyRepo.findLatestRecord(nodeId, target.id());
         assertThat(latest).isNotNull();
         assertThat(latest.nodeId()).isEqualTo(nodeId);
     }
@@ -130,7 +129,7 @@ class MariaDBLegacyCompatibilityTest {
                         base.plusSeconds(2)));
         historyRepo.record(record(failed, ExecutionDirection.UP, ExecutionStatus.FAILURE, base));
 
-        assertThat(historyRepo.executedNodes(environment.id())).containsExactly(applied);
+        assertThat(historyRepo.executedNodes(target.id())).containsExactly(applied);
     }
 
     @Test
@@ -143,7 +142,7 @@ class MariaDBLegacyCompatibilityTest {
 
         assertThatCode(() -> historyRepo.initialize()).doesNotThrowAnyException();
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -181,7 +180,7 @@ class MariaDBLegacyCompatibilityTest {
                         ExecutionStatus.SUCCESS,
                         sameSecond));
 
-        assertThat(historyRepo.wasExecuted(node, environment.id())).isFalse();
+        assertThat(historyRepo.wasExecuted(node, target.id())).isFalse();
     }
 
     @Test
@@ -205,7 +204,7 @@ class MariaDBLegacyCompatibilityTest {
                         ExecutionStatus.SUCCESS,
                         sameSecond));
 
-        assertThat(historyRepo.wasExecuted(node, environment.id())).isTrue();
+        assertThat(historyRepo.wasExecuted(node, target.id())).isTrue();
     }
 
     @Test
@@ -229,14 +228,14 @@ class MariaDBLegacyCompatibilityTest {
                         ExecutionStatus.SUCCESS,
                         sameSecond));
 
-        assertThat(historyRepo.executedNodes(environment.id())).isEmpty();
+        assertThat(historyRepo.executedNodes(target.id())).isEmpty();
     }
 
     @Test
     void renamesLegacyEnvironmentIdColumnWithChangeColumn() throws Exception {
         // RENAME COLUMN needs MariaDB 10.5.2, so the resource spells the rename as CHANGE COLUMN;
         // this server is where that choice has to hold.
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute(
                     """
@@ -264,11 +263,11 @@ class MariaDBLegacyCompatibilityTest {
         assertThat(columnExists("target_id")).isTrue();
         assertThat(columnExists("environment_id")).isFalse();
         // The migrated row still reads back through the repository, index prefixes included.
-        assertThat(historyRepo.wasExecuted(NodeId.of("db1/legacy"), environment.id())).isTrue();
+        assertThat(historyRepo.wasExecuted(NodeId.of("db1/legacy"), target.id())).isTrue();
     }
 
     private boolean columnExists(String column) throws Exception {
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -286,7 +285,7 @@ class MariaDBLegacyCompatibilityTest {
      * in creation order rather than hand-written ones.
      */
     private String generatedId() {
-        return ExecutionRecord.upSuccess(NodeId.of("seed"), environment.id(), "seed", null, 0).id();
+        return ExecutionRecord.upSuccess(NodeId.of("seed"), target.id(), "seed", null, 0).id();
     }
 
     private ExecutionRecord record(
@@ -306,7 +305,7 @@ class MariaDBLegacyCompatibilityTest {
         return new ExecutionRecord(
                 id,
                 nodeId,
-                environment.id(),
+                target.id(),
                 direction,
                 status,
                 executedAt,

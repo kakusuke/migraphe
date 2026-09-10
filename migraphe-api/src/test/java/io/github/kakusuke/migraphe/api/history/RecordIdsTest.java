@@ -184,7 +184,7 @@ class RecordIdsTest {
                 records.add(
                         ExecutionRecord.upSuccess(
                                 io.github.kakusuke.migraphe.api.graph.NodeId.of("n" + i),
-                                io.github.kakusuke.migraphe.api.environment.EnvironmentId.of("t"),
+                                io.github.kakusuke.migraphe.api.target.TargetId.of("t"),
                                 "d",
                                 null,
                                 1));

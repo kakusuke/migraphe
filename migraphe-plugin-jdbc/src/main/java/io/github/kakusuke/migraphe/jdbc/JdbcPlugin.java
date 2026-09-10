@@ -1,11 +1,11 @@
 package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.schema.SchemaInfoProvider;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentProvider;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfoProvider;
 import java.util.Optional;
@@ -20,9 +20,8 @@ import java.util.Optional;
  * PostgreSQL and MySQL plugins.
  *
  * <p>The plugin bundles the full set of providers required by the core orchestration layer: it maps
- * {@link SqlTaskDefinition} and {@link JdbcEnvironmentDefinition} from YAML, builds environments,
- * migration nodes, and history repositories, and exposes a JDBC schema-info provider for
- * generators.
+ * {@link SqlTaskDefinition} and {@link JdbcTargetDefinition} from YAML, builds targets, migration
+ * nodes, and history repositories, and exposes a JDBC schema-info provider for generators.
  */
 public final class JdbcPlugin implements MigraphePlugin<String> {
 
@@ -50,23 +49,23 @@ public final class JdbcPlugin implements MigraphePlugin<String> {
     }
 
     /**
-     * Returns the environment-definition mapping type used to bind target YAML.
+     * Returns the target-definition mapping type used to bind target YAML.
      *
-     * @return {@link JdbcEnvironmentDefinition}{@code .class}
+     * @return {@link JdbcTargetDefinition}{@code .class}
      */
     @Override
-    public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
-        return JdbcEnvironmentDefinition.class;
+    public Class<? extends TargetDefinition> targetDefinitionClass() {
+        return JdbcTargetDefinition.class;
     }
 
     /**
-     * Returns the provider that builds {@link JdbcEnvironment} instances.
+     * Returns the provider that builds {@link JdbcTarget} instances.
      *
-     * @return a new {@link JdbcEnvironmentProvider}
+     * @return a new {@link JdbcTargetProvider}
      */
     @Override
-    public EnvironmentProvider environmentProvider() {
-        return new JdbcEnvironmentProvider();
+    public TargetProvider targetProvider() {
+        return new JdbcTargetProvider();
     }
 
     /**

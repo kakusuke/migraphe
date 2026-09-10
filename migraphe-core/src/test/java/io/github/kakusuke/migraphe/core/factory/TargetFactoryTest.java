@@ -2,12 +2,12 @@ package io.github.kakusuke.migraphe.core.factory;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.spi.EnvironmentDefinition;
+import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.config.ConfigLoader;
 import io.github.kakusuke.migraphe.core.plugin.PluginNotFoundException;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.Map;
@@ -17,10 +17,10 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-class EnvironmentFactoryTest {
+class TargetFactoryTest {
 
     private PluginRegistry pluginRegistry;
-    private EnvironmentFactory factory;
+    private TargetFactory factory;
     private ConfigLoader configLoader;
 
     @BeforeEach
@@ -28,12 +28,12 @@ class EnvironmentFactoryTest {
         // PostgreSQLプラグインをクラスパスからロード
         pluginRegistry = new PluginRegistry();
         pluginRegistry.loadFromClasspath();
-        factory = new EnvironmentFactory(pluginRegistry);
+        factory = new TargetFactory(pluginRegistry);
         configLoader = new ConfigLoader();
     }
 
     @Test
-    void shouldCreatePostgreSQLEnvironmentFromDefinition() {
+    void shouldCreatePostgreSQLTargetFromDefinition() {
         // Given: TargetConfig がロードされた SmallRyeConfig
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
@@ -50,25 +50,25 @@ class EnvironmentFactoryTest {
                                                 "secret")))
                         .build();
 
-        // When: EnvironmentDefinition を読み込んで Environment を生成
-        Map<String, EnvironmentDefinition> definitions =
-                configLoader.loadEnvironmentDefinitions(config, pluginRegistry);
-        EnvironmentDefinition definition = Objects.requireNonNull(definitions.get("db1"));
-        Environment environment = factory.createEnvironment("db1", definition);
+        // When: TargetDefinition を読み込んで Target を生成
+        Map<String, TargetDefinition> definitions =
+                configLoader.loadTargetDefinitions(config, pluginRegistry);
+        TargetDefinition definition = Objects.requireNonNull(definitions.get("db1"));
+        Target target = factory.createTarget("db1", definition);
 
         // Then: 正しく生成される
-        assertThat(environment).isInstanceOf(PostgreSQLEnvironment.class);
-        assertThat(environment.name()).isEqualTo("db1");
+        assertThat(target).isInstanceOf(PostgreSQLTarget.class);
+        assertThat(target.name()).isEqualTo("db1");
 
-        // PostgreSQLEnvironment 固有のプロパティを検証
-        PostgreSQLEnvironment pgEnv = (PostgreSQLEnvironment) environment;
+        // PostgreSQLTarget 固有のプロパティを検証
+        PostgreSQLTarget pgEnv = (PostgreSQLTarget) target;
         assertThat(pgEnv.getJdbcUrl()).isEqualTo("jdbc:postgresql://localhost:5432/mydb");
         assertThat(pgEnv.getUsername()).isEqualTo("dbuser");
         assertThat(pgEnv.getPassword()).isEqualTo("secret");
     }
 
     @Test
-    void shouldCreateMultipleEnvironments() {
+    void shouldCreateMultipleTargets() {
         // Given: 複数のターゲット設定
         SmallRyeConfig config =
                 new SmallRyeConfigBuilder()
@@ -93,31 +93,31 @@ class EnvironmentFactoryTest {
                                                 "pass2")))
                         .build();
 
-        // When: EnvironmentDefinition を読み込んで Environment を生成
-        Map<String, EnvironmentDefinition> definitions =
-                configLoader.loadEnvironmentDefinitions(config, pluginRegistry);
-        Map<String, Environment> environments = factory.createEnvironments(definitions);
+        // When: TargetDefinition を読み込んで Target を生成
+        Map<String, TargetDefinition> definitions =
+                configLoader.loadTargetDefinitions(config, pluginRegistry);
+        Map<String, Target> targets = factory.createTargets(definitions);
 
         // Then: 両方のターゲットが生成される
-        assertThat(environments).hasSize(2);
-        assertThat(environments).containsKeys("db1", "db2");
+        assertThat(targets).hasSize(2);
+        assertThat(targets).containsKeys("db1", "db2");
 
-        Environment db1 = Objects.requireNonNull(environments.get("db1"));
+        Target db1 = Objects.requireNonNull(targets.get("db1"));
         assertThat(db1.name()).isEqualTo("db1");
-        assertThat(db1).isInstanceOf(PostgreSQLEnvironment.class);
-        assertThat(((PostgreSQLEnvironment) db1).getJdbcUrl()).isEqualTo("jdbc:postgresql://db1");
+        assertThat(db1).isInstanceOf(PostgreSQLTarget.class);
+        assertThat(((PostgreSQLTarget) db1).getJdbcUrl()).isEqualTo("jdbc:postgresql://db1");
 
-        Environment db2 = Objects.requireNonNull(environments.get("db2"));
+        Target db2 = Objects.requireNonNull(targets.get("db2"));
         assertThat(db2.name()).isEqualTo("db2");
-        assertThat(db2).isInstanceOf(PostgreSQLEnvironment.class);
-        assertThat(((PostgreSQLEnvironment) db2).getJdbcUrl()).isEqualTo("jdbc:postgresql://db2");
+        assertThat(db2).isInstanceOf(PostgreSQLTarget.class);
+        assertThat(((PostgreSQLTarget) db2).getJdbcUrl()).isEqualTo("jdbc:postgresql://db2");
     }
 
     @Test
     void shouldThrowExceptionWhenPluginNotFound() {
         // Given: 未知の type を持つ定義
-        EnvironmentDefinition unknownDefinition =
-                new EnvironmentDefinition() {
+        TargetDefinition unknownDefinition =
+                new TargetDefinition() {
                     @Override
                     public String type() {
                         return "unknown-type";
@@ -125,7 +125,7 @@ class EnvironmentFactoryTest {
                 };
 
         // When & Then: プラグインが見つからない例外が発生
-        assertThatThrownBy(() -> factory.createEnvironment("db1", unknownDefinition))
+        assertThatThrownBy(() -> factory.createTarget("db1", unknownDefinition))
                 .isInstanceOf(PluginNotFoundException.class)
                 .hasMessageContaining("No plugin found for type 'unknown-type'");
     }
@@ -133,13 +133,13 @@ class EnvironmentFactoryTest {
     @Test
     void shouldHandleEmptyDefinitions() {
         // Given: 空の定義マップ
-        Map<String, EnvironmentDefinition> definitions = Map.of();
+        Map<String, TargetDefinition> definitions = Map.of();
 
-        // When: 全 Environment を生成
-        Map<String, Environment> environments = factory.createEnvironments(definitions);
+        // When: 全 Target を生成
+        Map<String, Target> targets = factory.createTargets(definitions);
 
         // Then: 空のマップが返される
-        assertThat(environments).isEmpty();
+        assertThat(targets).isEmpty();
     }
 
     /** テスト用のシンプルなConfigSource実装。 */

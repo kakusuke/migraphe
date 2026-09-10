@@ -1,6 +1,5 @@
 package io.github.kakusuke.migraphe.core.generator;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.generator.DefinitionResolver;
 import io.github.kakusuke.migraphe.api.generator.GeneratorDefinition;
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
@@ -9,6 +8,7 @@ import io.github.kakusuke.migraphe.api.generator.OutputContext;
 import io.github.kakusuke.migraphe.api.generator.SourceContext;
 import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.smallrye.config.SmallRyeConfig;
 import java.nio.file.Path;
@@ -22,10 +22,10 @@ import org.jspecify.annotations.Nullable;
  * GeneratorOutputPlugin output} plugins.
  *
  * <p>For each configured generator it resolves the source plugin by its {@code source.type},
- * extracts a typed data object using a {@link SourceContext} assembled from the available
- * environment, migration graph, and history repository, then resolves the output plugin by the
- * generator's {@code type} and hands it the data together with an {@link OutputContext}. The
- * plugins themselves are obtained from the supplied {@link GeneratorRegistry}.
+ * extracts a typed data object using a {@link SourceContext} assembled from the available target,
+ * migration graph, and history repository, then resolves the output plugin by the generator's
+ * {@code type} and hands it the data together with an {@link OutputContext}. The plugins themselves
+ * are obtained from the supplied {@link GeneratorRegistry}.
  *
  * <p>Several overloads exist that differ only in which optional inputs they carry. When a {@link
  * SmallRyeConfig} is provided, plugin-specific {@code @ConfigMapping} definitions can be
@@ -54,8 +54,7 @@ public final class GeneratorExecutor {
      * {@code @ConfigMapping} fields cannot be resolved.
      *
      * @param generators the generator configuration sections to run
-     * @param environments the available environments, keyed by target id, for source plugins to
-     *     connect to
+     * @param targets the available targets, keyed by target id, for source plugins to connect to
      * @param graph a read-only view of the migration graph, or {@code null} if not applicable
      * @param baseDir the project base directory against which each generator's output directory is
      *     resolved
@@ -64,19 +63,18 @@ public final class GeneratorExecutor {
      */
     public void executeAll(
             List<ProjectConfig.GeneratorSection> generators,
-            Map<String, Environment> environments,
+            Map<String, Target> targets,
             @Nullable MigrationGraphView graph,
             Path baseDir,
             @Nullable String nameFilter) {
-        executeAll(generators, environments, graph, null, null, baseDir, nameFilter);
+        executeAll(generators, targets, graph, null, null, baseDir, nameFilter);
     }
 
     /**
      * Runs all matching generators with a history repository but no {@link SmallRyeConfig}.
      *
      * @param generators the generator configuration sections to run
-     * @param environments the available environments, keyed by target id, for source plugins to
-     *     connect to
+     * @param targets the available targets, keyed by target id, for source plugins to connect to
      * @param graph a read-only view of the migration graph, or {@code null} if not applicable
      * @param historyRepository the execution-history repository, or {@code null} if not applicable
      * @param baseDir the project base directory against which each generator's output directory is
@@ -86,12 +84,12 @@ public final class GeneratorExecutor {
      */
     public void executeAll(
             List<ProjectConfig.GeneratorSection> generators,
-            Map<String, Environment> environments,
+            Map<String, Target> targets,
             @Nullable MigrationGraphView graph,
             @Nullable HistoryRepository historyRepository,
             Path baseDir,
             @Nullable String nameFilter) {
-        executeAll(generators, environments, graph, historyRepository, null, baseDir, nameFilter);
+        executeAll(generators, targets, graph, historyRepository, null, baseDir, nameFilter);
     }
 
     /**
@@ -103,8 +101,7 @@ public final class GeneratorExecutor {
      * {@link PropertiesDefinitionResolver}; otherwise a minimal fallback resolver is used.
      *
      * @param generators the generator configuration sections to run
-     * @param environments the available environments, keyed by target id, for source plugins to
-     *     connect to
+     * @param targets the available targets, keyed by target id, for source plugins to connect to
      * @param graph a read-only view of the migration graph, or {@code null} if not applicable
      * @param historyRepository the execution-history repository, or {@code null} if not applicable
      * @param projectConfig the parsed project configuration enabling typed definition resolution,
@@ -116,7 +113,7 @@ public final class GeneratorExecutor {
      */
     public void executeAll(
             List<ProjectConfig.GeneratorSection> generators,
-            Map<String, Environment> environments,
+            Map<String, Target> targets,
             @Nullable MigrationGraphView graph,
             @Nullable HistoryRepository historyRepository,
             @Nullable SmallRyeConfig projectConfig,
@@ -128,8 +125,7 @@ public final class GeneratorExecutor {
                 continue;
             }
             DefinitionResolver resolver = resolverFor(config, index, projectConfig);
-            executeWithSourceOutput(
-                    config, environments, graph, historyRepository, resolver, baseDir);
+            executeWithSourceOutput(config, targets, graph, historyRepository, resolver, baseDir);
         }
     }
 
@@ -140,20 +136,20 @@ public final class GeneratorExecutor {
      * plugin-specific {@code @ConfigMapping} definitions are not available.
      *
      * @param config the generator configuration section to run
-     * @param environments the available environments, keyed by target id
+     * @param targets the available targets, keyed by target id
      * @param graph a read-only view of the migration graph, or {@code null} if not applicable
      * @param historyRepository the execution-history repository, or {@code null} if not applicable
      * @param baseDir the project base directory against which the output directory is resolved
      */
     public void executeWithSourceOutput(
             ProjectConfig.GeneratorSection config,
-            Map<String, Environment> environments,
+            Map<String, Target> targets,
             @Nullable MigrationGraphView graph,
             @Nullable HistoryRepository historyRepository,
             Path baseDir) {
         executeWithSourceOutput(
                 config,
-                environments,
+                targets,
                 graph,
                 historyRepository,
                 new GeneratorSectionFallbackResolver(config),
@@ -164,13 +160,13 @@ public final class GeneratorExecutor {
      * Runs a single generator using an explicitly supplied definition resolver.
      *
      * <p>Resolves the source plugin from {@code config.source().type()}, extracts data through a
-     * {@link SourceContext} built from the target environment (looked up by {@code
-     * config.source().target()}), the graph, and the history repository, then resolves the output
-     * plugin from {@code config.type()} and renders the data into {@code
-     * baseDir.resolve(config.outputDir())} via an {@link OutputContext} carrying {@code resolver}.
+     * {@link SourceContext} built from the target (looked up by {@code config.source().target()}),
+     * the graph, and the history repository, then resolves the output plugin from {@code
+     * config.type()} and renders the data into {@code baseDir.resolve(config.outputDir())} via an
+     * {@link OutputContext} carrying {@code resolver}.
      *
      * @param config the generator configuration section to run
-     * @param environments the available environments, keyed by target id
+     * @param targets the available targets, keyed by target id
      * @param graph a read-only view of the migration graph, or {@code null} if not applicable
      * @param historyRepository the execution-history repository, or {@code null} if not applicable
      * @param resolver the resolver used to materialize the output plugin's typed definition
@@ -180,7 +176,7 @@ public final class GeneratorExecutor {
      */
     public void executeWithSourceOutput(
             ProjectConfig.GeneratorSection config,
-            Map<String, Environment> environments,
+            Map<String, Target> targets,
             @Nullable MigrationGraphView graph,
             @Nullable HistoryRepository historyRepository,
             DefinitionResolver resolver,
@@ -199,8 +195,8 @@ public final class GeneratorExecutor {
                                         new IllegalArgumentException(
                                                 "Generator source plugin not found for type: "
                                                         + sourceType));
-        Environment environment = config.source().target().map(environments::get).orElse(null);
-        SourceContext sourceContext = new SourceContext(environment, graph, historyRepository);
+        Target target = config.source().target().map(targets::get).orElse(null);
+        SourceContext sourceContext = new SourceContext(target, graph, historyRepository);
         Object data = sourcePlugin.extract(sourceContext);
 
         GeneratorOutputPlugin outputPlugin =

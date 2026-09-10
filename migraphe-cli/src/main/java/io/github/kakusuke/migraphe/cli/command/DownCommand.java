@@ -33,7 +33,7 @@ import org.jspecify.annotations.Nullable;
 public class DownCommand implements Command {
 
     private final ExecutionContext context;
-    private final @Nullable NodeId targetVersion;
+    private final @Nullable NodeId requestedNode;
     private final boolean allMigrations;
     private final boolean skipConfirmation;
     private final boolean dryRun;
@@ -45,7 +45,7 @@ public class DownCommand implements Command {
      * auto-detecting color support.
      *
      * @param context the loaded execution context (graph, config, history)
-     * @param targetVersion the node version to roll back (together with everything depending on
+     * @param requestedNode the node version to roll back (together with everything depending on
      *     it), or {@code null} when {@code allMigrations} is {@code true}
      * @param allMigrations {@code true} to roll back every executed migration
      * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
@@ -53,13 +53,13 @@ public class DownCommand implements Command {
      */
     public DownCommand(
             ExecutionContext context,
-            @Nullable NodeId targetVersion,
+            @Nullable NodeId requestedNode,
             boolean allMigrations,
             boolean skipConfirmation,
             boolean dryRun) {
         this(
                 context,
-                targetVersion,
+                requestedNode,
                 allMigrations,
                 skipConfirmation,
                 dryRun,
@@ -72,7 +72,7 @@ public class DownCommand implements Command {
      * for testing.
      *
      * @param context the loaded execution context (graph, config, history)
-     * @param targetVersion the node version to roll back (together with everything depending on
+     * @param requestedNode the node version to roll back (together with everything depending on
      *     it), or {@code null} when {@code allMigrations} is {@code true}
      * @param allMigrations {@code true} to roll back every executed migration
      * @param skipConfirmation {@code true} to skip the interactive confirmation prompt
@@ -82,14 +82,14 @@ public class DownCommand implements Command {
      */
     public DownCommand(
             ExecutionContext context,
-            @Nullable NodeId targetVersion,
+            @Nullable NodeId requestedNode,
             boolean allMigrations,
             boolean skipConfirmation,
             boolean dryRun,
             InputStream inputStream,
             boolean colorEnabled) {
         this.context = context;
-        this.targetVersion = targetVersion;
+        this.requestedNode = requestedNode;
         this.allMigrations = allMigrations;
         this.skipConfirmation = skipConfirmation;
         this.dryRun = dryRun;
@@ -102,12 +102,12 @@ public class DownCommand implements Command {
         try {
             // 1. Validate the arguments.
             if (!allMigrations) {
-                if (targetVersion == null) {
+                if (requestedNode == null) {
                     System.err.println("Error: Either --all or target version must be specified.");
                     return 1;
                 }
-                if (context.graph().getNode(targetVersion).isEmpty()) {
-                    System.err.println("Error: Target version not found: " + targetVersion.value());
+                if (context.graph().getNode(requestedNode).isEmpty()) {
+                    System.err.println("Error: Target version not found: " + requestedNode.value());
                     return 1;
                 }
             }
@@ -123,17 +123,17 @@ public class DownCommand implements Command {
                             context.graph(), historyRepo, listener, ExecutionDirection.DOWN, 1);
 
             // 4. Determine the nodes to roll back.
-            Set<NodeId> targetNodes =
-                    executor.determineRollbackTargets(targetVersion, allMigrations);
+            Set<NodeId> selectedNodes =
+                    executor.determineRollbackTargets(requestedNode, allMigrations);
 
-            if (targetNodes.isEmpty()) {
+            if (selectedNodes.isEmpty()) {
                 System.out.println("No migrations to rollback.");
                 return 0;
             }
 
             // 5. Build the reverse execution plan and display the graph.
             ExecutionPlan plan =
-                    TopologicalSort.createReverseExecutionPlanFor(context.graph(), targetNodes);
+                    TopologicalSort.createReverseExecutionPlanFor(context.graph(), selectedNodes);
             displayRollbackPlan(context, plan, historyRepo);
 
             // 6. Stop here in dry-run mode.
@@ -154,7 +154,7 @@ public class DownCommand implements Command {
             System.out.println("Executing rollback...");
             System.out.println();
 
-            ExecutionResult result = executor.execute(targetNodes);
+            ExecutionResult result = executor.execute(selectedNodes);
             return result.success() ? 0 : 1;
 
         } catch (Exception e) {
@@ -183,7 +183,7 @@ public class DownCommand implements Command {
                 graphView.renderLines(
                         node -> {
                             String status =
-                                    historyRepo.wasExecuted(node.id(), node.environment().id())
+                                    historyRepo.wasExecuted(node.id(), node.target().id())
                                             ? "[✓]"
                                             : "[ ]";
                             return status + " " + node.id().value() + " - " + node.name();

@@ -16,13 +16,13 @@ class NoopPluginTest {
     void shouldProvideCorrectDefinitionClasses() {
         var plugin = new NoopPlugin();
         assertThat(plugin.taskDefinitionClass()).isEqualTo(NoopTaskDefinition.class);
-        assertThat(plugin.environmentDefinitionClass()).isEqualTo(NoopEnvironmentDefinition.class);
+        assertThat(plugin.targetDefinitionClass()).isEqualTo(NoopTargetDefinition.class);
     }
 
     @Test
     void shouldProvideProviders() {
         var plugin = new NoopPlugin();
-        assertThat(plugin.environmentProvider()).isNotNull();
+        assertThat(plugin.targetProvider()).isNotNull();
         assertThat(plugin.migrationNodeProvider()).isNotNull();
         assertThat(plugin.historyRepositoryProvider()).isNotNull();
     }

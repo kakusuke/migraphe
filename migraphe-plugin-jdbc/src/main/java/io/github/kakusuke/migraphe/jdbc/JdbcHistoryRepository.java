@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.jdbc;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -25,9 +25,9 @@ import org.jspecify.annotations.Nullable;
  * to date by {@link #initialize()} from a SQL resource on the classpath. The resource is a list of
  * {@link SchemaStep}s — each a detection query paired with the statements applying it — so the
  * table can gain columns and indexes over time without any schema-version bookkeeping. Each query
- * opens a short-lived connection from the supplied {@link JdbcEnvironment}, so the repository keeps
- * the migration history in the same database the migrations run against. A node is considered
- * applied only when its most recent record is a successful {@code UP}.
+ * opens a short-lived connection from the supplied {@link JdbcTarget}, so the repository keeps the
+ * migration history in the same database the migrations run against. A node is considered applied
+ * only when its most recent record is a successful {@code UP}.
  *
  * <p>"Most recent" orders by {@code executed_at} and then by {@code id}. The identifier decides
  * ties because {@link ExecutionRecord}'s factories mint time-ordered UUIDv7 values, and ties are
@@ -40,24 +40,24 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>The target column is named {@code target_id}. Releases before 0.6.0 called it {@code
  * environment_id}; {@link #initialize()} renames it in place. It has always held a target id, so
- * {@link ExecutionRecord#environmentId()} maps onto it despite the differing name — the API-side
- * rename is a separate change.
+ * {@link ExecutionRecord#targetId()} maps onto it despite the differing name — the API-side rename
+ * is a separate change.
  */
 public final class JdbcHistoryRepository implements HistoryRepository {
 
     private static final String DEFAULT_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql";
 
-    private final JdbcEnvironment environment;
+    private final JdbcTarget target;
     private final String schemaResourcePath;
 
     /**
      * Creates a repository using the bundled default schema resource.
      *
-     * @param environment the environment whose database stores the history
+     * @param target the target whose database stores the history
      */
-    public JdbcHistoryRepository(JdbcEnvironment environment) {
-        this(environment, DEFAULT_SCHEMA_RESOURCE);
+    public JdbcHistoryRepository(JdbcTarget target) {
+        this(target, DEFAULT_SCHEMA_RESOURCE);
     }
 
     /**
@@ -66,12 +66,12 @@ public final class JdbcHistoryRepository implements HistoryRepository {
      * <p>Database-specific subclasses or callers can point this at a dialect-tuned DDL script used
      * by {@link #initialize()}.
      *
-     * @param environment the environment whose database stores the history
+     * @param target the target whose database stores the history
      * @param schemaResourcePath the classpath path of the SQL resource that creates the history
      *     table
      */
-    public JdbcHistoryRepository(JdbcEnvironment environment, String schemaResourcePath) {
-        this.environment = Objects.requireNonNull(environment, "environment must not be null");
+    public JdbcHistoryRepository(JdbcTarget target, String schemaResourcePath) {
+        this.target = Objects.requireNonNull(target, "target must not be null");
         this.schemaResourcePath =
                 Objects.requireNonNull(schemaResourcePath, "schemaResourcePath must not be null");
     }
@@ -102,7 +102,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
             throw new JdbcException("Failed to load schema resource", e);
         }
 
-        try (Connection conn = environment.createConnection()) {
+        try (Connection conn = target.createConnection()) {
             for (SchemaStep step : steps) {
                 applyStep(conn, step);
             }
@@ -209,12 +209,12 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, record.id());
             pstmt.setString(2, record.nodeId().value());
-            pstmt.setString(3, record.environmentId().value());
+            pstmt.setString(3, record.targetId().value());
             pstmt.setString(4, record.direction().name());
             pstmt.setString(5, record.status().name());
             pstmt.setTimestamp(6, Timestamp.from(record.executedAt()));
@@ -230,21 +230,21 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Returns whether the node has been successfully applied in the given environment.
+     * Returns whether the node has been successfully applied in the given target.
      *
      * <p>A node counts as applied only when its most recent record (by {@code executed_at}) is a
      * successful {@code UP}.
      *
      * @param nodeId the node to check
-     * @param environmentId the environment to check within
+     * @param targetId the target to check within
      * @return {@code true} if the latest record is a successful UP, otherwise {@code false}
-     * @throws NullPointerException if {@code nodeId} or {@code environmentId} is {@code null}
+     * @throws NullPointerException if {@code nodeId} or {@code targetId} is {@code null}
      * @throws JdbcException if the query fails
      */
     @Override
-    public boolean wasExecuted(NodeId nodeId, EnvironmentId environmentId) {
+    public boolean wasExecuted(NodeId nodeId, TargetId targetId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
-        Objects.requireNonNull(environmentId, "environmentId must not be null");
+        Objects.requireNonNull(targetId, "targetId must not be null");
 
         String sql =
                 """
@@ -254,11 +254,11 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 LIMIT 1
                 """;
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, nodeId.value());
-            pstmt.setString(2, environmentId.value());
+            pstmt.setString(2, targetId.value());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
@@ -274,7 +274,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Returns the identifiers of all nodes currently applied in the given environment.
+     * Returns the identifiers of all nodes currently applied in the given target.
      *
      * <p>For each node only its most recent record is considered; a node is included when that
      * latest record is a successful {@code UP}. The result is ordered by node identifier.
@@ -284,14 +284,14 @@ public final class JdbcHistoryRepository implements HistoryRepository {
      * and earlier. Should several records for the same node share the maximum {@code executed_at},
      * the node counts as applied when any of them is a successful {@code UP}.
      *
-     * @param environmentId the environment to query
+     * @param targetId the target to query
      * @return the identifiers of nodes whose latest record is a successful UP
-     * @throws NullPointerException if {@code environmentId} is {@code null}
+     * @throws NullPointerException if {@code targetId} is {@code null}
      * @throws JdbcException if the query fails
      */
     @Override
-    public List<NodeId> executedNodes(EnvironmentId environmentId) {
-        Objects.requireNonNull(environmentId, "environmentId must not be null");
+    public List<NodeId> executedNodes(TargetId targetId) {
+        Objects.requireNonNull(targetId, "targetId must not be null");
 
         String sql =
                 """
@@ -307,10 +307,10 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 ORDER BY h.node_id
                 """;
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setString(1, environmentId.value());
+            pstmt.setString(1, targetId.value());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 List<NodeId> nodes = new ArrayList<>();
@@ -325,19 +325,19 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Returns the most recent execution record for the node in the given environment.
+     * Returns the most recent execution record for the node in the given target.
      *
      * @param nodeId the node to look up
-     * @param environmentId the environment to look up within
+     * @param targetId the target to look up within
      * @return the latest {@link ExecutionRecord}, or {@code null} if the node has no history in
-     *     this environment
-     * @throws NullPointerException if {@code nodeId} or {@code environmentId} is {@code null}
+     *     this target
+     * @throws NullPointerException if {@code nodeId} or {@code targetId} is {@code null}
      * @throws JdbcException if the query fails
      */
     @Override
-    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, EnvironmentId environmentId) {
+    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, TargetId targetId) {
         Objects.requireNonNull(nodeId, "nodeId must not be null");
-        Objects.requireNonNull(environmentId, "environmentId must not be null");
+        Objects.requireNonNull(targetId, "targetId must not be null");
 
         String sql =
                 """
@@ -347,11 +347,11 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 LIMIT 1
                 """;
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
             pstmt.setString(1, nodeId.value());
-            pstmt.setString(2, environmentId.value());
+            pstmt.setString(2, targetId.value());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {
@@ -365,16 +365,16 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     }
 
     /**
-     * Returns every execution record for the given environment, oldest first.
+     * Returns every execution record for the given target, oldest first.
      *
-     * @param environmentId the environment to query
+     * @param targetId the target to query
      * @return all {@link ExecutionRecord}s ordered by {@code executed_at} ascending
-     * @throws NullPointerException if {@code environmentId} is {@code null}
+     * @throws NullPointerException if {@code targetId} is {@code null}
      * @throws JdbcException if the query fails
      */
     @Override
-    public List<ExecutionRecord> allRecords(EnvironmentId environmentId) {
-        Objects.requireNonNull(environmentId, "environmentId must not be null");
+    public List<ExecutionRecord> allRecords(TargetId targetId) {
+        Objects.requireNonNull(targetId, "targetId must not be null");
 
         String sql =
                 """
@@ -383,10 +383,10 @@ public final class JdbcHistoryRepository implements HistoryRepository {
                 ORDER BY executed_at, id
                 """;
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
-            pstmt.setString(1, environmentId.value());
+            pstmt.setString(1, targetId.value());
 
             try (ResultSet rs = pstmt.executeQuery()) {
                 List<ExecutionRecord> records = new ArrayList<>();
@@ -403,7 +403,7 @@ public final class JdbcHistoryRepository implements HistoryRepository {
     private ExecutionRecord mapToExecutionRecord(ResultSet rs) throws SQLException {
         String id = rs.getString("id");
         NodeId nodeId = NodeId.of(rs.getString("node_id"));
-        EnvironmentId envId = EnvironmentId.of(rs.getString("target_id"));
+        TargetId envId = TargetId.of(rs.getString("target_id"));
         ExecutionDirection direction = ExecutionDirection.valueOf(rs.getString("direction"));
         ExecutionStatus status = ExecutionStatus.valueOf(rs.getString("status"));
         Instant executedAt = rs.getTimestamp("executed_at").toInstant();

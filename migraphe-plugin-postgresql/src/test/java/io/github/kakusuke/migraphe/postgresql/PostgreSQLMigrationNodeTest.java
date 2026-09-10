@@ -11,9 +11,8 @@ import org.junit.jupiter.api.Test;
 
 class PostgreSQLMigrationNodeTest {
 
-    private final PostgreSQLEnvironment env =
-            PostgreSQLEnvironment.create(
-                    "testdb", "jdbc:postgresql://localhost/test", "user", "pass");
+    private final PostgreSQLTarget target =
+            PostgreSQLTarget.create("testdb", "jdbc:postgresql://localhost/test", "user", "pass");
 
     @Test
     void buildWithRequiredFields() {
@@ -21,12 +20,12 @@ class PostgreSQLMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.id()).isEqualTo(NodeId.of("node1"));
         assertThat(node.name()).isEqualTo("Create table");
-        assertThat(node.environment()).isEqualTo(env);
+        assertThat(node.target()).isEqualTo(target);
         assertThat(node.dependencies()).isEmpty();
         assertThat(node.description()).isNull();
     }
@@ -38,7 +37,7 @@ class PostgreSQLMigrationNodeTest {
                         .id("node1")
                         .name("Create table")
                         .description("Creates the main table")
-                        .environment(env)
+                        .target(target)
                         .dependencies(NodeId.of("dep1"), NodeId.of("dep2"))
                         .upSql("CREATE TABLE t1 (id INT)")
                         .downSql("DROP TABLE t1")
@@ -55,7 +54,7 @@ class PostgreSQLMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.downTask()).isNull();
@@ -67,7 +66,7 @@ class PostgreSQLMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.description()).isNull();
@@ -80,7 +79,7 @@ class PostgreSQLMigrationNodeTest {
                                 JdbcMigrationNode.builder()
                                         .id("node1")
                                         .name("Bad node")
-                                        .environment(env)
+                                        .target(target)
                                         .upSql("   ")
                                         .build())
                 .isInstanceOf(IllegalArgumentException.class);
@@ -92,7 +91,7 @@ class PostgreSQLMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create DB")
-                        .environment(env)
+                        .target(target)
                         .upSql("CREATE DATABASE myapp")
                         .autocommit(true)
                         .build();
@@ -105,14 +104,14 @@ class PostgreSQLMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("same")
                         .name("Node A")
-                        .environment(env)
+                        .target(target)
                         .upSql("SELECT 1")
                         .build();
         var node2 =
                 JdbcMigrationNode.builder()
                         .id("same")
                         .name("Node B")
-                        .environment(env)
+                        .target(target)
                         .upSql("SELECT 2")
                         .build();
         assertThat(node1).isEqualTo(node2);
@@ -125,7 +124,7 @@ class PostgreSQLMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Create table")
-                        .environment(env)
+                        .target(target)
                         .upSql("CREATE TABLE t1 (id INT)")
                         .build();
         assertThat(node.upTask()).isInstanceOf(SqlContentProvider.class);
@@ -139,7 +138,7 @@ class PostgreSQLMigrationNodeTest {
                 JdbcMigrationNode.builder()
                         .id("node1")
                         .name("Node")
-                        .environment(env)
+                        .target(target)
                         .dependencies(Set.of(NodeId.of("dep1")))
                         .upSql("SELECT 1")
                         .build();

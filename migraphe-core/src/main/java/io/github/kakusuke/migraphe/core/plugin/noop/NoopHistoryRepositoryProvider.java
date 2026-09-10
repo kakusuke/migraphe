@@ -1,8 +1,8 @@
 package io.github.kakusuke.migraphe.core.plugin.noop;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 
 /**
@@ -20,14 +20,14 @@ public final class NoopHistoryRepositoryProvider implements HistoryRepositoryPro
     public NoopHistoryRepositoryProvider() {}
 
     /**
-     * Creates an in-memory history repository for the given environment.
+     * Creates an in-memory history repository for the given target.
      *
-     * @param environment the environment the repository is associated with; not used, as the
-     *     in-memory store needs no connection
+     * @param target the target the repository is associated with; not used, as the in-memory store
+     *     needs no connection
      * @return a new {@link InMemoryHistoryRepository}
      */
     @Override
-    public HistoryRepository createRepository(Environment environment) {
+    public HistoryRepository createRepository(Target target) {
         return new InMemoryHistoryRepository();
     }
 }

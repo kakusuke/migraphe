@@ -1,9 +1,9 @@
 package io.github.kakusuke.migraphe.core.graph.layout;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import java.util.ArrayList;
@@ -245,11 +245,11 @@ public final class LayoutTree {
     static final class VirtualNode implements MigrationNode {
 
         private static final NodeId VIRTUAL_ROOT_ID = NodeId.of("__virtual_root__");
-        private static final Environment VIRTUAL_ENV =
-                new Environment() {
+        private static final Target VIRTUAL_ENV =
+                new Target() {
                     @Override
-                    public EnvironmentId id() {
-                        return EnvironmentId.of("virtual");
+                    public TargetId id() {
+                        return TargetId.of("virtual");
                     }
 
                     @Override
@@ -274,7 +274,7 @@ public final class LayoutTree {
         }
 
         @Override
-        public Environment environment() {
+        public Target target() {
             return VIRTUAL_ENV;
         }
 

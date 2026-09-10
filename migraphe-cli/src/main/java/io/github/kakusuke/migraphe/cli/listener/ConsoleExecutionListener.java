@@ -76,8 +76,8 @@ public final class ConsoleExecutionListener implements ExecutionListener {
     }
 
     /**
-     * Prints a {@code [FAIL]} status line, the detailed failure block (environment, SQL, error),
-     * and records the failure so it appears in the final summary.
+     * Prints a {@code [FAIL]} status line, the detailed failure block (target, SQL, error), and
+     * records the failure so it appears in the final summary.
      *
      * @param node the node that failed
      * @param direction the direction in which the node was executed
@@ -98,7 +98,7 @@ public final class ConsoleExecutionListener implements ExecutionListener {
                     new FailureRecord(
                             node.id().value(),
                             node.name(),
-                            node.environment().id().value(),
+                            node.target().id().value(),
                             errorMessage));
         }
     }
@@ -159,7 +159,7 @@ public final class ConsoleExecutionListener implements ExecutionListener {
             for (int i = 0; i < failureSnapshot.size(); i++) {
                 FailureRecord f = failureSnapshot.get(i);
                 System.out.println("  [" + (i + 1) + "] " + f.id() + " - " + f.name());
-                System.out.println("      Environment: " + f.environmentId());
+                System.out.println("      Target: " + f.targetId());
                 System.out.println(
                         "      Error: "
                                 + (colorEnabled
@@ -239,10 +239,10 @@ public final class ConsoleExecutionListener implements ExecutionListener {
                         : "=== MIGRATION FAILED ===");
         System.out.println();
 
-        // Environment information.
-        String envLabel = colorEnabled ? AnsiColor.cyan("Environment:") : "Environment:";
+        // Target information.
+        String envLabel = colorEnabled ? AnsiColor.cyan("Target:") : "Target:";
         System.out.println(envLabel);
-        System.out.println("  Target: " + node.environment().id().value());
+        System.out.println("  Target: " + node.target().id().value());
         System.out.println();
 
         // SQL content.
@@ -271,11 +271,10 @@ public final class ConsoleExecutionListener implements ExecutionListener {
      *
      * @param id the failed node's id
      * @param name the failed node's display name
-     * @param environmentId the id of the environment the node ran against
+     * @param targetId the id of the target the node ran against
      * @param errorMessage the error message describing the failure
      */
-    private record FailureRecord(
-            String id, String name, String environmentId, String errorMessage) {}
+    private record FailureRecord(String id, String name, String targetId, String errorMessage) {}
 
     /**
      * Captures a node that was skipped because of a failed dependency, for the final summary.

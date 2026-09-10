@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.postgresql.schema;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.schema.SchemaInfoProvider;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.jdbc.schema.JdbcSchemaInfoProvider;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
 import io.github.kakusuke.migraphe.postgresql.PostgreSQLException;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Extracts {@link PostgreSQLSchemaInfo} from a live {@link PostgreSQLEnvironment}.
+ * Extracts {@link PostgreSQLSchemaInfo} from a live {@link PostgreSQLTarget}.
  *
  * <p>This provider first delegates to {@link JdbcSchemaInfoProvider} for the generic JDBC schema
  * details (tables, views, columns), then opens a connection and queries the PostgreSQL system
@@ -34,25 +34,24 @@ public class PostgreSQLSchemaInfoProvider implements SchemaInfoProvider<PostgreS
     public PostgreSQLSchemaInfoProvider() {}
 
     /**
-     * Extracts the full PostgreSQL schema snapshot from the given environment.
+     * Extracts the full PostgreSQL schema snapshot from the given target.
      *
-     * <p>The {@code environment} must be a {@link PostgreSQLEnvironment}; the generic JDBC schema
-     * details are obtained via {@link JdbcSchemaInfoProvider} and merged with PostgreSQL-specific
-     * catalog data queried over a fresh connection.
+     * <p>The {@code target} must be a {@link PostgreSQLTarget}; the generic JDBC schema details are
+     * obtained via {@link JdbcSchemaInfoProvider} and merged with PostgreSQL-specific catalog data
+     * queried over a fresh connection.
      *
-     * @param environment the environment to introspect; must be a {@link PostgreSQLEnvironment}
+     * @param target the target to introspect; must be a {@link PostgreSQLTarget}
      * @return the combined PostgreSQL schema information
-     * @throws PostgreSQLException if {@code environment} is not a {@link PostgreSQLEnvironment}, or
-     *     if a {@link SQLException} occurs while reading the catalogs
+     * @throws PostgreSQLException if {@code target} is not a {@link PostgreSQLTarget}, or if a
+     *     {@link SQLException} occurs while reading the catalogs
      */
     @Override
-    public PostgreSQLSchemaInfo getSchemaInfo(Environment environment) {
-        if (!(environment instanceof PostgreSQLEnvironment pgEnv)) {
+    public PostgreSQLSchemaInfo getSchemaInfo(Target target) {
+        if (!(target instanceof PostgreSQLTarget pgEnv)) {
             throw new PostgreSQLException(
-                    "Environment must be a PostgreSQLEnvironment: "
-                            + environment.getClass().getName());
+                    "Target must be a PostgreSQLTarget: " + target.getClass().getName());
         }
-        var baseInfo = new JdbcSchemaInfoProvider().getSchemaInfo(environment);
+        var baseInfo = new JdbcSchemaInfoProvider().getSchemaInfo(target);
         try (Connection conn = pgEnv.createConnection()) {
             return new PostgreSQLSchemaInfo(
                     baseInfo.schemas(),

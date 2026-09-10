@@ -88,8 +88,8 @@ public final class GradleExecutionListener implements ExecutionListener {
     }
 
     /**
-     * Called when a node fails; logs a {@code [FAIL]} line, a detailed failure block (environment,
-     * the offending SQL with line numbers when available, and the error message), and records the
+     * Called when a node fails; logs a {@code [FAIL]} line, a detailed failure block (target, the
+     * offending SQL with line numbers when available, and the error message), and records the
      * failure for the final summary.
      *
      * @param node the node that failed
@@ -107,8 +107,8 @@ public final class GradleExecutionListener implements ExecutionListener {
         logger.error("");
         logger.error("=== MIGRATION FAILED ===");
         logger.error("");
-        logger.error("Environment:");
-        logger.error("  Target: {}", node.environment().id().value());
+        logger.error("Target:");
+        logger.error("  Target: {}", node.target().id().value());
 
         if (sqlContent != null) {
             logger.error("");
@@ -128,7 +128,7 @@ public final class GradleExecutionListener implements ExecutionListener {
                     new FailureRecord(
                             node.id().value(),
                             node.name(),
-                            node.environment().id().value(),
+                            node.target().id().value(),
                             errorMessage));
         }
     }
@@ -184,7 +184,7 @@ public final class GradleExecutionListener implements ExecutionListener {
             for (int i = 0; i < failureSnapshot.size(); i++) {
                 FailureRecord f = failureSnapshot.get(i);
                 logger.error("  [{}] {} - {}", i + 1, f.id(), f.name());
-                logger.error("      Environment: {}", f.environmentId());
+                logger.error("      Target: {}", f.targetId());
                 logger.error("      Error: {}", singleLine(f.errorMessage()));
                 if (i < failureSnapshot.size() - 1) {
                     logger.error("");
@@ -224,11 +224,10 @@ public final class GradleExecutionListener implements ExecutionListener {
      *
      * @param id the node ID
      * @param name the node name
-     * @param environmentId the ID of the environment the node targets
+     * @param targetId the ID of the target the node ran against
      * @param errorMessage the error message describing the failure
      */
-    private record FailureRecord(
-            String id, String name, String environmentId, String errorMessage) {}
+    private record FailureRecord(String id, String name, String targetId, String errorMessage) {}
 
     /**
      * Captured details of a node skipped because of a failed dependency, retained for the

@@ -9,8 +9,8 @@ import java.util.Optional;
  *
  * <p>A SmallRye {@code @ConfigMapping} interface (empty prefix) read from a {@code targets/*.yaml}
  * file. It captures the JDBC connection settings common to the built-in JDBC-based plugins;
- * plugin-specific environment definitions are mapped separately via their own
- * {@code @ConfigMapping} types in {@link ConfigLoader#loadEnvironmentDefinition}.
+ * plugin-specific target definitions are mapped separately via their own {@code @ConfigMapping}
+ * types in {@link ConfigLoader#loadTargetDefinition}.
  */
 @ConfigMapping(prefix = "")
 public interface TargetConfig {

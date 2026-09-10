@@ -2,10 +2,10 @@ package io.github.kakusuke.migraphe.core.history;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,8 +13,8 @@ import org.junit.jupiter.api.Test;
 
 class InMemoryHistoryRepositoryTest {
 
-    private final EnvironmentId envId = EnvironmentId.of("dev");
-    private final EnvironmentId stagingEnvId = EnvironmentId.of("staging");
+    private final TargetId envId = TargetId.of("dev");
+    private final TargetId stagingEnvId = TargetId.of("staging");
     private final NodeId node1 = NodeId.of("node-1");
     private final NodeId node2 = NodeId.of("node-2");
 
@@ -132,7 +132,7 @@ class InMemoryHistoryRepositoryTest {
     }
 
     @Test
-    void shouldIsolateRecordsBetweenEnvironments() {
+    void shouldIsolateRecordsBetweenTargets() {
         // given
         ExecutionRecord devRecord =
                 ExecutionRecord.upSuccess(node1, envId, "Dev migration", null, 100);

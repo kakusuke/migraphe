@@ -1,8 +1,8 @@
 package io.github.kakusuke.migraphe.postgresql;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 
 /**
@@ -22,19 +22,17 @@ public final class PostgreSQLHistoryRepositoryProvider implements HistoryReposit
             "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
 
     /**
-     * Creates a {@link JdbcHistoryRepository} bound to the given PostgreSQL environment.
+     * Creates a {@link JdbcHistoryRepository} bound to the given PostgreSQL target.
      *
-     * @param environment the environment to persist history into; must be a {@link
-     *     PostgreSQLEnvironment}
+     * @param target the target to persist history into; must be a {@link PostgreSQLTarget}
      * @return a {@link HistoryRepository} backed by the PostgreSQL connection and DDL script
-     * @throws PostgreSQLException if {@code environment} is not a {@link PostgreSQLEnvironment}
+     * @throws PostgreSQLException if {@code target} is not a {@link PostgreSQLTarget}
      */
     @Override
-    public HistoryRepository createRepository(Environment environment) {
-        if (!(environment instanceof PostgreSQLEnvironment pgEnv)) {
+    public HistoryRepository createRepository(Target target) {
+        if (!(target instanceof PostgreSQLTarget pgEnv)) {
             throw new PostgreSQLException(
-                    "Environment must be PostgreSQLEnvironment, got: "
-                            + environment.getClass().getName());
+                    "Target must be PostgreSQLTarget, got: " + target.getClass().getName());
         }
 
         return new JdbcHistoryRepository(pgEnv, PG_SCHEMA_RESOURCE);

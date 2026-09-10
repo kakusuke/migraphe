@@ -39,25 +39,25 @@ class PostgreSQLIntegrationTest {
     private static final String PG_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
 
-    private PostgreSQLEnvironment environment;
+    private PostgreSQLTarget target;
     private HistoryRepository historyRepo;
 
     @BeforeEach
     void setUp() {
-        environment =
-                PostgreSQLEnvironment.create(
+        target =
+                PostgreSQLTarget.create(
                         "test",
                         postgres.getJdbcUrl(),
                         postgres.getUsername(),
                         postgres.getPassword());
 
-        historyRepo = new JdbcHistoryRepository(environment, PG_SCHEMA_RESOURCE);
+        historyRepo = new JdbcHistoryRepository(target, PG_SCHEMA_RESOURCE);
     }
 
     @AfterEach
     void tearDown() throws Exception {
         // Clean up database after each test
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             // Drop all user tables
             stmt.execute("DROP TABLE IF EXISTS posts CASCADE");
@@ -78,7 +78,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("do_tx")
                         .name("DO block transaction")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE do_target (id int);\n"
                                         + "DO $$\n"
@@ -106,7 +106,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("do_ac")
                         .name("DO block autocommit")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE do_target (id int);\n"
                                         + "DO $$\n"
@@ -136,7 +136,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("create_fn")
                         .name("Create function")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE FUNCTION f_add(a int, b int) RETURNS int AS $$\n"
                                         + "DECLARE\n"
@@ -154,7 +154,7 @@ class PostgreSQLIntegrationTest {
 
         // then
         assertThat(result.isOk()).isTrue();
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery("SELECT f_add(2, 3)")) {
             assertThat(rs.next()).isTrue();
@@ -163,7 +163,7 @@ class PostgreSQLIntegrationTest {
     }
 
     private int rowCount(String table) throws Exception {
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + table)) {
             rs.next();
@@ -177,7 +177,7 @@ class PostgreSQLIntegrationTest {
         historyRepo.initialize();
 
         // then - テーブルが存在することを確認
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -196,7 +196,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100));")
                         .downSql("DROP TABLE IF EXISTS users;")
                         .build();
@@ -212,7 +212,7 @@ class PostgreSQLIntegrationTest {
         assertThat(taskResult.serializedDownTask()).isNotNull();
 
         // Verify table exists
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -225,15 +225,15 @@ class PostgreSQLIntegrationTest {
         ExecutionRecord record =
                 ExecutionRecord.upSuccess(
                         node.id(),
-                        environment.id(),
+                        target.id(),
                         "Create users table",
                         taskResult.serializedDownTask(),
                         100);
         historyRepo.record(record);
 
         // Verify history persisted
-        assertThat(historyRepo.wasExecuted(node.id(), environment.id())).isTrue();
-        assertThat(historyRepo.executedNodes(environment.id())).containsExactly(node.id());
+        assertThat(historyRepo.wasExecuted(node.id(), target.id())).isTrue();
+        assertThat(historyRepo.executedNodes(target.id())).containsExactly(node.id());
     }
 
     @Test
@@ -246,7 +246,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE users (id SERIAL PRIMARY KEY);")
                         .downSql("DROP TABLE IF EXISTS users;")
                         .build();
@@ -263,7 +263,7 @@ class PostgreSQLIntegrationTest {
         assertThat(result.value().serializedDownTask()).isNull();
 
         // Verify table does not exist
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -280,7 +280,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V002")
                         .name("Invalid SQL")
-                        .environment(environment)
+                        .target(target)
                         .upSql("INVALID SQL SYNTAX;")
                         .build();
 
@@ -303,7 +303,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100));")
                         .downSql("DROP TABLE IF EXISTS users;")
                         .build();
@@ -312,7 +312,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V002")
                         .name("Create posts table")
-                        .environment(environment)
+                        .target(target)
                         .dependencies(NodeId.of("V001"))
                         .upSql(
                                 "CREATE TABLE posts (id SERIAL PRIMARY KEY, user_id INT REFERENCES"
@@ -332,7 +332,7 @@ class PostgreSQLIntegrationTest {
         historyRepo.record(
                 ExecutionRecord.upSuccess(
                         node1.id(),
-                        environment.id(),
+                        target.id(),
                         node1.name(),
                         result1.value().serializedDownTask(),
                         100));
@@ -340,13 +340,13 @@ class PostgreSQLIntegrationTest {
         historyRepo.record(
                 ExecutionRecord.upSuccess(
                         node2.id(),
-                        environment.id(),
+                        target.id(),
                         node2.name(),
                         result2.value().serializedDownTask(),
                         150));
 
         // Verify both executed
-        assertThat(historyRepo.executedNodes(environment.id()))
+        assertThat(historyRepo.executedNodes(target.id()))
                 .containsExactlyInAnyOrder(node1.id(), node2.id());
     }
 
@@ -357,16 +357,15 @@ class PostgreSQLIntegrationTest {
 
         NodeId nodeId = NodeId.of("V001");
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(nodeId, environment.id(), "First execution", null, 100);
-        ExecutionRecord record2 =
-                ExecutionRecord.downSuccess(nodeId, environment.id(), "Rollback", 50);
+                ExecutionRecord.upSuccess(nodeId, target.id(), "First execution", null, 100);
+        ExecutionRecord record2 = ExecutionRecord.downSuccess(nodeId, target.id(), "Rollback", 50);
 
         // when
         historyRepo.record(record1);
         historyRepo.record(record2);
 
         // then
-        var latest = historyRepo.findLatestRecord(nodeId, environment.id());
+        var latest = historyRepo.findLatestRecord(nodeId, target.id());
         assertThat(latest).isNotNull();
         assertThat(latest.id()).isEqualTo(record2.id());
     }
@@ -380,7 +379,7 @@ class PostgreSQLIntegrationTest {
         ExecutionRecord failedRecord =
                 ExecutionRecord.failure(
                         nodeId,
-                        environment.id(),
+                        target.id(),
                         ExecutionDirection.UP,
                         "Failed migration",
                         "SQL syntax error");
@@ -389,27 +388,27 @@ class PostgreSQLIntegrationTest {
         historyRepo.record(failedRecord);
 
         // then
-        assertThat(historyRepo.wasExecuted(nodeId, environment.id())).isFalse();
+        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isFalse();
     }
 
     @Test
-    void shouldGetAllRecordsForEnvironment() {
+    void shouldGetAllRecordsForTarget() {
         // given
         historyRepo.initialize();
 
         NodeId node1 = NodeId.of("V001");
         NodeId node2 = NodeId.of("V002");
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(node1, environment.id(), "Migration 1", null, 100);
+                ExecutionRecord.upSuccess(node1, target.id(), "Migration 1", null, 100);
         ExecutionRecord record2 =
-                ExecutionRecord.upSuccess(node2, environment.id(), "Migration 2", null, 150);
+                ExecutionRecord.upSuccess(node2, target.id(), "Migration 2", null, 150);
 
         // when
         historyRepo.record(record1);
         historyRepo.record(record2);
 
         // then
-        var allRecords = historyRepo.allRecords(environment.id());
+        var allRecords = historyRepo.allRecords(target.id());
         assertThat(allRecords).hasSize(2);
         assertThat(allRecords.get(0).status()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(allRecords.get(1).status()).isEqualTo(ExecutionStatus.SUCCESS);
@@ -424,7 +423,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("autocommit_test")
                         .name("Autocommit migration")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE autocommit_test (id SERIAL PRIMARY KEY);")
                         .downSql("DROP TABLE IF EXISTS autocommit_test;")
                         .autocommit(true)
@@ -439,7 +438,7 @@ class PostgreSQLIntegrationTest {
         assertThat(result.value().message()).contains("autocommit");
 
         // Verify table exists
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -458,7 +457,7 @@ class PostgreSQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("autocommit_down")
                         .name("Autocommit down migration")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE autocommit_down_test (id SERIAL);")
                         .downSql("DROP TABLE IF EXISTS autocommit_down_test;")
                         .autocommit(true)
@@ -475,7 +474,7 @@ class PostgreSQLIntegrationTest {
         assertThat(result.value().message()).contains("autocommit");
 
         // Verify table does not exist
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -487,7 +486,7 @@ class PostgreSQLIntegrationTest {
 
     @Test
     void renamesLegacyEnvironmentIdColumn() throws Exception {
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP TABLE IF EXISTS migraphe_history");
             stmt.execute(
@@ -512,7 +511,7 @@ class PostgreSQLIntegrationTest {
 
         historyRepo.initialize();
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -524,7 +523,7 @@ class PostgreSQLIntegrationTest {
             assertThat(rs.getString(1)).isEqualTo("target_id");
             assertThat(rs.next()).isFalse();
         }
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -544,7 +543,7 @@ class PostgreSQLIntegrationTest {
 
         assertThatCode(() -> historyRepo.initialize()).doesNotThrowAnyException();
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -559,14 +558,14 @@ class PostgreSQLIntegrationTest {
     @Test
     void recreatesAMissingIndex() throws Exception {
         historyRepo.initialize();
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP INDEX idx_migraphe_history_env");
         }
 
         historyRepo.initialize();
 
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(

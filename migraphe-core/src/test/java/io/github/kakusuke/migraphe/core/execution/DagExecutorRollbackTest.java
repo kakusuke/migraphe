@@ -3,19 +3,19 @@ package io.github.kakusuke.migraphe.core.execution;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.api.common.Result;
-import io.github.kakusuke.migraphe.api.environment.Environment;
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
+import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
-import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
+import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.HashSet;
 import java.util.Set;
@@ -27,7 +27,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("DagExecutor (DOWN / maxParallelism=1)")
 class DagExecutorRollbackTest {
 
-    private final Environment testEnv = SimpleEnvironment.create(EnvironmentId.of("env"), "env");
+    private final Target testEnv = SimpleTarget.create(TargetId.of("env"), "env");
 
     @Test
     @DisplayName("A→B チェーンを逆順 (B→A) にロールバックし成功する")
@@ -110,7 +110,7 @@ class DagExecutorRollbackTest {
         }
 
         @Test
-        @DisplayName("targetVersion=null, allMigrations=false のとき空セットを返す")
+        @DisplayName("requestedNode=null, allMigrations=false のとき空セットを返す")
         void shouldReturnEmptySetWhenTargetVersionIsNullAndAllMigrationsIsFalse() {
             MigrationGraph graph = MigrationGraph.create();
             MigrationNode nodeA = createNode("a", Set.of());
@@ -200,7 +200,7 @@ class DagExecutorRollbackTest {
             for (MigrationNode node : graph.allNodes()) {
                 historyRepo.record(
                         ExecutionRecord.upSuccess(
-                                node.id(), node.environment().id(), node.name(), null, 100L));
+                                node.id(), node.target().id(), node.name(), null, 100L));
             }
 
             executor = new DagExecutor(graph, historyRepo, listener, ExecutionDirection.DOWN, 1);
@@ -380,7 +380,7 @@ class DagExecutorRollbackTest {
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(id)
-                .environment(testEnv)
+                .target(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(downTask)
@@ -405,7 +405,7 @@ class DagExecutorRollbackTest {
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(id)
-                .environment(testEnv)
+                .target(testEnv)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(downTask)

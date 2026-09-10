@@ -2,10 +2,10 @@ package io.github.kakusuke.migraphe.core.history;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -19,11 +19,11 @@ import org.junit.jupiter.api.Test;
 @DisplayName("SynchronizedHistoryRepository")
 class SynchronizedHistoryRepositoryTest {
 
-    private EnvironmentId envId;
+    private TargetId envId;
 
     @BeforeEach
     void setUp() {
-        envId = EnvironmentId.of("test");
+        envId = TargetId.of("test");
     }
 
     @Nested

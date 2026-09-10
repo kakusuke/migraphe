@@ -6,7 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
-import io.github.kakusuke.migraphe.core.graph.TestHelpers.TestEnvironment;
+import io.github.kakusuke.migraphe.core.graph.TestHelpers.TestTarget;
 import org.junit.jupiter.api.Test;
 
 class GraphVisualizerTest {
@@ -97,18 +97,17 @@ class GraphVisualizerTest {
     }
 
     @Test
-    void shouldVisualizeMultipleEnvironments() {
+    void shouldVisualizeMultipleTargets() {
         // given: 複数環境のグラフ
-        TestEnvironment dev = new TestEnvironment("development");
-        TestEnvironment stg = new TestEnvironment("staging");
-        TestEnvironment prd = new TestEnvironment("production");
+        TestTarget dev = new TestTarget("development");
+        TestTarget stg = new TestTarget("staging");
+        TestTarget prd = new TestTarget("production");
 
         MigrationGraph graph = MigrationGraph.create();
 
-        MigrationNode node1 = node("dev-1").name("Setup dev schema").environment(dev).build();
-        MigrationNode node2 = node("stg-1").name("Setup staging schema").environment(stg).build();
-        MigrationNode node3 =
-                node("prd-1").name("Setup production schema").environment(prd).build();
+        MigrationNode node1 = node("dev-1").name("Setup dev schema").target(dev).build();
+        MigrationNode node2 = node("stg-1").name("Setup staging schema").target(stg).build();
+        MigrationNode node3 = node("prd-1").name("Setup production schema").target(prd).build();
 
         graph.addNode(node1);
         graph.addNode(node2);
@@ -118,7 +117,7 @@ class GraphVisualizerTest {
         String result = GraphVisualizer.visualize(graph);
 
         // then
-        System.out.println("\n=== Multiple Environments Graph ===");
+        System.out.println("\n=== Multiple Targets Graph ===");
         System.out.println(result);
 
         assertThat(result).contains("Total Nodes: 3");
@@ -180,14 +179,14 @@ class GraphVisualizerTest {
     @Test
     void shouldShowStatistics() {
         // given: 複数環境のグラフ
-        TestEnvironment dev = new TestEnvironment("development");
-        TestEnvironment prd = new TestEnvironment("production");
+        TestTarget dev = new TestTarget("development");
+        TestTarget prd = new TestTarget("production");
 
         MigrationGraph graph = MigrationGraph.create();
 
-        graph.addNode(node("dev-1").name("Dev migration 1").environment(dev).build());
-        graph.addNode(node("dev-2").name("Dev migration 2").environment(dev).build());
-        graph.addNode(node("prd-1").name("Prod migration 1").environment(prd).build());
+        graph.addNode(node("dev-1").name("Dev migration 1").target(dev).build());
+        graph.addNode(node("dev-2").name("Dev migration 2").target(dev).build());
+        graph.addNode(node("prd-1").name("Prod migration 1").target(prd).build());
 
         // when
         String result = GraphVisualizer.statistics(graph);

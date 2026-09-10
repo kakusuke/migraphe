@@ -112,7 +112,7 @@ class GenerateCommandTest {
     }
 
     @Test
-    void shouldReturnFailureWhenEnvironmentNotFound() throws IOException {
+    void shouldReturnFailureWhenTargetNotFound() throws IOException {
         // Given: generator の target が存在しない
         createProjectWithMissingTarget(tempDir);
         GenerateCommand command =

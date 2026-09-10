@@ -43,7 +43,7 @@ public abstract class MigrapheExtension {
     public abstract MapProperty<String, String> getVariables();
 
     /**
-     * Returns the deployment-environment name whose {@code environments/<env>.yaml} overlay is
+     * Returns the deployment-environment name whose {@code environments/<target>.yaml} overlay is
      * applied on top of the base configuration.
      *
      * <p>This is the Gradle counterpart of the CLI's {@code --env} option: it selects a set of

@@ -33,22 +33,22 @@ class MySQLIntegrationTest {
     private static final String MYSQL_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/mysql/schema/init_history_table.sql";
 
-    private MySQLEnvironment environment;
+    private MySQLTarget target;
     private HistoryRepository historyRepo;
 
     @BeforeEach
     void setUp() {
-        environment =
-                MySQLEnvironment.create(
+        target =
+                MySQLTarget.create(
                         "test", mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
 
-        historyRepo = new JdbcHistoryRepository(environment, MYSQL_SCHEMA_RESOURCE);
+        historyRepo = new JdbcHistoryRepository(target, MYSQL_SCHEMA_RESOURCE);
     }
 
     @AfterEach
     void tearDown() throws Exception {
         // Clean up database after each test
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP TABLE IF EXISTS posts");
             stmt.execute("DROP TABLE IF EXISTS users");
@@ -74,7 +74,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("multi_ddl")
                         .name("Create two tables")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE multi_a (id INT PRIMARY KEY);\n"
                                         + "CREATE TABLE multi_b (id INT PRIMARY KEY);\n")
@@ -97,7 +97,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("proc_inline")
                         .name("Create procedure inline")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE proc_target (id INT);\n"
                                         + "CREATE PROCEDURE seed_proc()\n"
@@ -125,7 +125,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("proc_delim")
                         .name("Create procedure with DELIMITER")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE delim_target (id INT);\n"
                                         + "DELIMITER $$\n"
@@ -149,7 +149,7 @@ class MySQLIntegrationTest {
     }
 
     private boolean tableExists(String table) throws Exception {
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -162,7 +162,7 @@ class MySQLIntegrationTest {
     }
 
     private boolean procedureExists(String name) throws Exception {
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -180,7 +180,7 @@ class MySQLIntegrationTest {
         historyRepo.initialize();
 
         // then - テーブルが存在することを確認
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -200,7 +200,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name"
                                         + " VARCHAR(100));")
@@ -218,7 +218,7 @@ class MySQLIntegrationTest {
         assertThat(taskResult.serializedDownTask()).isNotNull();
 
         // Verify table exists
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -232,15 +232,15 @@ class MySQLIntegrationTest {
         ExecutionRecord record =
                 ExecutionRecord.upSuccess(
                         node.id(),
-                        environment.id(),
+                        target.id(),
                         "Create users table",
                         taskResult.serializedDownTask(),
                         100);
         historyRepo.record(record);
 
         // Verify history persisted
-        assertThat(historyRepo.wasExecuted(node.id(), environment.id())).isTrue();
-        assertThat(historyRepo.executedNodes(environment.id())).containsExactly(node.id());
+        assertThat(historyRepo.wasExecuted(node.id(), target.id())).isTrue();
+        assertThat(historyRepo.executedNodes(target.id())).containsExactly(node.id());
     }
 
     @Test
@@ -252,7 +252,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY);")
                         .downSql("DROP TABLE IF EXISTS users;")
                         .build();
@@ -269,7 +269,7 @@ class MySQLIntegrationTest {
         assertThat(result.value().serializedDownTask()).isNull();
 
         // Verify table does not exist
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -287,7 +287,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V002")
                         .name("Invalid SQL")
-                        .environment(environment)
+                        .target(target)
                         .upSql("INVALID SQL SYNTAX;")
                         .build();
 
@@ -310,7 +310,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V001")
                         .name("Create users table")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE users (id INT AUTO_INCREMENT PRIMARY KEY, name"
                                         + " VARCHAR(100));")
@@ -321,7 +321,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("V002")
                         .name("Create posts table")
-                        .environment(environment)
+                        .target(target)
                         .dependencies(NodeId.of("V001"))
                         .upSql(
                                 "CREATE TABLE posts (id INT AUTO_INCREMENT PRIMARY KEY, user_id"
@@ -341,7 +341,7 @@ class MySQLIntegrationTest {
         historyRepo.record(
                 ExecutionRecord.upSuccess(
                         node1.id(),
-                        environment.id(),
+                        target.id(),
                         node1.name(),
                         result1.value().serializedDownTask(),
                         100));
@@ -349,13 +349,13 @@ class MySQLIntegrationTest {
         historyRepo.record(
                 ExecutionRecord.upSuccess(
                         node2.id(),
-                        environment.id(),
+                        target.id(),
                         node2.name(),
                         result2.value().serializedDownTask(),
                         150));
 
         // Verify both executed
-        assertThat(historyRepo.executedNodes(environment.id()))
+        assertThat(historyRepo.executedNodes(target.id()))
                 .containsExactlyInAnyOrder(node1.id(), node2.id());
     }
 
@@ -366,16 +366,15 @@ class MySQLIntegrationTest {
 
         NodeId nodeId = NodeId.of("V001");
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(nodeId, environment.id(), "First execution", null, 100);
-        ExecutionRecord record2 =
-                ExecutionRecord.downSuccess(nodeId, environment.id(), "Rollback", 50);
+                ExecutionRecord.upSuccess(nodeId, target.id(), "First execution", null, 100);
+        ExecutionRecord record2 = ExecutionRecord.downSuccess(nodeId, target.id(), "Rollback", 50);
 
         // when
         historyRepo.record(record1);
         historyRepo.record(record2);
 
         // then
-        var latest = historyRepo.findLatestRecord(nodeId, environment.id());
+        var latest = historyRepo.findLatestRecord(nodeId, target.id());
         assertThat(latest).isNotNull();
         assertThat(latest.id()).isEqualTo(record2.id());
     }
@@ -389,7 +388,7 @@ class MySQLIntegrationTest {
         ExecutionRecord failedRecord =
                 ExecutionRecord.failure(
                         nodeId,
-                        environment.id(),
+                        target.id(),
                         ExecutionDirection.UP,
                         "Failed migration",
                         "SQL syntax error");
@@ -398,27 +397,27 @@ class MySQLIntegrationTest {
         historyRepo.record(failedRecord);
 
         // then
-        assertThat(historyRepo.wasExecuted(nodeId, environment.id())).isFalse();
+        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isFalse();
     }
 
     @Test
-    void shouldGetAllRecordsForEnvironment() {
+    void shouldGetAllRecordsForTarget() {
         // given
         historyRepo.initialize();
 
         NodeId node1 = NodeId.of("V001");
         NodeId node2 = NodeId.of("V002");
         ExecutionRecord record1 =
-                ExecutionRecord.upSuccess(node1, environment.id(), "Migration 1", null, 100);
+                ExecutionRecord.upSuccess(node1, target.id(), "Migration 1", null, 100);
         ExecutionRecord record2 =
-                ExecutionRecord.upSuccess(node2, environment.id(), "Migration 2", null, 150);
+                ExecutionRecord.upSuccess(node2, target.id(), "Migration 2", null, 150);
 
         // when
         historyRepo.record(record1);
         historyRepo.record(record2);
 
         // then
-        var allRecords = historyRepo.allRecords(environment.id());
+        var allRecords = historyRepo.allRecords(target.id());
         assertThat(allRecords).hasSize(2);
         assertThat(allRecords.get(0).status()).isEqualTo(ExecutionStatus.SUCCESS);
         assertThat(allRecords.get(1).status()).isEqualTo(ExecutionStatus.SUCCESS);
@@ -433,7 +432,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("autocommit_test")
                         .name("Autocommit migration")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE autocommit_test (id INT AUTO_INCREMENT PRIMARY KEY);")
                         .downSql("DROP TABLE IF EXISTS autocommit_test;")
                         .autocommit(true)
@@ -448,7 +447,7 @@ class MySQLIntegrationTest {
         assertThat(result.value().message()).contains("autocommit");
 
         // Verify table exists
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -468,7 +467,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("autocommit_down")
                         .name("Autocommit down migration")
-                        .environment(environment)
+                        .target(target)
                         .upSql("CREATE TABLE autocommit_down_test (id INT);")
                         .downSql("DROP TABLE IF EXISTS autocommit_down_test;")
                         .autocommit(true)
@@ -485,7 +484,7 @@ class MySQLIntegrationTest {
         assertThat(result.value().message()).contains("autocommit");
 
         // Verify table does not exist
-        try (Connection conn = environment.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
                         stmt.executeQuery(
@@ -505,7 +504,7 @@ class MySQLIntegrationTest {
                 JdbcMigrationNode.builder()
                         .id("mysql_node")
                         .name("MySQL test node")
-                        .environment(environment)
+                        .target(target)
                         .upSql(
                                 "CREATE TABLE IF NOT EXISTS node_test (id INT PRIMARY KEY, val"
                                         + " VARCHAR(50))")

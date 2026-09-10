@@ -4,10 +4,10 @@ package io.github.kakusuke.migraphe.jdbc;
  * Unchecked exception raised by the JDBC plugin family.
  *
  * <p>This exception wraps low-level failures (for example {@link java.sql.SQLException} or {@link
- * java.io.IOException}) and configuration mismatches that occur while creating environments,
- * building migration nodes, or persisting execution history through the generic JDBC plugin. It is
- * a {@link RuntimeException} because migration failures are not recoverable at the call site and
- * are surfaced through the CLI/Gradle presentation layers.
+ * java.io.IOException}) and configuration mismatches that occur while creating targets, building
+ * migration nodes, or persisting execution history through the generic JDBC plugin. It is a {@link
+ * RuntimeException} because migration failures are not recoverable at the call site and are
+ * surfaced through the CLI/Gradle presentation layers.
  *
  * <p>Database-specific plugins extend this type (for example {@code PostgreSQLException} and {@code
  * MySQLException}) so callers can catch the common JDBC supertype while still distinguishing

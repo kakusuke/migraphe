@@ -23,12 +23,12 @@ class MigraphePluginSchemaInfoProviderTest {
                     }
 
                     @Override
-                    public Class<? extends EnvironmentDefinition> environmentDefinitionClass() {
-                        return StubEnvironmentDefinition.class;
+                    public Class<? extends TargetDefinition> targetDefinitionClass() {
+                        return StubTargetDefinition.class;
                     }
 
                     @Override
-                    public EnvironmentProvider environmentProvider() {
+                    public TargetProvider targetProvider() {
                         return (name, definition) -> {
                             throw new UnsupportedOperationException();
                         };
@@ -36,14 +36,14 @@ class MigraphePluginSchemaInfoProviderTest {
 
                     @Override
                     public MigrationNodeProvider<String> migrationNodeProvider() {
-                        return (nodeId, task, dependencies, environment) -> {
+                        return (nodeId, task, dependencies, target) -> {
                             throw new UnsupportedOperationException();
                         };
                     }
 
                     @Override
                     public HistoryRepositoryProvider historyRepositoryProvider() {
-                        return environment -> {
+                        return target -> {
                             throw new UnsupportedOperationException();
                         };
                     }
@@ -84,5 +84,5 @@ class MigraphePluginSchemaInfoProviderTest {
         }
     }
 
-    interface StubEnvironmentDefinition extends EnvironmentDefinition {}
+    interface StubTargetDefinition extends TargetDefinition {}
 }

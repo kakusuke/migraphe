@@ -206,8 +206,8 @@ public class Main {
             return null;
         }
 
-        NodeId targetVersion = version != null ? NodeId.of(version) : null;
-        return new DownCommand(context, targetVersion, allMigrations, skipConfirm, dryRun);
+        NodeId requestedNode = version != null ? NodeId.of(version) : null;
+        return new DownCommand(context, requestedNode, allMigrations, skipConfirm, dryRun);
     }
 
     /**
@@ -383,7 +383,7 @@ public class Main {
         System.out.println();
         System.out.println("Common options (up, down, status, validate, generate):");
         System.out.println(
-                "  --env <name>   Apply the environments/<name>.yaml overlay. Overrides target");
+                "  --env <name>   Apply the targets/<name>.yaml overlay. Overrides target");
         System.out.println(
                 "                 settings only; it does not partition migration history.");
         System.out.println();

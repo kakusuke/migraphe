@@ -11,10 +11,10 @@ import java.util.Objects;
  * Built-in generator source that extracts the migration graph as serializable tree data.
  *
  * <p>This {@link GeneratorSourcePlugin} is registered under the {@code "migration-tree"} type and
- * produces a {@link MigrationTreeData} object: one entry per node with its id, name, target
- * environment, dependencies, and execution status. The status is derived from the optional {@link
+ * produces a {@link MigrationTreeData} object: one entry per node with its id, name, target target,
+ * dependencies, and execution status. The status is derived from the optional {@link
  * HistoryRepository} in the {@link SourceContext} ({@code "executed"} when a record exists for the
- * node/environment pair, otherwise {@code "pending"}). Entries and each entry's dependency list are
+ * node/target pair, otherwise {@code "pending"}). Entries and each entry's dependency list are
  * sorted for deterministic output. The resulting data can be rendered by any compatible output
  * plugin (for example the JSON output plugin).
  *
@@ -77,14 +77,13 @@ public final class MigrationTreeSourcePlugin implements GeneratorSourcePlugin<Mi
                                     String status =
                                             historyRepository != null
                                                             && historyRepository.wasExecuted(
-                                                                    node.id(),
-                                                                    node.environment().id())
+                                                                    node.id(), node.target().id())
                                                     ? "executed"
                                                     : "pending";
                                     return new MigrationTreeData.NodeEntry(
                                             node.id().value(),
                                             node.name(),
-                                            node.environment().id().value(),
+                                            node.target().id().value(),
                                             status,
                                             deps);
                                 })

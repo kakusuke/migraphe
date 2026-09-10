@@ -18,7 +18,7 @@ import org.jspecify.annotations.Nullable;
  * according to the file's role, so that the combined config can be addressed by a single set of
  * property names. The merge happens eagerly in the constructor; the resulting map is exposed at
  * ordinal {@code 100}, the lowest tier in the layering, so that environment files, system
- * properties, OS env and explicit variables can all override it.
+ * properties, OS target and explicit variables can all override it.
  *
  * <p>Prefixing strategy:
  *

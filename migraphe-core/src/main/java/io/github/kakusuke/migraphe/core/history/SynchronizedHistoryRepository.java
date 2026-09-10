@@ -1,9 +1,9 @@
 package io.github.kakusuke.migraphe.core.history;
 
-import io.github.kakusuke.migraphe.api.environment.EnvironmentId;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.target.TargetId;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -45,30 +45,30 @@ public final class SynchronizedHistoryRepository implements HistoryRepository {
     }
 
     @Override
-    public boolean wasExecuted(NodeId nodeId, EnvironmentId environmentId) {
+    public boolean wasExecuted(NodeId nodeId, TargetId targetId) {
         synchronized (delegate) {
-            return delegate.wasExecuted(nodeId, environmentId);
+            return delegate.wasExecuted(nodeId, targetId);
         }
     }
 
     @Override
-    public List<NodeId> executedNodes(EnvironmentId environmentId) {
+    public List<NodeId> executedNodes(TargetId targetId) {
         synchronized (delegate) {
-            return delegate.executedNodes(environmentId);
+            return delegate.executedNodes(targetId);
         }
     }
 
     @Override
-    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, EnvironmentId environmentId) {
+    public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId, TargetId targetId) {
         synchronized (delegate) {
-            return delegate.findLatestRecord(nodeId, environmentId);
+            return delegate.findLatestRecord(nodeId, targetId);
         }
     }
 
     @Override
-    public List<ExecutionRecord> allRecords(EnvironmentId environmentId) {
+    public List<ExecutionRecord> allRecords(TargetId targetId) {
         synchronized (delegate) {
-            return delegate.allRecords(environmentId);
+            return delegate.allRecords(targetId);
         }
     }
 }

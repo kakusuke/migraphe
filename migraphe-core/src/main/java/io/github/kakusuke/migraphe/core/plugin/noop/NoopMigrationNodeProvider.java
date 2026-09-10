@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.core.plugin.noop;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
 import java.util.Set;
@@ -31,21 +31,18 @@ public final class NoopMigrationNodeProvider implements MigrationNodeProvider<St
      * @param nodeId the ID to assign to the node
      * @param task the bound task definition supplying name, description, and UP/DOWN text
      * @param dependencies the IDs of the nodes this node depends on
-     * @param environment the environment the node runs against
+     * @param target the target the node runs against
      * @return a {@link SimpleMigrationNode} with no-op UP and (optional) DOWN tasks
      */
     @Override
     public MigrationNode createNode(
-            NodeId nodeId,
-            TaskDefinition<String> task,
-            Set<NodeId> dependencies,
-            Environment environment) {
+            NodeId nodeId, TaskDefinition<String> task, Set<NodeId> dependencies, Target target) {
 
         var builder =
                 SimpleMigrationNode.builder()
                         .id(nodeId)
                         .name(task.name())
-                        .environment(environment)
+                        .target(target)
                         .dependencies(dependencies)
                         .upTask(SimpleTask.of(task.up()));
 

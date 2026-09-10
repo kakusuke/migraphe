@@ -15,12 +15,12 @@ import org.junit.jupiter.api.Test;
 class JdbcHistoryRepositorySchemaStepsTest {
 
     /**
-     * Builds an environment for a named in-memory database. {@code DB_CLOSE_DELAY=-1} keeps the
-     * database alive between connections; without it each closed connection discards the schema and
-     * every detection query would report "not applied".
+     * Builds an target for a named in-memory database. {@code DB_CLOSE_DELAY=-1} keeps the database
+     * alive between connections; without it each closed connection discards the schema and every
+     * detection query would report "not applied".
      */
-    private JdbcEnvironment env(String dbName) {
-        return JdbcEnvironment.create(
+    private JdbcTarget env(String dbName) {
+        return JdbcTarget.create(
                 "testdb",
                 "jdbc:h2:mem:" + dbName + ";DB_CLOSE_DELAY=-1",
                 "sa",
@@ -29,7 +29,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
                 "H2");
     }
 
-    private boolean tableExists(JdbcEnvironment env, String table) throws Exception {
+    private boolean tableExists(JdbcTarget env, String table) throws Exception {
         try (Connection conn = env.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
@@ -42,7 +42,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
         }
     }
 
-    private boolean columnExists(JdbcEnvironment env, String column) throws Exception {
+    private boolean columnExists(JdbcTarget env, String column) throws Exception {
         try (Connection conn = env.createConnection();
                 Statement stmt = conn.createStatement();
                 ResultSet rs =
@@ -59,7 +59,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("検出できたステップの適用SQLは実行されない")
     void skipsStepWhenDetected() throws Exception {
-        JdbcEnvironment env = env("steps_skip");
+        JdbcTarget env = env("steps_skip");
         try (Connection conn = env.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE step_probe (id INT)");
@@ -73,7 +73,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("検出できないステップは適用される")
     void appliesStepWhenNotDetected() throws Exception {
-        JdbcEnvironment env = env("steps_apply");
+        JdbcTarget env = env("steps_apply");
         var repository = new JdbcHistoryRepository(env, "/schema-steps/skip-when-detected.sql");
 
         repository.initialize();
@@ -84,7 +84,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("適用が競合で失敗しても、再検出で適用済みなら飲み込む")
     void swallowsFailureWhenStepBecameApplied() throws Exception {
-        JdbcEnvironment env = env("steps_race");
+        JdbcTarget env = env("steps_race");
         // The resource applies the same CREATE TABLE twice: the second failure stands in for a
         // competing process having applied the step between our detection and our apply.
         var repository = new JdbcHistoryRepository(env, "/schema-steps/losing-race.sql");
@@ -97,7 +97,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("適用が失敗し、再検出でも未適用なら例外を投げる")
     void propagatesFailureWhenStepStillMissing() {
-        JdbcEnvironment env = env("steps_fail");
+        JdbcTarget env = env("steps_fail");
         var repository = new JdbcHistoryRepository(env, "/schema-steps/apply-fails.sql");
 
         assertThatThrownBy(repository::initialize)
@@ -108,7 +108,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("検出SQL自体の失敗は未適用に丸めず伝播させる")
     void propagatesCheckFailure() {
-        JdbcEnvironment env = env("steps_broken_check");
+        JdbcTarget env = env("steps_broken_check");
         var repository = new JdbcHistoryRepository(env, "/schema-steps/broken-check.sql");
 
         assertThatThrownBy(repository::initialize)
@@ -128,7 +128,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
         // statements themselves, so assert it directly rather than trusting a detection query.
         // Later steps do carry one — ALTER TABLE has no portable conditional form — and they name
         // the current schema through a bound parameter instead of matching on table name alone.
-        JdbcEnvironment env = env("steps_idempotent");
+        JdbcTarget env = env("steps_idempotent");
         String resource =
                 new String(
                         getClass()
@@ -152,7 +152,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("新規作成したテーブルは target_id 列を持つ")
     void freshTableUsesTargetId() throws Exception {
-        JdbcEnvironment env = env("steps_fresh_target_id");
+        JdbcTarget env = env("steps_fresh_target_id");
         new JdbcHistoryRepository(env).initialize();
 
         assertThat(columnExists(env, "TARGET_ID")).isTrue();
@@ -162,7 +162,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("environment_id を持つ旧テーブルは target_id にリネームされ、既存行が保持される")
     void renamesTheLegacyColumnKeepingRows() throws Exception {
-        JdbcEnvironment env = env("steps_legacy_rename");
+        JdbcTarget env = env("steps_legacy_rename");
         try (Connection conn = env.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute(
@@ -203,7 +203,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("リネーム済みのテーブルに再実行しても壊れない")
     void renameStepIsIdempotent() throws Exception {
-        JdbcEnvironment env = env("steps_rename_idempotent");
+        JdbcTarget env = env("steps_rename_idempotent");
         var repository = new JdbcHistoryRepository(env);
         repository.initialize();
 
@@ -214,7 +214,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("検出SQLの ? に現在のスキーマが束縛される")
     void bindsTheCurrentSchemaToTheDetectionParameter() throws Exception {
-        JdbcEnvironment env = env("steps_qualified_hit");
+        JdbcTarget env = env("steps_qualified_hit");
         try (Connection conn = env.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE step_probe (id INT)");
@@ -229,7 +229,7 @@ class JdbcHistoryRepositorySchemaStepsTest {
     @Test
     @DisplayName("別スキーマの同名テーブルは検出とみなさない")
     void doesNotMistakeASameNamedTableInAnotherSchema() throws Exception {
-        JdbcEnvironment env = env("steps_qualified_miss");
+        JdbcTarget env = env("steps_qualified_miss");
         try (Connection conn = env.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE SCHEMA other");

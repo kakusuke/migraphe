@@ -1,10 +1,10 @@
 package io.github.kakusuke.migraphe.jdbc;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.MigrationNodeProvider;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.api.target.Target;
 import java.util.Set;
 
 /**
@@ -26,22 +26,18 @@ public final class JdbcMigrationNodeProvider implements MigrationNodeProvider<St
      * @param nodeId the identifier to assign to the node
      * @param task the mapped task configuration; must be a {@link SqlTaskDefinition}
      * @param dependencies the resolved node identifiers this node depends on
-     * @param environment the environment the node runs against; must be a {@link JdbcEnvironment}
+     * @param target the target the node runs against; must be a {@link JdbcTarget}
      * @return a new {@link JdbcMigrationNode}
-     * @throws JdbcException if {@code environment} is not a {@link JdbcEnvironment} or {@code task}
-     *     is not a {@link SqlTaskDefinition}
+     * @throws JdbcException if {@code target} is not a {@link JdbcTarget} or {@code task} is not a
+     *     {@link SqlTaskDefinition}
      */
     @Override
     public MigrationNode createNode(
-            NodeId nodeId,
-            TaskDefinition<String> task,
-            Set<NodeId> dependencies,
-            Environment environment) {
+            NodeId nodeId, TaskDefinition<String> task, Set<NodeId> dependencies, Target target) {
 
-        if (!(environment instanceof JdbcEnvironment jdbcEnv)) {
+        if (!(target instanceof JdbcTarget jdbcEnv)) {
             throw new JdbcException(
-                    "Environment must be JdbcEnvironment, got: "
-                            + environment.getClass().getName());
+                    "Target must be JdbcTarget, got: " + target.getClass().getName());
         }
 
         if (!(task instanceof SqlTaskDefinition sqlTask)) {
@@ -56,7 +52,7 @@ public final class JdbcMigrationNodeProvider implements MigrationNodeProvider<St
                 JdbcMigrationNode.builder()
                         .id(nodeId)
                         .name(task.name())
-                        .environment(jdbcEnv)
+                        .target(jdbcEnv)
                         .dependencies(dependencies)
                         .upSql(upSql)
                         .autocommit(autocommit);

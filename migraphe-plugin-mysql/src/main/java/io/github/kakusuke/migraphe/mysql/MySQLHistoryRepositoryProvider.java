@@ -1,8 +1,8 @@
 package io.github.kakusuke.migraphe.mysql;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 
 /**
@@ -25,19 +25,18 @@ public final class MySQLHistoryRepositoryProvider implements HistoryRepositoryPr
             "/io/github/kakusuke/migraphe/mysql/schema/init_history_table.sql";
 
     /**
-     * Creates a {@link JdbcHistoryRepository} for the given MySQL environment.
+     * Creates a {@link JdbcHistoryRepository} for the given MySQL target.
      *
-     * @param environment the environment whose migration history is to be stored; must be a {@link
-     *     MySQLEnvironment}
+     * @param target the target whose migration history is to be stored; must be a {@link
+     *     MySQLTarget}
      * @return a {@link JdbcHistoryRepository} backed by the MySQL target
-     * @throws MySQLException if {@code environment} is not a {@link MySQLEnvironment}
+     * @throws MySQLException if {@code target} is not a {@link MySQLTarget}
      */
     @Override
-    public HistoryRepository createRepository(Environment environment) {
-        if (!(environment instanceof MySQLEnvironment mysqlEnv)) {
+    public HistoryRepository createRepository(Target target) {
+        if (!(target instanceof MySQLTarget mysqlEnv)) {
             throw new MySQLException(
-                    "Environment must be MySQLEnvironment, got: "
-                            + environment.getClass().getName());
+                    "Target must be MySQLTarget, got: " + target.getClass().getName());
         }
 
         return new JdbcHistoryRepository(mysqlEnv, MYSQL_SCHEMA_RESOURCE);

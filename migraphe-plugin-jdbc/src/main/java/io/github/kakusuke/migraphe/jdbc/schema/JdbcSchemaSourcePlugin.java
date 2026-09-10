@@ -1,15 +1,15 @@
 package io.github.kakusuke.migraphe.jdbc.schema;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
 import io.github.kakusuke.migraphe.api.generator.SourceContext;
+import io.github.kakusuke.migraphe.api.target.Target;
 import java.util.Objects;
 
 /**
  * Generator source plugin that extracts JDBC database schema information.
  *
  * <p>This is the {@code jdbc-schema} source: given a {@link SourceContext} carrying a JDBC {@link
- * Environment}, it produces a {@link JdbcSchemaInfo} snapshot by delegating to {@link
+ * Target}, it produces a {@link JdbcSchemaInfo} snapshot by delegating to {@link
  * JdbcSchemaInfoProvider}. The resulting data can then be rendered by any output plugin that
  * accepts {@link JdbcSchemaInfo} (for example the JDBC Markdown generator).
  *
@@ -48,19 +48,18 @@ public final class JdbcSchemaSourcePlugin implements GeneratorSourcePlugin<JdbcS
     /**
      * Extracts the JDBC schema snapshot from the given context.
      *
-     * <p>Requires the context to carry a non-{@code null} {@link Environment}, which must be a JDBC
-     * environment usable by {@link JdbcSchemaInfoProvider}.
+     * <p>Requires the context to carry a non-{@code null} {@link Target}, which must be a JDBC
+     * target usable by {@link JdbcSchemaInfoProvider}.
      *
-     * @param context the extraction context; its {@link SourceContext#environment()} must be
-     *     present
+     * @param context the extraction context; its {@link SourceContext#target()} must be present
      * @return the extracted schema information
-     * @throws NullPointerException if the context carries no environment
+     * @throws NullPointerException if the context carries no target
      */
     @Override
     public JdbcSchemaInfo extract(SourceContext context) {
-        Environment environment =
+        Target target =
                 Objects.requireNonNull(
-                        context.environment(), "Environment is required for jdbc-schema source");
-        return new JdbcSchemaInfoProvider().getSchemaInfo(environment);
+                        context.target(), "Target is required for jdbc-schema source");
+        return new JdbcSchemaInfoProvider().getSchemaInfo(target);
     }
 }

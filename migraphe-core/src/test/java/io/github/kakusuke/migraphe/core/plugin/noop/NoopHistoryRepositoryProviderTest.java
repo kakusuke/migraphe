@@ -3,7 +3,7 @@ package io.github.kakusuke.migraphe.core.plugin.noop;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
-import io.github.kakusuke.migraphe.core.plugin.SimpleEnvironment;
+import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import org.junit.jupiter.api.Test;
 
 class NoopHistoryRepositoryProviderTest {
@@ -11,9 +11,9 @@ class NoopHistoryRepositoryProviderTest {
     @Test
     void shouldReturnInMemoryHistoryRepository() {
         var provider = new NoopHistoryRepositoryProvider();
-        var env = SimpleEnvironment.create("main");
+        var target = SimpleTarget.create("main");
 
-        var repo = provider.createRepository(env);
+        var repo = provider.createRepository(target);
 
         assertThat(repo).isInstanceOf(InMemoryHistoryRepository.class);
     }
@@ -21,10 +21,10 @@ class NoopHistoryRepositoryProviderTest {
     @Test
     void eachCallShouldReturnNewInstance() {
         var provider = new NoopHistoryRepositoryProvider();
-        var env = SimpleEnvironment.create("main");
+        var target = SimpleTarget.create("main");
 
-        var repo1 = provider.createRepository(env);
-        var repo2 = provider.createRepository(env);
+        var repo1 = provider.createRepository(target);
+        var repo2 = provider.createRepository(target);
 
         assertThat(repo1).isNotSameAs(repo2);
     }

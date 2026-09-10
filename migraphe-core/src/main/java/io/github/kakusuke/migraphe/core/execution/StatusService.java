@@ -45,12 +45,11 @@ public final class StatusService {
         int pendingCount = 0;
 
         for (MigrationNode node : graph.allNodes()) {
-            boolean executed = historyRepository.wasExecuted(node.id(), node.environment().id());
+            boolean executed = historyRepository.wasExecuted(node.id(), node.target().id());
             ExecutionRecord latestRecord = null;
 
             if (executed) {
-                latestRecord =
-                        historyRepository.findLatestRecord(node.id(), node.environment().id());
+                latestRecord = historyRepository.findLatestRecord(node.id(), node.target().id());
                 executedCount++;
             } else {
                 pendingCount++;

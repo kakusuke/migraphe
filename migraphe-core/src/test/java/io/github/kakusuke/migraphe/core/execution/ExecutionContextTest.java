@@ -2,16 +2,16 @@ package io.github.kakusuke.migraphe.core.execution;
 
 import static org.assertj.core.api.Assertions.*;
 
-import io.github.kakusuke.migraphe.api.environment.Environment;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.github.kakusuke.migraphe.jdbc.JdbcEnvironment;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
-import io.github.kakusuke.migraphe.postgresql.PostgreSQLEnvironment;
+import io.github.kakusuke.migraphe.jdbc.JdbcTarget;
+import io.github.kakusuke.migraphe.postgresql.PostgreSQLTarget;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,7 +46,7 @@ class ExecutionContextTest {
 
         // Then: 正しく読み込まれている
         assertThat(context.baseDir()).isEqualTo(tempDir);
-        assertThat(context.environments()).isNotEmpty();
+        assertThat(context.targets()).isNotEmpty();
         assertThat(context.nodes()).isNotEmpty();
         assertThat(context.graph()).isNotNull();
     }
@@ -65,19 +65,19 @@ class ExecutionContextTest {
     }
 
     @Test
-    void shouldProvideEnvironmentByTargetId() throws IOException {
+    void shouldProvideTargetByTargetId() throws IOException {
         // Given: テスト用のプロジェクト構造
         createTestProject(tempDir);
 
         // When: ExecutionContext をロード
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
 
-        // Then: ターゲットIDで Environment が取得できる
-        Map<String, Environment> environments = context.environments();
-        assertThat(environments).containsKey("test-db");
+        // Then: ターゲットIDで Target が取得できる
+        Map<String, Target> targets = context.targets();
+        assertThat(targets).containsKey("test-db");
 
-        Environment env = Objects.requireNonNull(environments.get("test-db"));
-        assertThat(env).isInstanceOf(PostgreSQLEnvironment.class);
+        Target env = Objects.requireNonNull(targets.get("test-db"));
+        assertThat(env).isInstanceOf(PostgreSQLTarget.class);
         assertThat(env.id().value()).isEqualTo("test-db");
     }
 
@@ -215,7 +215,7 @@ class ExecutionContextTest {
 
     @Test
     void shouldApplyEnvironmentOverrideToTargetConfig() throws IOException {
-        // Given: targets/test-db.yaml に ${DB_URL} を含むプロジェクトと environments/staging.yaml
+        // Given: targets/test-db.yaml に ${DB_URL} を含むプロジェクトと targets/staging.yaml
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),
                 """
@@ -243,17 +243,17 @@ class ExecutionContextTest {
         // When: envName = "staging" を指定して load
         ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry, "staging");
 
-        // Then: staging 環境の jdbc_url が Environment に反映されている
-        Environment env = Objects.requireNonNull(context.environments().get("test-db"));
-        assertThat(env).isInstanceOf(JdbcEnvironment.class);
-        assertThat(((JdbcEnvironment) env).getJdbcUrl())
+        // Then: staging 環境の jdbc_url が Target に反映されている
+        Target env = Objects.requireNonNull(context.targets().get("test-db"));
+        assertThat(env).isInstanceOf(JdbcTarget.class);
+        assertThat(((JdbcTarget) env).getJdbcUrl())
                 .isEqualTo("jdbc:postgresql://staging-host:5432/stagingdb");
     }
 
     /**
      * history.target が存在しない環境を指すプロジェクト構造を作成する。
      *
-     * <p>history.target = "nonexistent-db" で、environments に存在しないため InMemory にフォールバックする。
+     * <p>history.target = "nonexistent-db" で、targets に存在しないため InMemory にフォールバックする。
      */
     private void createTestProjectWithMissingHistoryTarget(Path baseDir) throws IOException {
         // migraphe.yaml — history.target が存在しない環境を指す
