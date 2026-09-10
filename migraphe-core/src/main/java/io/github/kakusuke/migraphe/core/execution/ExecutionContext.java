@@ -7,13 +7,11 @@ import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.api.target.Target;
-import io.github.kakusuke.migraphe.core.common.ValidationResult;
 import io.github.kakusuke.migraphe.core.config.ConfigLoader;
 import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.factory.MigrationNodeFactory;
 import io.github.kakusuke.migraphe.core.factory.TargetFactory;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
-import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import java.nio.file.Path;
@@ -24,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -54,26 +53,51 @@ public record ExecutionContext(
         MigrationGraph graph) {
 
     /**
+     * How many migrations this project may run at once.
+     *
+     * <p>One place, so no command decides it for itself. A command that computed its own answer got
+     * to disagree with the one beside it — {@code rebuild}'s apply phase ran sequentially while
+     * {@code up} honoured the configuration, on the same project, for the same work — and the
+     * disagreement was invisible, because both looked reasonable where they stood.
+     *
+     * <p>{@code max_parallelism} is read only when {@code parallel} is on: the setting says how far
+     * to go once going wide is allowed, and reading it while it is not allowed would turn a
+     * left-behind number into a behaviour change.
+     *
+     * @return the configured parallelism, or 1 when parallel execution is off
+     */
+    public int maxParallelism() {
+        ProjectConfig.ExecutionSection execution =
+                config.getConfigMapping(ProjectConfig.class).execution();
+        return execution.parallel() ? execution.maxParallelism() : 1;
+    }
+
+    /**
      * Creates the {@link HistoryRepository} for this project.
      *
-     * <p>The history target is read from {@code history.target} in the project configuration. If a
-     * matching {@link Target} exists, the corresponding plugin's {@link
-     * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} creates the repository against
-     * that target. If no matching target is found, an {@link InMemoryHistoryRepository} is returned
-     * as a fallback.
+     * <p>The history target is read from {@code history.target} in the project configuration and
+     * resolved against the configured targets; the matching plugin's {@link
+     * io.github.kakusuke.migraphe.api.spi.HistoryRepositoryProvider} then creates the repository
+     * against that {@link Target}.
      *
-     * @return the project's history repository, or an in-memory fallback when no history target is
-     *     configured
+     * @return the project's history repository
+     * @throws IllegalStateException if {@code history.target} names no configured target. Falling
+     *     back to an in-memory repository would let a run apply its migrations to the real database
+     *     and then discard the record of having done so.
      */
     public HistoryRepository createHistoryRepository() {
-        String historyTarget = config.getConfigMapping(ProjectConfig.class).history().target();
-        Target historyEnv = targets.get(historyTarget);
-        if (historyEnv == null) {
-            return new InMemoryHistoryRepository();
+        String historyTargetId = config.getConfigMapping(ProjectConfig.class).history().target();
+        Target historyTarget = targets.get(historyTargetId);
+        if (historyTarget == null) {
+            throw new IllegalStateException(
+                    "history.target '"
+                            + historyTargetId
+                            + "' does not match any configured target. Configured targets: "
+                            + new TreeSet<>(targets.keySet()));
         }
-        String type = config.getValue("target." + historyTarget + ".type", String.class);
+        String type = config.getValue("target." + historyTargetId + ".type", String.class);
         MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
-        return plugin.historyRepositoryProvider().createRepository(historyEnv);
+        return plugin.historyRepositoryProvider().createRepository(historyTarget);
     }
 
     /**
@@ -163,11 +187,12 @@ public record ExecutionContext(
         List<MigrationNode> sortedNodes = sortNodesByDependencies(nodes);
         MigrationGraph graph = MigrationGraph.fromNodesUp(sortedNodes);
 
-        // 6. Validate graph integrity (cycles / missing dependencies).
-        ValidationResult validation = graph.validate();
-        if (!validation.isValid()) {
+        // 6. A cycle means no order exists, so nothing can be built from this. An unresolved
+        // dependency is only incompleteness, and a project in that state must still be able to
+        // report what happened to it — the commands that would apply something refuse instead.
+        if (graph.hasCycle()) {
             throw new IllegalStateException(
-                    "Migration graph is invalid: " + String.join("; ", validation.errors()));
+                    "Migration graph is invalid: Graph contains a cycle (circular dependency)");
         }
 
         return new ExecutionContext(

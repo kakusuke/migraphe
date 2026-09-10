@@ -7,6 +7,7 @@ import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.target.DownTaskRestorer;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
 import io.github.kakusuke.migraphe.api.task.Task;
@@ -18,7 +19,6 @@ import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.history.SynchronizedHistoryRepository;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,7 +29,6 @@ import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -98,6 +97,18 @@ public final class DagExecutor implements Executor {
     private final int maxParallelism;
 
     /**
+     * The row that applied each node, read once when a rollback run starts.
+     *
+     * <p>Empty for an UP run, which never asks. A DOWN run writes only DOWN rows, so no apply can
+     * appear while it is running and one read answers for every node — where asking per node made
+     * {@link HistoryRepository#latestApplies} fold the whole history once per migration, since the
+     * shipped JDBC repository derives it from {@code allRecords()}.
+     *
+     * <p>Assigned at the top of {@link #execute} before any worker starts, so the workers see it.
+     */
+    private Map<NodeId, ExecutionRecord> appliedRows = Map.of();
+
+    /**
      * Creates an executor bound to a graph, persistence, listener, direction, and parallelism.
      *
      * <p>The {@code history} and {@code listener} are automatically wrapped in synchronizing
@@ -135,76 +146,16 @@ public final class DagExecutor implements Executor {
     /**
      * Determines the set of nodes to execute for an UP run.
      *
-     * <p>When {@code targetId} is supplied, the candidate set is that node plus all of its
-     * transitive dependencies; otherwise every node in the graph is a candidate. The candidate set
-     * is then filtered to nodes that have not yet been successfully applied (per {@link
-     * HistoryRepository#wasExecuted}), so already-applied nodes are excluded.
+     * <p>Delegates to {@link UpService#selectedNodes}, which is where the whole apply decision
+     * lives so that every front end asks the same question of it.
      *
-     * @param targetId a specific target node to migrate up to, or {@code null} to consider all
+     * @param requestedNode a specific target node to migrate up to, or {@code null} to consider all
      *     nodes
      * @return the set of not-yet-executed node IDs to run
      */
     @Override
-    public Set<NodeId> determineTargetNodes(@Nullable NodeId targetId) {
-        Set<NodeId> candidates;
-
-        if (targetId != null) {
-            candidates = new HashSet<>(graph.getAllDependencies(targetId));
-            candidates.add(targetId);
-        } else {
-            candidates =
-                    graph.allNodes().stream().map(MigrationNode::id).collect(Collectors.toSet());
-        }
-
-        return candidates.stream()
-                .filter(
-                        id -> {
-                            MigrationNode node = graph.getNode(id).orElse(null);
-                            if (node == null) return false;
-                            return !history.wasExecuted(id);
-                        })
-                .collect(Collectors.toSet());
-    }
-
-    /**
-     * Determines the set of nodes to roll back for a DOWN run.
-     *
-     * <p>If {@code allMigrations} is {@code true}, every currently applied node is selected.
-     * Otherwise, if {@code requestedNode} is supplied, the selection is that node plus all of its
-     * transitive dependents, filtered to nodes that are currently applied (per {@link
-     * HistoryRepository#wasExecuted}). If neither applies, an empty set is returned.
-     *
-     * @param requestedNode the node to roll back (together with its dependents), or {@code null} to
-     *     defer to {@code allMigrations}
-     * @param allMigrations when {@code true}, selects all currently applied nodes regardless of
-     *     {@code requestedNode}
-     * @return the set of currently applied node IDs to roll back
-     */
-    public Set<NodeId> determineRollbackTargets(
-            @Nullable NodeId requestedNode, boolean allMigrations) {
-        if (allMigrations) {
-            return graph.allNodes().stream()
-                    .filter(node -> history.wasExecuted(node.id()))
-                    .map(MigrationNode::id)
-                    .collect(Collectors.toSet());
-        }
-
-        if (requestedNode != null) {
-            Set<NodeId> targets = new HashSet<>();
-            targets.add(requestedNode);
-            targets.addAll(graph.getAllDependents(requestedNode));
-
-            return targets.stream()
-                    .filter(
-                            id -> {
-                                MigrationNode node = graph.getNode(id).orElse(null);
-                                if (node == null) return false;
-                                return history.wasExecuted(id);
-                            })
-                    .collect(Collectors.toSet());
-        }
-
-        return Set.of();
+    public Set<NodeId> determineSelectedNodes(@Nullable NodeId requestedNode) {
+        return new UpService(graph, history).selectedNodes(requestedNode);
     }
 
     /**
@@ -221,7 +172,7 @@ public final class DagExecutor implements Executor {
      * restored and a failure result is returned.
      *
      * @param selectedNodes the set of node IDs to execute; typically the result of {@link
-     *     #determineTargetNodes} or {@link #determineRollbackTargets}
+     *     #determineSelectedNodes} or, for a rollback, {@link DownService.DownPlan#selectedNodes}
      * @return a success {@link ExecutionResult} if no node failed, otherwise a failure result; the
      *     embedded {@link ExecutionSummary} carries the executed/skipped/failed counts
      */
@@ -232,6 +183,8 @@ public final class DagExecutor implements Executor {
             listener.onCompleted(summary);
             return ExecutionResult.success(summary);
         }
+
+        appliedRows = direction == ExecutionDirection.DOWN ? appliedRowsForThisRun() : Map.of();
 
         ExecutionPlan plan = createPlanFor(selectedNodes);
         int totalNodes = plan.totalNodes();
@@ -403,6 +356,15 @@ public final class DagExecutor implements Executor {
             CountDownLatch latch,
             Set<NodeId> selectedNodes) {
 
+        String refusal = rollbackRefusalFor(node);
+        if (refusal != null) {
+            listener.onNodeFailed(node, direction, null, refusal);
+            failedNodes.add(node.id());
+            failureCount.incrementAndGet();
+            propagateFailure(node.id(), failedNodes, claimed, selectedNodes, skippedCount, latch);
+            return;
+        }
+
         Task task = taskFor(node);
         if (task == null) {
             listener.onNodeSkipped(node, direction, "no down task");
@@ -500,10 +462,144 @@ public final class DagExecutor implements Executor {
     }
 
     /**
-     * Returns the task for this direction; may be {@code null} for DOWN when no down task exists.
+     * Returns the task for this direction; {@code null} for DOWN when the history has no rollback
+     * to run.
+     *
+     * <p>A rollback runs what the history recorded, and <strong>only</strong> that. There is no
+     * fallback to {@link MigrationNode#downTask()}: the definition may have moved on — or be gone —
+     * since the node was applied, and the objects standing in the database were made by the version
+     * that ran, so the task file describes something else. Every state in which the recorded
+     * rollback cannot be rebuilt is a refusal instead, reported by {@link #rollbackRefusalFor}
+     * before this is asked.
+     *
+     * <p>What is left for {@code null} to mean here is a node the history holds no apply for, which
+     * a plan does not select.
      */
     private @Nullable Task taskFor(MigrationNode node) {
-        return direction == ExecutionDirection.DOWN ? node.downTask() : node.upTask();
+        if (direction != ExecutionDirection.DOWN) {
+            return node.upTask();
+        }
+        return recordedRollbackFor(node);
+    }
+
+    /**
+     * Rebuilds the rollback the history kept for this node, or {@code null} when it cannot.
+     *
+     * <p>Read from the row that <strong>applied</strong> the node, not from its latest row of any
+     * kind. A payload is written on an apply alone, so a node whose newest row is a failed rollback
+     * has none there — and reading the newest row hid what was applied the moment a rollback failed
+     * once, leaving every retry on the current definition instead of replaying what actually ran.
+     *
+     * <p>{@code null} means one of three things, and none of them lets the definition stand in for
+     * the row: the plugin's target does not implement {@link DownTaskRestorer}, the history records
+     * no apply of this node against this target, or that apply carried no payload. The first and
+     * the third are refusals; the second is a node nothing selected.
+     */
+    private @Nullable Task recordedRollbackFor(MigrationNode node) {
+        if (!(node.target() instanceof DownTaskRestorer restorer)) {
+            return null;
+        }
+        ExecutionRecord applied = appliedRowFor(node);
+        if (applied == null || applied.serializedDownTask() == null) {
+            return null;
+        }
+        return restorer.restoreDownTask(applied.serializedDownTask(), applied.pluginMetadata());
+    }
+
+    /**
+     * The row that applied this node against its own target, or {@code null} when there is none.
+     */
+    private @Nullable ExecutionRecord appliedRowFor(MigrationNode node) {
+        ExecutionRecord applied = appliedRows.get(node.id());
+        return applied != null && applied.targetId().equals(node.target().id()) ? applied : null;
+    }
+
+    /**
+     * The applied rows this run may be asked about, keyed by node.
+     *
+     * <p>Keyed by node alone because {@link HistoryRepository#latestApplies} is: an identifier is
+     * unique across the project, so it answers with one row per migration and there is no second
+     * row for a key to tell apart. {@link #appliedRowFor} still checks the target, so a row naming
+     * somewhere this run is not rolling back is declined rather than replayed.
+     */
+    private Map<NodeId, ExecutionRecord> appliedRowsForThisRun() {
+        Map<NodeId, ExecutionRecord> rows = new HashMap<>();
+        for (ExecutionRecord apply : history.latestApplies()) {
+            rows.put(apply.nodeId(), apply);
+        }
+        return rows;
+    }
+
+    /**
+     * Why this node's rollback cannot run, or {@code null} when it can be attempted.
+     *
+     * <p>The history recording no rollback is a refusal, not a reason to run the definition's. The
+     * recorded SQL is what matches the objects that exist; substituting what the definitions say
+     * now would be answering with D where H was asked, which is the judgement this tool does not
+     * make.
+     *
+     * <p>Four refusals, because the operator's next move differs, and they are asked in that order.
+     * A row naming a {@code no_way_back:} reason is quoting its author, so the reason is quoted
+     * back — first, since a row can carry the reason and no fingerprint at once. A row carrying no
+     * fingerprint cannot speak for its own contents <em>at all</em>, whatever else it holds, so
+     * that is asked before the payload and answered in the words {@code down}'s own plan uses;
+     * {@code upgrade} fills it from the definitions in one pass. A complete row that still kept no
+     * payload has either come from a plugin whose up task reports no rollback payload, or been
+     * edited — the row cannot tell those apart, so the message does not pretend to. And a payload
+     * the target cannot rebuild is a plugin that cannot read back what it wrote.
+     *
+     * <p><strong>Nothing is recorded.</strong> A refusal is not an attempt: a DOWN failure row
+     * would say a rollback ran and failed, and — since {@code amend} reads the latest record — it
+     * would take the remedy this message names away from the operator it was named to.
+     *
+     * <p>Two states stay outside this: a node the history has no apply for, and a complete row
+     * whose payload the target can rebuild. Neither is the history saying it kept no rollback.
+     *
+     * <p>The restorer arm was once outside it, to spare {@code noop}, whose provider kept the
+     * rollback on the node rather than in the row; that was the plugin being wrong, and it is
+     * fixed. {@code up} now refuses a definition whose declared rollback would not be recorded, so
+     * no new row of that shape can appear, and the reference target rebuilds what its task
+     * recorded.
+     */
+    private @Nullable String rollbackRefusalFor(MigrationNode node) {
+        if (direction != ExecutionDirection.DOWN) {
+            return null;
+        }
+        ExecutionRecord applied = appliedRowFor(node);
+        if (applied == null) {
+            return null;
+        }
+        String id = node.id().value();
+        String reason = applied.noWayBack();
+        if (reason != null) {
+            return id
+                    + " was applied one-way: "
+                    + reason
+                    + ". The history recorded no rollback for it.";
+        }
+        if (applied.fingerprint() == null) {
+            // Both halves, because neither reaches every row: upgrade fills a row from the
+            // definition that names it, and a node standing for a row no definition names — which
+            // is exactly what reaches this executor as a rollback — is repaired by naming it.
+            return id
+                    + ": the row that applied it carries no fingerprint, so what it recorded cannot"
+                    + " be read at face value; run 'migraphe amend "
+                    + id
+                    + "'";
+        }
+        if (applied.serializedDownTask() == null) {
+            return id
+                    + ": the history recorded no rollback for it and no reason for having none."
+                    + " Either the plugin that applied it does not report rollback payloads, or the"
+                    + " row was edited.";
+        }
+        return recordedRollbackFor(node) != null
+                ? null
+                : id
+                        + ": the history recorded a rollback for it, but the target "
+                        + node.target().id().value()
+                        + " cannot rebuild one — only the plugin that wrote the payload can read it"
+                        + " back.";
     }
 
     /**

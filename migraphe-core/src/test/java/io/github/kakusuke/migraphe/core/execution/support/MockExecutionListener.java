@@ -24,6 +24,7 @@ public class MockExecutionListener implements ExecutionListener {
     public final List<NodeId> skippedNodes = Collections.synchronizedList(new ArrayList<>());
     public final Map<NodeId, String> skipReasons = Collections.synchronizedMap(new HashMap<>());
     public final List<NodeId> failedNodes = Collections.synchronizedList(new ArrayList<>());
+    public final Map<NodeId, String> failureMessages = Collections.synchronizedMap(new HashMap<>());
     public volatile boolean completedCalled = false;
 
     @Override
@@ -52,6 +53,7 @@ public class MockExecutionListener implements ExecutionListener {
             @Nullable String sqlContent,
             String errorMessage) {
         failedNodes.add(node.id());
+        failureMessages.put(node.id(), errorMessage);
     }
 
     @Override
