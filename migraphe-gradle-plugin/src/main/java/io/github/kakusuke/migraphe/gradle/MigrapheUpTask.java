@@ -8,6 +8,7 @@ import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.Executor;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
 import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.execution.UpBlocker;
 import io.github.kakusuke.migraphe.core.execution.UpPlanFormatter;
@@ -113,7 +114,18 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                     }
 
                     HistoryRepository historyRepo = context.createHistoryRepository();
-                    historyRepo.initialize();
+                    // up is where a project's history should come into being, so it creates one
+                    // rather than refusing. Every other task reports on migrations and must not
+                    // write DDL to do it.
+                    if (!historyRepo.isInitialized()) {
+                        historyRepo.initialize();
+                    }
+
+                    List<String> notReady =
+                            HistoryReadiness.refusal(historyRepo, RepairVocabulary.GRADLE);
+                    if (!notReady.isEmpty()) {
+                        throw new GradleException(String.join(System.lineSeparator(), notReady));
+                    }
 
                     GradleExecutionListener listener = new GradleExecutionListener(getLogger());
                     Executor executor = createExecutor(context, historyRepo, listener);

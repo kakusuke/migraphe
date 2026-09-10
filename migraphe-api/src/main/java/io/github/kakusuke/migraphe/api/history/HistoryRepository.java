@@ -38,6 +38,49 @@ public interface HistoryRepository {
     void initialize();
 
     /**
+     * Reports whether the history has been created in this store yet.
+     *
+     * <p>Asked before anything else touches the history, so that a command reporting on migrations
+     * does not create a table as a side effect of being run. Only {@code init} — and {@code up},
+     * which is the moment a project's history should come into being — calls {@link #initialize()};
+     * everything else refuses and names {@code init}.
+     *
+     * <p><strong>No default</strong>, for the reason {@link #upgrades()} has one and this does not:
+     * "yes" is not a correct answer for a backend that has not been asked. One that forgot to
+     * override would report itself ready and then fail on its first read, with an error naming a
+     * missing table rather than a missing step. A backend whose store cannot be absent — an
+     * in-memory one — answers {@code true} deliberately.
+     *
+     * @return {@code true} when the history is there to be read and written
+     */
+    boolean isInitialized();
+
+    /**
+     * Returns the upgrades this history needs to reach the shape this version writes, in order.
+     *
+     * <p>{@link #initialize()} creates a history with every column this version writes and never
+     * alters an existing one, so a fresh project needs nothing from this list. Everything that
+     * changes a history an older release created lives here instead, behind the upgrade command an
+     * operator schedules — a history shared with a deployment still on the older version must not
+     * have a column dropped out from under it by whoever runs {@code status} first.
+     *
+     * <p>The list belongs to the repository rather than being collected from every plugin on the
+     * classpath. There is one history per project, fixed by {@code history.target}, and its
+     * upgrades are written in that backend's dialect against that backend's shape; a sweep would
+     * hand a MySQL upgrade to a PostgreSQL history whenever a project uses both.
+     *
+     * <p>The default is empty because "nothing" is a correct answer here: a new backend has no
+     * older shapes to come from. That is why this has a default and {@link
+     * io.github.kakusuke.migraphe.api.graph.MigrationNode#fingerprint} does not — a node always has
+     * content to fold, so a default there would let an implementation silently skip it.
+     *
+     * @return the ordered upgrades, or an empty list when this backend has none
+     */
+    default List<HistoryUpgrade> upgrades() {
+        return List.of();
+    }
+
+    /**
      * Persists an execution record.
      *
      * @param record the execution record to store

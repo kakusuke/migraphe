@@ -3,10 +3,14 @@ package io.github.kakusuke.migraphe.mysql;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kakusuke.migraphe.api.common.Result;
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
+import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.history.HistoryUpgrade;
+import io.github.kakusuke.migraphe.api.history.UpgradeContext;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
@@ -35,6 +39,9 @@ class MySQLIntegrationTest {
     private static final String MYSQL_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/mysql/schema/init_history_table.sql";
 
+    private static final String MYSQL_UPGRADE_RESOURCE =
+            "/io/github/kakusuke/migraphe/mysql/schema/upgrade_history_table.sql";
+
     private MySQLTarget target;
     private HistoryRepository historyRepo;
 
@@ -44,7 +51,8 @@ class MySQLIntegrationTest {
                 MySQLTarget.create(
                         "test", mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
 
-        historyRepo = new JdbcHistoryRepository(target, MYSQL_SCHEMA_RESOURCE);
+        historyRepo =
+                new JdbcHistoryRepository(target, MYSQL_SCHEMA_RESOURCE, MYSQL_UPGRADE_RESOURCE);
     }
 
     @AfterEach
@@ -567,7 +575,7 @@ class MySQLIntegrationTest {
                     """);
         }
 
-        historyRepo.initialize();
+        applyEveryUpgrade();
 
         try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
@@ -612,5 +620,32 @@ class MySQLIntegrationTest {
         // then
         assertThat(upResult.isOk()).isTrue();
         assertThat(downResult.isOk()).isTrue();
+    }
+
+    /**
+     * A schema-only upgrade never reads the context, so one that answers nothing is enough to drive
+     * it. Anything that did read it would fail loudly rather than quietly fold the wrong token.
+     */
+    private static final UpgradeContext NO_CONTEXT =
+            new UpgradeContext() {
+                @Override
+                public MigrationGraphView definitions() {
+                    throw new UnsupportedOperationException(
+                            "a schema-only step reads no definitions");
+                }
+
+                @Override
+                public Fingerprinter fingerprinterFor(NodeId nodeId) {
+                    throw new UnsupportedOperationException("a schema-only step folds nothing");
+                }
+            };
+
+    /** Runs the repository's upgrades the way the upgrade command does: pending ones, in order. */
+    private void applyEveryUpgrade() {
+        for (HistoryUpgrade upgrade : historyRepo.upgrades()) {
+            if (upgrade.isPending()) {
+                upgrade.apply(NO_CONTEXT);
+            }
+        }
     }
 }

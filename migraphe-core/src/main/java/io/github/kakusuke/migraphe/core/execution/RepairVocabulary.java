@@ -22,7 +22,13 @@ package io.github.kakusuke.migraphe.core.execution;
 public enum RepairVocabulary {
 
     /** {@code migraphe} on a command line. */
-    CLI("migraphe amend <id>", "migraphe amend", "migraphe rebuild", "migraphe down <id>"),
+    CLI(
+            "migraphe amend <id>",
+            "migraphe amend",
+            "migraphe rebuild",
+            "migraphe down <id>",
+            "migraphe upgrade-history",
+            "migraphe init"),
 
     /**
      * The Gradle tasks.
@@ -35,18 +41,55 @@ public enum RepairVocabulary {
             "./gradlew migrapheAmend --migration=<id>",
             "the migrapheAmend task",
             "./gradlew migrapheRebuild",
-            "./gradlew migrapheDown --target=<id>");
+            "./gradlew migrapheDown --target=<id>",
+            "./gradlew migrapheUpgradeHistory",
+            "./gradlew migrapheInit");
 
     private final String named;
     private final String plain;
     private final String rebuild;
     private final String down;
+    private final String upgradeHistory;
+    private final String init;
 
-    RepairVocabulary(String named, String plain, String rebuild, String down) {
+    RepairVocabulary(
+            String named,
+            String plain,
+            String rebuild,
+            String down,
+            String upgradeHistory,
+            String init) {
         this.named = named;
         this.plain = plain;
         this.rebuild = rebuild;
         this.down = down;
+        this.upgradeHistory = upgradeHistory;
+        this.init = init;
+    }
+
+    /**
+     * How to bring the history to the shape this version writes.
+     *
+     * <p>The one invocation that does not change between releases: whatever a given version has to
+     * do to a history it did not write, this is what the operator runs.
+     *
+     * @return the invocation, as an operator would type it
+     */
+    public String upgradeHistory() {
+        return upgradeHistory;
+    }
+
+    /**
+     * How to create the history in a store that has none.
+     *
+     * <p>Named on its own, never alongside {@code up}. {@code up} does create the history when it
+     * finds none, but a refusal from a command that only reports must not offer applying migrations
+     * as the way to make it report — that answers a reading problem with a write to the database.
+     *
+     * @return the invocation, as an operator would type it
+     */
+    public String init() {
+        return init;
     }
 
     /**

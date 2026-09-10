@@ -415,6 +415,11 @@ class InMemoryHistoryRepositoryTest {
         assertThat(latest.id()).isEqualTo("00000000-0000-7000-8000-000000000002");
     }
 
+    @Test
+    void aBackendWithNoOlderShapesDeclaresNoUpgrades() {
+        assertThat(repository.upgrades()).isEmpty();
+    }
+
     private ExecutionRecord recordAt(String id, Instant executedAt, ExecutionDirection direction) {
         return new ExecutionRecord(
                 id,

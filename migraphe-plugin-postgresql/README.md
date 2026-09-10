@@ -92,7 +92,7 @@ down: |
 | `dependencies` | No | `[]` | List of task IDs that must run before this task |
 | `up` | Yes | — | SQL executed on migrate up |
 | `down` | No | — | SQL executed on rollback (down). Omit for irreversible migrations |
-| `autocommit` | No | `false` | Run outside a transaction (see [Autocommit Mode](#autocommit-mode)) |
+| `autocommit` | No | `false` | Run outside a transaction. A bare boolean sets both directions; `{up, down}` sets them separately (see [Autocommit Mode](#autocommit-mode)) |
 
 ### Multi-Statement SQL and Dollar-Quoting
 

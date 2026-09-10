@@ -4,6 +4,7 @@
 
 ## Table of Contents
 
+0. [Upgrading to 0.7.0](#upgrading-to-070)
 1. [Introduction](#introduction)
 2. [Installation](#installation)
 3. [Project Setup](#project-setup)
@@ -11,12 +12,84 @@
 5. [Writing Migrations](#writing-migrations)
 6. [Running Migrations](#running-migrations)
 7. [Rollback (down)](#rollback-down)
-8. [Configuration Validation (validate)](#configuration-validation-validate)
-9. [Schema Documentation Generation (generate)](#schema-documentation-generation-generate)
-10. [Environment Management](#environment-management)
-11. [Advanced Features](#advanced-features)
-12. [Gradle Plugin](#gradle-plugin)
-13. [Troubleshooting](#troubleshooting)
+8. [Recording Definitions as Applied (amend)](#recording-definitions-as-applied-amend)
+9. [Creating the History (init)](#creating-the-history-init)
+10. [Upgrading the History (upgrade-history)](#upgrading-the-history-upgrade-history)
+11. [Rebuilding What Drifted (rebuild)](#rebuilding-what-drifted-rebuild)
+12. [Configuration Validation (validate)](#configuration-validation-validate)
+13. [Schema Documentation Generation (generate)](#schema-documentation-generation-generate)
+14. [Environment Management](#environment-management)
+15. [Advanced Features](#advanced-features)
+16. [Gradle Plugin](#gradle-plugin)
+17. [Troubleshooting](#troubleshooting)
+
+## Upgrading to 0.7.0
+
+Four things about this release need doing before you run it, in this order.
+
+**Rebuild your plugins — re-resolving is not enough.** The plugin API breaks in this release,
+deliberately and all at once, so a plugin is migrated once rather than twice: `Environment` and
+`EnvironmentId` are now `Target` and `TargetId` (with their definitions and providers), the history's
+read methods no longer take a target id, `ExecutionRecord` and `TaskResult` carry more, and
+`MigrationNode.fingerprint` and `Task.signature` are required with no default to inherit. A plugin
+whose *source* is not migrated will not compile, which is the intent. A plugin **jar** built against
+0.6.0 will load and then fail with `AbstractMethodError` at the first call, so update the coordinate
+to a rebuilt artifact rather than pointing at the old one.
+
+**`up` refuses while anything is drifted.** A migration edited after it ran means the database no
+longer matches your task files, and applying more on top of that builds on ground they no longer
+describe. `status` shows those as `[!]`. Clear one with `migraphe down <id>`, which takes it out so
+your next `up` puts it back as the file now reads, or with `migraphe amend <id>` if what is already
+applied is what you meant. `migraphe rebuild` does that for every difference at once — the heavier
+move, since it also takes out migrations no task file declares any more, permanently. `rebuild`
+itself is never blocked by drift; removing it is its job.
+
+**Every task must declare either `down:` or `no_way_back:`, or `up` will not run at all.** A missing
+rollback used to answer two questions at once — the author decided this migration is one-way, or the
+author forgot — and nothing could tell them apart. Declaring neither is an error now: `validate`
+reports it and `up` refuses. The refusal is the whole run, not the named subgraph, because an `up`
+that avoids the offending task still leaves the project in a state `rebuild` cannot work in. On an
+existing project this is real work, and it is the price of the distinction.
+
+**Run `migraphe upgrade-history` first — every other command refuses until you do.** This release's history
+table has columns the previous one did not, and until they are there a command that selects them
+fails. So the schema change is a step you schedule rather than something that happens to whoever runs
+`status` first: that matters if a second deployment is still on the older version and still reading
+the column this renames.
+
+```bash
+migraphe upgrade-history
+```
+
+It adds the columns and, in the same pass, fills what your task files can still supply — the
+fingerprint, the recorded dependencies, and the declared reason a migration is one-way — on the rows
+an older release left without them. It touches only columns that carry nothing: a value already
+recorded is left alone, whether it agrees with the definitions or not.
+
+**What filling asserts.** A row written before the fingerprint column says a migration was applied
+and nothing about its content. Writing today's token onto it asserts that your database matches
+today's definition, and migraphe cannot check that — it never reads your schema. If a migration was
+edited after it was applied, this is the one run where that goes unnoticed; from the next run on, an
+edit shows as `[!]` as usual. If you know a migration was edited since it was applied, roll it back
+and apply it again rather than relying on the upgrade.
+
+**Rows the task files no longer declare are the half `upgrade` cannot reach.** There is no definition
+to fill them from, so `status` keeps showing them, and naming one withdraws it:
+
+```bash
+migraphe amend <id>              # the task files no longer declare it — withdraws it
+```
+
+That leaves its objects in the database, so it is right only once you have removed them another way.
+`migraphe down <id>` is the route that removes them, and it works as soon as the upgrade is done.
+
+Run `migraphe upgrade-history` once per history, after installing this release. Running it again does
+nothing and says so.
+
+**Do not point two versions at one history database.** This release renames the history's
+`environment_id` column to `target_id` and mints time-ordered record ids. A 0.6.0 binary reading a
+migrated history, or the reverse, will not see what it expects. Migrate a copy first if you need to
+compare.
 
 ## Introduction
 
@@ -30,6 +103,22 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 - **Task ID**: Automatically generated from file path (e.g., `tasks/db1/001_create_users.yaml` → `db1/001_create_users`)
 - **Dependency**: Relationship between tasks that determines execution order
 - **History**: Record of executed migrations stored in a database
+
+### Which command do I need?
+
+migraphe reads two things and writes two things. It reads your **task files** and its **history
+table**; it writes the **database** (`up`, `down`, `rebuild`) and the **history** (`amend`). It never
+reads the database itself to decide anything — so where the two disagree, which side is right is your
+call, and the tool reports the disagreement rather than choosing a fix.
+
+| what happened | what to run |
+|---|---|
+| Switching branches mid-development left the database out of step with the task files | `migraphe rebuild` — fix everything that differs |
+| You rewrote a migration's SQL and want to apply it again | `migraphe down <id>` then `migraphe up` |
+| You are adopting migraphe on a database that already has its schema | write one bootstrap task holding what exists, then `migraphe amend <id>` — **one node is the whole job**, there is no bulk "mark as applied" |
+| CI has to check that the database and the migrations agree | `migraphe status --check` — non-zero exit unless everything agrees |
+| You installed a new migraphe and every command refuses | `migraphe upgrade-history` — brings the history table to the shape this version writes |
+| A brand-new project, or a database migraphe has never run against | `migraphe init` — creates the history table (`migraphe up` also creates one when it finds none) |
 
 ## Installation
 
@@ -299,7 +388,7 @@ down: |
 - `dependencies` (optional): List of task IDs this task depends on
 - `up` (required): SQL to execute for forward migration
 - `down` (optional): SQL to execute for rollback
-- `autocommit` (optional): Execute without transaction (see [Autocommit Mode](#autocommit-mode))
+- `autocommit` (optional): Execute without transaction. A bare boolean sets both directions; `{up, down}` sets them separately (see [Autocommit Mode](#autocommit-mode))
 
 ### Environment-Specific Configuration
 
@@ -334,6 +423,33 @@ up: |
 down: |
   DROP TABLE IF EXISTS posts;
 ```
+
+### Declaring a rollback, or why there is none
+
+**Every task declares one of the two, and declaring neither is an error** — `validate` reports it and
+`up` refuses the whole run, not just the offending task.
+
+A missing `down:` used to answer two different questions at once: the author decided this migration is
+one-way, or the author forgot to write the rollback. Those want opposite responses, and nothing could
+tell them apart, so a forgotten rollback silently froze everything built on top of it.
+
+```yaml
+name: Drop the legacy audit table
+target: db1
+up: |
+  DROP TABLE legacy_audit;
+no_way_back: the rows cannot be reconstructed
+```
+
+`no_way_back:` carries a **reason**, not a flag. It is quoted back to whoever meets it later:
+
+```
+Error: db1/003_drop_audit cannot be rolled back — no way back: the rows cannot be reconstructed
+```
+
+A migration declared this way is **frozen**: it cannot come down, so nothing standing on it can come
+down either, and `rebuild` stops rather than tearing down what it cannot put back. Prefer a real
+`down:` wherever one exists; reach for `no_way_back:` when the rollback would be a lie.
 
 ### Migration with Dependencies
 
@@ -406,6 +522,36 @@ down: |
 
 Which statements require autocommit is database-specific (e.g. PostgreSQL `CREATE INDEX CONCURRENTLY`, `VACUUM`, `CLUSTER`). See the plugin READMEs for dialect-specific use cases: [postgresql](../migraphe-plugin-postgresql/README.md), [mysql](../migraphe-plugin-mysql/README.md), [jdbc](../migraphe-plugin-jdbc/README.md).
 
+#### Setting it per direction
+
+An apply and its rollback do not always need the same mode — `CREATE INDEX CONCURRENTLY` requires
+autocommit, while the `DROP INDEX` that undoes it may not. Write the two separately:
+
+```yaml
+name: Add index concurrently
+target: db1
+autocommit:
+  up: true
+  down: false
+up: |
+  CREATE INDEX CONCURRENTLY idx_users_name ON users(name);
+down: |
+  DROP INDEX idx_users_name;
+```
+
+Either direction may be omitted. A bare `autocommit: true` still sets both, and when both forms are
+present the named direction wins:
+
+| written | UP | DOWN |
+|---|---|---|
+| `autocommit: true` | autocommit | autocommit |
+| `autocommit: {up: true, down: false}` | autocommit | transaction |
+| `autocommit: {down: true}` | transaction | autocommit |
+| nothing | transaction | transaction |
+
+Changing either flag on a migration that is already applied moves its fingerprint, so `status` will
+report it as `[!]`. Since no database object changed, [`migraphe amend`](#recording-definitions-as-applied-amend) is the whole fix.
+
 ### Best Practices
 
 1. **Always provide DOWN migrations**: Enables rollback capability
@@ -435,6 +581,16 @@ Migration Status
 
 Summary: Total: 3 | Executed: 1 | Pending: 2
 ```
+
+**Markers:**
+
+| Marker | Meaning |
+|--------|---------|
+| `[ ]` | Not applied yet |
+| `[✓]` | Applied, and no change detected in its definition |
+| `[!]` | Applied, but the definition has changed since — its `up:` SQL, its `down:` SQL, its `autocommit` setting, or what it depends on. Whether the database or the history is the side that needs moving depends on which of those you changed, so migraphe reports it instead of choosing: see [`migraphe amend`](#recording-definitions-as-applied-amend) |
+| `[?]` | The plugin supplies a fingerprint but the applied row carries none, so a change cannot be detected. Rows written before 0.7.0 read this way. **Every command but `status` refuses while one exists**; [`migraphe upgrade-history`](#upgrading-the-history-upgrade-history) fills the rows your task files still declare, and [`migraphe amend <id>`](#recording-definitions-as-applied-amend) withdraws one they do not |
+| `[E]` | The plugin could not report what this migration applied — its accessor threw, or it answered with none. The plugin itself is at fault, and no `amend` clears it |
 
 ### Execute Migrations
 
@@ -481,7 +637,7 @@ Migration completed successfully. 2 migrations executed.
 |--------|-------------|
 | `<id>` | Execute only the specified migration and its dependencies |
 | `-y` | Skip confirmation prompt |
-| `--preview` | Show execution plan only without executing |
+| `--preview` | Show execution plan only without executing (`--dry-run` is accepted as an alias) |
 
 ### Colored Output
 
@@ -556,11 +712,11 @@ These two concepts are easy to confuse, because both are commonly called "enviro
 
 A target keeps its **name** regardless of `--env`; only its **values** change. So `--env production` does not create a new target — it rewrites the settings of the existing ones.
 
-This matters for migration history: history is partitioned by **target name**, not by `--env`. Running `migraphe up --env production` records the same target id as `migraphe up --env development` would. That is safe as long as each deployment environment has its own history database, which is the intended setup (`history.target` normally points at the same database the migrations run against). **Do not point `history.target` at a database shared across deployment environments** — the applied/not-applied state of different databases would be conflated.
+This matters for migration history: what a row records is the **target name**, not the `--env` overlay it ran under. Running `migraphe up --env production` records the same target id as `migraphe up --env development` would. That is safe as long as each deployment environment has its own history database, which is the intended setup (`history.target` normally points at the same database the migrations run against). **Do not point `history.target` at a database shared across deployment environments** — the applied/not-applied state of different databases would be conflated.
 
 ## Rollback (down)
 
-The `down` command rolls back migrations to a specified version.
+The `down` command rolls back a migration and everything built on top of it.
 
 ### Basic Usage
 
@@ -585,6 +741,23 @@ migraphe down --preview --all
 #### Version-Specific Rollback
 
 The `down <version>` command rolls back the specified version (node) **itself** and all migrations that **directly or indirectly depend on** it.
+
+**`--all` refuses outright if anything cannot come down.** "All" means the whole database, and part of
+it is not the whole — so rather than rolling back everything else and leaving a shape nobody asked for,
+the command names what stopped it and touches nothing:
+
+```
+Error: --all means all, and 1 applied migration(s) cannot be rolled back. Nothing was rolled back:
+  db1/003_drop_audit — no way back: the rows cannot be reconstructed
+```
+
+Rolling back a *named* migration is different: that request is either satisfiable or it is not, so a
+frozen migration simply refuses, and one standing under a frozen one is reported as held down by it.
+
+**The rollback follows the history, not your task files.** Which migrations come down, in what order,
+what SQL runs and which database it connects to all come from the rows that recorded the applies —
+because that is what matches the objects that exist. Editing a task's `target:` or `dependencies:`
+after it ran does not move its rollback.
 
 **Example:**
 ```
@@ -670,6 +843,262 @@ No changes made (dry run).
 2. **Dependency order**: Migrations that are depended upon are rolled back first
 3. **Recorded in history**: Rollbacks are recorded in the history table (direction: DOWN)
 4. **Only executed migrations**: Only migrations marked as executed in history are rolled back
+
+## Recording Definitions as Applied (amend)
+
+The `amend` command rewrites the **history** so that it agrees with your current task files. For every migration whose recorded fingerprint is missing or differs from its definition, it records the current fingerprint. **No database objects are touched.**
+
+Use it when `status` shows `[?]` or `[!]`:
+
+- `[?]` — the migration was applied by a version older than 0.7.0, which recorded no fingerprint. **This is not optional to clear.** A row nothing can be read from stops every command but `status`, so `up`, `down` and `rebuild` all refuse while one exists. `amend` is the only thing that clears it: a row is filled by rebuilding it from the definition, and `up` never gets that far.
+- `[!]` — the definition changed after it was applied, and the change needs no rollback. Clearing it is a decision: you are stating that what the database already contains is correct.
+
+Only an `up:` edit can ever need one. Editing `down:` or `autocommit:`, or changing what the migration depends on, moves the fingerprint without changing a single database object — and the rollback a re-apply would run is the edited one either way, so `amend` is the whole fix. An `up:` edit is the case to think about: a comment or a formatter run needs no rollback either, but a changed statement does.
+
+If the *database* is the side that is wrong, roll the migration back and re-apply it (`migraphe down <id>` followed by `migraphe up`) instead. `amend` will not do that for you.
+
+### Basic Usage
+
+`amend` has two forms, and which one you want follows from what `status` is showing.
+
+**Both forms append a row saying what the definition says now.** `amend` means one thing — from here on, what the history reports about a migration is what the definition says — and the row it writes carries every attribute the definitions determine, not a chosen few. Nothing is edited and nothing is deleted: the rows already there stay readable, so when the migration was really applied is still there next to the claim that replaced it. Both forms say so before they write:
+
+```
+For each migration listed, a row is appended saying what the definition says
+now, so what the history reports about it becomes the current definition. The
+rows already there are neither changed nor removed.
+```
+
+**One migration, named:**
+
+```bash
+$ migraphe amend db1/002_create_posts
+
+Amend plan (history only — no database changes):
+
+  [!] → [✓]  db1/002_create_posts - Create posts table
+
+For each migration listed, a row is appended saying what the definition says
+now, so what the history reports about it becomes the current definition. The
+rows already there are neither changed nor removed.
+
+1 fingerprint will be recorded.
+
+Record 1 fingerprint? [y/N]: y
+
+Recorded 1 fingerprint.
+```
+
+> **`amend` is not a "fill in the blanks" operation.** It writes every attribute the definition
+> determines on the migration you name, not only the part that was missing. Upgrading is exactly
+> where that matters: if you have since deleted a migration's `down:` block, amending it replaces the
+> recorded rollback with nothing — and the recorded rollback is what `down` runs. Check `git diff` on
+> your task files before naming a migration. Completing rows that an older release wrote without a
+> fingerprint is **not** this command: that is `migraphe upgrade-history`, which touches only columns that
+> carry nothing.
+
+Preview first — no prompt, no writes:
+
+```bash
+migraphe amend --preview db1/002_create_posts
+```
+
+Running `migraphe amend` without naming a migration is an error: this is a claim you make one
+migration at a time. When the named migration has nothing to do, the command prints `Nothing to
+amend.` and exits 0.
+
+### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `<migration>` | Record the current definition of one migration. Required |
+| `--preview` | Display the plan without recording anything (`--dry-run` is accepted as a legacy alias) |
+| `-y` | Skip the confirmation prompt |
+| `--env <name>` | Apply the `environments/<name>.yaml` overlay |
+
+There is one scope, and it is deliberate: amending replaces what the history reported for the whole
+migration, so it is done by naming one. There used to be a bulk form for rows carrying no
+fingerprint; that is what a history an older release wrote looks like, completing it carries no
+decision about your migrations, and it now belongs to `migraphe upgrade-history`.
+
+### Important Notes
+
+1. **Nothing is overwritten, but what the history *reports* changes**: `amend` appends a row saying what the definition says now, and everything reads the latest applied row. The earlier row stays, so when the migration really ran is still there to read — but nothing marks that the definition ever differed.
+2. **The appended row carries everything the definition determines**: the fingerprint, the dependencies, the rollback SQL, the plugin's metadata, the target and the `no_way_back:` reason. Its `executed_at` is when you ran `amend`, and its duration is zero — those are facts about an execution that did not happen — so `status` reports the amend's timestamp from then on.
+3. **`[!]` discards evidence**: the fingerprint of what really ran is replaced by the fingerprint of what the files say now. If an `up:` edit needs to reach the database, roll back instead. This is why the plan marks those rows with a warning.
+4. **What the history said first is not a condition**: naming a migration is a deliberate claim that it is applied, so it is appended whether the history has never recorded it, already agrees, or holds it as rolled back. A failed rollback or a failed re-apply does not hide it either — the row that *applied* it is what is read, not the newest row of any kind. Only a migration whose plugin reports no fingerprint is refused, because the row would say nothing about itself.
+5. **The plugin has to be able to report its rollback**: `amend` runs nothing, so it asks the up task what rollback it would record instead of getting it from a run. Every bundled plugin can. A migration whose plugin cannot is refused by name, rather than having the superseded row's rollback copied into a row that claims to say what the definition says. Any history repository works — appending needs no capability beyond recording.
+
+### Exit Codes
+
+| Exit Code | Meaning |
+|-----------|---------|
+| 0 | Everything planned was recorded — also when there was nothing to amend, the run was a preview, or you answered `N` at the prompt |
+| 1 | A planned row could not be recorded (it was gone by the time the write ran), or the command failed |
+
+## Creating the History (init)
+
+`migraphe init` creates the history table in the target `history.target` names. Run it once per
+database, before anything else.
+
+```bash
+$ migraphe init
+Created the migration history.
+
+$ migraphe init
+The migration history already exists.
+```
+
+It exists so that creating the history is something you do, rather than something that happens to
+whichever command you happen to run first. Every command used to create it, which meant
+`migraphe status --check` in CI wrote DDL to a database while reporting that nothing had been
+applied — a command whose whole job is to report should not change anything.
+
+**`migraphe up` is the exception and creates one when it finds none**, because applying the first
+migration is the moment a project's history should come into being; a fresh project still needs no
+ceremony before its first `up`. Every other command refuses:
+
+```
+Error: the migration history has not been created here.
+Run 'migraphe init'.
+```
+
+That refusal names `init` and never `up`, deliberately: answering "I cannot report" with "then apply
+your migrations" is not an answer.
+
+`init` does not alter a history an older release created — that is
+[`migraphe upgrade-history`](#upgrading-the-history-upgrade-history). Against such a history, `init`
+says it already exists and the other commands go on refusing until you upgrade it.
+
+### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--env <name>` | Apply the `environments/<name>.yaml` overlay |
+
+## Upgrading the History (upgrade-history)
+
+`migraphe upgrade-history` brings the migration history to the shape the installed version writes. It is the
+only command that changes a table an older release created: every other command creates the history
+if it is absent and otherwise leaves its shape alone.
+
+That split exists because a history can be shared. If a second deployment is still running the older
+version, it is still reading the columns an upgrade renames — so the change is something an operator
+schedules, not something that happens to whoever runs `status` first.
+
+```bash
+$ migraphe upgrade-history-history
+
+Upgrading the history
+=====================
+
+  rename environment_id to target_id
+  add fingerprint column
+  add plugin_metadata column
+  add dependencies column
+  add origin column
+  add no_way_back column
+  fill what the definitions still declare
+
+Applied 7 upgrades.
+```
+
+Every other command refuses while an upgrade is outstanding, and names this one:
+
+```
+Error: the migration history was written by an older release and needs 7 upgrade(s) before this
+version can read it:
+  rename environment_id to target_id
+  ...
+Run 'migraphe upgrade-history'.
+```
+
+**It fills rows as well as adding columns.** The last step writes what your task files can still
+supply — the fingerprint, the recorded dependencies, and the declared reason a migration is one-way
+— onto the rows an older release left without them. It touches only columns that carry nothing, so a
+value already recorded is left alone whether or not it agrees with the definitions.
+
+Filling an absent fingerprint asserts that your database matches today's definition, and migraphe
+cannot check that: it never reads your schema. See [Upgrading to 0.7.0](#upgrading-to-070) for what
+that means in practice.
+
+**Rows your task files no longer declare are not reached.** There is nothing to fill them from, so
+they keep showing in `status`; `migraphe amend <id>` withdraws one.
+
+There is no `--preview` and no confirmation prompt. Each step is guarded by its own detection, so
+running the command against a history that is already current writes nothing:
+
+```bash
+$ migraphe upgrade-history-history
+The history is already up to date.
+```
+
+Run it once per history after installing a new version. The command's name does not change between
+releases: whatever a given version has to do to a history it did not write, this is what you run.
+
+### Command Options
+
+| Option | Description |
+|--------|-------------|
+| `--env <name>` | Apply the `environments/<name>.yaml` overlay |
+
+## Rebuilding What Drifted (rebuild)
+
+`rebuild` makes both the database and the history agree with your task files: it rolls back every
+migration whose recorded content no longer matches its definition — plus everything standing on those
+— and then applies the whole graph again.
+
+```bash
+migraphe rebuild              # asks for confirmation first
+migraphe rebuild --preview    # show the plan, change nothing
+migraphe rebuild -y           # skip the confirmation
+```
+
+**It takes no migration argument.** Naming one would be `migraphe down <id>` followed by
+`migraphe up`, which you can already do — and it is a way to leave the job half done, so it is
+rejected rather than ignored.
+
+This is a **development-time command**. It drops and re-creates real objects, so the data in them does
+not survive.
+
+### It is partly a permanent removal
+
+A migration the history holds and your task files no longer declare comes down like anything else —
+but nothing puts it back, because there is no definition left to apply. The confirmation names those
+separately, before anything runs:
+
+```
+Migrations to rebuild:
+
+  [!] db1/002_add_email
+
+Permanently removed — no task file declares these any more, so they come out and do not go back:
+
+  [-] db1/004_experiment
+
+Rolling back 2 migration(s) — everything standing on them comes down too — then applying the whole graph.
+```
+
+### When it refuses
+
+`rebuild` checks everything that could stop it **before** the destructive phase, and before `--preview`
+returns — a preview that exits zero on a plan the real run would fail is not a rehearsal. It stops when:
+
+- an applied row names a target this project no longer configures (there is no connection to take that
+  migration out through)
+- a plugin cannot report what a migration applied — a fault to fix in the plugin, not a state `amend`
+  repairs
+- something that has to come down declares `no_way_back:` — there is no version of the run that
+  finishes, so nothing is torn down
+- the history cannot say whether a migration matches its definition — run `migraphe upgrade-history`
+  first
+
+### Exit Codes
+
+| Exit Code | Meaning |
+|-----------|---------|
+| 0 | The rebuild completed, or there was nothing to rebuild, or the run was a preview, or you answered `N` |
+| 1 | Something refused the run, the rollback did not complete, or the re-apply failed |
 
 ## Configuration Validation (validate)
 
@@ -1028,6 +1457,12 @@ WHERE node_id = 'db1/001_create_users';
 - `duration_ms`: Execution duration
 - `serialized_down_task`: Rollback SQL (UP migrations only)
 - `error_message`: Error details (FAILURE status only)
+- `fingerprint`: Fingerprint of the definition that was applied, recorded on UP success only. The
+  JDBC, PostgreSQL and MySQL plugins hash four things together: the `up:` SQL, the `down:` SQL,
+  both `autocommit` flags, and every migration this one depends on directly or indirectly. Each SQL text
+  has its surrounding whitespace stripped and is otherwise hashed as written. Empty on DOWN rows, on
+  rows written before 0.7.0, and when a plugin does not supply one — in every such case it means
+  "unknown", not "unchanged".
 
 ## Gradle Plugin
 
@@ -1085,10 +1520,14 @@ dependencies {
 
 | Task | Description |
 |------|-------------|
+| `migrapheInit` | Create the migration history |
 | `migrapheValidate` | Validate configuration files (offline, no DB connection) |
 | `migrapheStatus` | Show migration execution status |
 | `migrapheUp` | Execute forward (UP) migrations |
 | `migrapheDown` | Execute rollback (DOWN) migrations |
+| `migrapheAmend` | Record the current definitions as applied, one named migration (history only) |
+| `migrapheRebuild` | Roll back what drifted and apply everything again |
+| `migrapheUpgradeHistory` | Bring the history table to the shape this version writes |
 | `migrapheGenerate` | Generate schema documentation |
 
 ### Task Options
@@ -1105,6 +1544,15 @@ dependencies {
 - `--all` — Rollback all executed migrations
 - `--preview` — Preview without executing
 
+**migrapheAmend**:
+- `--migration=<nodeId>` — The migration to record the current definition of (required)
+- `--preview` — Show the plan without recording anything
+
+**migrapheInit**: no options of its own — it creates the history, or says it is already there
+
+**migrapheUpgradeHistory**: no options of its own — every step is guarded, so running it against a history
+that is already current writes nothing
+
 **migrapheGenerate**:
 - `--name=<name>` — Generate for a specific generator only
 
@@ -1114,6 +1562,7 @@ Options can also be specified via project properties (`-P`):
 ./gradlew migrapheUp -Pmigraphe.up.target=db1/create_users
 ./gradlew migrapheDown -Pmigraphe.down.all=true
 ./gradlew migrapheStatus -Pmigraphe.env=production
+./gradlew migrapheAmend -Pmigraphe.amend.dryRun=true
 ```
 
 ## Troubleshooting
