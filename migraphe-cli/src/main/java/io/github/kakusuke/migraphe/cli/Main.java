@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.cli;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.cli.command.AmendCommand;
 import io.github.kakusuke.migraphe.cli.command.Command;
 import io.github.kakusuke.migraphe.cli.command.DownCommand;
 import io.github.kakusuke.migraphe.cli.command.GenerateCommand;
@@ -154,8 +155,48 @@ public class Main {
             case "up" -> createUpCommand(args, context);
             case "status" -> new StatusCommand(context, List.of(args).contains("--check"));
             case "down" -> createDownCommand(args, context);
+            case "amend" -> createAmendCommand(args, context);
             default -> null;
         };
+    }
+
+    /**
+     * Builds an {@link AmendCommand} from the parsed arguments, or returns {@code null} after
+     * printing an error when no migration is named.
+     */
+    /**
+     * Returns whether dry-run mode was requested. Both {@code --preview} and its legacy alias
+     * {@code --dry-run} select it; the Gradle tasks expose only {@code --preview} because Gradle
+     * reserves {@code --dry-run} for itself.
+     *
+     * @param args the raw command-line arguments
+     * @return {@code true} when the plan should be printed without executing it
+     */
+    static boolean parseDryRun(String[] args) {
+        List<String> argList = Arrays.asList(args);
+        return argList.contains("--preview") || argList.contains("--dry-run");
+    }
+
+    static @Nullable Command createAmendCommand(String[] args, ExecutionContext context) {
+        List<String> argList = Arrays.asList(args);
+        boolean skipConfirm = argList.contains("-y");
+        boolean dryRun = parseDryRun(args);
+
+        String migration = firstPositionalArg(args);
+
+        // Amending states what the definitions say for the whole migration and replaces what the
+        // history reported, so it is never implied: it is made node by node. Filling in what an
+        // older release left incomplete is not this claim; upgrade-history is what does it.
+        if (migration == null) {
+            System.err.println("Error: Migration argument required for 'amend' command");
+            System.err.println("Usage: migraphe amend [-y] [--preview] <migration>");
+            System.err.println(
+                    "To complete rows a previous version left incomplete, run 'migraphe"
+                            + " upgrade-history'.");
+            return null;
+        }
+
+        return new AmendCommand(context, NodeId.of(migration), skipConfirm, dryRun);
     }
 
     /** Builds an {@link UpCommand} from the parsed arguments. */

@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.jdbc;
 
 import io.github.kakusuke.migraphe.api.common.Result;
+import io.github.kakusuke.migraphe.api.task.RollbackPayloadProvider;
 import io.github.kakusuke.migraphe.api.task.SqlContentProvider;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
@@ -22,9 +23,10 @@ import org.jspecify.annotations.Nullable;
  * <p>The optional {@code downSql} is not executed here; it is carried into the resulting {@link
  * TaskResult} as the serialized rollback so the history layer can later perform a DOWN migration.
  * As a {@link SqlContentProvider}, the task also exposes its UP SQL for inspection and generators,
+ * and as a {@link RollbackPayloadProvider} it reports that same rollback payload without running
  * anything, for a caller that has to record what this task would do rather than do it.
  */
-public final class JdbcUpTask implements Task, SqlContentProvider {
+public final class JdbcUpTask implements Task, SqlContentProvider, RollbackPayloadProvider {
 
     private final JdbcTarget target;
     private final String upSql;
@@ -97,6 +99,7 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
      * <p>Derived entirely from the definition, so it is the same value whether or not the task has
      * run.
      */
+    @Override
     public @Nullable String pluginMetadata() {
         return downSql == null ? null : "autocommit.down=" + autocommitDown + "\n";
     }
@@ -106,6 +109,7 @@ public final class JdbcUpTask implements Task, SqlContentProvider {
      *
      * @return the rollback SQL, or {@code null} if this migration is not reversible
      */
+    @Override
     public @Nullable String serializedDownTask() {
         return downSql;
     }

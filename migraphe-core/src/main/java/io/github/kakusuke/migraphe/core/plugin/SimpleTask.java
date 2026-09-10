@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.plugin;
 
 import io.github.kakusuke.migraphe.api.common.Result;
+import io.github.kakusuke.migraphe.api.task.RollbackPayloadProvider;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import java.util.List;
@@ -21,7 +22,7 @@ import org.jspecify.annotations.Nullable;
  * @see Task
  * @see TaskResult
  */
-public final class SimpleTask implements Task {
+public final class SimpleTask implements Task, RollbackPayloadProvider {
     private final Object content;
     private final @Nullable String serializedDownTask;
 
@@ -48,6 +49,24 @@ public final class SimpleTask implements Task {
     @Override
     public String description() {
         return content.toString();
+    }
+
+    /**
+     * The rollback payload this task would record, without running it.
+     *
+     * <p>It is the same value {@link #execute()} puts in its {@link TaskResult}: the task is handed
+     * it at construction, so reporting it costs nothing and needs no run. Amending asks for it here
+     * precisely because it executes nothing.
+     */
+    @Override
+    public @Nullable String serializedDownTask() {
+        return serializedDownTask;
+    }
+
+    /** {@inheritDoc} This task keeps nothing of its own beyond the rollback payload. */
+    @Override
+    public @Nullable String pluginMetadata() {
+        return null;
     }
 
     /**
