@@ -4,6 +4,7 @@ import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.task.RollbackPayloadProvider;
 import io.github.kakusuke.migraphe.core.common.ValidationResult;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -386,6 +387,34 @@ public final class MigrationGraph implements MigrationGraphView {
         Set<NodeId> offenders = new HashSet<>();
         for (MigrationNode node : nodes.values()) {
             if (node.downTask() == null && node.noWayBack() == null) {
+                offenders.add(node.id());
+            }
+        }
+        return offenders;
+    }
+
+    /**
+     * Returns the nodes declaring a rollback that their up task would not record.
+     *
+     * <p>What the history keeps is what the up task reports on success; the {@code down:} in the
+     * definition is what runs, not what is stored. A task that declares one while reporting none
+     * writes a row that says the migration kept no rollback, and the rollback then has nothing to
+     * replay.
+     *
+     * <p>Only tasks implementing {@link RollbackPayloadProvider} are judged. Not implementing it is
+     * a declaration in itself — that what would be recorded is not knowable before the run — and
+     * this cannot second-guess it.
+     *
+     * @return the offending node ids, possibly empty
+     */
+    public Set<NodeId> nodesWhoseRollbackWouldNotBeRecorded() {
+        Set<NodeId> offenders = new HashSet<>();
+        for (MigrationNode node : nodes.values()) {
+            if (node.downTask() == null) {
+                continue;
+            }
+            if (node.upTask() instanceof RollbackPayloadProvider provider
+                    && provider.serializedDownTask() == null) {
                 offenders.add(node.id());
             }
         }
