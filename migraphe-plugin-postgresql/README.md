@@ -29,14 +29,14 @@ plugins:
     repository: jitpack
 ```
 
-### Via plugins directory
+### Via the Gradle plugin
 
-Build the fat JAR and place it in your project's `plugins/` directory:
+Declare the same coordinate in the `migraphePlugin` configuration:
 
-```bash
-./gradlew :migraphe-plugin-postgresql:fatJar
-mkdir -p your-project/plugins
-cp migraphe-plugin-postgresql/build/libs/migraphe-plugin-postgresql-*-all.jar your-project/plugins/
+```kotlin
+dependencies {
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.6.0")
+}
 ```
 
 ## Configuration

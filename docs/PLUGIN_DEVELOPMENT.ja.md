@@ -152,19 +152,34 @@ com.example.myplugin.MyDatabasePlugin
 
 ## プラグインの使用方法
 
-### 方法 1: plugins/ ディレクトリ
+Migraphe はクラスパスと、プロジェクトが宣言した Maven 座標からプラグインを読み込みます。JAR を
+ディレクトリから探索することはないため、リゾルバが到達できる場所に publish する必要があります。開発中は
+ローカルの `~/.m2` への install で十分です。
 
-Migraphe プロジェクトの `plugins/` ディレクトリにプラグイン JAR を配置します：
+### 方法 1: Maven 座標（CLI）
 
+JAR を publish し（開発中は `./gradlew publishToMavenLocal`）、`migraphe.yaml` に宣言して pin します：
+
+```yaml
+plugins:
+  - coordinate: com.example:my-database-plugin:1.0.0
 ```
-my-project/
-├── migraphe.yaml
-├── plugins/
-│   └── my-database-plugin-1.0.0.jar
-└── ...
+
+```bash
+migraphe pin
 ```
 
-### 方法 2: クラスパス
+`plugins:` を宣言した場合はロックファイルが必須です。`migraphe pin` が生成します。
+
+### 方法 2: migraphePlugin コンフィギュレーション（Gradle）
+
+```kotlin
+dependencies {
+    migraphePlugin("com.example:my-database-plugin:1.0.0")
+}
+```
+
+### 方法 3: クラスパス
 
 Migraphe 実行時にプラグインをクラスパスに追加します。
 

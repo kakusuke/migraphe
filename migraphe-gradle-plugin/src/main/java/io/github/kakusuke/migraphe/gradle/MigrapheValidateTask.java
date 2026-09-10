@@ -35,7 +35,8 @@ public abstract class MigrapheValidateTask extends AbstractMigrapheTask {
         getLogger().lifecycle("");
 
         URLClassLoader pluginClassLoader = createPluginClassLoader();
-        try (PluginRegistry registry = createPluginRegistry(pluginClassLoader)) {
+        try {
+            PluginRegistry registry = createPluginRegistry(pluginClassLoader);
             ConfigValidator validator = new ConfigValidator(registry);
             ValidationOutput result =
                     validator.validate(

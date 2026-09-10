@@ -39,7 +39,11 @@ public final class PluginNotFoundException extends RuntimeException {
         }
 
         sb.append("\n\nTo use this plugin type:");
-        sb.append("\n  1. Place the plugin JAR file in ./plugins/ directory");
+        sb.append(
+                "\n"
+                        + "  1. Declare the plugin's Maven coordinate under plugins: in"
+                        + " migraphe.yaml (CLI), or add it to the migraphePlugin configuration"
+                        + " (Gradle)");
         sb.append(
                 "\n"
                         + "  2. Ensure the JAR contains"

@@ -1,16 +1,8 @@
 package io.github.kakusuke.migraphe.core.plugin;
 
 import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
-import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -18,33 +10,26 @@ import org.jspecify.annotations.Nullable;
  *
  * <p>Plugins are discovered through the {@link ServiceLoader} mechanism and indexed by their {@link
  * MigraphePlugin#type() type} identifier. The runtime resolves a configuration {@code type} value
- * to a plugin instance through this registry. Plugins can be loaded from several sources, typically
- * in this order:
+ * to a plugin instance through this registry. Plugins come from the classpath ({@link
+ * #loadFromClasspath()}) and from a class loader the caller supplies ({@link
+ * #loadFromClassLoader(ClassLoader)}) — the Maven-resolved one in the CLI, the {@code
+ * migraphePlugin} configuration's in Gradle.
  *
- * <ol>
- *   <li>the classpath (for example {@code testImplementation} dependencies)
- *   <li>individual JAR files ({@link #loadFromJar(Path)})
- *   <li>a {@code plugins/} directory ({@link #loadFromDirectory(Path)})
- * </ol>
+ * <p>This registry creates no class loader of its own, so it owns none and has nothing to close.
+ * The loader passed to {@link #loadFromClassLoader(ClassLoader)} stays the caller's to close, which
+ * matters in a long-lived process such as the Gradle daemon.
  *
  * <p>When more than one plugin declares the same {@code type}, the most recently loaded one wins
  * (last-write-wins).
  *
- * <p>Any {@link URLClassLoader} created internally by {@link #loadFromJar(Path)} or {@link
- * #loadFromDirectory(Path)} is owned by this registry and released by {@link #close()}. In
- * long-lived processes (such as the Gradle daemon), wrap the registry in a try-with-resources block
- * to avoid leaking class loaders.
- *
- * <p>This class is thread-safe: plugins are stored in a {@link ConcurrentHashMap} and owned class
- * loaders in a {@link CopyOnWriteArrayList}.
+ * <p>This class is thread-safe: plugins are stored in a {@link ConcurrentHashMap}.
  */
-public final class PluginRegistry implements AutoCloseable {
+public final class PluginRegistry {
 
     /** Creates a new {@code PluginRegistry}. */
     public PluginRegistry() {}
 
     private final Map<String, MigraphePlugin<?>> plugins = new ConcurrentHashMap<>();
-    private final List<URLClassLoader> ownedClassLoaders = new CopyOnWriteArrayList<>();
 
     /**
      * Loads all plugins discoverable on the current thread's context classpath via {@link
@@ -75,129 +60,6 @@ public final class PluginRegistry implements AutoCloseable {
                 ServiceLoader.load(MigraphePlugin.class, classLoader);
         for (MigraphePlugin plugin : loader) {
             register(plugin);
-        }
-    }
-
-    /**
-     * Loads plugins from a single JAR file.
-     *
-     * <p>A dedicated {@link URLClassLoader} is created for the JAR (parented to the class loader of
-     * {@link MigraphePlugin}), the JAR is scanned via {@link ServiceLoader}, and every discovered
-     * plugin is registered. The created class loader becomes owned by this registry and is closed
-     * by {@link #close()}. If no plugins are found, the class loader is closed immediately and an
-     * exception is thrown.
-     *
-     * @param jarPath the path to the JAR file to load
-     * @throws PluginLoadException if the path does not exist, is not a {@code .jar} file, contains
-     *     no plugins, or cannot be read
-     */
-    @SuppressWarnings("rawtypes")
-    public void loadFromJar(Path jarPath) {
-        if (!Files.exists(jarPath)) {
-            throw new PluginLoadException("JAR file not found: " + jarPath);
-        }
-
-        if (!jarPath.toString().endsWith(".jar")) {
-            throw new PluginLoadException("Not a JAR file: " + jarPath);
-        }
-
-        URLClassLoader classLoader = null;
-        try {
-            URL jarUrl = jarPath.toUri().toURL();
-            classLoader =
-                    new URLClassLoader(new URL[] {jarUrl}, MigraphePlugin.class.getClassLoader());
-            ServiceLoader<MigraphePlugin> loader =
-                    ServiceLoader.load(MigraphePlugin.class, classLoader);
-
-            int loadedCount = 0;
-            for (MigraphePlugin plugin : loader) {
-                register(plugin);
-                loadedCount++;
-            }
-
-            if (loadedCount == 0) {
-                try {
-                    classLoader.close();
-                } catch (IOException ignored) {
-                    // I/O errors while closing the class loader are swallowed.
-                }
-                throw new PluginLoadException("No plugins found in JAR: " + jarPath);
-            }
-            ownedClassLoaders.add(classLoader);
-        } catch (PluginLoadException e) {
-            throw e;
-        } catch (Exception e) {
-            if (classLoader != null) {
-                try {
-                    classLoader.close();
-                } catch (IOException ignored) {
-                    // I/O errors while closing the class loader are swallowed.
-                }
-            }
-            throw new PluginLoadException("Failed to load plugin from JAR: " + jarPath, e);
-        }
-    }
-
-    /**
-     * Closes every {@link URLClassLoader} this registry created via {@link #loadFromJar(Path)} or
-     * {@link #loadFromDirectory(Path)}.
-     *
-     * <p>Class loaders supplied externally (for example to {@link
-     * #loadFromClassLoader(ClassLoader)}) are not owned by this registry and are therefore not
-     * closed.
-     */
-    @Override
-    public void close() {
-        for (URLClassLoader cl : ownedClassLoaders) {
-            try {
-                cl.close();
-            } catch (IOException ignored) {
-                // I/O errors while closing are swallowed; the loaded classes are already retained
-                // by
-                // the JVM.
-            }
-        }
-        ownedClassLoaders.clear();
-    }
-
-    /**
-     * Loads plugins from every JAR file directly inside the given directory.
-     *
-     * <p>If the directory does not exist, this method does nothing. Each JAR is loaded via {@link
-     * #loadFromJar(Path)}; a failure to load an individual JAR is logged to {@code System.err} and
-     * does not abort the scan of the remaining JARs.
-     *
-     * @param pluginsDir the directory to scan for plugin JAR files
-     * @throws PluginLoadException if {@code pluginsDir} exists but is not a directory, or if the
-     *     directory cannot be listed
-     */
-    public void loadFromDirectory(Path pluginsDir) {
-        if (!Files.exists(pluginsDir)) {
-            return; // Nothing to do when the directory does not exist.
-        }
-
-        if (!Files.isDirectory(pluginsDir)) {
-            throw new PluginLoadException("Not a directory: " + pluginsDir);
-        }
-
-        try (Stream<Path> files = Files.list(pluginsDir)) {
-            List<Path> jarFiles =
-                    files.filter(path -> path.toString().endsWith(".jar"))
-                            .collect(Collectors.toList());
-
-            for (Path jarFile : jarFiles) {
-                try {
-                    loadFromJar(jarFile);
-                } catch (PluginLoadException e) {
-                    // Log and continue: an error loading one JAR must not abort the others.
-                    System.err.println("Warning: " + e.getMessage());
-                    if (e.getCause() != null) {
-                        System.err.println("  Caused by: " + e.getCause());
-                    }
-                }
-            }
-        } catch (Exception e) {
-            throw new PluginLoadException("Failed to scan plugins directory: " + pluginsDir, e);
         }
     }
 

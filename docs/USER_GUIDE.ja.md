@@ -101,7 +101,7 @@ Migraphe はプラグインアーキテクチャを採用しており、デー�
 
 各プラグインの `README.ja.md` には、ターゲットのフィールド、接続例、データベース固有の挙動が網羅されています。詳細は上記のプラグイン名のリンクを参照してください。
 
-#### 方法1: Maven 座標（推奨）
+#### Maven 座標
 
 `migraphe.yaml` に `plugins` セクションを追加し、Maven 座標を記述します。Migraphe のプラグインは JitPack 経由で配布されているため、JitPack リポジトリを宣言したうえで map 形式で参照します:
 
@@ -164,21 +164,6 @@ migraphe pin --check
 
 ピン留め後に JAR が改ざんされた場合（例: ローカルキャッシュの破損）、起動時に対応座標を含む checksum mismatch エラーで失敗します。
 
-#### 方法2: plugins/ ディレクトリ（レガシー）
-
-プラグイン JAR ファイルをプロジェクトの `plugins/` ディレクトリに直接配置します:
-
-```
-my-project/
-├── migraphe.yaml
-├── plugins/                      # プラグインディレクトリ
-│   └── migraphe-plugin-postgresql-x.x.x.jar
-├── targets/
-└── tasks/
-```
-
-**注意:** 両方の方法を同時に使用できます。Maven で解決されたプラグインが先に読み込まれ、次に `plugins/` ディレクトリが読み込まれます。
-
 ## プロジェクトのセットアップ
 
 ### ディレクトリ構造
@@ -236,7 +221,7 @@ history:
 **フィールド:**
 - `plugins`（任意）: CLI プラグイン解決用の Maven 座標リスト（`groupId:artifactId:version`）
 - `project.name`（必須）: プロジェクト識別子
-- `project.scan-root`（任意）: `tasks/`、`targets/`、`environments/`、`plugins/` を探索する起点ディレクトリ。`migraphe.yaml` の親ディレクトリ起点の相対パス、または絶対パスを指定できます。未指定の場合は `migraphe.yaml` の親ディレクトリと同じ（既定値）。CLI と Gradle プラグインのどちらでも同じフィールドを参照するため挙動が一致します。
+- `project.scan-root`（任意）: `tasks/`、`targets/`、`environments/` を探索する起点ディレクトリ。`migraphe.yaml` の親ディレクトリ起点の相対パス、または絶対パスを指定できます。未指定の場合は `migraphe.yaml` の親ディレクトリと同じ（既定値）。CLI と Gradle プラグインのどちらでも同じフィールドを参照するため挙動が一致します。
 - `history.target`（必須）: マイグレーション履歴を保存するターゲット名
 
 **例: `scan-root` でマイグレーション資材をサブディレクトリにまとめる**
@@ -249,7 +234,7 @@ history:
   target: main
 ```
 
-この設定では、Migraphe は `migraphe.yaml` の親ディレクトリを基準として `config/tasks/` からタスクを、`config/targets/` からターゲットを、`config/environments/` から環境設定を、レガシーの `plugins/` ディレクトリも `config/plugins/` から読み込みます。
+この設定では、Migraphe は `migraphe.yaml` の親ディレクトリを基準として `config/tasks/` からタスクを、`config/targets/` からターゲットを、`config/environments/` から環境設定を読み込みます。
 
 ### ターゲット設定
 
@@ -1112,7 +1097,7 @@ No plugins are currently loaded.
 **解決策:**
 - `migraphe.yaml` の `plugins` セクションにプラグインの Maven 座標を追加
 - `migraphe pin` でロックファイルを (再) 生成
-- または `plugins/` ディレクトリにプラグイン JAR ファイルを配置
+- Gradle プラグインを使う場合は、代わりに `migraphePlugin` コンフィギュレーションに座標を追加
 - [プラグインのインストール](#プラグインのインストール) セクションを参照
 
 #### 1b. "Failed to resolve plugin" エラー
