@@ -49,14 +49,7 @@ class GenerateCommandTest {
         // Given: generators セクションがない設定
         createProjectWithoutGenerators(tempDir);
         GenerateCommand command =
-                new GenerateCommand(
-                        tempDir,
-                        pluginRegistry,
-                        null,
-                        null,
-                        tempDir.resolve("plugins"),
-                        null,
-                        false);
+                new GenerateCommand(tempDir, pluginRegistry, null, null, null, false);
 
         // When
         int exitCode = command.execute();
@@ -72,14 +65,7 @@ class GenerateCommandTest {
         // Given: 存在しない generator type を指定
         createProjectWithUnknownGeneratorType(tempDir);
         GenerateCommand command =
-                new GenerateCommand(
-                        tempDir,
-                        pluginRegistry,
-                        null,
-                        null,
-                        tempDir.resolve("plugins"),
-                        null,
-                        false);
+                new GenerateCommand(tempDir, pluginRegistry, null, null, null, false);
 
         // When
         int exitCode = command.execute();
@@ -96,13 +82,7 @@ class GenerateCommandTest {
         createProjectWithTwoGenerators(tempDir);
         GenerateCommand command =
                 new GenerateCommand(
-                        tempDir,
-                        pluginRegistry,
-                        null,
-                        "non-existent-name",
-                        tempDir.resolve("plugins"),
-                        null,
-                        false);
+                        tempDir, pluginRegistry, null, "non-existent-name", null, false);
 
         // When: 存在しない名前でフィルターすると、何も実行されない（プラグインエラーにならない）
         int exitCode = command.execute();
@@ -116,14 +96,7 @@ class GenerateCommandTest {
         // Given: generator の target が存在しない
         createProjectWithMissingTarget(tempDir);
         GenerateCommand command =
-                new GenerateCommand(
-                        tempDir,
-                        pluginRegistry,
-                        null,
-                        null,
-                        tempDir.resolve("plugins"),
-                        null,
-                        false);
+                new GenerateCommand(tempDir, pluginRegistry, null, null, null, false);
 
         // When
         int exitCode = command.execute();
@@ -141,14 +114,7 @@ class GenerateCommandTest {
         // Given: environments/ が無いプロジェクト
         createProjectWithoutGenerators(tempDir);
         GenerateCommand command =
-                new GenerateCommand(
-                        tempDir,
-                        pluginRegistry,
-                        null,
-                        null,
-                        tempDir.resolve("plugins"),
-                        "production",
-                        false);
+                new GenerateCommand(tempDir, pluginRegistry, null, null, "production", false);
 
         // When: 存在しないオーバーレイ名を指定
         int exitCode = command.execute();
@@ -174,27 +140,12 @@ class GenerateCommandTest {
 
         // 対照群: --env なしならベース設定（type: noop）で成功する
         int withoutOverlay =
-                new GenerateCommand(
-                                tempDir,
-                                pluginRegistry,
-                                null,
-                                null,
-                                tempDir.resolve("plugins"),
-                                null,
-                                false)
-                        .execute();
+                new GenerateCommand(tempDir, pluginRegistry, null, null, null, false).execute();
         assertThat(withoutOverlay).isEqualTo(0);
 
         // When: --env production
         int withOverlay =
-                new GenerateCommand(
-                                tempDir,
-                                pluginRegistry,
-                                null,
-                                null,
-                                tempDir.resolve("plugins"),
-                                "production",
-                                false)
+                new GenerateCommand(tempDir, pluginRegistry, null, null, "production", false)
                         .execute();
 
         // Then: オーバーレイの値が実際に効いている（ファイル存在確認だけではない）

@@ -29,10 +29,10 @@ import org.jspecify.annotations.Nullable;
 /**
  * Entry point for the Migraphe command-line interface.
  *
- * <p>Parses the top-level command and options, resolves plugins (from the classpath, Maven
- * coordinates declared in {@code migraphe.yaml}, and the {@code plugins/} directory), loads the
- * {@link ExecutionContext} when needed, then dispatches to the matching {@link Command}
- * implementation. The command's exit code is returned to the operating system.
+ * <p>Parses the top-level command and options, resolves plugins (from the classpath and the Maven
+ * coordinates declared in {@code migraphe.yaml}), loads the {@link ExecutionContext} when needed,
+ * then dispatches to the matching {@link Command} implementation. The command's exit code is
+ * returned to the operating system.
  */
 public class Main {
 
@@ -83,14 +83,11 @@ public class Main {
             }
 
             // Resolve plugin dependencies via the Maven Resolver.
-            PluginConfigParseResult parsed =
-                    new PluginConfigPreParser().parse(baseDir.resolve("migraphe.yaml"));
             PluginResolver pluginResolver = new PluginResolver();
             URLClassLoader pluginClassLoader = pluginResolver.resolve(baseDir);
 
             // Initialize the PluginRegistry.
-            PluginRegistry pluginRegistry =
-                    initializePluginRegistry(baseDir, parsed, pluginClassLoader);
+            PluginRegistry pluginRegistry = initializePluginRegistry(pluginClassLoader);
 
             // The validate command needs no ExecutionContext (offline validation).
             if ("validate".equals(commandName)) {
@@ -103,14 +100,12 @@ public class Main {
             // ExecutionContext rather than going through loadContext.
             if ("generate".equals(commandName)) {
                 String nameFilter = parseNameOption(args);
-                Path pluginsDir = resolvePluginsDir(baseDir, parsed);
                 GenerateCommand generateCommand =
                         new GenerateCommand(
                                 baseDir,
                                 pluginRegistry,
                                 pluginClassLoader,
                                 nameFilter,
-                                pluginsDir,
                                 parseEnvOption(args));
                 return generateCommand.execute();
             }
@@ -134,12 +129,10 @@ public class Main {
     }
 
     /**
-     * Builds and populates the {@link PluginRegistry} from the classpath, the Maven-resolved plugin
-     * class loader, and the {@code plugins/} directory (in that order).
+     * Builds and populates the {@link PluginRegistry} from the classpath and then the
+     * Maven-resolved plugin class loader.
      */
     private static PluginRegistry initializePluginRegistry(
-            Path baseDir,
-            PluginConfigParseResult parsed,
             @Nullable URLClassLoader pluginClassLoader) {
         PluginRegistry registry = new PluginRegistry();
 
@@ -150,10 +143,6 @@ public class Main {
         if (pluginClassLoader != null) {
             registry.loadFromClassLoader(pluginClassLoader);
         }
-
-        // 3. Load plugins from the plugins/ directory (backward compatibility).
-        Path pluginsDir = resolvePluginsDir(baseDir, parsed);
-        registry.loadFromDirectory(pluginsDir);
 
         return registry;
     }
@@ -279,19 +268,6 @@ public class Main {
             }
         }
         return null;
-    }
-
-    /**
-     * Resolves the {@code plugins/} directory relative to the configured scan root (or the base
-     * directory when no scan root is configured).
-     *
-     * @param baseDir the project base directory
-     * @param parsed the pre-parsed plugin configuration, providing the optional scan root
-     * @return the path to the {@code plugins/} directory
-     */
-    static Path resolvePluginsDir(Path baseDir, PluginConfigParseResult parsed) {
-        Path scanRoot = parsed.scanRoot().map(baseDir::resolve).orElse(baseDir);
-        return scanRoot.resolve("plugins");
     }
 
     /**

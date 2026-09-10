@@ -152,19 +152,35 @@ com.example.myplugin.MyDatabasePlugin
 
 ## Using Your Plugin
 
-### Option 1: plugins/ Directory
+Migraphe loads plugins from the classpath and from the Maven coordinates the project declares. It
+does not scan a directory for JARs, so the plugin has to be published somewhere a resolver can reach —
+a local `~/.m2` install is enough while developing.
 
-Place your plugin JAR in the `plugins/` directory of your Migraphe project:
+### Option 1: Maven coordinate (CLI)
 
+Publish the JAR (`./gradlew publishToMavenLocal` while developing), then declare it in
+`migraphe.yaml` and pin it:
+
+```yaml
+plugins:
+  - coordinate: com.example:my-database-plugin:1.0.0
 ```
-my-project/
-├── migraphe.yaml
-├── plugins/
-│   └── my-database-plugin-1.0.0.jar
-└── ...
+
+```bash
+migraphe pin
 ```
 
-### Option 2: Classpath
+A lockfile is required whenever `plugins:` is declared; `migraphe pin` writes it.
+
+### Option 2: migraphePlugin configuration (Gradle)
+
+```kotlin
+dependencies {
+    migraphePlugin("com.example:my-database-plugin:1.0.0")
+}
+```
+
+### Option 3: Classpath
 
 Add your plugin to the classpath when running Migraphe.
 

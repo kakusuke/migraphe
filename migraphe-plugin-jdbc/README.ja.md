@@ -31,14 +31,14 @@ plugins:
 
 > 注意: このプラグインは JDBC ドライバーを同梱しません。対象データベースのドライバーをクラスパスに含めてください。
 
-### plugins ディレクトリ経由
+### Gradle プラグイン経由
 
-Fat JAR をビルドしてプロジェクトの `plugins/` ディレクトリに配置:
+同じ座標を `migraphePlugin` コンフィギュレーションに宣言します:
 
-```bash
-./gradlew :migraphe-plugin-jdbc:fatJar
-mkdir -p your-project/plugins
-cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar your-project/plugins/
+```kotlin
+dependencies {
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.6.0")
+}
 ```
 
 ## 設定
