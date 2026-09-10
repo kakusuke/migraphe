@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.config;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
@@ -316,7 +317,16 @@ public class ConfigValidator {
                             .build();
 
             // Resolve the mapping; an exception here means a required field is missing.
-            config.getConfigMapping(taskDefClass);
+            Object mapped = config.getConfigMapping(taskDefClass);
+
+            if (mapped instanceof TaskDefinition<?> definition
+                    && definition.down().isEmpty()
+                    && definition.noWayBack().isEmpty()) {
+                errors.add(
+                        relativePath
+                                + ": defines neither down: nor no_way_back:. Write the rollback, or"
+                                + " state why there is none so the decision is on record.");
+            }
 
         } catch (io.smallrye.config.ConfigValidationException e) {
             // Extract messages from the SmallRye validation error.

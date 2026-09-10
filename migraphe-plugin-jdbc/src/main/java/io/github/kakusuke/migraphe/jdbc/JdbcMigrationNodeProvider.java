@@ -12,8 +12,14 @@ import java.util.Set;
  *
  * <p>Returned by {@link JdbcPlugin#migrationNodeProvider()} and invoked by the core configuration
  * layer for each task YAML. It translates a {@link SqlTaskDefinition} (UP/DOWN SQL plus the {@code
- * autocommit} flag) and the resolved dependency set into an immutable migration node. A blank
+ * autocommit} settings) and the resolved dependency set into an immutable migration node. A blank
  * {@code down} SQL is treated as absent so the resulting node has no rollback task.
+ *
+ * <p>{@code autocommit} may be written as a bare boolean or as {@code autocommit: {up, down}}, and
+ * the two forms may be mixed — a direction the task named wins over the bare value, which in turn
+ * wins over the default of {@code false}. Resolving that here rather than in {@link
+ * SqlTaskDefinition} keeps the precedence in one place: SmallRye reports all three keys
+ * independently and takes no view on which should win.
  */
 public final class JdbcMigrationNodeProvider implements MigrationNodeProvider<String> {
 
@@ -47,6 +53,8 @@ public final class JdbcMigrationNodeProvider implements MigrationNodeProvider<St
 
         String upSql = task.up();
         boolean autocommit = sqlTask.autocommit().orElse(false);
+        boolean autocommitUp = sqlTask.autocommitUp().orElse(autocommit);
+        boolean autocommitDown = sqlTask.autocommitDown().orElse(autocommit);
 
         var builder =
                 JdbcMigrationNode.builder()
@@ -55,10 +63,12 @@ public final class JdbcMigrationNodeProvider implements MigrationNodeProvider<St
                         .target(jdbcEnv)
                         .dependencies(dependencies)
                         .upSql(upSql)
-                        .autocommit(autocommit);
+                        .autocommitUp(autocommitUp)
+                        .autocommitDown(autocommitDown);
 
         task.description().ifPresent(builder::description);
         task.down().filter(sql -> !sql.isBlank()).ifPresent(builder::downSql);
+        sqlTask.noWayBack().filter(reason -> !reason.isBlank()).ifPresent(builder::noWayBack);
 
         return builder.build();
     }

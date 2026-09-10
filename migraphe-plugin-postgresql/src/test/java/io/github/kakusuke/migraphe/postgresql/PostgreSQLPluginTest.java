@@ -10,17 +10,45 @@ import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.api.target.Target;
+import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.jdbc.JdbcHistoryRepository;
 import io.github.kakusuke.migraphe.jdbc.JdbcMigrationNode;
 import io.github.kakusuke.migraphe.jdbc.SqlTaskDefinition;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.util.List;
+import java.util.Objects;
 import java.util.ServiceLoader;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class PostgreSQLPluginTest {
+
+    @Test
+    void migrationNodeProviderCarriesNoWayBackFromTheDefinition() {
+        SqlTaskDefinition definition =
+                new SmallRyeConfigBuilder()
+                        .withMapping(SqlTaskDefinition.class)
+                        .withDefaultValue("name", "drop_legacy")
+                        .withDefaultValue("target", "db1")
+                        .withDefaultValue("up", "ALTER TABLE users DROP COLUMN legacy")
+                        .withDefaultValue("no_way_back", "DROP COLUMN discards the data")
+                        .build()
+                        .getConfigMapping(SqlTaskDefinition.class);
+
+        MigrationNode node =
+                new PostgreSQLPlugin()
+                        .migrationNodeProvider()
+                        .createNode(
+                                NodeId.of("drop_legacy"),
+                                definition,
+                                Set.of(),
+                                PostgreSQLTarget.create(
+                                        "db1", "jdbc:postgresql://localhost:5432/t", "u", "p"));
+
+        assertThat(node.noWayBack()).isEqualTo("DROP COLUMN discards the data");
+        assertThat(node.downTask()).isNull();
+    }
 
     @Test
     @SuppressWarnings("rawtypes")
@@ -64,10 +92,10 @@ class PostgreSQLPluginTest {
         PostgreSQLPlugin plugin = new PostgreSQLPlugin();
 
         // when
-        Class<? extends TargetDefinition> envDefClass = plugin.targetDefinitionClass();
+        Class<? extends TargetDefinition> targetDefClass = plugin.targetDefinitionClass();
 
         // then
-        assertThat(envDefClass).isEqualTo(PostgreSQLTargetDefinition.class);
+        assertThat(targetDefClass).isEqualTo(PostgreSQLTargetDefinition.class);
     }
 
     @Test
@@ -121,12 +149,12 @@ class PostgreSQLPluginTest {
                         "testpass");
 
         // when
-        Target env = provider.createTarget("test-db", definition);
+        Target target = provider.createTarget("test-db", definition);
 
         // then
-        assertThat(env).isNotNull();
-        assertThat(env).isInstanceOf(PostgreSQLTarget.class);
-        assertThat(env.name()).isEqualTo("test-db");
+        assertThat(target).isNotNull();
+        assertThat(target).isInstanceOf(PostgreSQLTarget.class);
+        assertThat(target.name()).isEqualTo("test-db");
     }
 
     @Test
@@ -151,7 +179,7 @@ class PostgreSQLPluginTest {
     void migrationNodeProviderShouldCreateNode() {
         // given
         var provider = new PostgreSQLMigrationNodeProvider();
-        var env =
+        var target =
                 PostgreSQLTarget.create(
                         "test", "jdbc:postgresql://localhost:5432/test", "user", "pass");
         var nodeId = NodeId.of("V001");
@@ -165,7 +193,7 @@ class PostgreSQLPluginTest {
                         "DROP TABLE users;");
 
         // when
-        MigrationNode node = provider.createNode(nodeId, task, Set.of(), env);
+        MigrationNode node = provider.createNode(nodeId, task, Set.of(), target);
 
         // then
         assertThat(node).isNotNull();
@@ -204,12 +232,12 @@ class PostgreSQLPluginTest {
     void historyRepositoryProviderShouldCreateRepository() {
         // given
         var provider = new PostgreSQLHistoryRepositoryProvider();
-        var env =
+        var target =
                 PostgreSQLTarget.create(
                         "test", "jdbc:postgresql://localhost:5432/test", "user", "pass");
 
         // when
-        HistoryRepository repo = provider.createRepository(env);
+        HistoryRepository repo = provider.createRepository(target);
 
         // then
         assertThat(repo).isNotNull();
@@ -237,6 +265,56 @@ class PostgreSQLPluginTest {
         assertThatThrownBy(() -> provider.createRepository(nonPgEnv))
                 .isInstanceOf(PostgreSQLException.class)
                 .hasMessageContaining("Target must be PostgreSQLTarget");
+    }
+
+    @Test
+    void autocommitCanDifferBetweenUpAndDown() {
+        assertThat(taskDescriptions("autocommit.up", "true", "autocommit.down", "false"))
+                .containsExactly(
+                        "PostgreSQL UP migration (autocommit)", "PostgreSQL DOWN migration");
+        assertThat(taskDescriptions("autocommit.down", "true"))
+                .containsExactly(
+                        "PostgreSQL UP migration", "PostgreSQL DOWN migration (autocommit)");
+        assertThat(taskDescriptions("autocommit", "true"))
+                .containsExactly(
+                        "PostgreSQL UP migration (autocommit)",
+                        "PostgreSQL DOWN migration (autocommit)");
+        assertThat(taskDescriptions("autocommit", "true", "autocommit.up", "false"))
+                .containsExactly(
+                        "PostgreSQL UP migration", "PostgreSQL DOWN migration (autocommit)");
+        assertThat(taskDescriptions())
+                .containsExactly("PostgreSQL UP migration", "PostgreSQL DOWN migration");
+    }
+
+    private List<String> taskDescriptions(String... autocommitEntries) {
+        SmallRyeConfigBuilder builder =
+                new SmallRyeConfigBuilder()
+                        .withMapping(SqlTaskDefinition.class)
+                        .withDefaultValue("name", "create_users")
+                        .withDefaultValue("target", "test")
+                        .withDefaultValue("up", "CREATE TABLE users (id INT)")
+                        .withDefaultValue("down", "DROP TABLE users");
+        for (int i = 0; i < autocommitEntries.length; i += 2) {
+            builder.withDefaultValue(autocommitEntries[i], autocommitEntries[i + 1]);
+        }
+
+        MigrationNode node =
+                new PostgreSQLPlugin()
+                        .migrationNodeProvider()
+                        .createNode(
+                                NodeId.of("create_users"),
+                                builder.build().getConfigMapping(SqlTaskDefinition.class),
+                                Set.of(),
+                                PostgreSQLTarget.create(
+                                        "test",
+                                        "jdbc:postgresql://localhost:5432/test",
+                                        "user",
+                                        "pass"));
+
+        Task downTask = node.downTask();
+        return List.of(
+                node.upTask().description(),
+                Objects.requireNonNull(downTask, "the fixture supplies down SQL").description());
     }
 
     /** テスト用の SqlTaskDefinition を作成する。 */

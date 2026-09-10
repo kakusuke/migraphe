@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.history.ExecutionOrigin;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
@@ -86,7 +87,7 @@ class MariaDBLegacyCompatibilityTest {
                 ExecutionRecord.upSuccess(
                         nodeId, target.id(), "create table", "DROP TABLE users", 10));
 
-        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isTrue();
+        assertThat(historyRepo.wasExecuted(nodeId)).isTrue();
     }
 
     @Test
@@ -100,8 +101,8 @@ class MariaDBLegacyCompatibilityTest {
         historyRepo.record(
                 ExecutionRecord.upSuccess(nodeId, target.id(), "ユーザ作成", "DROP TABLE users", 10));
 
-        assertThat(historyRepo.wasExecuted(nodeId, target.id())).isTrue();
-        ExecutionRecord latest = historyRepo.findLatestRecord(nodeId, target.id());
+        assertThat(historyRepo.wasExecuted(nodeId)).isTrue();
+        ExecutionRecord latest = historyRepo.findLatestRecord(nodeId);
         assertThat(latest).isNotNull();
         assertThat(latest.nodeId()).isEqualTo(nodeId);
     }
@@ -129,7 +130,7 @@ class MariaDBLegacyCompatibilityTest {
                         base.plusSeconds(2)));
         historyRepo.record(record(failed, ExecutionDirection.UP, ExecutionStatus.FAILURE, base));
 
-        assertThat(historyRepo.executedNodes(target.id())).containsExactly(applied);
+        assertThat(historyRepo.executedNodes()).containsExactly(applied);
     }
 
     @Test
@@ -180,7 +181,7 @@ class MariaDBLegacyCompatibilityTest {
                         ExecutionStatus.SUCCESS,
                         sameSecond));
 
-        assertThat(historyRepo.wasExecuted(node, target.id())).isFalse();
+        assertThat(historyRepo.wasExecuted(node)).isFalse();
     }
 
     @Test
@@ -204,7 +205,7 @@ class MariaDBLegacyCompatibilityTest {
                         ExecutionStatus.SUCCESS,
                         sameSecond));
 
-        assertThat(historyRepo.wasExecuted(node, target.id())).isTrue();
+        assertThat(historyRepo.wasExecuted(node)).isTrue();
     }
 
     @Test
@@ -228,7 +229,7 @@ class MariaDBLegacyCompatibilityTest {
                         ExecutionStatus.SUCCESS,
                         sameSecond));
 
-        assertThat(historyRepo.executedNodes(target.id())).isEmpty();
+        assertThat(historyRepo.executedNodes()).isEmpty();
     }
 
     @Test
@@ -263,7 +264,7 @@ class MariaDBLegacyCompatibilityTest {
         assertThat(columnExists("target_id")).isTrue();
         assertThat(columnExists("environment_id")).isFalse();
         // The migrated row still reads back through the repository, index prefixes included.
-        assertThat(historyRepo.wasExecuted(NodeId.of("db1/legacy"), target.id())).isTrue();
+        assertThat(historyRepo.wasExecuted(NodeId.of("db1/legacy"))).isTrue();
     }
 
     private boolean columnExists(String column) throws Exception {
@@ -312,6 +313,11 @@ class MariaDBLegacyCompatibilityTest {
                 "test description",
                 direction == ExecutionDirection.UP ? "DROP TABLE t" : null,
                 10L,
-                status == ExecutionStatus.FAILURE ? "boom" : null);
+                status == ExecutionStatus.FAILURE ? "boom" : null,
+                null,
+                null,
+                null,
+                ExecutionOrigin.EXECUTED,
+                null);
     }
 }

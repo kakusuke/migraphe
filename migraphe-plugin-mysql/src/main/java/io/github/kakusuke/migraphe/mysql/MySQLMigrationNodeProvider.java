@@ -29,6 +29,9 @@ public final class MySQLMigrationNodeProvider implements MigrationNodeProvider<S
     /**
      * Builds a MySQL {@link MigrationNode} from a SQL task definition.
      *
+     * <p>{@code autocommit} may be a bare boolean or {@code autocommit: {up, down}}; a direction
+     * the task named wins over the bare value, which wins over the default of {@code false}.
+     *
      * @param nodeId the unique identifier to assign to the created node
      * @param task the task definition; must be a {@link SqlTaskDefinition} carrying SQL strings
      * @param dependencies the IDs of the nodes this node depends on, already resolved by the
@@ -54,6 +57,8 @@ public final class MySQLMigrationNodeProvider implements MigrationNodeProvider<S
 
         String upSql = task.up();
         boolean autocommit = sqlTask.autocommit().orElse(false);
+        boolean autocommitUp = sqlTask.autocommitUp().orElse(autocommit);
+        boolean autocommitDown = sqlTask.autocommitDown().orElse(autocommit);
 
         var builder =
                 JdbcMigrationNode.builder()
@@ -62,10 +67,12 @@ public final class MySQLMigrationNodeProvider implements MigrationNodeProvider<S
                         .target(mysqlEnv)
                         .dependencies(dependencies)
                         .upSql(upSql)
-                        .autocommit(autocommit);
+                        .autocommitUp(autocommitUp)
+                        .autocommitDown(autocommitDown);
 
         task.description().ifPresent(builder::description);
         task.down().filter(sql -> !sql.isBlank()).ifPresent(builder::downSql);
+        sqlTask.noWayBack().filter(reason -> !reason.isBlank()).ifPresent(builder::noWayBack);
 
         return builder.build();
     }

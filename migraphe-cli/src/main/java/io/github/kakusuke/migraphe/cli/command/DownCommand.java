@@ -182,10 +182,7 @@ public class DownCommand implements Command {
         List<String> lines =
                 graphView.renderLines(
                         node -> {
-                            String status =
-                                    historyRepo.wasExecuted(node.id(), node.target().id())
-                                            ? "[✓]"
-                                            : "[ ]";
+                            String status = historyRepo.wasExecuted(node.id()) ? "[✓]" : "[ ]";
                             return status + " " + node.id().value() + " - " + node.name();
                         });
         for (String line : lines) {
