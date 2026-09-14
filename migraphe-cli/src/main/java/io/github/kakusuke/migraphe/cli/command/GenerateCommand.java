@@ -18,8 +18,8 @@ import org.jspecify.annotations.Nullable;
  * <p>Loads the project configuration, gathers the {@code generators:} section, and executes each
  * generator (for example schema documentation or migration-tree output) through a {@link
  * GeneratorExecutor} backed by a {@link GeneratorRegistry}. The registry pulls source and output
- * plugins from the classpath, the Maven-resolved plugin class loader, and the {@code plugins/}
- * directory. An optional name filter restricts execution to a single generator.
+ * plugins from the classpath and the Maven-resolved plugin class loader. An optional name filter
+ * restricts execution to a single generator.
  */
 public class GenerateCommand implements Command {
 
@@ -27,7 +27,6 @@ public class GenerateCommand implements Command {
     private final PluginRegistry pluginRegistry;
     private final @Nullable URLClassLoader pluginClassLoader;
     private final @Nullable String nameFilter;
-    private final Path pluginsDir;
     private final @Nullable String envName;
     private final boolean colorEnabled;
 
@@ -41,7 +40,6 @@ public class GenerateCommand implements Command {
      *     null} if no external plugins were resolved
      * @param nameFilter the name of the single generator to run, or {@code null} to run all
      *     configured generators
-     * @param pluginsDir the {@code plugins/} directory scanned for additional generator plugins
      * @param envName the deployment-environment name whose {@code environments/<envName>.yaml}
      *     overlay is applied, or {@code null} to use the base configuration
      */
@@ -50,14 +48,12 @@ public class GenerateCommand implements Command {
             PluginRegistry pluginRegistry,
             @Nullable URLClassLoader pluginClassLoader,
             @Nullable String nameFilter,
-            Path pluginsDir,
             @Nullable String envName) {
         this(
                 baseDir,
                 pluginRegistry,
                 pluginClassLoader,
                 nameFilter,
-                pluginsDir,
                 envName,
                 AnsiColor.isColorEnabled());
     }
@@ -72,7 +68,6 @@ public class GenerateCommand implements Command {
      *     null} if no external plugins were resolved
      * @param nameFilter the name of the single generator to run, or {@code null} to run all
      *     configured generators
-     * @param pluginsDir the {@code plugins/} directory scanned for additional generator plugins
      * @param envName the deployment-environment name whose {@code environments/<envName>.yaml}
      *     overlay is applied, or {@code null} to use the base configuration
      * @param colorEnabled {@code true} to colorize console output
@@ -82,14 +77,12 @@ public class GenerateCommand implements Command {
             PluginRegistry pluginRegistry,
             @Nullable URLClassLoader pluginClassLoader,
             @Nullable String nameFilter,
-            Path pluginsDir,
             @Nullable String envName,
             boolean colorEnabled) {
         this.baseDir = baseDir;
         this.pluginRegistry = pluginRegistry;
         this.pluginClassLoader = pluginClassLoader;
         this.nameFilter = nameFilter;
-        this.pluginsDir = pluginsDir;
         this.envName = envName;
         this.colorEnabled = colorEnabled;
     }
@@ -109,23 +102,21 @@ public class GenerateCommand implements Command {
                 return 0;
             }
 
-            try (GeneratorRegistry generatorRegistry = new GeneratorRegistry()) {
-                generatorRegistry.loadFromClasspath();
-                if (pluginClassLoader != null) {
-                    generatorRegistry.loadFromClassLoader(pluginClassLoader);
-                }
-                generatorRegistry.loadFromDirectory(pluginsDir);
-
-                GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
-                executor.executeAll(
-                        generators,
-                        context.targets(),
-                        context.graph(),
-                        context.createHistoryRepository(),
-                        context.config(),
-                        baseDir,
-                        nameFilter);
+            GeneratorRegistry generatorRegistry = new GeneratorRegistry();
+            generatorRegistry.loadFromClasspath();
+            if (pluginClassLoader != null) {
+                generatorRegistry.loadFromClassLoader(pluginClassLoader);
             }
+
+            GeneratorExecutor executor = new GeneratorExecutor(generatorRegistry);
+            executor.executeAll(
+                    generators,
+                    context.targets(),
+                    context.graph(),
+                    context.createHistoryRepository(),
+                    context.config(),
+                    baseDir,
+                    nameFilter);
 
             printSuccess("Generation complete.");
             return 0;

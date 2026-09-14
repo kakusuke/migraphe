@@ -31,14 +31,14 @@ plugins:
 
 > Note: this plugin does not bundle a JDBC driver. Ensure the driver for your target database is on the classpath.
 
-### Via plugins directory
+### Via the Gradle plugin
 
-Build the fat JAR and place it in your project's `plugins/` directory:
+Declare the same coordinate in the `migraphePlugin` configuration:
 
-```bash
-./gradlew :migraphe-plugin-jdbc:fatJar
-mkdir -p your-project/plugins
-cp migraphe-plugin-jdbc/build/libs/migraphe-plugin-jdbc-*-all.jar your-project/plugins/
+```kotlin
+dependencies {
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.6.0")
+}
 ```
 
 ## Configuration

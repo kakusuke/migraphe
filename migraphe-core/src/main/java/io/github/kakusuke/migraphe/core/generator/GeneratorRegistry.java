@@ -2,18 +2,11 @@ package io.github.kakusuke.migraphe.core.generator;
 
 import io.github.kakusuke.migraphe.api.generator.GeneratorOutputPlugin;
 import io.github.kakusuke.migraphe.api.generator.GeneratorSourcePlugin;
-import java.io.IOException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Registry that discovers and manages generator plugins.
@@ -27,19 +20,17 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>When two plugins report the same {@code type()}, the most recently registered one wins (it
  * overwrites the earlier entry).
  *
- * <p>{@link URLClassLoader URLClassLoaders} created internally by {@link #loadFromDirectory(Path)}
- * are owned by this registry and released by {@link #close()}; externally supplied class loaders
- * are never closed. In long-lived processes such as the Gradle daemon, wrap the registry in a
- * try-with-resources to avoid leaking those class loaders.
+ * <p>This registry creates no class loader of its own. Generators reach it either from the
+ * application class path or through a loader the caller built and therefore owns — in a long-lived
+ * process such as the Gradle daemon, closing that loader is the caller's job.
  */
-public final class GeneratorRegistry implements AutoCloseable {
+public final class GeneratorRegistry {
 
     /** Creates a new {@code GeneratorRegistry}. */
     public GeneratorRegistry() {}
 
     private final Map<String, GeneratorSourcePlugin<?>> sourcePlugins = new ConcurrentHashMap<>();
     private final Map<String, GeneratorOutputPlugin> outputPlugins = new ConcurrentHashMap<>();
-    private final List<URLClassLoader> ownedClassLoaders = new CopyOnWriteArrayList<>();
 
     /**
      * Loads plugins from the current thread/application classpath via {@link ServiceLoader}.
@@ -70,65 +61,6 @@ public final class GeneratorRegistry implements AutoCloseable {
                 ServiceLoader.load(GeneratorOutputPlugin.class, classLoader)) {
             registerOutput(plugin);
         }
-    }
-
-    /**
-     * Loads plugins from every {@code .jar} file in the given directory.
-     *
-     * <p>For each JAR a child {@link URLClassLoader} (parented to this class's loader) is created,
-     * retained as an owned resource, and searched via {@link ServiceLoader}. If the directory does
-     * not exist or is not a directory, the call is a no-op. The owned class loaders are released by
-     * {@link #close()}.
-     *
-     * @param pluginsDir the directory containing plugin JAR files
-     * @throws IllegalStateException if the directory cannot be scanned, or if a particular JAR
-     *     cannot be loaded
-     */
-    public void loadFromDirectory(Path pluginsDir) {
-        if (!Files.isDirectory(pluginsDir)) {
-            return;
-        }
-        try (var entries = Files.list(pluginsDir)) {
-            entries.filter(p -> p.toString().endsWith(".jar"))
-                    .forEach(
-                            jarPath -> {
-                                try {
-                                    URL jarUrl = jarPath.toUri().toURL();
-                                    URLClassLoader classLoader =
-                                            new URLClassLoader(
-                                                    new URL[] {jarUrl},
-                                                    GeneratorRegistry.class.getClassLoader());
-                                    ownedClassLoaders.add(classLoader);
-                                    loadFromClassLoader(classLoader);
-                                } catch (Exception e) {
-                                    throw new IllegalStateException(
-                                            "Failed to load generator plugin from: " + jarPath, e);
-                                }
-                            });
-        } catch (IOException e) {
-            throw new IllegalStateException(
-                    "Failed to scan generator plugins directory: " + pluginsDir, e);
-        }
-    }
-
-    /**
-     * Closes every {@link URLClassLoader} this registry created in {@link
-     * #loadFromDirectory(Path)}.
-     *
-     * <p>Class loaders supplied by callers ({@link #loadFromClassLoader(ClassLoader)}) are not
-     * owned and are left open. {@link IOException}s raised while closing are swallowed, since the
-     * loaded classes are already resident in the JVM.
-     */
-    @Override
-    public void close() {
-        for (URLClassLoader cl : ownedClassLoaders) {
-            try {
-                cl.close();
-            } catch (IOException ignored) {
-                // Ignore I/O errors on close: the classes are already held by the JVM.
-            }
-        }
-        ownedClassLoaders.clear();
     }
 
     /**

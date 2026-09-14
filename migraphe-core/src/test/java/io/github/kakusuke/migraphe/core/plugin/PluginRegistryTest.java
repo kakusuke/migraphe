@@ -74,7 +74,8 @@ class PluginRegistryTest {
                 .isInstanceOf(PluginNotFoundException.class)
                 .hasMessageContaining("No plugin found for type 'mysql'")
                 .hasMessageContaining("Available plugins: [postgresql]")
-                .hasMessageContaining("plugins/ directory");
+                .hasMessageContaining("under plugins: in migraphe.yaml")
+                .hasMessageContaining("migraphePlugin");
     }
 
     @Test
@@ -191,52 +192,6 @@ class PluginRegistryTest {
         // then
         assertThat(registry.size()).isZero();
         assertThat(registry.supportedTypes()).isEmpty();
-    }
-
-    @Test
-    void shouldThrowExceptionForNonExistentJar() {
-        // when & then
-        assertThatThrownBy(() -> registry.loadFromJar(java.nio.file.Path.of("/nonexistent.jar")))
-                .isInstanceOf(PluginLoadException.class)
-                .hasMessageContaining("JAR file not found");
-    }
-
-    @Test
-    void shouldThrowExceptionForNonJarFile() {
-        // given - 実際に存在するファイルを使用
-        var nonJarFile = java.nio.file.Path.of("build.gradle.kts");
-
-        // when & then
-        if (java.nio.file.Files.exists(nonJarFile)) {
-            assertThatThrownBy(() -> registry.loadFromJar(nonJarFile))
-                    .isInstanceOf(PluginLoadException.class)
-                    .hasMessageContaining("Not a JAR file");
-        }
-    }
-
-    @Test
-    void shouldThrowExceptionForNonDirectoryPath() {
-        // given
-        var filePath = java.nio.file.Path.of("build.gradle.kts");
-
-        // when & then - ファイルが存在する場合
-        if (java.nio.file.Files.exists(filePath)) {
-            assertThatThrownBy(() -> registry.loadFromDirectory(filePath))
-                    .isInstanceOf(PluginLoadException.class)
-                    .hasMessageContaining("Not a directory");
-        }
-    }
-
-    @Test
-    void shouldDoNothingWhenDirectoryDoesNotExist() {
-        // given
-        var nonExistentDir = java.nio.file.Path.of("/nonexistent/plugins");
-
-        // when
-        registry.loadFromDirectory(nonExistentDir);
-
-        // then - 例外がスローされないことを確認
-        assertThat(registry.size()).isZero();
     }
 
     // ========== テストヘルパー ==========
