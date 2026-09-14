@@ -145,6 +145,7 @@ class MainTest {
                 name: Create users
                 target: noop-db
                 up: Create the users table
+                down: Drop the users table
                 """);
 
         String[] args = {"up", "--preview", "-y"};

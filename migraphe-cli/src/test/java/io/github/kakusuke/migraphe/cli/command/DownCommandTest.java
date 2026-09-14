@@ -61,8 +61,8 @@ class DownCommandTest {
         try {
             createTestProject(tempDir);
             ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
-            Target env = context.targets().get("test-db");
-            if (env instanceof PostgreSQLTarget pgEnv) {
+            Target target = context.targets().get("test-db");
+            if (target instanceof PostgreSQLTarget pgEnv) {
                 try (Connection conn = pgEnv.createConnection();
                         Statement stmt = conn.createStatement()) {
                     stmt.execute("DROP TABLE IF EXISTS users CASCADE");
@@ -101,6 +101,63 @@ class DownCommandTest {
     }
 
     @Test
+    void shouldNameTheOrphanItIsAboutToRollBack() throws Exception {
+        createTestProject(tempDir);
+        new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
+        Files.delete(tempDir.resolve("tasks/test-db/002_add_index.yaml"));
+        outputStream.reset();
+
+        // A preview: an operator confirming a rollback has to be able to see what it names.
+        int exitCode =
+                new DownCommand(
+                                ExecutionContext.load(tempDir, pluginRegistry),
+                                NodeId.of("test-db/002_add_index"),
+                                false,
+                                true,
+                                true)
+                        .execute();
+
+        assertThat(exitCode).isZero();
+        assertThat(outputStream.toString(StandardCharsets.UTF_8))
+                .contains("Migrations to rollback:")
+                .contains("test-db/002_add_index");
+    }
+
+    @Test
+    void shouldRollbackAMigrationWhoseTaskFileWasDeleted() throws Exception {
+        // Given: 001 と 002 を適用したあと、002 の定義ファイルを消す
+        createTestProject(tempDir);
+        new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
+        Files.delete(tempDir.resolve("tasks/test-db/002_add_index.yaml"));
+        outputStream.reset();
+
+        ExecutionContext orphaned = ExecutionContext.load(tempDir, pluginRegistry);
+
+        // When
+        int exitCode =
+                new DownCommand(orphaned, NodeId.of("test-db/002_add_index"), false, true, false)
+                        .execute();
+
+        // Then: DB のオブジェクトが消え、履歴も適用済みでなくなる
+        assertThat(exitCode).isZero();
+        Target target = orphaned.targets().get("test-db");
+        assertThat(target).isInstanceOf(PostgreSQLTarget.class);
+        try (Connection conn = ((PostgreSQLTarget) target).createConnection();
+                Statement stmt = conn.createStatement()) {
+            ResultSet rs =
+                    stmt.executeQuery(
+                            "SELECT EXISTS (SELECT FROM pg_indexes WHERE indexname ="
+                                    + " 'idx_users_name')");
+            rs.next();
+            assertThat(rs.getBoolean(1)).isFalse();
+        }
+        assertThat(
+                        orphaned.createHistoryRepository()
+                                .wasExecuted(NodeId.of("test-db/002_add_index")))
+                .isFalse();
+    }
+
+    @Test
     void shouldRollbackTargetVersionItself() throws Exception {
         // Given
         createTestProject(tempDir);
@@ -118,8 +175,8 @@ class DownCommandTest {
         downCommand.execute();
 
         // Then: V001 のテーブル (users) も削除されている
-        Target env = context.targets().get("test-db");
-        if (env instanceof PostgreSQLTarget pgEnv) {
+        Target target = context.targets().get("test-db");
+        if (target instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =
@@ -255,8 +312,8 @@ class DownCommandTest {
         assertThat(output).contains("No changes made (dry run)");
 
         // インデックスがまだ存在することを確認
-        Target env = context.targets().get("test-db");
-        if (env instanceof PostgreSQLTarget pgEnv) {
+        Target target = context.targets().get("test-db");
+        if (target instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =
@@ -313,7 +370,7 @@ class DownCommandTest {
         // Then
         assertThat(exitCode).isEqualTo(1);
         String errOutput = errStream.toString(StandardCharsets.UTF_8);
-        assertThat(errOutput).contains("Target version not found");
+        assertThat(errOutput).contains("Migration not found");
     }
 
     @Test
@@ -355,8 +412,8 @@ class DownCommandTest {
         assertThat(output).contains("Rollback completed successfully");
 
         // 全テーブルが削除されていることを確認
-        Target env = context.targets().get("test-db");
-        if (env instanceof PostgreSQLTarget pgEnv) {
+        Target target = context.targets().get("test-db");
+        if (target instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =
@@ -421,8 +478,8 @@ class DownCommandTest {
         assertThat(output).doesNotContain("[SKIP]"); // スキップされずに実行される
 
         // テーブルが存在することを確認
-        Target env = context.targets().get("test-db");
-        if (env instanceof PostgreSQLTarget pgEnv) {
+        Target target = context.targets().get("test-db");
+        if (target instanceof PostgreSQLTarget pgEnv) {
             try (Connection conn = pgEnv.createConnection();
                     Statement stmt = conn.createStatement()) {
                 ResultSet rs =
@@ -455,6 +512,36 @@ class DownCommandTest {
         // Then: IllegalArgumentException が投げられず、正常終了 (exit code 0) する
         assertThatCode(() -> downCommand.execute()).doesNotThrowAnyException();
         assertThat(downCommand.execute()).isEqualTo(0);
+    }
+
+    @Test
+    void shouldDrawTheTreeTheRollbackWillActuallyFollow() throws IOException {
+        createTestProject(tempDir);
+        new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
+
+        // The dependency is edited away after both ran. The rollback still takes 002 out first,
+        // because that is what the rows record — so the tree has to show them related.
+        Files.writeString(
+                tempDir.resolve("tasks/test-db/002_add_index.yaml"),
+                """
+                name: Add index on users
+                target: test-db
+                up: CREATE INDEX idx_users_name ON users(name);
+                down: DROP INDEX idx_users_name;
+                """);
+        outputStream.reset();
+
+        int exitCode =
+                new DownCommand(
+                                ExecutionContext.load(tempDir, pluginRegistry),
+                                null,
+                                true,
+                                true,
+                                true)
+                        .execute();
+
+        assertThat(exitCode).isZero();
+        assertThat(outputStream.toString(StandardCharsets.UTF_8)).contains("│");
     }
 
     /** テスト用のプロジェクト構造を作成する。 */

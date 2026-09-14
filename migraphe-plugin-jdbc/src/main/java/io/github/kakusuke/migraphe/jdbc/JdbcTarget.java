@@ -1,12 +1,17 @@
 package io.github.kakusuke.migraphe.jdbc;
 
+import io.github.kakusuke.migraphe.api.target.DownTaskRestorer;
 import io.github.kakusuke.migraphe.api.target.Target;
 import io.github.kakusuke.migraphe.api.target.TargetId;
+import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.jdbc.statement.StatementSplitter;
+import java.io.IOException;
+import java.io.StringReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.Properties;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -23,7 +28,7 @@ import org.jspecify.annotations.Nullable;
  * protected} so subclasses can supply those fixed values, while end users create plain JDBC targets
  * through {@link #create}.
  */
-public class JdbcTarget implements Target {
+public class JdbcTarget implements Target, DownTaskRestorer {
 
     private final TargetId id;
     private final String name;
@@ -70,7 +75,7 @@ public class JdbcTarget implements Target {
      *
      * <p>The target identifier is derived from {@code name} via {@link TargetId#of(String)}.
      *
-     * @param name the target name (also used to derive the target identifier)
+     * @param name the environment name (also used to derive the target identifier)
      * @param jdbcUrl the JDBC connection URL
      * @param username the database user name
      * @param password the database password, or {@code null} for no password
@@ -172,6 +177,40 @@ public class JdbcTarget implements Target {
      */
     public StatementSplitter statementSplitter() {
         return StatementSplitter.standard();
+    }
+
+    /**
+     * Rebuilds a recorded rollback as a {@link JdbcDownTask}.
+     *
+     * <p>The rollback payload this plugin writes is the plain SQL, so replaying it needs only the
+     * transaction mode, which {@link JdbcUpTask} recorded in the metadata as {@code
+     * autocommit.down}. An absent key means the row predates it; the mode then falls back to a
+     * transaction, which is what a task that never said otherwise ran in.
+     *
+     * @param serializedDownTask the recorded rollback SQL
+     * @param pluginMetadata the recorded metadata, or {@code null}
+     * @return a task that runs that SQL against this target
+     * @throws JdbcException if the metadata is present but not readable
+     */
+    @Override
+    public Task restoreDownTask(String serializedDownTask, @Nullable String pluginMetadata) {
+        return JdbcDownTask.create(
+                this, serializedDownTask, readAutocommitDown(pluginMetadata, false));
+    }
+
+    /** Reads one boolean out of the recorded metadata, or returns {@code fallback}. */
+    private boolean readAutocommitDown(@Nullable String pluginMetadata, boolean fallback) {
+        if (pluginMetadata == null) {
+            return fallback;
+        }
+        Properties properties = new Properties();
+        try {
+            properties.load(new StringReader(pluginMetadata));
+        } catch (IOException e) {
+            throw new JdbcException("Recorded plugin metadata could not be read", e);
+        }
+        String value = properties.getProperty("autocommit.down");
+        return value == null ? fallback : Boolean.parseBoolean(value);
     }
 
     /**

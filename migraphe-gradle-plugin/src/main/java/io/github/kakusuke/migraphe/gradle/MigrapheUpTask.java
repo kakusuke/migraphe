@@ -4,11 +4,15 @@ import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
-import io.github.kakusuke.migraphe.core.config.ProjectConfig;
 import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
 import io.github.kakusuke.migraphe.core.execution.Executor;
+import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
+import io.github.kakusuke.migraphe.core.execution.UpBlocker;
+import io.github.kakusuke.migraphe.core.execution.UpPlanFormatter;
+import io.github.kakusuke.migraphe.core.execution.UpService;
+import io.github.kakusuke.migraphe.core.execution.UpService.UpPlan;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.TopologicalSort;
 import io.github.kakusuke.migraphe.core.graph.layout.ExecutionGraphView;
@@ -25,14 +29,17 @@ import org.gradle.work.DisableCachingByDefault;
 /**
  * Gradle task that runs forward (UP) migrations.
  *
- * <p>Registered as {@code migrapheUp} by {@link MigrapheGradlePlugin}, the task resolves the set of
- * pending nodes (optionally bounded by a {@linkplain #getTarget() target node}), prints the
- * execution graph, and — unless running in {@linkplain #getDryRun() dry-run} mode — executes the
- * migrations via a {@link DagExecutor} in the {@link ExecutionDirection#UP} direction. Parallelism
- * is taken from the project's {@code execution} configuration.
+ * <p>Registered as {@code migrapheUp} by {@link MigrapheGradlePlugin}, the task asks {@link
+ * UpService} which nodes are pending (optionally bounded by a {@linkplain #getTarget() target
+ * node}), prints the execution graph, and — unless running in {@linkplain #getDryRun() dry-run}
+ * mode — executes the migrations via a {@link DagExecutor} in the {@link ExecutionDirection#UP}
+ * direction. Parallelism is taken from the project's {@code execution} configuration.
  *
- * <p>The task fails the build with a {@link GradleException} when the target node is unknown or
- * when any migration fails.
+ * <p>Every check that can refuse a run lives in {@code UpService}, so the CLI and this task refuse
+ * the same things in the same words.
+ *
+ * <p>The task fails the build with a {@link GradleException} when the target node is unknown, when
+ * something refuses the run, or when any migration fails.
  */
 @DisableCachingByDefault(
         because = "Migraphe tasks have side effects and their output cannot be cached")
@@ -82,25 +89,27 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
     /**
      * Task action that executes the forward migrations.
      *
-     * <p>Loads the execution context, resolves the target nodes, prints the execution graph, and —
-     * unless in dry-run mode — runs the migrations. Initializes the history repository before
-     * execution.
+     * <p>Loads the execution context, asks {@link UpService} what applying would do, prints the
+     * execution graph, and — unless in dry-run mode — runs the migrations. Initializes the history
+     * repository before execution.
      *
-     * @throws GradleException if the target node is not found or if any migration fails
+     * @throws GradleException if the target node is not found, if anything refuses the run (a task
+     *     depending on a migration that is not defined, or one defining neither a rollback nor a
+     *     reason there is none), or if any migration fails
      */
     @TaskAction
     public void up() {
         withExecutionContext(
                 context -> {
-                    NodeId targetId = null;
+                    NodeId requestedNode = null;
                     if (getTarget().isPresent()) {
-                        targetId = NodeId.of(getTarget().get());
+                        requestedNode = NodeId.of(getTarget().get());
                     }
 
                     boolean dryRun = getDryRun().getOrElse(false);
 
-                    if (targetId != null && context.graph().getNode(targetId).isEmpty()) {
-                        throw new GradleException("Target not found: " + targetId.value());
+                    if (requestedNode != null && context.graph().getNode(requestedNode).isEmpty()) {
+                        throw new GradleException("Target not found: " + requestedNode.value());
                     }
 
                     HistoryRepository historyRepo = context.createHistoryRepository();
@@ -109,7 +118,16 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                     GradleExecutionListener listener = new GradleExecutionListener(getLogger());
                     Executor executor = createExecutor(context, historyRepo, listener);
 
-                    Set<NodeId> selectedNodes = executor.determineTargetNodes(targetId);
+                    UpPlan plan = new UpService(context.graph(), historyRepo).plan(requestedNode);
+                    UpBlocker blocker = plan.blocker();
+                    if (blocker != null) {
+                        throw new GradleException(
+                                String.join(
+                                        System.lineSeparator(),
+                                        UpPlanFormatter.format(blocker, RepairVocabulary.GRADLE)));
+                    }
+
+                    Set<NodeId> selectedNodes = plan.selectedNodes();
 
                     if (selectedNodes.isEmpty()) {
                         getLogger()
@@ -118,9 +136,9 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
                         return;
                     }
 
-                    ExecutionPlan plan =
+                    ExecutionPlan executionPlan =
                             TopologicalSort.createExecutionPlanFor(context.graph(), selectedNodes);
-                    displayMigrationGraph(context, plan, historyRepo, dryRun);
+                    displayMigrationGraph(context, executionPlan, historyRepo, dryRun);
 
                     if (dryRun) {
                         getLogger().lifecycle("");
@@ -157,11 +175,12 @@ public abstract class MigrapheUpTask extends AbstractMigrapheTask {
             ExecutionContext context,
             HistoryRepository historyRepo,
             GradleExecutionListener listener) {
-        ProjectConfig projectConfig = context.config().getConfigMapping(ProjectConfig.class);
-        ProjectConfig.ExecutionSection execConfig = projectConfig.execution();
-        int maxParallelism = execConfig.parallel() ? execConfig.maxParallelism() : 1;
         return new DagExecutor(
-                context.graph(), historyRepo, listener, ExecutionDirection.UP, maxParallelism);
+                context.graph(),
+                historyRepo,
+                listener,
+                ExecutionDirection.UP,
+                context.maxParallelism());
     }
 
     private void displayMigrationGraph(

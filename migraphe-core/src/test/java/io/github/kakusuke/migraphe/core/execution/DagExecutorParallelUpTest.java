@@ -29,7 +29,7 @@ import org.junit.jupiter.api.Test;
 @DisplayName("DagExecutor (Parallel UP)")
 class DagExecutorParallelUpTest {
 
-    private final Target testEnv = SimpleTarget.create(TargetId.of("env"), "env");
+    private final Target testTarget = SimpleTarget.create(TargetId.of("env"), "env");
 
     @Test
     @DisplayName("ダイアモンド DAG を maxParallelism=2 で全ノード成功する")
@@ -254,7 +254,7 @@ class DagExecutorParallelUpTest {
 
         InMemoryHistoryRepository history = new InMemoryHistoryRepository();
         // nodeA を実行済みとして記録
-        history.record(ExecutionRecord.upSuccess(NodeId.of("a"), testEnv.id(), "a", null, 100L));
+        history.record(ExecutionRecord.upSuccess(NodeId.of("a"), testTarget.id(), "a", null, 100L));
 
         MockExecutionListener listener = new MockExecutionListener();
         DagExecutor executor = new DagExecutor(graph, history, listener, ExecutionDirection.UP, 0);
@@ -501,7 +501,7 @@ class DagExecutorParallelUpTest {
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(id)
-                .target(testEnv)
+                .target(testTarget)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(downTask)
@@ -532,7 +532,6 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String signature() {
-
                         return "FailingTask";
                     }
                 };
@@ -557,7 +556,6 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String signature() {
-
                         return "SlowTask";
                     }
                 };
@@ -614,7 +612,6 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String signature() {
-
                         return "SlowTask";
                     }
                 };
@@ -652,7 +649,7 @@ class DagExecutorParallelUpTest {
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(id)
-                .target(testEnv)
+                .target(testTarget)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(SimpleTask.of("DOWN: " + id))
@@ -681,7 +678,7 @@ class DagExecutorParallelUpTest {
         return SimpleMigrationNode.builder()
                 .id(NodeId.of(id))
                 .name(id)
-                .target(testEnv)
+                .target(testTarget)
                 .dependencies(dependencies)
                 .upTask(upTask)
                 .downTask(SimpleTask.of("DOWN: " + id))

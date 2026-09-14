@@ -6,9 +6,7 @@ import java.util.List;
  * Turns an {@link AmendBlocker} into the lines a front end prints.
  *
  * <p>Lives in core rather than in either front end so that the CLI and the Gradle task refuse in
- * the same words. Two copies of a sentence are two chances for one of them to drift while its own
- * test stays green, and the drift would read as the two front ends disagreeing about what an
- * operator has to do.
+ * the same words, the way {@link UpPlanFormatter} and {@link DownPlanFormatter} already do.
  */
 public final class AmendPlanFormatter {
 
