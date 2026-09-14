@@ -1,6 +1,7 @@
 package io.github.kakusuke.migraphe.core.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import io.github.kakusuke.migraphe.api.common.Result;
 import io.github.kakusuke.migraphe.api.execution.ExecutionListener;
@@ -15,11 +16,13 @@ import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
 import io.github.kakusuke.migraphe.core.execution.support.MockExecutionListener;
+import io.github.kakusuke.migraphe.core.execution.support.ThrowingHistoryRepository;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.history.InMemoryHistoryRepository;
 import io.github.kakusuke.migraphe.core.plugin.SimpleMigrationNode;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTarget;
 import io.github.kakusuke.migraphe.core.plugin.SimpleTask;
+import java.time.Duration;
 import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.DisplayName;
@@ -145,6 +148,38 @@ class DagExecutorSequentialUpTest {
     @Nested
     @DisplayName("実行")
     class Execute {
+
+        @Test
+        @DisplayName("履歴の記録が例外を投げても実行は止まらず、そのノードは失敗として扱われる")
+        void shouldFailNodeWhenHistoryRecordingThrows() {
+            // Given
+            MigrationGraph graph = MigrationGraph.create();
+            graph.addNode(createNode("a", Set.of()));
+            graph.addNode(createNode("b", Set.of(NodeId.of("a"))));
+
+            MockExecutionListener listener = new MockExecutionListener();
+            DagExecutor executor =
+                    new DagExecutor(
+                            graph,
+                            new ThrowingHistoryRepository(new InMemoryHistoryRepository()),
+                            listener,
+                            ExecutionDirection.UP,
+                            1);
+
+            // When
+            ExecutionResult result =
+                    assertTimeoutPreemptively(
+                            Duration.ofSeconds(5),
+                            () -> executor.execute(Set.of(NodeId.of("a"), NodeId.of("b"))));
+
+            // Then
+            assertThat(result.success()).isFalse();
+            assertThat(result.summary().failedCount()).isEqualTo(1);
+            assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
+            assertThat(listener.skippedNodes).containsExactly(NodeId.of("b"));
+            assertThat(listener.skipReasons.get(NodeId.of("b"))).isEqualTo("dependency failed: a");
+            assertThat(listener.startedNodes).containsExactly(NodeId.of("a"));
+        }
 
         @Test
         @DisplayName("単一ノードを実行できる")
