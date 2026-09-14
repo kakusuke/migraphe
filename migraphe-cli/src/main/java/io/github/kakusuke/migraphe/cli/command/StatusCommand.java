@@ -3,6 +3,8 @@ package io.github.kakusuke.migraphe.cli.command;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
+import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.execution.StatusLineFormatter;
 import io.github.kakusuke.migraphe.core.execution.StatusService;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
@@ -48,13 +50,17 @@ public class StatusCommand implements Command {
     @Override
     public int execute() {
         try {
+            // Asked before the heading: a refusal under "Migration Status" reads as a status.
+            HistoryRepository historyRepo = context.createHistoryRepository();
+            List<String> notReady = HistoryReadiness.refusal(historyRepo, RepairVocabulary.CLI);
+            if (!notReady.isEmpty()) {
+                notReady.forEach(System.err::println);
+                return 1;
+            }
+
             System.out.println("Migration Status");
             System.out.println("================");
             System.out.println();
-
-            // Obtain the HistoryRepository.
-            HistoryRepository historyRepo = context.createHistoryRepository();
-            historyRepo.initialize();
 
             StatusInfo status = new StatusService(context.graph(), historyRepo).getStatus();
             Map<NodeId, NodeStatus> statusByNode = new HashMap<>();

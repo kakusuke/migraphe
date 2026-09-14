@@ -55,6 +55,47 @@ class JdbcHistoryRepositoryTest {
     }
 
     @Test
+    void reportsWhetherTheHistoryHasBeenCreatedYet() {
+        assertThat(repository.isInitialized()).isFalse();
+
+        repository.initialize();
+
+        assertThat(repository.isInitialized()).isTrue();
+    }
+
+    @Test
+    void initializeCreatesEveryColumnThisVersionWritesAndLeavesAnOlderTableAlone()
+            throws Exception {
+        repository.initialize();
+
+        assertThat(columnsOfHistoryTable())
+                .contains(
+                        "ID",
+                        "NODE_ID",
+                        "TARGET_ID",
+                        "DIRECTION",
+                        "STATUS",
+                        "EXECUTED_AT",
+                        "DESCRIPTION",
+                        "SERIALIZED_DOWN_TASK",
+                        "DURATION_MS",
+                        "ERROR_MESSAGE",
+                        "FINGERPRINT",
+                        "PLUGIN_METADATA",
+                        "DEPENDENCIES",
+                        "ORIGIN",
+                        "NO_WAY_BACK");
+
+        createPreUpgradeHistoryTable();
+
+        repository.initialize();
+
+        assertThat(columnsOfHistoryTable())
+                .contains("ENVIRONMENT_ID")
+                .doesNotContain("TARGET_ID", "FINGERPRINT", "ORIGIN");
+    }
+
+    @Test
     void recordAndRetrieve() {
         repository.initialize();
 
@@ -670,5 +711,39 @@ class JdbcHistoryRepositoryTest {
         var reversible = repository.findLatestRecord(NodeId.of("reversible"));
         assertThat(reversible).isNotNull();
         assertThat(reversible.noWayBack()).isNull();
+    }
+
+    private List<String> columnsOfHistoryTable() throws Exception {
+        List<String> columns = new java.util.ArrayList<>();
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement();
+                var rs =
+                        stmt.executeQuery(
+                                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS"
+                                        + " WHERE TABLE_NAME = 'MIGRAPHE_HISTORY'")) {
+            while (rs.next()) {
+                columns.add(rs.getString(1).toUpperCase(java.util.Locale.ROOT));
+            }
+        }
+        return columns;
+    }
+
+    private void createPreUpgradeHistoryTable() throws Exception {
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+            stmt.execute(
+                    "CREATE TABLE migraphe_history ("
+                            + " id VARCHAR(64) PRIMARY KEY,"
+                            + " node_id VARCHAR(255) NOT NULL,"
+                            + " environment_id VARCHAR(255) NOT NULL,"
+                            + " direction VARCHAR(10) NOT NULL,"
+                            + " status VARCHAR(10) NOT NULL,"
+                            + " executed_at TIMESTAMP NOT NULL,"
+                            + " description TEXT,"
+                            + " serialized_down_task TEXT,"
+                            + " duration_ms BIGINT,"
+                            + " error_message TEXT)");
+        }
     }
 }

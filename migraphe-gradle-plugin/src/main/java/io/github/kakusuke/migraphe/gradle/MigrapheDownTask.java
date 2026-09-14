@@ -10,6 +10,7 @@ import io.github.kakusuke.migraphe.core.execution.DownPlanFormatter;
 import io.github.kakusuke.migraphe.core.execution.DownService;
 import io.github.kakusuke.migraphe.core.execution.DownService.DownPlan;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
 import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.graph.ExecutionPlan;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
@@ -140,7 +141,11 @@ public abstract class MigrapheDownTask extends AbstractMigrapheTask {
                     }
 
                     HistoryRepository historyRepo = context.createHistoryRepository();
-                    historyRepo.initialize();
+                    List<String> notReady =
+                            HistoryReadiness.refusal(historyRepo, RepairVocabulary.GRADLE);
+                    if (!notReady.isEmpty()) {
+                        throw new GradleException(String.join(System.lineSeparator(), notReady));
+                    }
 
                     DownPlan plan =
                             new DownService(context.graph(), historyRepo)

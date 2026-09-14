@@ -8,6 +8,7 @@ import io.github.kakusuke.migraphe.core.execution.DownBlocker;
 import io.github.kakusuke.migraphe.core.execution.DownPlanFormatter;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.execution.ExecutionResult;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
 import io.github.kakusuke.migraphe.core.execution.HistoryRefusalFormatter;
 import io.github.kakusuke.migraphe.core.execution.RebuildService;
 import io.github.kakusuke.migraphe.core.execution.RebuildService.RebuildPlan;
@@ -73,7 +74,11 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                     boolean dryRun = getDryRun().getOrElse(false);
 
                     HistoryRepository historyRepo = context.createHistoryRepository();
-                    historyRepo.initialize();
+                    List<String> notReady =
+                            HistoryReadiness.refusal(historyRepo, RepairVocabulary.GRADLE);
+                    if (!notReady.isEmpty()) {
+                        throw new GradleException(String.join(System.lineSeparator(), notReady));
+                    }
 
                     RebuildPlan plan =
                             new RebuildService(context.graph(), historyRepo)

@@ -52,6 +52,15 @@ public final class InMemoryHistoryRepository implements HistoryRepository {
         // No initialization is needed for the in-memory implementation.
     }
 
+    /**
+     * Always {@code true}: the store is this object's own map, so it exists as soon as the
+     * repository does and no run can find it absent.
+     */
+    @Override
+    public boolean isInitialized() {
+        return true;
+    }
+
     @Override
     public void record(ExecutionRecord record) {
         Objects.requireNonNull(record, "record must not be null");

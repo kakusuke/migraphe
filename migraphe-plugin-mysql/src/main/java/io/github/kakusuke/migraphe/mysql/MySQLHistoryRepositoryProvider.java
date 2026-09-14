@@ -24,6 +24,9 @@ public final class MySQLHistoryRepositoryProvider implements HistoryRepositoryPr
     private static final String MYSQL_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/mysql/schema/init_history_table.sql";
 
+    private static final String MYSQL_UPGRADE_RESOURCE =
+            "/io/github/kakusuke/migraphe/mysql/schema/upgrade_history_table.sql";
+
     /**
      * Creates a {@link JdbcHistoryRepository} for the given MySQL target.
      *
@@ -39,6 +42,6 @@ public final class MySQLHistoryRepositoryProvider implements HistoryRepositoryPr
                     "Target must be MySQLTarget, got: " + target.getClass().getName());
         }
 
-        return new JdbcHistoryRepository(mysqlEnv, MYSQL_SCHEMA_RESOURCE);
+        return new JdbcHistoryRepository(mysqlEnv, MYSQL_SCHEMA_RESOURCE, MYSQL_UPGRADE_RESOURCE);
     }
 }

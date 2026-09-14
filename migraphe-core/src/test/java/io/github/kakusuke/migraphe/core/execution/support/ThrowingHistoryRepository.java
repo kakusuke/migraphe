@@ -19,6 +19,11 @@ public record ThrowingHistoryRepository(HistoryRepository delegate) implements H
     }
 
     @Override
+    public boolean isInitialized() {
+        return delegate.isInitialized();
+    }
+
+    @Override
     public void record(ExecutionRecord executionRecord) {
         throw new IllegalStateException("history connection lost");
     }

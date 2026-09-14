@@ -34,6 +34,25 @@ If the two `null` reasons ever need to be distinguished by *callers* rather than
 a return-type change across every null-returning helper here (plus their NullAway annotations) — a
 design step with its own cycle, not a tidy.
 
+## A new boolean flag must be registered in `firstPositionalArg`
+
+`firstPositionalArg` walks the arguments skipping known flags and returns the first token that is not
+one. Its `boolFlags` set is the *only* place that knows a bare flag takes no value. A flag added to a
+command but not to that set is returned as the positional argument — so `migraphe amend --whatever`
+is read as "amend the migration named `--whatever`", and the command reports that no such migration
+exists rather than that the flag was unknown. `valueFlags` is the same hazard for a flag that
+takes a value: omit it and the flag's *value* becomes the positional argument.
+
+Nothing catches this at compile time and a command's own tests usually pass, because they construct
+the command directly rather than going through the parser.
+
+## `--check` is read from the raw arguments, not through `firstPositionalArg`
+
+`case "status"` reads `List.of(args).contains("--check")` directly, the way `pin` already does. That
+is deliberate for a flag with no value and no positional argument beside it, but it still has to be
+in `boolFlags` — `status` takes no positional argument today, and the day it does, an unregistered
+flag becomes that argument.
+
 ## `run` reads `user.dir` per call
 
 `baseDir` is `Paths.get(System.getProperty("user.dir"))`, read fresh on every `run` and never cached.

@@ -92,7 +92,7 @@ down: |
 | `dependencies` | いいえ | `[]` | このタスクより先に実行すべきタスク ID のリスト |
 | `up` | はい | — | マイグレーション（up）時に実行する SQL |
 | `down` | いいえ | — | ロールバック（down）時に実行する SQL。不可逆なマイグレーションでは省略 |
-| `autocommit` | いいえ | `false` | トランザクション外で実行する（[Autocommit モード](#autocommit-モード)参照） |
+| `autocommit` | いいえ | `false` | トランザクション外で実行する。素の boolean は両方向に効き、`{up, down}` で方向ごとに指定できる（[Autocommit モード](#autocommit-モード)参照） |
 
 ### 複数文 SQL とドル引用符
 

@@ -19,9 +19,9 @@ import org.gradle.api.artifacts.Configuration;
  *   <li>creates the resolvable {@code migraphePlugin} configuration, used to declare
  *       database/plugin JAR dependencies whose classpath is handed to every task;
  *   <li>lazily registers the {@code migrapheValidate}, {@code migrapheStatus}, {@code
- *       migrapheGenerate}, {@code migrapheUp}, {@code migrapheDown}, {@code migrapheRebuild} and
- *       {@code migrapheAmend} tasks in the {@code migraphe} group, wiring the extension properties
- *       and the plugin classpath onto each.
+ *       migrapheGenerate}, {@code migrapheUp}, {@code migrapheDown}, {@code migrapheAmend} and
+ *       {@code migrapheInit} and {@code migrapheUpgradeHistory} tasks in the {@code migraphe}
+ *       group, wiring the extension properties and the plugin classpath onto each.
  * </ul>
  *
  * <p>For tasks that also accept command-line options, configuration-time fallbacks are read from
@@ -35,7 +35,7 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
 
     /**
      * Applies the plugin to the given project, creating the {@code migraphe} extension, the {@code
-     * migraphePlugin} configuration and the Migraphe tasks.
+     * migraphePlugin} configuration and the six Migraphe tasks.
      *
      * @param project the Gradle project the plugin is applied to
      */
@@ -186,12 +186,39 @@ public class MigrapheGradlePlugin implements Plugin<Project> {
                                 task.getDryRun().convention(true);
                             }
                         });
+
+        project.getTasks()
+                .register(
+                        "migrapheInit",
+                        MigrapheInitTask.class,
+                        task -> {
+                            task.setDescription("Create the migration history");
+                            task.setGroup("migraphe");
+                            task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
+                            task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
+                        });
+
+        project.getTasks()
+                .register(
+                        "migrapheUpgradeHistory",
+                        MigrapheUpgradeHistoryTask.class,
+                        task -> {
+                            task.setDescription(
+                                    "Bring the history to the shape this version writes");
+                            task.setGroup("migraphe");
+                            task.getBaseDir().set(extension.getBaseDir());
+                            task.getVariables().set(extension.getVariables());
+                            task.getPluginClasspath().from(migraphePluginConfig);
+                            applyEnvSources(project, extension, task);
+                        });
     }
 
     /**
      * Wires the environment-overlay name onto a task from the extension and {@code -P} properties.
      *
-     * <p>Precedence, lowest first: the {@code migraphe { env = ... }} block, then {@code
+     * <p>Precedence, lowest first: the {@code migraphe { target = ... }} block, then {@code
      * -Pmigraphe.env=...}, then the task's {@code --env} command-line option (applied by Gradle
      * after configuration). The extension is bound as a <em>convention</em> rather than with {@code
      * set} so that an unset extension property still leaves room for the {@code -P} fallback.

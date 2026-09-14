@@ -4,10 +4,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 import io.github.kakusuke.migraphe.api.common.Result;
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
+import io.github.kakusuke.migraphe.api.graph.MigrationGraphView;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.ExecutionStatus;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.history.HistoryUpgrade;
+import io.github.kakusuke.migraphe.api.history.UpgradeContext;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.api.task.TaskResult;
@@ -41,6 +45,9 @@ class PostgreSQLIntegrationTest {
     private static final String PG_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
 
+    private static final String PG_UPGRADE_RESOURCE =
+            "/io/github/kakusuke/migraphe/postgresql/schema/upgrade_history_table.sql";
+
     private static final String GENERIC_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/jdbc/schema/init_history_table.sql";
 
@@ -56,7 +63,7 @@ class PostgreSQLIntegrationTest {
                         postgres.getUsername(),
                         postgres.getPassword());
 
-        historyRepo = new JdbcHistoryRepository(target, PG_SCHEMA_RESOURCE);
+        historyRepo = new JdbcHistoryRepository(target, PG_SCHEMA_RESOURCE, PG_UPGRADE_RESOURCE);
     }
 
     @AfterEach
@@ -554,7 +561,7 @@ class PostgreSQLIntegrationTest {
                             + " 'UP', 'SUCCESS', NOW(), 'legacy row', NULL, 1, NULL)");
         }
 
-        historyRepo.initialize();
+        applyEveryUpgrade();
 
         try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
@@ -617,7 +624,7 @@ class PostgreSQLIntegrationTest {
                     """);
         }
 
-        historyRepo.initialize();
+        applyEveryUpgrade();
 
         try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement();
@@ -641,10 +648,15 @@ class PostgreSQLIntegrationTest {
 
     @Test
     void initializeIsIdempotent() throws Exception {
-        // The PostgreSQL resource declares the table and each index as separate steps guarded only
-        // by IF NOT EXISTS (CREATE TABLE since 9.1, CREATE INDEX since 9.5), so every one of them
-        // runs on every call and must stay harmless. The rename step between them does carry a
-        // detection query, whose bound parameter is exercised here too.
+        // The PostgreSQL resource declares the table and each index as separate steps leaning on
+        // IF NOT EXISTS (CREATE TABLE since 9.1, CREATE INDEX since 9.5), so every one of them runs
+        // on every call and must stay harmless. The table is dropped first because the assertion
+        // counts indexes: a legacy table left behind by another test would make the index steps
+        // decline, and the count would report that rather than a broken idempotence.
+        try (Connection conn = target.createConnection();
+                Statement stmt = conn.createStatement()) {
+            stmt.execute("DROP TABLE IF EXISTS migraphe_history");
+        }
         historyRepo.initialize();
 
         assertThatCode(() -> historyRepo.initialize()).doesNotThrowAnyException();
@@ -658,6 +670,33 @@ class PostgreSQLIntegrationTest {
             rs.next();
             // Two named indexes plus the primary key's implicit unique index.
             assertThat(rs.getInt(1)).isEqualTo(3);
+        }
+    }
+
+    /**
+     * A schema-only upgrade never reads the context, so one that answers nothing is enough to drive
+     * it. Anything that did read it would fail loudly rather than quietly fold the wrong token.
+     */
+    private static final UpgradeContext NO_CONTEXT =
+            new UpgradeContext() {
+                @Override
+                public MigrationGraphView definitions() {
+                    throw new UnsupportedOperationException(
+                            "a schema-only step reads no definitions");
+                }
+
+                @Override
+                public Fingerprinter fingerprinterFor(NodeId nodeId) {
+                    throw new UnsupportedOperationException("a schema-only step folds nothing");
+                }
+            };
+
+    /** Runs the repository's upgrades the way the upgrade command does: pending ones, in order. */
+    private void applyEveryUpgrade() {
+        for (HistoryUpgrade upgrade : historyRepo.upgrades()) {
+            if (upgrade.isPending()) {
+                upgrade.apply(NO_CONTEXT);
+            }
         }
     }
 

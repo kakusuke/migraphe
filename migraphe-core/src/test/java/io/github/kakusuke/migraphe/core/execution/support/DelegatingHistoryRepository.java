@@ -27,6 +27,11 @@ public class DelegatingHistoryRepository implements HistoryRepository {
     }
 
     @Override
+    public boolean isInitialized() {
+        return delegate.isInitialized();
+    }
+
+    @Override
     public void record(ExecutionRecord record) {
         delegate.record(record);
     }

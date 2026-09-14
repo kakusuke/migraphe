@@ -2,6 +2,8 @@ package io.github.kakusuke.migraphe.gradle;
 
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
+import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.execution.StatusLineFormatter;
 import io.github.kakusuke.migraphe.core.execution.StatusService;
 import io.github.kakusuke.migraphe.core.execution.StatusService.NodeStatus;
@@ -59,12 +61,18 @@ public abstract class MigrapheStatusTask extends AbstractMigrapheTask {
     public void status() {
         withExecutionContext(
                 context -> {
+                    // Asked before the heading: a refusal under "Migration Status" reads as a
+                    // status.
+                    HistoryRepository historyRepo = context.createHistoryRepository();
+                    List<String> notReady =
+                            HistoryReadiness.refusal(historyRepo, RepairVocabulary.GRADLE);
+                    if (!notReady.isEmpty()) {
+                        throw new GradleException(String.join(System.lineSeparator(), notReady));
+                    }
+
                     getLogger().lifecycle("Migration Status");
                     getLogger().lifecycle("================");
                     getLogger().lifecycle("");
-
-                    HistoryRepository historyRepo = context.createHistoryRepository();
-                    historyRepo.initialize();
 
                     StatusInfo status = new StatusService(context.graph(), historyRepo).getStatus();
                     Map<NodeId, NodeStatus> statusByNode = new HashMap<>();
