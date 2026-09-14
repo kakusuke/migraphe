@@ -1,6 +1,28 @@
 # Migraphe Development Changelog
 
-Claude session records. Newest entries first. The latest session summary also lives in [CLAUDE.md](../CLAUDE.md); full history is kept here.
+Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
+
+### 2026-09-10 / 09-14 (Session 76) — v0.7.0
+
+**D（定義）・H（履歴）・W（データベース）の三者が食い違ったとき、何を読み、何を名指し、何を運用者に委ねるか**を通した回。
+9 本のスタック PR（#76–#84）に分けて main へ入れた。設計の一次資料は [ARCHITECTURE.md](ARCHITECTURE.md) の
+「Drift and its repair」、プラグイン作者向けの移行点は [PLUGIN_DEVELOPMENT.md](PLUGIN_DEVELOPMENT.md) の
+"What changed in 0.7.0"。
+
+- **`Environment` → `Target` に改名した（#76、破壊的）**。1 つの語が 2 つの意味を背負っていた——`targets/` 配下の接続先と、`--env` で選ぶ設定オーバーレイ。前者を `Target`/`TargetId`（`TargetDefinition`/`TargetProvider` ごと）に寄せ、*environment* は `environments/*.yaml` だけを指す語に戻した。実行対象のノードは `selectedNodes`/`requestedNode` で、これも「target」とは呼ばない。**YAML の互換性は保っている**——`targets/*.yaml` → `target.<id>.*` のキー対応は以前のままで、利用者の設定は書き換え不要。
+- **プラグインの入手経路を 3 つから 2 つに減らした（#77、破壊的）**。classpath と `plugins:` の Maven 座標だけになり、`plugins/` ディレクトリの JAR 走査を廃止。これに伴い `PluginRegistry` は `AutoCloseable` でなくなった——`URLClassLoader` を自前で作らなくなったので、所有するものが無く閉じるものも無い。Gradle デーモンのような長命プロセスでのリーク責任が構造的に消えている。
+- **`DagExecutor` の完了勘定を「1 ノードにつき countDown ちょうど 1 回」に固定した（#78）**。多ければ適用中に走が終わり、少なければ固まる。所有権を `claimed` 集合への主張として実装し、上流失敗の伝播は**誰も主張していないノードだけ**を数える。机上の話ではなく、伝播が*推移的*なコーンを歩くのに `ReadyNodeTracker` は*直接*の先行だけで開始を判定するため、`execution.parallel: true` や `rebuild` の適用相で実際に踏める。割り込み時は**待ってから終わる**（仮想スレッドはデーモンなので join が要る）。
+- **マイグレーションが自分を申告し、行がそれを記録するようにした（#79、破壊的）**。`MigrationNode.fingerprint(Fingerprinter)` と `Task.signature()` が default なしの必須メソッドになり、`ExecutionRecord` が 5 列増えた（`fingerprint` / `plugin_metadata` / `dependencies` / `origin` / `no_way_back`）。**責任の分割が要点**: プラグインは自分の内容の署名を出すだけで、綴じ方（正規化・推移閉包・区切り）は core が持つ。プラグインごとに畳み方が違えば、同じ編集が別トークンになったり別の編集が同じトークンになったりする。前像は `<長さ>:<本文>` で各部を囲み、core が読む 3 つ（name / noWayBack / targetId）を個数固定で先頭に置く——可変長の何よりも先に読めるため。未宣言の `noWayBack` は 1 バイトの `-`（長さは必ず数字で始まるので衝突しない）、空文字で宣言された理由は `0:` で別トークンになる。それは別の編集だから。
+- **`status` がドリフトを boolean ではなく 5 状態で報告するようにした（#80）**。`UpContentState` = `UNCHANGED` `[✓]` / `NOT_APPLICABLE` `[✓]` / `CHANGED` `[!]` / `UNKNOWN` `[?]` / `UNREADABLE` `[E]`。「変わった / 変わってない」だけでは*比べられなかった*場合を表現できない。`UNKNOWN`（古い行に指紋が無い）と `UNREADABLE`（いまの定義が指紋を答えられない）を分けたのは手当てが違うから——前者は `upgrade-history` が埋められ、後者はプラグインを直すしかない。一緒にすると、直しようのない方に「アップグレードしろ」と言うことになる。`--check` は両ストアが一致しないかぎり非ゼロ終了。
+- **`amend` を追加した（#81）**。名指した 1 件について「いま適用されているものが正しい」と履歴に記録する。`AmendBlocker` は 3 つ——定義にも履歴にも無い（`NoSuchMigration`）、UP タスクが `RollbackPayloadProvider` を実装しておらず何を記録すべきか申告できない（`CannotReportRollbackPayload`、クラス名を挙げる）、指紋が無い（`NoFingerprint`）。
+- **ロールバックが定義の写しではなく履歴に従うようにした（#82、破壊的）**。従来は現在のタスクファイルから `down:` SQL を読み直し、*定義が名指す* target に対して実行していた。定義が動いた後では両方とも誤りで、`test` から `staging` に付け替えたタスクは、オブジェクトが `test` にあるのに `staging` に対してロールバックし、しかも履歴には成功が記録されていた。いまは記録された行が権威で、UP タスクが報告したペイロードを読み、行の `target_id` に接続する——宣言済みノードでも孤児でも同じ。復元できる target は `DownTaskRestorer` を実装して名乗り、名乗らない target に対しては**拒否する**（定義へフォールバックしない）。併せて `history.target` が設定済み target を指さない場合を失敗にした（メモリへの暗黙フォールバックは、本番 DB に適用しておきながら記録を捨てることを許してしまう）。未解決依存は**読み込める**ようにし、グラフを組めなくするのは循環だけにした——報告する手段まで失わせないため。
+- **`rebuild` を追加した（#83）**。差集合だけを落として全部を当て直す。指紋が一致するノードには触らず、孤児は道連れに恒久的に落ちる（`down <id>` では id が無くて届かない）。`down` と同じ状態を同じ言葉で拒否する（同じ `DownPlanFormatter` が描画する）。適用相は `ExecutionContext.maxParallelism()` を読む——`rebuild` と `up` が同じプロジェクトで並列度を食い違わせないため。**引数は取らない**: 1 件だけ指定するのは `down <id>` + `up` で、受け取って無視するのは「やったつもり」と区別が付かない唯一の応答だから。
+- **`init` と `upgrade-history` をコマンドにした（#84、破壊的）**。履歴テーブルは、最初にストアに触れたコマンドの副作用で出来ていた——`status` が報告するだけで作っていた。読むだけのコマンドが、読めるようになるためにデータベースへ書いてはいけない。全コマンドが先に存在を訊き、無ければ `init` を名指して拒否する。**`up` だけは例外**で今も作る（最初のマイグレーションを当てる瞬間が履歴の生まれる時点）が、**拒否文言は `up` を案内しない**——「報告できない」に「ではデータベースを変更せよ」と答えるのは手当てではない。`upgrade-history` は方言 DDL を「作る／変える」の 2 本に割り、`HistoryUpgrade`（`description`/`isPending`/`apply`）で宣言する。他コマンドは未適用がある間は拒否し、**件数ではなく内容を列挙する**——いつ流すかを決める運用者は、第 2 のデプロイがまだ読んでいる列を改名するのかを知る必要がある。穴埋めには core の指紋畳みが要るので `UpgradeContext`（`definitions()` + `fingerprinterFor(NodeId)`）が運ぶ。**`MigrationGraphView` には載せなかった**——全ビューが答える義務を負う一方、欲しいのはこの呼び出し元だけ。
+- **`HistoryRepository.isInitialized()` に default を置かなかった**。存在するかを答えられないリポジトリは門番にかけられず、`true` を継承させると無い履歴を有ると名乗る。対して `upgrades()` は `List.of()` が正しい既定——新しいバックエンドには「前の形」が無いから。この非対称は「空が意味のある答えか」で分けている。
+- **CLI の語彙を揃えた**。`--dry-run` は `--preview` を正名とし（Gradle は `--dry-run` を予約済みなのでタスク側は `--preview` のみ）、`down` の引数は `<version>` ではなく `<id>`、ヘルプは実在する全コマンドを列挙する。未知のコマンド語のときだけ全体ヘルプを出す（`migraphe down` の引数不足に全ヘルプを被せない）。
+- **CLAUDE.md をコードから再構成できない内容だけに絞った**。パッケージ木・モジュール一覧・インターフェース一覧・CLI 構成・Tech Stack を削除——いずれも `ls` か manifest か `--help` 1 回で届く。実際に腐ってもいた: パッケージ木は #76 で改名された `Environment` 系を載せたままだった。28 項目に育った設計判断サマリも削除し、[ARCHITECTURE.md](ARCHITECTURE.md) への道標に置き換えた。同じ変更でルール 3 と 5 を書き換えている——旧文面が「一行要約をここに残せ」と指示し続けるので、次のセッションが書き戻してしまうため。240 行 → 84 行。
+
+**移行の注意**: プラグインは**再ビルドが必要**で、再解決だけでは足りない。旧リリース向けにビルドされた jar は読み込まれたうえで最初の呼び出しで `AbstractMethodError` になる。履歴を共有している場合は、このリリースを入れた後に履歴ごとに 1 度 `migraphe upgrade-history` を実行すること。
 
 ### 2026-08-30 / 08-31 (Session 75)
 
