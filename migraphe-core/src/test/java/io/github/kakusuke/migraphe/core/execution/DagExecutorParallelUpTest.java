@@ -61,11 +61,11 @@ class DagExecutorParallelUpTest {
                 .containsExactlyInAnyOrder(
                         NodeId.of("a"), NodeId.of("b"), NodeId.of("c"), NodeId.of("d"));
         assertThat(listener.completedCalled).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("a"), TargetId.of("env"))).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("b"), TargetId.of("env"))).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("c"), TargetId.of("env"))).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("d"), TargetId.of("env"))).isTrue();
-        List<ExecutionRecord> records = history.allRecords(TargetId.of("env"));
+        assertThat(history.wasExecuted(NodeId.of("a"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("b"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("c"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("d"))).isTrue();
+        List<ExecutionRecord> records = history.allRecords();
         assertThat(records).hasSize(4);
     }
 
@@ -87,7 +87,7 @@ class DagExecutorParallelUpTest {
         // Then
         assertThat(result.success()).isTrue();
         assertThat(result.summary().executedCount()).isEqualTo(1);
-        assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("a"))).isTrue();
         assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"));
     }
 
@@ -134,8 +134,8 @@ class DagExecutorParallelUpTest {
         // Then
         assertThat(result.success()).isTrue();
         assertThat(result.summary().executedCount()).isEqualTo(2);
-        assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("a"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("b"))).isTrue();
     }
 
     @Test
@@ -184,7 +184,7 @@ class DagExecutorParallelUpTest {
         assertThat(result.success()).isFalse();
         assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
         assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
-        assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("b"))).isTrue();
     }
 
     @Test
@@ -316,6 +316,12 @@ class DagExecutorParallelUpTest {
                     public String description() {
                         return "ConcurrencyTrackingTask";
                     }
+
+                    @Override
+                    public String signature() {
+
+                        return "ConcurrencyTrackingTask";
+                    }
                 };
 
         MigrationGraph graph = MigrationGraph.create();
@@ -362,6 +368,12 @@ class DagExecutorParallelUpTest {
                     public String description() {
                         return "SlowFailingTask";
                     }
+
+                    @Override
+                    public String signature() {
+
+                        return "SlowFailingTask";
+                    }
                 };
 
         Task startSignalingTask =
@@ -374,6 +386,12 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String description() {
+                        return "StartSignalingTask";
+                    }
+
+                    @Override
+                    public String signature() {
+
                         return "StartSignalingTask";
                     }
                 };
@@ -420,6 +438,12 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String description() {
+                        return "ConcurrencyTrackingTask";
+                    }
+
+                    @Override
+                    public String signature() {
+
                         return "ConcurrencyTrackingTask";
                     }
                 };
@@ -505,6 +529,12 @@ class DagExecutorParallelUpTest {
                     public String description() {
                         return "FailingTask";
                     }
+
+                    @Override
+                    public String signature() {
+
+                        return "FailingTask";
+                    }
                 };
         Task slow =
                 new Task() {
@@ -522,6 +552,12 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String description() {
+                        return "SlowTask";
+                    }
+
+                    @Override
+                    public String signature() {
+
                         return "SlowTask";
                     }
                 };
@@ -573,6 +609,12 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String description() {
+                        return "SlowTask";
+                    }
+
+                    @Override
+                    public String signature() {
+
                         return "SlowTask";
                     }
                 };
@@ -627,6 +669,12 @@ class DagExecutorParallelUpTest {
 
                     @Override
                     public String description() {
+                        return "FAIL: " + id;
+                    }
+
+                    @Override
+                    public String signature() {
+
                         return "FAIL: " + id;
                     }
                 };

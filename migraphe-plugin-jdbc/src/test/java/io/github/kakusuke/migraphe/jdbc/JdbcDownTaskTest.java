@@ -12,11 +12,11 @@ import org.junit.jupiter.api.Test;
 
 class JdbcDownTaskTest {
 
-    private JdbcTarget env;
+    private JdbcTarget target;
 
     @BeforeEach
     void setUp() throws Exception {
-        env =
+        target =
                 JdbcTarget.create(
                         "testdb",
                         "jdbc:h2:mem:downtask_test;DB_CLOSE_DELAY=-1",
@@ -24,7 +24,7 @@ class JdbcDownTaskTest {
                         "",
                         "org.h2.Driver",
                         "H2");
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP ALL OBJECTS");
             stmt.execute("CREATE TABLE t1 (id INT)");
@@ -33,7 +33,7 @@ class JdbcDownTaskTest {
 
     @AfterEach
     void tearDown() throws Exception {
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("DROP ALL OBJECTS");
         }
@@ -41,7 +41,7 @@ class JdbcDownTaskTest {
 
     @Test
     void executeWithTransaction() {
-        var task = JdbcDownTask.create(env, "DROP TABLE t1", false);
+        var task = JdbcDownTask.create(target, "DROP TABLE t1", false);
         Result<TaskResult, String> result = task.execute();
         assertThat(result.isOk()).isTrue();
         assertThat(result.value().serializedDownTask()).isNull();
@@ -49,18 +49,18 @@ class JdbcDownTaskTest {
 
     @Test
     void executeWithAutocommit() throws Exception {
-        try (Connection conn = env.createConnection();
+        try (Connection conn = target.createConnection();
                 Statement stmt = conn.createStatement()) {
             stmt.execute("CREATE TABLE t2 (id INT)");
         }
-        var task = JdbcDownTask.create(env, "DROP TABLE t1;\nDROP TABLE t2;\n", true);
+        var task = JdbcDownTask.create(target, "DROP TABLE t1;\nDROP TABLE t2;\n", true);
         Result<TaskResult, String> result = task.execute();
         assertThat(result.isOk()).isTrue();
     }
 
     @Test
     void executeFailsOnInvalidSql() {
-        var task = JdbcDownTask.create(env, "INVALID SQL", false);
+        var task = JdbcDownTask.create(target, "INVALID SQL", false);
         Result<TaskResult, String> result = task.execute();
         assertThat(result.isErr()).isTrue();
         assertThat(result.error()).contains("Failed to execute DOWN migration");
@@ -68,13 +68,34 @@ class JdbcDownTaskTest {
 
     @Test
     void descriptionIncludesDbLabel() {
-        var task = JdbcDownTask.create(env, "DROP TABLE t1", false);
+        var task = JdbcDownTask.create(target, "DROP TABLE t1", false);
         assertThat(task.description()).isEqualTo("H2 DOWN migration");
     }
 
     @Test
     void descriptionIncludesAutocommit() {
-        var task = JdbcDownTask.create(env, "DROP TABLE t1", true);
+        var task = JdbcDownTask.create(target, "DROP TABLE t1", true);
         assertThat(task.description()).isEqualTo("H2 DOWN migration (autocommit)");
+    }
+
+    @Test
+    void signatureCoversTheRollbackSqlAndItsOwnMode() {
+        var task = JdbcDownTask.create(target, "DROP TABLE t1", false);
+
+        assertThat(task.signature())
+                .isEqualTo(JdbcDownTask.create(target, "  DROP TABLE t1  ", false).signature());
+        assertThat(task.signature())
+                .isNotEqualTo(JdbcDownTask.create(target, "DROP TABLE t2", false).signature());
+        assertThat(task.signature())
+                .isNotEqualTo(JdbcDownTask.create(target, "DROP TABLE t1", true).signature());
+    }
+
+    @Test
+    void signatureKeepsSqlEndingInTheModeNameApartFromTheModeBeingSet() {
+        var sqlEndingInTheModeName =
+                JdbcDownTask.create(target, "DROP TABLE t1\nautocommit", false);
+        var modeSet = JdbcDownTask.create(target, "DROP TABLE t1", true);
+
+        assertThat(sqlEndingInTheModeName.signature()).isNotEqualTo(modeSet.signature());
     }
 }

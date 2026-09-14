@@ -3,7 +3,7 @@ package io.github.kakusuke.migraphe.api.target;
 import java.util.Objects;
 
 /**
- * A unique identifier for an {@link Target}.
+ * A unique identifier for a {@link Target}.
  *
  * <p>This value object wraps a non-blank string and is used throughout Migraphe to reference an
  * target, most notably to partition migration history so that each target's executions are tracked
@@ -29,7 +29,7 @@ public record TargetId(String value) {
     }
 
     /**
-     * Creates an {@code TargetId} from the given string.
+     * Creates a {@code TargetId} from the given string.
      *
      * @param value the identifier string; must be non-{@code null} and non-blank
      * @return a new {@code TargetId} wrapping {@code value}

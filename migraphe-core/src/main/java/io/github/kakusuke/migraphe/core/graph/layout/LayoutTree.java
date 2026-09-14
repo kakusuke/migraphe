@@ -1,5 +1,6 @@
 package io.github.kakusuke.migraphe.core.graph.layout;
 
+import io.github.kakusuke.migraphe.api.graph.Fingerprinter;
 import io.github.kakusuke.migraphe.api.graph.MigrationNode;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.target.Target;
@@ -297,6 +298,18 @@ public final class LayoutTree {
         @Override
         public @Nullable Task downTask() {
             return null;
+        }
+
+        /**
+         * Always throws, for the same reason {@link #upTask()} does: nothing here was ever applied.
+         *
+         * @param fingerprinter ignored
+         * @return never returns normally
+         * @throws UnsupportedOperationException always
+         */
+        @Override
+        public String fingerprint(Fingerprinter fingerprinter) {
+            throw new UnsupportedOperationException("VirtualNode has no content to fingerprint");
         }
     }
 }

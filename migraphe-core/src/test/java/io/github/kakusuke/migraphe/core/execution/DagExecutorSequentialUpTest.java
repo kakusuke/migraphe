@@ -63,8 +63,8 @@ class DagExecutorSequentialUpTest {
         assertThat(listener.startedNodes).containsExactly(NodeId.of("a"), NodeId.of("b"));
         assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"), NodeId.of("b"));
         assertThat(listener.completedCalled).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("a"), TargetId.of("env"))).isTrue();
-        assertThat(history.wasExecuted(NodeId.of("b"), TargetId.of("env"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("a"))).isTrue();
+        assertThat(history.wasExecuted(NodeId.of("b"))).isTrue();
     }
 
     @Nested
@@ -200,7 +200,7 @@ class DagExecutorSequentialUpTest {
             // Then
             assertThat(result.success()).isTrue();
             assertThat(result.summary().executedCount()).isEqualTo(1);
-            assertThat(history.wasExecuted(NodeId.of("a"), testEnv.id())).isTrue();
+            assertThat(history.wasExecuted(NodeId.of("a"))).isTrue();
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("a"));
         }
 
@@ -311,7 +311,7 @@ class DagExecutorSequentialUpTest {
             assertThat(result.success()).isFalse();
             assertThat(listener.failedNodes).containsExactly(NodeId.of("a"));
             assertThat(listener.succeededNodes).containsExactly(NodeId.of("b"));
-            assertThat(history.wasExecuted(NodeId.of("b"), testEnv.id())).isTrue();
+            assertThat(history.wasExecuted(NodeId.of("b"))).isTrue();
         }
     }
 
@@ -338,6 +338,12 @@ class DagExecutorSequentialUpTest {
 
                     @Override
                     public String description() {
+                        return "FAIL: " + id;
+                    }
+
+                    @Override
+                    public String signature() {
+
                         return "FAIL: " + id;
                     }
                 };

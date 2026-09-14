@@ -25,8 +25,9 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
     /**
      * Builds a {@link JdbcMigrationNode} for the given task and dependencies.
      *
-     * <p>The task's optional description and (non-blank) DOWN SQL are applied when present; {@code
-     * autocommit} defaults to {@code false} when not specified on the {@link SqlTaskDefinition}.
+     * <p>The task's optional description and (non-blank) DOWN SQL are applied when present. {@code
+     * autocommit} may be a bare boolean or {@code autocommit: {up, down}}; a direction the task
+     * named wins over the bare value, which wins over the default of {@code false}.
      *
      * @param nodeId the unique identifier of the node
      * @param task the task definition supplying name, UP/DOWN SQL, description, and autocommit;
@@ -53,6 +54,8 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
 
         String upSql = task.up();
         boolean autocommit = sqlTask.autocommit().orElse(false);
+        boolean autocommitUp = sqlTask.autocommitUp().orElse(autocommit);
+        boolean autocommitDown = sqlTask.autocommitDown().orElse(autocommit);
 
         var builder =
                 JdbcMigrationNode.builder()
@@ -61,10 +64,12 @@ public final class PostgreSQLMigrationNodeProvider implements MigrationNodeProvi
                         .target(pgEnv)
                         .dependencies(dependencies)
                         .upSql(upSql)
-                        .autocommit(autocommit);
+                        .autocommitUp(autocommitUp)
+                        .autocommitDown(autocommitDown);
 
         task.description().ifPresent(builder::description);
         task.down().filter(sql -> !sql.isBlank()).ifPresent(builder::downSql);
+        sqlTask.noWayBack().filter(reason -> !reason.isBlank()).ifPresent(builder::noWayBack);
 
         return builder.build();
     }

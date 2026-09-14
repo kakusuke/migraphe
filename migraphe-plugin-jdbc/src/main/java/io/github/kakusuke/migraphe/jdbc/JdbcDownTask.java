@@ -109,6 +109,18 @@ public final class JdbcDownTask implements Task {
         }
     }
 
+    /**
+     * The rollback SQL and the mode it runs in.
+     *
+     * <p>The two parts are length-prefixed rather than concatenated, because concatenating SQL with
+     * a mode marker lets a statement ending in the marker's own text stand in for the mode being
+     * set.
+     */
+    @Override
+    public String signature() {
+        return SignatureFraming.frame(downSql.strip(), autocommit);
+    }
+
     @Override
     public String description() {
         String label = target.getDbLabel();

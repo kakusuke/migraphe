@@ -11,7 +11,7 @@ import java.util.Objects;
  * Built-in generator source that extracts the migration graph as serializable tree data.
  *
  * <p>This {@link GeneratorSourcePlugin} is registered under the {@code "migration-tree"} type and
- * produces a {@link MigrationTreeData} object: one entry per node with its id, name, target target,
+ * produces a {@link MigrationTreeData} object: one entry per node with its id, name, target,
  * dependencies, and execution status. The status is derived from the optional {@link
  * HistoryRepository} in the {@link SourceContext} ({@code "executed"} when a record exists for the
  * node/target pair, otherwise {@code "pending"}). Entries and each entry's dependency list are
@@ -77,7 +77,7 @@ public final class MigrationTreeSourcePlugin implements GeneratorSourcePlugin<Mi
                                     String status =
                                             historyRepository != null
                                                             && historyRepository.wasExecuted(
-                                                                    node.id(), node.target().id())
+                                                                    node.id())
                                                     ? "executed"
                                                     : "pending";
                                     return new MigrationTreeData.NodeEntry(

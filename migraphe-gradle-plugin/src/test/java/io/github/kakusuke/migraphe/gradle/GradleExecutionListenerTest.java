@@ -146,6 +146,12 @@ class GradleExecutionListenerTest {
             implements MigrationNode {
 
         @Override
+        public String fingerprint(
+                io.github.kakusuke.migraphe.api.graph.Fingerprinter fingerprinter) {
+            return fingerprinter.over(id.value());
+        }
+
+        @Override
         public @Nullable String description() {
             return null;
         }
