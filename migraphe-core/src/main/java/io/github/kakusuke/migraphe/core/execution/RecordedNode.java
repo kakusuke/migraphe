@@ -92,8 +92,8 @@ final class RecordedNode implements MigrationNode {
      * out from under one still built on it. That is safe only because no released version writes
      * such a row: the column arrives with `fingerprint` in one schema step list, an insert names
      * every column so a half-migrated table fails loudly instead of writing a partial row, and the
-     * rows that predate all of them carry no fingerprint — which `upgrade` fills
-     * whole, dependencies and the one-way reason included. What is left needs a hand-edited row,
+     * rows that predate all of them carry no fingerprint — which `upgrade-history`
+     * fills whole, dependencies and the one-way reason included. What is left needs a hand-edited row,
      * and the same is true of a row carrying a fingerprint but no `no_way_back` for a task that
      * declares one: the refusal then reads "recorded neither", which is what the design says a
      * hand-edited row should read as.

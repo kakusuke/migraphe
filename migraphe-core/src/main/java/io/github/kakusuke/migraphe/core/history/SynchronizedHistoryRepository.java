@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.core.history;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.history.HistoryUpgrade;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
 
@@ -33,6 +34,13 @@ public final class SynchronizedHistoryRepository implements HistoryRepository {
     public void initialize() {
         synchronized (delegate) {
             delegate.initialize();
+        }
+    }
+
+    @Override
+    public boolean isInitialized() {
+        synchronized (delegate) {
+            return delegate.isInitialized();
         }
     }
 
@@ -87,6 +95,18 @@ public final class SynchronizedHistoryRepository implements HistoryRepository {
     public List<ExecutionRecord> latestApplies() {
         synchronized (delegate) {
             return delegate.latestApplies();
+        }
+    }
+
+    /**
+     * Forwards the delegate's upgrades, for the reason above: a repository that declares some would
+     * otherwise report none the moment it is wrapped, and every command that refuses while an
+     * upgrade is pending would stop refusing.
+     */
+    @Override
+    public List<HistoryUpgrade> upgrades() {
+        synchronized (delegate) {
+            return delegate.upgrades();
         }
     }
 }

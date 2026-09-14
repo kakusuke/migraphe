@@ -10,6 +10,8 @@ import io.github.kakusuke.migraphe.core.execution.AmendService.AmendEntry;
 import io.github.kakusuke.migraphe.core.execution.AmendService.AmendOutcome;
 import io.github.kakusuke.migraphe.core.execution.AmendService.AmendPlan;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
+import io.github.kakusuke.migraphe.core.execution.HistoryReadiness;
+import io.github.kakusuke.migraphe.core.execution.RepairVocabulary;
 import io.github.kakusuke.migraphe.core.execution.UpContentState;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -86,7 +88,11 @@ public class AmendCommand implements Command {
     public int execute() {
         try {
             HistoryRepository historyRepo = context.createHistoryRepository();
-            historyRepo.initialize();
+            List<String> notReady = HistoryReadiness.refusal(historyRepo, RepairVocabulary.CLI);
+            if (!notReady.isEmpty()) {
+                notReady.forEach(System.err::println);
+                return 1;
+            }
 
             AmendService service = new AmendService(context.graph(), historyRepo);
             AmendPlan plan = service.plan(nodeId);

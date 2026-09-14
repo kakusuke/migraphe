@@ -21,6 +21,9 @@ public final class PostgreSQLHistoryRepositoryProvider implements HistoryReposit
     private static final String PG_SCHEMA_RESOURCE =
             "/io/github/kakusuke/migraphe/postgresql/schema/init_history_table.sql";
 
+    private static final String PG_UPGRADE_RESOURCE =
+            "/io/github/kakusuke/migraphe/postgresql/schema/upgrade_history_table.sql";
+
     /**
      * Creates a {@link JdbcHistoryRepository} bound to the given PostgreSQL target.
      *
@@ -35,6 +38,6 @@ public final class PostgreSQLHistoryRepositoryProvider implements HistoryReposit
                     "Target must be PostgreSQLTarget, got: " + target.getClass().getName());
         }
 
-        return new JdbcHistoryRepository(pgEnv, PG_SCHEMA_RESOURCE);
+        return new JdbcHistoryRepository(pgEnv, PG_SCHEMA_RESOURCE, PG_UPGRADE_RESOURCE);
     }
 }

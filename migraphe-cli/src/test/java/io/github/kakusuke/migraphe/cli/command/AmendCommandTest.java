@@ -74,6 +74,7 @@ class AmendCommandTest {
 
         writeProject(tempDir, "jdbc:h2:mem:amend_bootstrap;DB_CLOSE_DELAY=-1");
         ExecutionContext context = ExecutionContext.load(tempDir, registry);
+        new InitCommand(context).execute();
 
         Command named =
                 new AmendCommand(

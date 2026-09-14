@@ -166,9 +166,9 @@ public final class DownPlanFormatter {
         }
         if (row.fingerprint() == null) {
             return "the row that applied it carries no fingerprint, so what it recorded cannot be"
-                    + " read at face value; run 'migraphe amend "
+                    + " read at face value; run 'migraphe upgrade-history', or 'migraphe amend "
                     + node.id().value()
-                    + "'";
+                    + "' if no task file declares it any more";
         }
         if (row.serializedDownTask() == null) {
             return "the history recorded no rollback for it and no reason for having none";

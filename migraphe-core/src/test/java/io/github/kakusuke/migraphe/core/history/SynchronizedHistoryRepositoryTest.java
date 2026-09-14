@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.ExecutionRecord;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
+import io.github.kakusuke.migraphe.api.history.HistoryUpgrade;
+import io.github.kakusuke.migraphe.api.history.UpgradeContext;
 import io.github.kakusuke.migraphe.api.target.TargetId;
 import java.util.ArrayList;
 import java.util.List;
@@ -47,6 +49,11 @@ class SynchronizedHistoryRepositoryTest {
                         }
 
                         @Override
+                        public boolean isInitialized() {
+                            return backing.isInitialized();
+                        }
+
+                        @Override
                         public void record(ExecutionRecord record) {
                             backing.record(record);
                         }
@@ -80,6 +87,74 @@ class SynchronizedHistoryRepositoryTest {
 
             // When & Then
             assertThat(repo.latestApplies()).containsExactly(marker);
+        }
+
+        @Test
+        @DisplayName("upgrades() もデリゲートに委譲される — 包んだ途端に「無し」と答えない")
+        void shouldDelegateUpgrades() {
+            // Given: a delegate that declares one upgrade
+            HistoryUpgrade upgrade =
+                    new HistoryUpgrade() {
+                        @Override
+                        public String description() {
+                            return "fill the columns 0.7.0 added";
+                        }
+
+                        @Override
+                        public boolean isPending() {
+                            return true;
+                        }
+
+                        @Override
+                        public void apply(UpgradeContext context) {}
+                    };
+            InMemoryHistoryRepository backing = new InMemoryHistoryRepository();
+            HistoryRepository delegate =
+                    new HistoryRepository() {
+                        @Override
+                        public void initialize() {
+                            backing.initialize();
+                        }
+
+                        @Override
+                        public boolean isInitialized() {
+                            return backing.isInitialized();
+                        }
+
+                        @Override
+                        public List<HistoryUpgrade> upgrades() {
+                            return List.of(upgrade);
+                        }
+
+                        @Override
+                        public void record(ExecutionRecord record) {
+                            backing.record(record);
+                        }
+
+                        @Override
+                        public boolean wasExecuted(NodeId nodeId) {
+                            return backing.wasExecuted(nodeId);
+                        }
+
+                        @Override
+                        public List<NodeId> executedNodes() {
+                            return backing.executedNodes();
+                        }
+
+                        @Override
+                        public @Nullable ExecutionRecord findLatestRecord(NodeId nodeId) {
+                            return backing.findLatestRecord(nodeId);
+                        }
+
+                        @Override
+                        public List<ExecutionRecord> allRecords() {
+                            return backing.allRecords();
+                        }
+                    };
+            HistoryRepository repo = new SynchronizedHistoryRepository(delegate);
+
+            // When & Then
+            assertThat(repo.upgrades()).containsExactly(upgrade);
         }
 
         @Test
