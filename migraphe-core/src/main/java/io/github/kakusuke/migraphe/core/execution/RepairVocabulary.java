@@ -22,7 +22,7 @@ package io.github.kakusuke.migraphe.core.execution;
 public enum RepairVocabulary {
 
     /** {@code migraphe} on a command line. */
-    CLI("migraphe amend <id>", "migraphe amend", "migraphe down <id>"),
+    CLI("migraphe amend <id>", "migraphe amend", "migraphe rebuild", "migraphe down <id>"),
 
     /**
      * The Gradle tasks.
@@ -34,15 +34,18 @@ public enum RepairVocabulary {
     GRADLE(
             "./gradlew migrapheAmend --migration=<id>",
             "the migrapheAmend task",
+            "./gradlew migrapheRebuild",
             "./gradlew migrapheDown --target=<id>");
 
     private final String named;
     private final String plain;
+    private final String rebuild;
     private final String down;
 
-    RepairVocabulary(String named, String plain, String down) {
+    RepairVocabulary(String named, String plain, String rebuild, String down) {
         this.named = named;
         this.plain = plain;
+        this.rebuild = rebuild;
         this.down = down;
     }
 
@@ -62,6 +65,15 @@ public enum RepairVocabulary {
      */
     public String plain() {
         return plain;
+    }
+
+    /**
+     * How to sweep every difference at once, when repairing them one at a time is not wanted.
+     *
+     * @return the invocation, as an operator would type it
+     */
+    public String rebuild() {
+        return rebuild;
     }
 
     /**

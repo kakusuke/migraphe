@@ -82,10 +82,11 @@ public final class UpPlanFormatter {
     /**
      * Names the migrations edited since they ran, and both ways out.
      *
-     * <p>Both of them are repairs and neither is safe to pick for the operator: which is right
+     * <p>Every one of them is a repair and none is safe to pick for the operator: which is right
      * depends on the objects, which migraphe cannot read. They are named in the order an operator
      * reaches for them — take the migration out and let it be applied again, or accept what is
-     * applied.
+     * applied — with the sweep last, because rebuilding everything that differs is the heavier move
+     * and takes orphans out permanently along the way.
      */
     private static List<String> editedLines(Set<NodeId> nodes, RepairVocabulary repair) {
         List<String> lines = new ArrayList<>();
@@ -102,6 +103,8 @@ public final class UpPlanFormatter {
                         + "' and let the next apply put it back as it now reads, or record that"
                         + " what is applied is correct with '"
                         + repair.named()
+                        + "'. To do that for every difference at once, run '"
+                        + repair.rebuild()
                         + "'.");
         return List.copyOf(lines);
     }
