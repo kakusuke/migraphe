@@ -585,7 +585,7 @@ Summary: Total: 3 | Executed: 1 | Pending: 2
 | `[ ]` | 未適用 |
 | `[✓]` | 適用済みで、定義に変化が検出されていない |
 | `[!]` | 適用済みだが、その後に定義が変わった — `up:` の SQL、`down:` の SQL、`autocommit` の設定、依存先のいずれか。DB と履歴のどちらを動かすべきかは、そのうち何を変えたかで決まるため、migraphe は判断せず報告だけする。[`migraphe amend`](#定義を適用済みとして記録amend) を参照 |
-| `[?]` | プラグインは fingerprint を提供するが、適用時の行に記録が無いため変化を判定できない。0.7.0 より前に書かれた行がこれになる。**この行がある間は `status` 以外のすべてのコマンドが拒否する。** 解消できるのは [`migraphe amend`](#定義を適用済みとして記録amend) だけ |
+| `[?]` | プラグインは fingerprint を提供するが、適用時の行に記録が無いため変化を判定できない。0.7.0 より前に書かれた行がこれになる。**この行がある間は `status` 以外のすべてのコマンドが拒否する。** タスクファイルがまだ宣言している行は [`migraphe upgrade-history`](#履歴のアップグレードupgrade-history) がまとめて埋める。宣言しなくなった行は [`migraphe amend`](#定義を適用済みとして記録amend) で撤回する |
 | `[E]` | プラグインがこのマイグレーションの内容を報告できなかった（例外を投げたか、何も返さなかったか）。プラグイン側の不具合であり、`amend` では解消しない |
 
 ### マイグレーションの実行
@@ -680,7 +680,13 @@ migraphe status --env production
 migraphe up --env development
 ```
 
-`environments/<name>.yaml` が存在しない場合、このフラグは無視されます(ベース設定が使われます)。`validate` と `generate` は現時点では `--env` を読み取りません。
+`environments/<name>.yaml` が存在しない場合、コマンドは**失敗します**。探したパスと、実在するオーバーレイ名の一覧を表示するので、`--env prodction` のような打ち間違いはその場で分かります。`--env` を省略するのは常に有効で、ベース設定が使われます。
+
+このフラグは `up` / `down` / `status` / `validate` / `generate` と Gradle の全タスクに届きます。
+
+ターゲットは `--env` に関係なく**名前**を保ち、変わるのは**値**だけです。これは履歴に関わります。履歴の行が記録するのは**ターゲット名**であって、どの `--env` オーバーレイで走ったかは記録しません。`migraphe up --env production` と `migraphe up --env development` は同じ target id を記録します。
+
+これはデプロイ環境ごとに履歴データベースが分かれている限り安全で、それが想定している構成です（`history.target` は通常、マイグレーション先と同じデータベースを指します）。**`history.target` を複数のデプロイ環境で共有しているデータベースに向けないでください。** 別々のデータベースの適用済み／未適用が1つの履歴に混ざります。
 
 ## ロールバック（down）
 
@@ -818,7 +824,7 @@ No changes made (dry run).
 
 `status` が `[?]` または `[!]` を表示している場合に使います。
 
-- `[?]` — 0.7.0 より前のバージョンで適用され、fingerprint が記録されていない。**これは任意の後始末ではありません。** 何も読み取れない行があると `status` 以外のすべてのコマンドが止まるので、`up`・`down`・`rebuild` はいずれも拒否します。解消できるのは `amend` だけです（行は定義から組み立て直して埋めるものであり、`up` はそこまで到達しません）。
+- `[?]` — 0.7.0 より前のバージョンで適用され、fingerprint が記録されていない。**これは任意の後始末ではありません。** 何も読み取れない行があると `status` 以外のすべてのコマンドが止まるので、`up`・`down`・`rebuild` はいずれも拒否します。タスクファイルがまだ宣言している行は [`migraphe upgrade-history`](#履歴のアップグレードupgrade-history) が列の追加と同じ実行の中でまとめて埋めるので、1件ずつ `amend` する必要はありません。`amend` が要るのは、タスクファイルが宣言しなくなった行（`upgrade-history` には埋める材料が無い）を撤回する場合です。
 - `[!]` — 適用後に定義が変わったが、その変更にロールバックは不要。解消するかどうかは判断です: 「DB の現在の状態は正しい」と宣言することになります。
 
 ロールバックが必要になりうるのは `up:` の編集だけです。`down:` や `autocommit:` の編集、依存先の変更は、DB のオブジェクトを1つも変えずに fingerprint だけを動かします。しかも再適用で走るロールバックはどのみち編集後のものなので、`amend` だけで完結します。考える必要があるのは `up:` の編集で、コメントやフォーマッタの実行なら同じくロールバックは不要ですが、文そのものを変えたなら必要です。
@@ -1600,11 +1606,16 @@ Level 0:
   [SKIP] Create users table (already executed)
 ```
 
-これは期待される動作です。再実行するには、履歴から手動で削除します:
+これは期待される動作です。もう一度流したい場合は、履歴を手で編集せず `down` で巻き戻してから `up` します。
 
-```sql
-DELETE FROM migraphe_history WHERE node_id = 'db1/001_create_users';
+```bash
+migraphe down db1/001_create_users   # 指定したノードと、その上に建っているものを巻き戻す
+migraphe up
 ```
+
+定義を書き換えたうえで作り直すなら、[`migraphe rebuild`](#ドリフトした状態の作り直しrebuild) が差分のあるノードとその上に建っているものだけを巻き戻して流し直します。
+
+**履歴テーブルを直接 `DELETE` / `UPDATE` しないでください。** migraphe は履歴の行を「何がどう適用されたか」の唯一の根拠として読みます。手で編集した行は設計が想定しない組み合わせ（fingerprint はあるのに `dependencies` が `NULL` など）を作り、以後のコマンドが止まる原因になります。
 
 #### 5. マイグレーション失敗
 
@@ -1615,18 +1626,18 @@ Level 0:
 ```
 
 **解決策:**
-- タスクファイルのSQL構文を修正
-- 履歴から失敗したレコードを削除
-- マイグレーションを再実行
+
+1. タスクファイルの SQL を修正する
+2. `migraphe up` をもう一度実行する
+
+**失敗した行を削除する必要はありません。** migraphe が「適用済み」と判断するのは UP + SUCCESS の最新行だけなので、FAILURE の行が残っていても、修正したタスクは次の `up` で再実行されます。
+
+エラーの詳細は履歴から読めます。
 
 ```sql
--- エラーの詳細を確認
 SELECT error_message FROM migraphe_history
-WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
-
--- 再試行のため失敗したレコードを削除
-DELETE FROM migraphe_history
-WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
+WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE'
+ORDER BY executed_at DESC;
 ```
 
 ### デバッグのヒント

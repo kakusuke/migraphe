@@ -2,6 +2,19 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-10-08 (Session 77)
+
+**ユーザーガイドが設計と食い違っていた 5 箇所を直した。** 実装と [ARCHITECTURE.md](ARCHITECTURE.md) が正で、ガイドが古い側。Java コードは無変更。
+
+- **トラブルシュートが履歴テーブルの手打ち削除を案内していた（ja/en 両方）**。「再実行するには履歴から手動で削除します」→ `DELETE FROM migraphe_history WHERE node_id = ...` が、`down`/`amend`/`rebuild` の存在しない時代の記述のまま残っていた。設計は「手編集された行がどう読まれるか」まで決めている（Accepted limits）ので、公式ガイドが設計に反する操作を勧めている状態だった。`down` → `up`、定義を変えたなら `rebuild`、履歴を直接触るなという注意に差し替えた。
+- **失敗したマイグレーションの再試行に FAILURE 行の削除を要求していた（ja/en 両方）**。適用済みの判定は UP + SUCCESS の最新行なので、FAILURE 行が残っていても修正したタスクは次の `up` で流れる。削除は不要で、かつ読めない行を自分で作る害がある。
+- **`--env` の挙動が ja だけ古かった**。「存在しない場合は無視される」「`validate` と `generate` は読み取らない」の 2 点とも、決定 29 および `USER_GUIDE.md:689` では「存在しなければ失敗し、探したパスと実在するオーバーレイ名を出す」「全コマンドに届く」。
+- **`[?]` の修復手段が ja/en 両方で `amend` だけになっていた**。[ARCHITECTURE.md:502](ARCHITECTURE.md) は「タスクファイルがまだ宣言している行は `upgrade-history` が列追加と同じ実行で埋める、宣言しなくなった行は `amend <id>` で撤回」。1 件ずつ `amend` させる案内になっていた。
+- **`history.target` をデプロイ環境間で共有してはいけない旨が ja に無かった**。決定 29 は「`USER_GUIDE.md` に unsupported として明文化した」と記録しており `:715` には実在するが、ja に対応記述が無かった。
+- **README の「アーキテクチャ」リンクが `CLAUDE.md` を指していた（ja/en 両方）**。設計判断は `docs/ARCHITECTURE.md` に移っており、CLAUDE.md は規範のみを持つ。
+
+ガイド内アンカーの解決はスクリプトで全件確認した（切れリンクなし）。
+
 ### 2026-09-10 / 09-14 (Session 76) — v0.7.0
 
 **D（定義）・H（履歴）・W（データベース）の三者が食い違ったとき、何を読み、何を名指し、何を運用者に委ねるか**を通した回。
