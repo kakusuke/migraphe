@@ -59,7 +59,7 @@ For Gradle integration instead of the CLI, see [User Guide → Gradle Plugin](do
 - [User Guide](docs/USER_GUIDE.md) ([日本語](docs/USER_GUIDE.ja.md)) — installation, configuration, running, rollback, generate, troubleshooting
 - [Plugin Development](docs/PLUGIN_DEVELOPMENT.md) ([日本語](docs/PLUGIN_DEVELOPMENT.ja.md)) — write your own plugin
 - [Contributing](CONTRIBUTING.md) — build from source, coding standards, PR workflow
-- [Architecture notes](CLAUDE.md) — design decisions and module layout
+- [Architecture](docs/ARCHITECTURE.md) — the reasoning behind the design decisions
 
 ## License
 

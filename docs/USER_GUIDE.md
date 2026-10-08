@@ -850,7 +850,7 @@ The `amend` command rewrites the **history** so that it agrees with your current
 
 Use it when `status` shows `[?]` or `[!]`:
 
-- `[?]` — the migration was applied by a version older than 0.7.0, which recorded no fingerprint. **This is not optional to clear.** A row nothing can be read from stops every command but `status`, so `up`, `down` and `rebuild` all refuse while one exists. `amend` is the only thing that clears it: a row is filled by rebuilding it from the definition, and `up` never gets that far.
+- `[?]` — the migration was applied by a version older than 0.7.0, which recorded no fingerprint. **This is not optional to clear.** A row nothing can be read from stops every command but `status`, so `up`, `down` and `rebuild` all refuse while one exists. A row whose node the task files still declare is filled by [`migraphe upgrade-history`](#upgrading-the-history-upgrade-history), in the same run that adds the columns, so there is no need to `amend` them one at a time. `amend` is for a row the task files no longer declare, which `upgrade-history` has no source to fill — that one is withdrawn rather than completed.
 - `[!]` — the definition changed after it was applied, and the change needs no rollback. Clearing it is a decision: you are stating that what the database already contains is correct.
 
 Only an `up:` edit can ever need one. Editing `down:` or `autocommit:`, or changing what the migration depends on, moves the fingerprint without changing a single database object — and the rollback a re-apply would run is the edited one either way, so `amend` is the whole fix. An `up:` edit is the case to think about: a comment or a formatter run needs no rollback either, but a changed statement does.
@@ -1643,11 +1643,16 @@ Level 0:
   [SKIP] Create users table (already executed)
 ```
 
-This is expected behavior. To re-run, manually delete from history:
+This is expected behavior. To run it again, roll it back with `down` and apply again — do not edit the history by hand.
 
-```sql
-DELETE FROM migraphe_history WHERE node_id = 'db1/001_create_users';
+```bash
+migraphe down db1/001_create_users   # takes out that node and whatever stands on it
+migraphe up
 ```
+
+If you edited the definition and want it rebuilt, [`migraphe rebuild`](#rebuilding-what-drifted-rebuild) rolls back only what differs and whatever stands on it, then applies the graph.
+
+**Do not `DELETE` or `UPDATE` the history table directly.** migraphe reads those rows as the only account of what was applied and how. A hand-edited row produces a state the design does not write — a fingerprint present while `dependencies` is `NULL`, say — and every command then stops on it.
 
 #### 5. Migration Failure
 
@@ -1658,18 +1663,18 @@ Level 0:
 ```
 
 **Solution:**
-- Fix SQL syntax in task file
-- Delete failed record from history
-- Re-run migration
+
+1. Fix the SQL in the task file
+2. Run `migraphe up` again
+
+**The failed row does not need deleting.** What counts as applied is the latest UP + SUCCESS row, so a FAILURE row can stay where it is and the corrected task runs on the next `up`.
+
+The error itself is readable from the history.
 
 ```sql
--- Check error details
 SELECT error_message FROM migraphe_history
-WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
-
--- Remove failed record to retry
-DELETE FROM migraphe_history
-WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE';
+WHERE node_id = 'db1/001_create_users' AND status = 'FAILURE'
+ORDER BY executed_at DESC;
 ```
 
 ### Debug Tips

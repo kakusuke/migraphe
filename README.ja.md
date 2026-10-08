@@ -59,7 +59,7 @@ CLI ではなく Gradle で使う場合は [ユーザーガイド → Gradle プ
 - [ユーザーガイド](docs/USER_GUIDE.ja.md) ([English](docs/USER_GUIDE.md)) — インストール、設定、実行、ロールバック、ドキュメント生成、トラブルシュート
 - [プラグイン開発](docs/PLUGIN_DEVELOPMENT.ja.md) ([English](docs/PLUGIN_DEVELOPMENT.md)) — 独自プラグインの作り方
 - [コントリビューション](CONTRIBUTING.md) — ソースからのビルド、コーディング規約、PR ワークフロー
-- [アーキテクチャ](CLAUDE.md) — 設計判断とモジュール構成
+- [アーキテクチャ](docs/ARCHITECTURE.md) — 設計判断の詳細
 
 ## ライセンス
 
