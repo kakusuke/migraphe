@@ -118,8 +118,9 @@ public final class RebuildService {
     /**
      * What rebuilding would do.
      *
-     * <p>A node that is only in the definitions was never applied and is {@code up}'s job, not a
-     * rebuild's; a node whose comparison cannot be made — a row predating the fingerprint column, a
+     * <p>A node that is only in the definitions was never applied, so it is in none of these sets:
+     * nothing has to come down for it, and the apply phase that follows picks it up the way {@code
+     * up} would. A node whose comparison cannot be made — a row predating the fingerprint column, a
      * plugin that supplies none — is deliberately not a difference, because including it would mean
      * the first rebuild after an upgrade tore down and re-created most of the database. Clearing
      * that state is {@code upgrade}'s job.

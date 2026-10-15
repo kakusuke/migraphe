@@ -1046,7 +1046,9 @@ releases: whatever a given version has to do to a history it did not write, this
 
 `rebuild` makes both the database and the history agree with your task files: it rolls back every
 migration whose recorded content no longer matches its definition — plus everything standing on those
-— and then applies the whole graph again.
+— and then applies the whole graph again. "The whole graph" includes migrations that were never applied,
+such as the ones a branch switch brought in, so one `rebuild` leaves nothing for `up` to do. It prints
+`Nothing to rebuild.` only when nothing has to come down and nothing is waiting to be applied.
 
 ```bash
 migraphe rebuild              # asks for confirmation first
@@ -1068,16 +1070,28 @@ but nothing puts it back, because there is no definition left to apply. The conf
 separately, before anything runs:
 
 ```
-Migrations to rebuild:
+Migrations to roll back:
 
   [!] db1/002_add_email
+  [✓] db1/003_seed
+  [-] db1/004_experiment
 
 Permanently removed — no task file declares these any more, so they come out and do not go back:
 
   [-] db1/004_experiment
 
-Rolling back 2 migration(s) — everything standing on them comes down too — then applying the whole graph.
+Not yet applied — these are applied too:
+
+  db1/005_add_index
+
+Rolling back 3 migration(s) — [!] differs from its definition, [-] has none any more, [✓] stands on one that does — then applying the whole graph.
 ```
+
+The first list is everything that comes down, and its count is the one in the last line. Each entry says
+why: `[!]` its recorded content differs from its definition, `[-]` no task file declares it any more, `[✓]`
+it is built on one of those. What comes down goes back up except the `[-]` ones. "Not yet applied" names the
+migrations that go up for the first time; when nothing has to come down, the last line reads
+`Rolling back 0 migration(s), then applying the whole graph.`
 
 ### When it refuses
 
@@ -1090,6 +1104,8 @@ returns — a preview that exits zero on a plan the real run would fail is not a
   repairs
 - something that has to come down declares `no_way_back:` — there is no version of the run that
   finishes, so nothing is torn down
+- the graph could not be applied again — `up` would refuse it, for the reason `up` gives, so nothing is
+  taken out that could not be put back
 - the history cannot say whether a migration matches its definition — run `migraphe upgrade-history`
   first
 

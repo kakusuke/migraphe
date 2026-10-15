@@ -1017,7 +1017,9 @@ The history is already up to date.
 
 `rebuild` は、データベースと履歴の両方をタスクファイルに合わせます。記録された内容が定義と一致しなく
 なったマイグレーション——およびその上に建っているすべて——をロールバックし、そのうえでグラフ全体を
-適用し直します。
+適用し直します。「グラフ全体」には一度も適用されていないマイグレーション（ブランチを切り替えて入ってきた
+ものなど）も含まれるので、`rebuild` を1回実行すれば `up` に残る仕事はありません。`Nothing to rebuild.`
+と表示して終わるのは、落とすものも、適用を待っているものも無いときだけです。
 
 ```bash
 migraphe rebuild              # 先に確認を求めます
@@ -1038,16 +1040,28 @@ migraphe rebuild -y           # 確認を省略します
 します：
 
 ```
-Migrations to rebuild:
+Migrations to roll back:
 
   [!] db1/002_add_email
+  [✓] db1/003_seed
+  [-] db1/004_experiment
 
 Permanently removed — no task file declares these any more, so they come out and do not go back:
 
   [-] db1/004_experiment
 
-Rolling back 2 migration(s) — everything standing on them comes down too — then applying the whole graph.
+Not yet applied — these are applied too:
+
+  db1/005_add_index
+
+Rolling back 3 migration(s) — [!] differs from its definition, [-] has none any more, [✓] stands on one that does — then applying the whole graph.
 ```
+
+最初の一覧は落ちるものすべてで、その件数が最終行の数と一致します。各行の印は落ちる理由です。`[!]` は
+記録された内容が定義と違うもの、`[-]` はどのタスクファイルももう宣言していないもの、`[✓]` はそれらの上に
+建っているものです。落ちたものは `[-]` を除いて再び適用されます。「Not yet applied」は初めて適用される
+マイグレーションです。落とすものが無いときは、最終行が
+`Rolling back 0 migration(s), then applying the whole graph.` になります。
 
 ### 拒否する条件
 
@@ -1060,6 +1074,8 @@ Rolling back 2 migration(s) — everything standing on them comes down too — t
 - プラグインが「そのマイグレーションが何を適用したか」を報告できない——`amend` が直す状態ではなく、
   プラグイン側の不具合
 - 落とさなければならないものが `no_way_back:` を宣言している——完走する筋書きが無いので、何も壊しません
+- グラフを適用し直すことができない——`up` が拒否する状態で、理由も `up` と同じ言葉で示します。戻せない
+  ものを取り出すことはしません
 - 履歴が「定義と一致しているか」を答えられない——先に `migraphe upgrade-history` を実行してください
 
 ### 終了コード
