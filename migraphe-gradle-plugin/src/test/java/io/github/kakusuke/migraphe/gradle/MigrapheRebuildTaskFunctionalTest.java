@@ -127,6 +127,52 @@ class MigrapheRebuildTaskFunctionalTest {
     }
 
     @Test
+    void shouldRefuseBeforeTouchingTheDatabaseWhenTheGraphCouldNotBeAppliedAgain()
+            throws Exception {
+        writeTwoTargetProject();
+
+        runTask("migrapheUp");
+
+        Files.writeString(
+                testProjectDir.resolve("tasks/h2-db/001_a.yaml"),
+                """
+                name: Create a
+                target: h2-db
+                autocommit: true
+                up: |
+                  CREATE TABLE t_a (id INT PRIMARY KEY, label VARCHAR(20));
+                down: |
+                  DROP TABLE IF EXISTS t_a;
+                """);
+        Files.writeString(
+                testProjectDir.resolve("tasks/h2-db/002_b.yaml"),
+                """
+                name: Fill a
+                target: h2-db
+                dependencies:
+                  - h2-db/001_a
+                autocommit: true
+                up: |
+                  INSERT INTO t_a (id) VALUES (1);
+                """);
+
+        BuildResult preview = runTaskAndFail("migrapheRebuild", "--preview");
+        BuildResult run = runTaskAndFail("migrapheRebuild");
+
+        assertThat(preview.getOutput()).contains("h2-db/002_b");
+        assertThat(run.getOutput()).contains("h2-db/002_b");
+        try (Connection connection = DriverManager.getConnection(jdbcUrl(), "sa", "");
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery(
+                                "SELECT count(*) FROM information_schema.tables"
+                                        + " WHERE table_name = 'T_A'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isEqualTo(1);
+        }
+    }
+
+    @Test
     void shouldApplyWhatWasNeverAppliedEvenWhenNothingComesDown() throws Exception {
         writeTwoTargetProject();
 

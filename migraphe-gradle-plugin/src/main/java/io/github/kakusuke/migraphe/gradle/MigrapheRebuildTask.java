@@ -128,9 +128,21 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                                                 plan.incomplete(), RepairVocabulary.GRADLE)));
                     }
 
+                    // Asked before anything comes out of the database, and before the preview
+                    // returns: a rebuild that cannot put back what it takes out has no version
+                    // that succeeds.
                     UpPlan beforeRollback =
                             new UpService(context.graph(), historyRepo)
                                     .planWhileRepairingDrift(null);
+                    UpBlocker upBlocker = beforeRollback.blocker();
+                    if (upBlocker != null) {
+                        throw new GradleException(
+                                String.join(
+                                        System.lineSeparator(),
+                                        UpPlanFormatter.format(
+                                                upBlocker, RepairVocabulary.GRADLE)));
+                    }
+
                     if (plan.toRebuild().isEmpty()
                             && plan.toRollBack().isEmpty()
                             && beforeRollback.selectedNodes().isEmpty()) {
@@ -202,13 +214,13 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                     UpPlan upPlan =
                             new UpService(context.graph(), historyRepo)
                                     .planWhileRepairingDrift(null);
-                    UpBlocker upBlocker = upPlan.blocker();
-                    if (upBlocker != null) {
+                    UpBlocker afterRollback = upPlan.blocker();
+                    if (afterRollback != null) {
                         throw new GradleException(
                                 String.join(
                                         System.lineSeparator(),
                                         UpPlanFormatter.format(
-                                                upBlocker, RepairVocabulary.GRADLE)));
+                                                afterRollback, RepairVocabulary.GRADLE)));
                     }
                     ExecutionResult up =
                             new DagExecutor(
