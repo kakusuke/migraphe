@@ -10,6 +10,7 @@ import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -515,6 +516,38 @@ class RebuildCommandTest {
             assertThat(rs.next()).isTrue();
             assertThat(rs.getInt(1)).isEqualTo(1);
         }
+    }
+
+    @Test
+    void writesNoColorWhenColorIsDisabled() throws Exception {
+        writeProject();
+        new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
+        Files.writeString(
+                tempDir.resolve("tasks/db/002_add_email.yaml"),
+                """
+                name: Add email
+                target: db
+                dependencies:
+                  - db/001_create_users
+                up: |
+                  ALTER TABLE users ADD COLUMN email VARCHAR(255) DEFAULT 'none';
+                down: |
+                  ALTER TABLE users DROP COLUMN email;
+                """);
+        outputStream.reset();
+
+        int exitCode =
+                new RebuildCommand(
+                                ExecutionContext.load(tempDir, pluginRegistry),
+                                true,
+                                false,
+                                new ByteArrayInputStream(new byte[0]),
+                                false)
+                        .execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(exitCode).isZero();
+        assertThat(output).contains("db/002_add_email").doesNotContain("\u001B[");
     }
 
     @Test

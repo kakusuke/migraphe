@@ -4,6 +4,7 @@ import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.history.HistoryRepository;
 import io.github.kakusuke.migraphe.api.task.ExecutionDirection;
 import io.github.kakusuke.migraphe.cli.listener.ConsoleExecutionListener;
+import io.github.kakusuke.migraphe.cli.util.AnsiColor;
 import io.github.kakusuke.migraphe.core.execution.DagExecutor;
 import io.github.kakusuke.migraphe.core.execution.DownBlocker;
 import io.github.kakusuke.migraphe.core.execution.DownPlanFormatter;
@@ -42,6 +43,7 @@ public class RebuildCommand implements Command {
     private final boolean skipConfirmation;
     private final boolean dryRun;
     private final InputStream inputStream;
+    private final boolean colorEnabled;
 
     /**
      * Creates the rebuild command.
@@ -51,26 +53,30 @@ public class RebuildCommand implements Command {
      * @param dryRun {@code true} to display the plan and change nothing
      */
     public RebuildCommand(ExecutionContext context, boolean skipConfirmation, boolean dryRun) {
-        this(context, skipConfirmation, dryRun, System.in);
+        this(context, skipConfirmation, dryRun, System.in, AnsiColor.isColorEnabled());
     }
 
     /**
-     * Creates the rebuild command, reading the confirmation from a supplied stream.
+     * Creates the rebuild command, reading the confirmation from a supplied stream and colorizing
+     * as told.
      *
      * @param context the loaded execution context
      * @param skipConfirmation {@code true} to proceed without prompting
      * @param dryRun {@code true} to display the plan and change nothing
      * @param inputStream where the confirmation is read from
+     * @param colorEnabled {@code true} to colorize console output
      */
     public RebuildCommand(
             ExecutionContext context,
             boolean skipConfirmation,
             boolean dryRun,
-            InputStream inputStream) {
+            InputStream inputStream,
+            boolean colorEnabled) {
         this.context = context;
         this.skipConfirmation = skipConfirmation;
         this.dryRun = dryRun;
         this.inputStream = inputStream;
+        this.colorEnabled = colorEnabled;
     }
 
     @Override
@@ -204,7 +210,7 @@ public class RebuildCommand implements Command {
                 return 0;
             }
 
-            ConsoleExecutionListener listener = new ConsoleExecutionListener(true);
+            ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
             ExecutionResult down =
                     // Sequential because that is how `down` rolls back, not because a rebuild
                     // decided so. When `down` reads the configuration this follows it.
