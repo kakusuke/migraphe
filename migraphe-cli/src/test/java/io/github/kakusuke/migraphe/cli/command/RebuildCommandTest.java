@@ -517,6 +517,31 @@ class RebuildCommandTest {
         }
     }
 
+    @Test
+    void thePlanNamesWhatIsAppliedForTheFirstTime() throws Exception {
+        writeProject();
+        new UpCommand(
+                        ExecutionContext.load(tempDir, pluginRegistry),
+                        NodeId.of("db/001_create_users"),
+                        true,
+                        false)
+                .execute();
+        outputStream.reset();
+
+        int exitCode =
+                new RebuildCommand(ExecutionContext.load(tempDir, pluginRegistry), true, true)
+                        .execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(exitCode).isZero();
+        assertThat(output)
+                .contains(
+                        "[DRY RUN] Not yet applied — these are applied too:\n\n"
+                                + "  db/002_add_email\n")
+                .contains("Rolling back 0 migration(s), then applying the whole graph.")
+                .doesNotContain("db/001_create_users");
+    }
+
     private void writeProject() throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),

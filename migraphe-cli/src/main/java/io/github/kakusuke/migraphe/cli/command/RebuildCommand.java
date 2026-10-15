@@ -172,11 +172,26 @@ public class RebuildCommand implements Command {
                 }
                 System.out.println();
             }
-            System.out.println(
-                    "Rolling back "
-                            + plan.toRollBack().size()
-                            + " migration(s) — [!] differs from its definition, [✓] stands on one"
-                            + " that does — then applying the whole graph.");
+            // What goes up is not only what came down: a migration never applied — one a branch
+            // switch brought in — is applied too, and the operator agreeing to the run has to see
+            // it. The re-applied ones are already named above.
+            if (!beforeRollback.selectedNodes().isEmpty()) {
+                System.out.println(prefix + "Not yet applied — these are applied too:");
+                System.out.println();
+                for (NodeId node : sorted(beforeRollback.selectedNodes())) {
+                    System.out.println("  " + node.value());
+                }
+                System.out.println();
+            }
+            if (plan.toRollBack().isEmpty()) {
+                System.out.println("Rolling back 0 migration(s), then applying the whole graph.");
+            } else {
+                System.out.println(
+                        "Rolling back "
+                                + plan.toRollBack().size()
+                                + " migration(s) — [!] differs from its definition, [✓] stands on"
+                                + " one that does — then applying the whole graph.");
+            }
 
             if (dryRun) {
                 System.out.println();

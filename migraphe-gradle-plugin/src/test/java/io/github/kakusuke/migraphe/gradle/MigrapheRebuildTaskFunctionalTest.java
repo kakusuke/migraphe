@@ -192,6 +192,22 @@ class MigrapheRebuildTaskFunctionalTest {
         }
     }
 
+    @Test
+    void shouldNameWhatIsAppliedForTheFirstTime() throws IOException {
+        writeTwoTargetProject();
+
+        runTask("migrapheInit");
+
+        BuildResult result = runTask("migrapheRebuild", "--preview");
+
+        assertThat(result.getOutput())
+                .contains(
+                        "[DRY RUN] Not yet applied — these are applied too:\n\n"
+                                + "  archive/001_audit\n"
+                                + "  h2-db/001_a\n")
+                .contains("Rolling back 0 migration(s), then applying the whole graph.");
+    }
+
     private String jdbcUrl() {
         return "jdbc:h2:file:" + testProjectDir.resolve("rebuild-db") + ";MODE=LEGACY";
     }

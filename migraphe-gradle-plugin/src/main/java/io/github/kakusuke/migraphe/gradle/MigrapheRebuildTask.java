@@ -179,12 +179,28 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                         }
                         getLogger().lifecycle("");
                     }
-                    getLogger()
-                            .lifecycle(
-                                    "Rolling back {} migration(s) — [!] differs from its"
-                                            + " definition, [✓] stands on one that does — then"
-                                            + " applying the whole graph.",
-                                    plan.toRollBack().size());
+                    // What was never applied goes up too — see RebuildCommand for why it is named.
+                    if (!beforeRollback.selectedNodes().isEmpty()) {
+                        getLogger().lifecycle("{}Not yet applied — these are applied too:", prefix);
+                        getLogger().lifecycle("");
+                        for (NodeId node : sorted(beforeRollback.selectedNodes())) {
+                            getLogger().lifecycle("  {}", node.value());
+                        }
+                        getLogger().lifecycle("");
+                    }
+                    if (plan.toRollBack().isEmpty()) {
+                        getLogger()
+                                .lifecycle(
+                                        "Rolling back 0 migration(s), then applying the whole"
+                                                + " graph.");
+                    } else {
+                        getLogger()
+                                .lifecycle(
+                                        "Rolling back {} migration(s) — [!] differs from its"
+                                                + " definition, [✓] stands on one that does —"
+                                                + " then applying the whole graph.",
+                                        plan.toRollBack().size());
+                    }
 
                     if (dryRun) {
                         getLogger().lifecycle("");
