@@ -487,6 +487,36 @@ class RebuildCommandTest {
         }
     }
 
+    @Test
+    void appliesWhatWasNeverAppliedEvenWhenNothingComesDown() throws Exception {
+        writeProject();
+        new UpCommand(
+                        ExecutionContext.load(tempDir, pluginRegistry),
+                        NodeId.of("db/001_create_users"),
+                        true,
+                        false)
+                .execute();
+        outputStream.reset();
+
+        int exitCode =
+                new RebuildCommand(ExecutionContext.load(tempDir, pluginRegistry), true, false)
+                        .execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(exitCode).isZero();
+        assertThat(output).doesNotContain("Nothing to rebuild.");
+        try (Connection connection =
+                        DriverManager.getConnection(postgres.getJdbcUrl(), "test", "test");
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery(
+                                "SELECT count(*) FROM information_schema.columns WHERE table_name"
+                                        + " = 'users' AND column_name = 'email'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isEqualTo(1);
+        }
+    }
+
     private void writeProject() throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),

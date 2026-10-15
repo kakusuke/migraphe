@@ -128,7 +128,12 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                                                 plan.incomplete(), RepairVocabulary.GRADLE)));
                     }
 
-                    if (plan.toRebuild().isEmpty() && plan.toRollBack().isEmpty()) {
+                    UpPlan beforeRollback =
+                            new UpService(context.graph(), historyRepo)
+                                    .planWhileRepairingDrift(null);
+                    if (plan.toRebuild().isEmpty()
+                            && plan.toRollBack().isEmpty()
+                            && beforeRollback.selectedNodes().isEmpty()) {
                         getLogger().lifecycle("Nothing to rebuild.");
                         return;
                     }

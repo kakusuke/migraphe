@@ -129,17 +129,18 @@ public class RebuildCommand implements Command {
             // A rebuild that cannot put back what it takes out has no version that succeeds, and
             // reporting that only after the rollback would leave the database torn down; a preview
             // that exits zero on a plan the real run would fail is not a rehearsal.
-            UpBlocker upBlocker =
-                    new UpService(context.graph(), historyRepo)
-                            .planWhileRepairingDrift(null)
-                            .blocker();
+            UpPlan beforeRollback =
+                    new UpService(context.graph(), historyRepo).planWhileRepairingDrift(null);
+            UpBlocker upBlocker = beforeRollback.blocker();
             if (upBlocker != null) {
                 UpPlanFormatter.format(upBlocker, RepairVocabulary.CLI)
                         .forEach(System.err::println);
                 return 1;
             }
 
-            if (plan.toRebuild().isEmpty() && plan.toRollBack().isEmpty()) {
+            if (plan.toRebuild().isEmpty()
+                    && plan.toRollBack().isEmpty()
+                    && beforeRollback.selectedNodes().isEmpty()) {
                 System.out.println("Nothing to rebuild.");
                 return 0;
             }

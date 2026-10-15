@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.stream.Collectors;
@@ -123,6 +124,26 @@ class MigrapheRebuildTaskFunctionalTest {
         assertThat(result.getOutput())
                 .contains("have to be rolled back to rebuild, and cannot be")
                 .contains("h2-db/002_b");
+    }
+
+    @Test
+    void shouldApplyWhatWasNeverAppliedEvenWhenNothingComesDown() throws Exception {
+        writeTwoTargetProject();
+
+        runTask("migrapheInit");
+
+        BuildResult result = runTask("migrapheRebuild");
+
+        assertThat(result.getOutput()).doesNotContain("Nothing to rebuild.");
+        try (Connection connection = DriverManager.getConnection(jdbcUrl(), "sa", "");
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery(
+                                "SELECT count(*) FROM information_schema.tables"
+                                        + " WHERE table_name IN ('T_A', 'T_AUDIT')")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isEqualTo(2);
+        }
     }
 
     private String jdbcUrl() {
