@@ -2,6 +2,12 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-10-16 (Session 78)
+
+**プロダクト名の表記を Migraphe に揃えた。** README とガイドのタイトル、ガイド本文の大半は `Migraphe` だったが、0.7.0 で書き足した節を中心に本文中のプロダクト名が小文字の `migraphe` になっていた（27 箇所: USER_GUIDE ja/en、ARCHITECTURE、PLUGIN_DEVELOPMENT ja/en、sample/README）。コマンド名・`migraphe.yaml`・リポジトリ名・Maven 座標・コードブロックとインラインコードの中は小文字のまま。CHANGELOG の過去エントリは記録なので触っていない。
+
+調査中に `rebuild` の不具合を 3 件起票した: #88（`NO_COLOR` を無視）、#89（定義のない行に `[✓]` が付く）、#90（ロールバック対象が無いと未適用を適用しない）。
+
 ### 2026-10-08 (Session 77)
 
 **ユーザーガイドが設計と食い違っていた 5 箇所を直した。** 実装と [ARCHITECTURE.md](ARCHITECTURE.md) が正で、ガイドが古い側。Java コードは無変更。

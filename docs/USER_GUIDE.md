@@ -68,7 +68,7 @@ recorded is left alone, whether it agrees with the definitions or not.
 
 **What filling asserts.** A row written before the fingerprint column says a migration was applied
 and nothing about its content. Writing today's token onto it asserts that your database matches
-today's definition, and migraphe cannot check that — it never reads your schema. If a migration was
+today's definition, and Migraphe cannot check that — it never reads your schema. If a migration was
 edited after it was applied, this is the one run where that goes unnoticed; from the next run on, an
 edit shows as `[!]` as usual. If you know a migration was edited since it was applied, roll it back
 and apply it again rather than relying on the upgrade.
@@ -106,7 +106,7 @@ Migraphe is a migration orchestration tool designed to manage complex database m
 
 ### Which command do I need?
 
-migraphe reads two things and writes two things. It reads your **task files** and its **history
+Migraphe reads two things and writes two things. It reads your **task files** and its **history
 table**; it writes the **database** (`up`, `down`, `rebuild`) and the **history** (`amend`). It never
 reads the database itself to decide anything — so where the two disagree, which side is right is your
 call, and the tool reports the disagreement rather than choosing a fix.
@@ -115,10 +115,10 @@ call, and the tool reports the disagreement rather than choosing a fix.
 |---|---|
 | Switching branches mid-development left the database out of step with the task files | `migraphe rebuild` — fix everything that differs |
 | You rewrote a migration's SQL and want to apply it again | `migraphe down <id>` then `migraphe up` |
-| You are adopting migraphe on a database that already has its schema | write one bootstrap task holding what exists, then `migraphe amend <id>` — **one node is the whole job**, there is no bulk "mark as applied" |
+| You are adopting Migraphe on a database that already has its schema | write one bootstrap task holding what exists, then `migraphe amend <id>` — **one node is the whole job**, there is no bulk "mark as applied" |
 | CI has to check that the database and the migrations agree | `migraphe status --check` — non-zero exit unless everything agrees |
-| You installed a new migraphe and every command refuses | `migraphe upgrade-history` — brings the history table to the shape this version writes |
-| A brand-new project, or a database migraphe has never run against | `migraphe init` — creates the history table (`migraphe up` also creates one when it finds none) |
+| You installed a new Migraphe and every command refuses | `migraphe upgrade-history` — brings the history table to the shape this version writes |
+| A brand-new project, or a database Migraphe has never run against | `migraphe init` — creates the history table (`migraphe up` also creates one when it finds none) |
 
 ## Installation
 
@@ -588,7 +588,7 @@ Summary: Total: 3 | Executed: 1 | Pending: 2
 |--------|---------|
 | `[ ]` | Not applied yet |
 | `[✓]` | Applied, and no change detected in its definition |
-| `[!]` | Applied, but the definition has changed since — its `up:` SQL, its `down:` SQL, its `autocommit` setting, or what it depends on. Whether the database or the history is the side that needs moving depends on which of those you changed, so migraphe reports it instead of choosing: see [`migraphe amend`](#recording-definitions-as-applied-amend) |
+| `[!]` | Applied, but the definition has changed since — its `up:` SQL, its `down:` SQL, its `autocommit` setting, or what it depends on. Whether the database or the history is the side that needs moving depends on which of those you changed, so Migraphe reports it instead of choosing: see [`migraphe amend`](#recording-definitions-as-applied-amend) |
 | `[?]` | The plugin supplies a fingerprint but the applied row carries none, so a change cannot be detected. Rows written before 0.7.0 read this way. **Every command but `status` refuses while one exists**; [`migraphe upgrade-history`](#upgrading-the-history-upgrade-history) fills the rows your task files still declare, and [`migraphe amend <id>`](#recording-definitions-as-applied-amend) withdraws one they do not |
 | `[E]` | The plugin could not report what this migration applied — its accessor threw, or it answered with none. The plugin itself is at fault, and no `amend` clears it |
 
@@ -1018,7 +1018,7 @@ supply — the fingerprint, the recorded dependencies, and the declared reason a
 — onto the rows an older release left without them. It touches only columns that carry nothing, so a
 value already recorded is left alone whether or not it agrees with the definitions.
 
-Filling an absent fingerprint asserts that your database matches today's definition, and migraphe
+Filling an absent fingerprint asserts that your database matches today's definition, and Migraphe
 cannot check that: it never reads your schema. See [Upgrading to 0.7.0](#upgrading-to-070) for what
 that means in practice.
 
@@ -1652,7 +1652,7 @@ migraphe up
 
 If you edited the definition and want it rebuilt, [`migraphe rebuild`](#rebuilding-what-drifted-rebuild) rolls back only what differs and whatever stands on it, then applies the graph.
 
-**Do not `DELETE` or `UPDATE` the history table directly.** migraphe reads those rows as the only account of what was applied and how. A hand-edited row produces a state the design does not write — a fingerprint present while `dependencies` is `NULL`, say — and every command then stops on it.
+**Do not `DELETE` or `UPDATE` the history table directly.** Migraphe reads those rows as the only account of what was applied and how. A hand-edited row produces a state the design does not write — a fingerprint present while `dependencies` is `NULL`, say — and every command then stops on it.
 
 #### 5. Migration Failure
 
