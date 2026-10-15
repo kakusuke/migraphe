@@ -160,9 +160,7 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                         for (NodeId node : sorted(plan.toRollBack())) {
                             getLogger()
                                     .lifecycle(
-                                            "  {} {}",
-                                            plan.toRebuild().contains(node) ? "[!]" : "[✓]",
-                                            node.value());
+                                            "  {} {}", marker(node, plan, context), node.value());
                         }
                         getLogger().lifecycle("");
                     }
@@ -197,8 +195,9 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                         getLogger()
                                 .lifecycle(
                                         "Rolling back {} migration(s) — [!] differs from its"
-                                                + " definition, [✓] stands on one that does —"
-                                                + " then applying the whole graph.",
+                                                + " definition, [-] has none any more, [✓] stands"
+                                                + " on one that does — then applying the whole"
+                                                + " graph.",
                                         plan.toRollBack().size());
                     }
 
@@ -264,6 +263,20 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                 .filter(id -> context.graph().getNode(id).isEmpty())
                 .sorted(java.util.Comparator.comparing(NodeId::value))
                 .toList();
+    }
+
+    /**
+     * Why a migration in the rollback comes down: it differs from its definition, it has none any
+     * more, or it stands on one of those.
+     */
+    private static String marker(NodeId node, RebuildPlan plan, ExecutionContext context) {
+        if (plan.toRebuild().contains(node)) {
+            return "[!]";
+        }
+        if (context.graph().getNode(node).isEmpty()) {
+            return "[-]";
+        }
+        return "[✓]";
     }
 
     /** Node ids in a stable order, so the plan reads the same twice. */

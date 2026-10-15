@@ -208,6 +208,24 @@ class MigrapheRebuildTaskFunctionalTest {
                 .contains("Rolling back 0 migration(s), then applying the whole graph.");
     }
 
+    @Test
+    void shouldMarkAMigrationNoTaskFileDeclaresAsHavingNoDefinition() throws IOException {
+        writeTwoTargetProject();
+
+        runTask("migrapheUp");
+        Files.delete(testProjectDir.resolve("tasks/archive/001_audit.yaml"));
+
+        BuildResult result = runTask("migrapheRebuild", "--preview");
+
+        assertThat(result.getOutput())
+                .contains("[DRY RUN] Migrations to roll back:\n\n  [-] archive/001_audit\n")
+                .doesNotContain("[✓] archive/001_audit")
+                .contains(
+                        "Rolling back 1 migration(s) — [!] differs from its definition, [-] has"
+                                + " none any more, [✓] stands on one that does — then applying"
+                                + " the whole graph.");
+    }
+
     private String jdbcUrl() {
         return "jdbc:h2:file:" + testProjectDir.resolve("rebuild-db") + ";MODE=LEGACY";
     }

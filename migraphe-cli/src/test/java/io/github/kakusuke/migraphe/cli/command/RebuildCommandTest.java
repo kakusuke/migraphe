@@ -519,6 +519,25 @@ class RebuildCommandTest {
     }
 
     @Test
+    void thePlanMarksAMigrationNoTaskFileDeclaresAsHavingNoDefinition() throws Exception {
+        writeProject();
+        new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
+        Files.delete(tempDir.resolve("tasks/db/002_add_email.yaml"));
+        outputStream.reset();
+
+        new RebuildCommand(ExecutionContext.load(tempDir, pluginRegistry), true, true).execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(output)
+                .contains("[DRY RUN] Migrations to roll back:\n\n  [-] db/002_add_email\n")
+                .doesNotContain("[✓] db/002_add_email")
+                .contains(
+                        "Rolling back 1 migration(s) — [!] differs from its definition, [-] has"
+                                + " none any more, [✓] stands on one that does — then applying"
+                                + " the whole graph.");
+    }
+
+    @Test
     void writesNoColorWhenColorIsDisabled() throws Exception {
         writeProject();
         new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();

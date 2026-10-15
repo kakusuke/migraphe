@@ -161,8 +161,7 @@ public class RebuildCommand implements Command {
                 System.out.println(prefix + "Migrations to roll back:");
                 System.out.println();
                 for (NodeId node : sorted(plan.toRollBack())) {
-                    String marker = plan.toRebuild().contains(node) ? "  [!] " : "  [✓] ";
-                    System.out.println(marker + node.value());
+                    System.out.println("  " + marker(node, plan, context) + " " + node.value());
                 }
                 System.out.println();
             }
@@ -195,8 +194,9 @@ public class RebuildCommand implements Command {
                 System.out.println(
                         "Rolling back "
                                 + plan.toRollBack().size()
-                                + " migration(s) — [!] differs from its definition, [✓] stands on"
-                                + " one that does — then applying the whole graph.");
+                                + " migration(s) — [!] differs from its definition, [-] has none"
+                                + " any more, [✓] stands on one that does — then applying the"
+                                + " whole graph.");
             }
 
             if (dryRun) {
@@ -278,6 +278,20 @@ public class RebuildCommand implements Command {
                 .filter(id -> context.graph().getNode(id).isEmpty())
                 .sorted(java.util.Comparator.comparing(NodeId::value))
                 .toList();
+    }
+
+    /**
+     * Why a migration in the rollback comes down: it differs from its definition, it has none any
+     * more, or it stands on one of those.
+     */
+    private static String marker(NodeId node, RebuildPlan plan, ExecutionContext context) {
+        if (plan.toRebuild().contains(node)) {
+            return "[!]";
+        }
+        if (context.graph().getNode(node).isEmpty()) {
+            return "[-]";
+        }
+        return "[✓]";
     }
 
     /** Node ids in a stable order, so the plan reads the same twice. */
