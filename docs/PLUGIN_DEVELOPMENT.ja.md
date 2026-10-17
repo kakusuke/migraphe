@@ -32,7 +32,7 @@ dependencies {
 }
 ```
 
-coordinate は実際に動かす migraphe と揃える必要があります。API は 0.7.0 で壊れており
+coordinate は実際に動かす Migraphe と揃える必要があります。API は 0.7.0 で壊れており
 （[0.7.0 での変更](#070-での変更)）、古いバージョン向けにビルドされた jar は読み込まれたうえで最初の
 呼び出しで `AbstractMethodError` になります。
 

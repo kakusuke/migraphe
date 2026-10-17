@@ -32,7 +32,7 @@ dependencies {
 }
 ```
 
-The coordinate has to match the migraphe you run against. The API breaks in 0.7.0 (see
+The coordinate has to match the Migraphe you run against. The API breaks in 0.7.0 (see
 [What changed in 0.7.0](#what-changed-in-070)), and a jar built against an older one loads and then
 fails with `AbstractMethodError` at the first call.
 

@@ -2,7 +2,7 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
-### 2026-10-16 (Session 78) — v0.7.1
+### 2026-10-16 (Session 79) — v0.7.1
 
 **`rebuild` の不具合 3 件（#88〜#90）と、その途中で見つけた Gradle 側の 1 件を直した。** 期待する動きは「ブランチ切り替えと既存の書き換えは `rebuild`、新規追加は `up`」がそのまま通ること。
 
@@ -11,6 +11,12 @@ Claude session records. Newest entries first. This is the only place session rec
 - **#88 `rebuild` が `NO_COLOR` を無視していた**。`ConsoleExecutionListener(true)` 固定を、`up`/`down` と同じくコンストラクタで色の有無を受け取る形にした（既定は `AnsiColor.isColorEnabled()`）。
 - **#89 定義の無いマイグレーションがロールバック欄で `[✓]` になっていた（CLI・Gradle）**。印を `toRebuild` に入っているかだけで選んでいたため。`[-]` を付けて凡例に加えた。欄から外す案もあったが、一覧の長さと要約行の件数を一致させておく方を選んだ。
 - **作業環境の注意**: `migraphe-build` MCP サーバーは起動時のディレクトリ（`.mcp.json` の `--project-root .`）に固定されるので、worktree で作業すると元のチェックアウトを試験してしまう。今回は同じ `server.py` に `--project-root` で worktree を渡し、JSON-RPC を標準入力から流して使った。
+
+### 2026-10-16 (Session 78)
+
+**プロダクト名の表記を Migraphe に揃えた。** README とガイドのタイトル、ガイド本文の大半は `Migraphe` だったが、0.7.0 で書き足した節を中心に本文中のプロダクト名が小文字の `migraphe` になっていた（27 箇所: USER_GUIDE ja/en、ARCHITECTURE、PLUGIN_DEVELOPMENT ja/en、sample/README）。コマンド名・`migraphe.yaml`・リポジトリ名・Maven 座標・コードブロックとインラインコードの中は小文字のまま。CHANGELOG の過去エントリは記録なので触っていない。
+
+調査中に `rebuild` の不具合を 3 件起票した: #88（`NO_COLOR` を無視）、#89（定義のない行に `[✓]` が付く）、#90（ロールバック対象が無いと未適用を適用しない）。
 
 ### 2026-10-08 (Session 77)
 
