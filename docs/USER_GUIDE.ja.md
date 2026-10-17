@@ -142,16 +142,16 @@ mise use github:kakusuke/migraphe
 ```bash
 # tar.gz — Linux / macOS（bin/ と lib/ を展開先ディレクトリに展開）
 mkdir -p ~/.local/migraphe
-curl -L https://github.com/kakusuke/migraphe/releases/download/v0.7.0/migraphe-0.7.0.tar.gz | tar xz -C ~/.local/migraphe
+curl -L https://github.com/kakusuke/migraphe/releases/download/v0.7.1/migraphe-0.7.1.tar.gz | tar xz -C ~/.local/migraphe
 export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # zip — Windows
-curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.7.0/migraphe-0.7.0.zip
+curl -L -o migraphe.zip https://github.com/kakusuke/migraphe/releases/download/v0.7.1/migraphe-0.7.1.zip
 unzip migraphe.zip -d ~/.local/migraphe
 export PATH="$HOME/.local/migraphe/bin:$PATH"
 
 # fat JAR — 単一ファイル
-curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.7.0/migraphe-0.7.0-all.jar
+curl -L -o migraphe.jar https://github.com/kakusuke/migraphe/releases/download/v0.7.1/migraphe-0.7.1-all.jar
 alias migraphe="java -jar $PWD/migraphe.jar"
 ```
 
@@ -197,9 +197,9 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.0
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.1
     repository: jitpack
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.7.0
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.7.1
     repository: jitpack
 
 project:
@@ -222,7 +222,7 @@ repositories:
     url: https://maven.internal.example.com/releases
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.0
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.1
     repository: jitpack
   - coordinate: com.example:internal-plugin:1.0.0
     repository: my-internal
@@ -294,7 +294,7 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.0
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.1
     repository: jitpack
 
 project:
@@ -1017,7 +1017,9 @@ The history is already up to date.
 
 `rebuild` は、データベースと履歴の両方をタスクファイルに合わせます。記録された内容が定義と一致しなく
 なったマイグレーション——およびその上に建っているすべて——をロールバックし、そのうえでグラフ全体を
-適用し直します。
+適用し直します。「グラフ全体」には一度も適用されていないマイグレーション（ブランチを切り替えて入ってきた
+ものなど）も含まれるので、`rebuild` を1回実行すれば `up` に残る仕事はありません。`Nothing to rebuild.`
+と表示して終わるのは、落とすものも、適用を待っているものも無いときだけです。
 
 ```bash
 migraphe rebuild              # 先に確認を求めます
@@ -1038,16 +1040,28 @@ migraphe rebuild -y           # 確認を省略します
 します：
 
 ```
-Migrations to rebuild:
+Migrations to roll back:
 
   [!] db1/002_add_email
+  [✓] db1/003_seed
+  [-] db1/004_experiment
 
 Permanently removed — no task file declares these any more, so they come out and do not go back:
 
   [-] db1/004_experiment
 
-Rolling back 2 migration(s) — everything standing on them comes down too — then applying the whole graph.
+Not yet applied — these are applied too:
+
+  db1/005_add_index
+
+Rolling back 3 migration(s) — [!] differs from its definition, [-] has none any more, [✓] stands on one that does — then applying the whole graph.
 ```
+
+最初の一覧は落ちるものすべてで、その件数が最終行の数と一致します。各行の印は落ちる理由です。`[!]` は
+記録された内容が定義と違うもの、`[-]` はどのタスクファイルももう宣言していないもの、`[✓]` はそれらの上に
+建っているものです。落ちたものは `[-]` を除いて再び適用されます。「Not yet applied」は初めて適用される
+マイグレーションです。落とすものが無いときは、最終行が
+`Rolling back 0 migration(s), then applying the whole graph.` になります。
 
 ### 拒否する条件
 
@@ -1060,6 +1074,8 @@ Rolling back 2 migration(s) — everything standing on them comes down too — t
 - プラグインが「そのマイグレーションが何を適用したか」を報告できない——`amend` が直す状態ではなく、
   プラグイン側の不具合
 - 落とさなければならないものが `no_way_back:` を宣言している——完走する筋書きが無いので、何も壊しません
+- グラフを適用し直すことができない——`up` が拒否する状態で、理由も `up` と同じ言葉で示します。戻せない
+  ものを取り出すことはしません
 - 履歴が「定義と一致しているか」を答えられない——先に `migraphe upgrade-history` を実行してください
 
 ### 終了コード
@@ -1468,7 +1484,7 @@ dependencyResolutionManagement {
 
 ```kotlin
 plugins {
-    id("io.github.kakusuke.migraphe") version "v0.7.0"
+    id("io.github.kakusuke.migraphe") version "v0.7.1"
 }
 
 migraphe {
@@ -1477,9 +1493,9 @@ migraphe {
 
 dependencies {
     // 使用するデータベースに応じてプラグインを選択:
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.0")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.7.0")
-    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.7.0")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.1")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-mysql:v0.7.1")
+    // migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-jdbc:v0.7.1")
 }
 ```
 
@@ -1550,12 +1566,12 @@ No plugins are currently loaded.
 
 **問題:**
 ```
-Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.0
+Failed to resolve plugin: com.github.kakusuke.migraphe:migraphe-plugin-postgresql:v0.7.1
 ```
 
 **解決策:**
 - `migraphe.yaml` の Maven 座標と `repository:` 指定が正しいか確認
-- JitPack 側で `v0.7.0` のビルドが成功しているかを <https://jitpack.io/#kakusuke/migraphe> で確認
+- JitPack 側で `v0.7.1` のビルドが成功しているかを <https://jitpack.io/#kakusuke/migraphe> で確認
 - JitPack および Maven Central へのネットワーク接続を確認
 - `migraphe pin` でロックファイルを再生成
 
@@ -1677,7 +1693,7 @@ Migraphe アーティファクトは以下のチャネルで提供されます:
 | JitPack | ✅ 提供中 | `com.github.kakusuke.migraphe` | プラグイン JAR + Gradle プラグイン |
 | Maven Central | 📅 公開予定 | `io.github.kakusuke.migraphe` | プラグイン JAR + Gradle プラグイン |
 
-プラグイン JAR および Gradle プラグインは現在 JitPack 経由で `com.github.kakusuke.migraphe:<module>:v0.7.0` として配布されています。Maven Central への公開は予定中で、その際に groupId が `io.github.kakusuke.migraphe` に切り替わります。
+プラグイン JAR および Gradle プラグインは現在 JitPack 経由で `com.github.kakusuke.migraphe:<module>:v0.7.1` として配布されています。Maven Central への公開は予定中で、その際に groupId が `io.github.kakusuke.migraphe` に切り替わります。
 
 ## 次のステップ
 

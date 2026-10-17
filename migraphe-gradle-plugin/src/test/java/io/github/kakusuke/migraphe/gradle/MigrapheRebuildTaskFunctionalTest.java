@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.stream.Collectors;
@@ -123,6 +124,106 @@ class MigrapheRebuildTaskFunctionalTest {
         assertThat(result.getOutput())
                 .contains("have to be rolled back to rebuild, and cannot be")
                 .contains("h2-db/002_b");
+    }
+
+    @Test
+    void shouldRefuseBeforeTouchingTheDatabaseWhenTheGraphCouldNotBeAppliedAgain()
+            throws Exception {
+        writeTwoTargetProject();
+
+        runTask("migrapheUp");
+
+        Files.writeString(
+                testProjectDir.resolve("tasks/h2-db/001_a.yaml"),
+                """
+                name: Create a
+                target: h2-db
+                autocommit: true
+                up: |
+                  CREATE TABLE t_a (id INT PRIMARY KEY, label VARCHAR(20));
+                down: |
+                  DROP TABLE IF EXISTS t_a;
+                """);
+        Files.writeString(
+                testProjectDir.resolve("tasks/h2-db/002_b.yaml"),
+                """
+                name: Fill a
+                target: h2-db
+                dependencies:
+                  - h2-db/001_a
+                autocommit: true
+                up: |
+                  INSERT INTO t_a (id) VALUES (1);
+                """);
+
+        BuildResult preview = runTaskAndFail("migrapheRebuild", "--preview");
+        BuildResult run = runTaskAndFail("migrapheRebuild");
+
+        assertThat(preview.getOutput()).contains("h2-db/002_b");
+        assertThat(run.getOutput()).contains("h2-db/002_b");
+        try (Connection connection = DriverManager.getConnection(jdbcUrl(), "sa", "");
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery(
+                                "SELECT count(*) FROM information_schema.tables"
+                                        + " WHERE table_name = 'T_A'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void shouldApplyWhatWasNeverAppliedEvenWhenNothingComesDown() throws Exception {
+        writeTwoTargetProject();
+
+        runTask("migrapheInit");
+
+        BuildResult result = runTask("migrapheRebuild");
+
+        assertThat(result.getOutput()).doesNotContain("Nothing to rebuild.");
+        try (Connection connection = DriverManager.getConnection(jdbcUrl(), "sa", "");
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery(
+                                "SELECT count(*) FROM information_schema.tables"
+                                        + " WHERE table_name IN ('T_A', 'T_AUDIT')")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isEqualTo(2);
+        }
+    }
+
+    @Test
+    void shouldNameWhatIsAppliedForTheFirstTime() throws IOException {
+        writeTwoTargetProject();
+
+        runTask("migrapheInit");
+
+        BuildResult result = runTask("migrapheRebuild", "--preview");
+
+        assertThat(result.getOutput())
+                .contains(
+                        "[DRY RUN] Not yet applied — these are applied too:\n\n"
+                                + "  archive/001_audit\n"
+                                + "  h2-db/001_a\n")
+                .contains("Rolling back 0 migration(s), then applying the whole graph.");
+    }
+
+    @Test
+    void shouldMarkAMigrationNoTaskFileDeclaresAsHavingNoDefinition() throws IOException {
+        writeTwoTargetProject();
+
+        runTask("migrapheUp");
+        Files.delete(testProjectDir.resolve("tasks/archive/001_audit.yaml"));
+
+        BuildResult result = runTask("migrapheRebuild", "--preview");
+
+        assertThat(result.getOutput())
+                .contains("[DRY RUN] Migrations to roll back:\n\n  [-] archive/001_audit\n")
+                .doesNotContain("[✓] archive/001_audit")
+                .contains(
+                        "Rolling back 1 migration(s) — [!] differs from its definition, [-] has"
+                                + " none any more, [✓] stands on one that does — then applying"
+                                + " the whole graph.");
     }
 
     private String jdbcUrl() {

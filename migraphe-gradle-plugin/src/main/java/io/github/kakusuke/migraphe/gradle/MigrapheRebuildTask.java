@@ -128,7 +128,24 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                                                 plan.incomplete(), RepairVocabulary.GRADLE)));
                     }
 
-                    if (plan.toRebuild().isEmpty() && plan.toRollBack().isEmpty()) {
+                    // Asked before anything comes out of the database, and before the preview
+                    // returns: a rebuild that cannot put back what it takes out has no version
+                    // that succeeds.
+                    UpPlan beforeRollback =
+                            new UpService(context.graph(), historyRepo)
+                                    .planWhileRepairingDrift(null);
+                    UpBlocker upBlocker = beforeRollback.blocker();
+                    if (upBlocker != null) {
+                        throw new GradleException(
+                                String.join(
+                                        System.lineSeparator(),
+                                        UpPlanFormatter.format(
+                                                upBlocker, RepairVocabulary.GRADLE)));
+                    }
+
+                    if (plan.toRebuild().isEmpty()
+                            && plan.toRollBack().isEmpty()
+                            && beforeRollback.selectedNodes().isEmpty()) {
                         getLogger().lifecycle("Nothing to rebuild.");
                         return;
                     }
@@ -143,9 +160,7 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                         for (NodeId node : sorted(plan.toRollBack())) {
                             getLogger()
                                     .lifecycle(
-                                            "  {} {}",
-                                            plan.toRebuild().contains(node) ? "[!]" : "[✓]",
-                                            node.value());
+                                            "  {} {}", marker(node, plan, context), node.value());
                         }
                         getLogger().lifecycle("");
                     }
@@ -162,12 +177,29 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                         }
                         getLogger().lifecycle("");
                     }
-                    getLogger()
-                            .lifecycle(
-                                    "Rolling back {} migration(s) — [!] differs from its"
-                                            + " definition, [✓] stands on one that does — then"
-                                            + " applying the whole graph.",
-                                    plan.toRollBack().size());
+                    // What was never applied goes up too — see RebuildCommand for why it is named.
+                    if (!beforeRollback.selectedNodes().isEmpty()) {
+                        getLogger().lifecycle("{}Not yet applied — these are applied too:", prefix);
+                        getLogger().lifecycle("");
+                        for (NodeId node : sorted(beforeRollback.selectedNodes())) {
+                            getLogger().lifecycle("  {}", node.value());
+                        }
+                        getLogger().lifecycle("");
+                    }
+                    if (plan.toRollBack().isEmpty()) {
+                        getLogger()
+                                .lifecycle(
+                                        "Rolling back 0 migration(s), then applying the whole"
+                                                + " graph.");
+                    } else {
+                        getLogger()
+                                .lifecycle(
+                                        "Rolling back {} migration(s) — [!] differs from its"
+                                                + " definition, [-] has none any more, [✓] stands"
+                                                + " on one that does — then applying the whole"
+                                                + " graph.",
+                                        plan.toRollBack().size());
+                    }
 
                     if (dryRun) {
                         getLogger().lifecycle("");
@@ -197,13 +229,13 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                     UpPlan upPlan =
                             new UpService(context.graph(), historyRepo)
                                     .planWhileRepairingDrift(null);
-                    UpBlocker upBlocker = upPlan.blocker();
-                    if (upBlocker != null) {
+                    UpBlocker afterRollback = upPlan.blocker();
+                    if (afterRollback != null) {
                         throw new GradleException(
                                 String.join(
                                         System.lineSeparator(),
                                         UpPlanFormatter.format(
-                                                upBlocker, RepairVocabulary.GRADLE)));
+                                                afterRollback, RepairVocabulary.GRADLE)));
                     }
                     ExecutionResult up =
                             new DagExecutor(
@@ -231,6 +263,20 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                 .filter(id -> context.graph().getNode(id).isEmpty())
                 .sorted(java.util.Comparator.comparing(NodeId::value))
                 .toList();
+    }
+
+    /**
+     * Why a migration in the rollback comes down: it differs from its definition, it has none any
+     * more, or it stands on one of those.
+     */
+    private static String marker(NodeId node, RebuildPlan plan, ExecutionContext context) {
+        if (plan.toRebuild().contains(node)) {
+            return "[!]";
+        }
+        if (context.graph().getNode(node).isEmpty()) {
+            return "[-]";
+        }
+        return "[✓]";
     }
 
     /** Node ids in a stable order, so the plan reads the same twice. */

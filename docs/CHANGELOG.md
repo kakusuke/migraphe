@@ -2,6 +2,16 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-10-16 (Session 78) — v0.7.1
+
+**`rebuild` の不具合 3 件（#88〜#90）と、その途中で見つけた Gradle 側の 1 件を直した。** 期待する動きは「ブランチ切り替えと既存の書き換えは `rebuild`、新規追加は `up`」がそのまま通ること。
+
+- **#90 ロールバック対象が無いと未適用を当てなかった（CLI・Gradle）**。`toRollBack` が空なら再適用の計画を見ずに `Nothing to rebuild.` で返していた。対象があれば未適用も含めて全体が当たるので、当たるかどうかがロールバック対象の有無で変わっていた。早期リターンは「落とすものも未適用も無い」ときだけにした。併せて確認表示と `--preview` に「Not yet applied — these are applied too:」として初めて当たるものを列挙する（再適用分はロールバック欄に既に出ている）。落とすものが 0 件のときは凡例を外す——空の一覧の説明になるため。
+- **Gradle の `migrapheRebuild` は up 側の blocker をロールバックの後でしか見ていなかった**。再適用できない計画でも先に DOWN を流して DB を壊してから失敗し、`--preview` は 0 で終わっていた。ARCHITECTURE の「破壊的な相の前、`--preview` が戻る前」に反する。CLI と同じ位置で拒否するようにした。
+- **#88 `rebuild` が `NO_COLOR` を無視していた**。`ConsoleExecutionListener(true)` 固定を、`up`/`down` と同じくコンストラクタで色の有無を受け取る形にした（既定は `AnsiColor.isColorEnabled()`）。
+- **#89 定義の無いマイグレーションがロールバック欄で `[✓]` になっていた（CLI・Gradle）**。印を `toRebuild` に入っているかだけで選んでいたため。`[-]` を付けて凡例に加えた。欄から外す案もあったが、一覧の長さと要約行の件数を一致させておく方を選んだ。
+- **作業環境の注意**: `migraphe-build` MCP サーバーは起動時のディレクトリ（`.mcp.json` の `--project-root .`）に固定されるので、worktree で作業すると元のチェックアウトを試験してしまう。今回は同じ `server.py` に `--project-root` で worktree を渡し、JSON-RPC を標準入力から流して使った。
+
 ### 2026-10-08 (Session 77)
 
 **ユーザーガイドが設計と食い違っていた 5 箇所を直した。** 実装と [ARCHITECTURE.md](ARCHITECTURE.md) が正で、ガイドが古い側。Java コードは無変更。
