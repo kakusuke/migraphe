@@ -230,11 +230,20 @@ in the order the recorded edges give. Then `up`, with the project's own executio
 everything" is the same apply `up` performs, not a private one. **`rebuild` decides nothing about how
 either phase runs.**
 
+"Apply everything" includes what was never applied: a branch switch brings in migrations H has no row
+for, and a rebuild that left them to a following `up` would not have made W and H agree with D. So
+whether there is anything to do is not decided by the rollback set alone — the run ends early only when
+nothing comes down **and** nothing is waiting to be applied. The plan an operator confirms names the
+ones going up for the first time, since agreeing to "rolling back 0 migration(s)" would otherwise be
+agreeing to work the plan never showed.
+
 Orphans are part of "what H holds that D does not"; the history-only side of the difference *is* the
 orphan set. What `rebuild` rolls back normally comes straight back up, but an orphan does not, because
 D no longer describes it. **So `rebuild` is partly a permanent removal** — the wanted behavior for a
 development-time command, and worth knowing before running it, which is why the confirmation names
-those migrations separately.
+those migrations separately. In the list of what comes down they carry their own marker, `[-]`, beside
+`[!]` (differs from D) and `[✓]` (stands on one of those): they are part of the difference, not
+collateral, and the list stays the full rollback set so its length is the count the summary states.
 
 It stops before touching anything when a migration that has to come down declares `no_way_back:`, when
 one that has to come back up is blocked, or when the history cannot say whether a node matches. The

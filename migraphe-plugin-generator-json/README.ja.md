@@ -23,7 +23,7 @@ repositories:
     url: https://jitpack.io
 
 plugins:
-  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.7.0
+  - coordinate: com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.7.1
     repository: jitpack
 ```
 
@@ -33,7 +33,7 @@ plugins:
 
 ```kotlin
 dependencies {
-    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.7.0")
+    migraphePlugin("com.github.kakusuke.migraphe:migraphe-plugin-generator-json:v0.7.1")
 }
 ```
 

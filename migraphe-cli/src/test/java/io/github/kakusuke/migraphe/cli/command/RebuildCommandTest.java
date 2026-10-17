@@ -10,6 +10,7 @@ import io.github.kakusuke.migraphe.api.task.Task;
 import io.github.kakusuke.migraphe.core.execution.ExecutionContext;
 import io.github.kakusuke.migraphe.core.graph.MigrationGraph;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -485,6 +486,112 @@ class RebuildCommandTest {
             assertThat(rs.next()).isTrue();
             assertThat(rs.getInt(1)).isZero();
         }
+    }
+
+    @Test
+    void appliesWhatWasNeverAppliedEvenWhenNothingComesDown() throws Exception {
+        writeProject();
+        new UpCommand(
+                        ExecutionContext.load(tempDir, pluginRegistry),
+                        NodeId.of("db/001_create_users"),
+                        true,
+                        false)
+                .execute();
+        outputStream.reset();
+
+        int exitCode =
+                new RebuildCommand(ExecutionContext.load(tempDir, pluginRegistry), true, false)
+                        .execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(exitCode).isZero();
+        assertThat(output).doesNotContain("Nothing to rebuild.");
+        try (Connection connection =
+                        DriverManager.getConnection(postgres.getJdbcUrl(), "test", "test");
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery(
+                                "SELECT count(*) FROM information_schema.columns WHERE table_name"
+                                        + " = 'users' AND column_name = 'email'")) {
+            assertThat(rs.next()).isTrue();
+            assertThat(rs.getInt(1)).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void thePlanMarksAMigrationNoTaskFileDeclaresAsHavingNoDefinition() throws Exception {
+        writeProject();
+        new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
+        Files.delete(tempDir.resolve("tasks/db/002_add_email.yaml"));
+        outputStream.reset();
+
+        new RebuildCommand(ExecutionContext.load(tempDir, pluginRegistry), true, true).execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(output)
+                .contains("[DRY RUN] Migrations to roll back:\n\n  [-] db/002_add_email\n")
+                .doesNotContain("[✓] db/002_add_email")
+                .contains(
+                        "Rolling back 1 migration(s) — [!] differs from its definition, [-] has"
+                                + " none any more, [✓] stands on one that does — then applying"
+                                + " the whole graph.");
+    }
+
+    @Test
+    void writesNoColorWhenColorIsDisabled() throws Exception {
+        writeProject();
+        new UpCommand(ExecutionContext.load(tempDir, pluginRegistry), null, true, false).execute();
+        Files.writeString(
+                tempDir.resolve("tasks/db/002_add_email.yaml"),
+                """
+                name: Add email
+                target: db
+                dependencies:
+                  - db/001_create_users
+                up: |
+                  ALTER TABLE users ADD COLUMN email VARCHAR(255) DEFAULT 'none';
+                down: |
+                  ALTER TABLE users DROP COLUMN email;
+                """);
+        outputStream.reset();
+
+        int exitCode =
+                new RebuildCommand(
+                                ExecutionContext.load(tempDir, pluginRegistry),
+                                true,
+                                false,
+                                new ByteArrayInputStream(new byte[0]),
+                                false)
+                        .execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(exitCode).isZero();
+        assertThat(output).contains("db/002_add_email").doesNotContain("\u001B[");
+    }
+
+    @Test
+    void thePlanNamesWhatIsAppliedForTheFirstTime() throws Exception {
+        writeProject();
+        new UpCommand(
+                        ExecutionContext.load(tempDir, pluginRegistry),
+                        NodeId.of("db/001_create_users"),
+                        true,
+                        false)
+                .execute();
+        outputStream.reset();
+
+        int exitCode =
+                new RebuildCommand(ExecutionContext.load(tempDir, pluginRegistry), true, true)
+                        .execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(exitCode).isZero();
+        assertThat(output)
+                .contains(
+                        "[DRY RUN] Not yet applied — these are applied too:\n\n"
+                                + "  db/002_add_email\n")
+                .contains("Rolling back 0 migration(s), then applying the whole graph.")
+                .doesNotContain("db/001_create_users");
     }
 
     private void writeProject() throws IOException {
