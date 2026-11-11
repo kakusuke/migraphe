@@ -2,6 +2,10 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-11-11 (Session 80)
+
+**#94 `rebuild` で戻すものが無いとき、「All migrations are up to date.」と出た直後に適用が走っていた（CLI・Gradle）。** ロールバック対象が空でも DOWN の `DagExecutor` を回しており、その完了通知で listener が「何も実行していない」側の文言を出していた。対象が空ならロールバックの段ごと飛ばすようにした。`DagExecutor.execute` は空集合だと `onCompleted` を呼んで返すだけで履歴を読み書きしないので、飛ばしても失うものは無い（issue で確認が必要とされていた点）。
+
 ### 2026-10-16 (Session 79) — v0.7.1
 
 **`rebuild` の不具合 3 件（#88〜#90）と、その途中で見つけた Gradle 側の 1 件を直した。** 期待する動きは「ブランチ切り替えと既存の書き換えは `rebuild`、新規追加は `up`」がそのまま通ること。

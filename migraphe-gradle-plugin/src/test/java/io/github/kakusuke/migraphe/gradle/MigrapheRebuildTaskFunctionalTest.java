@@ -193,6 +193,19 @@ class MigrapheRebuildTaskFunctionalTest {
     }
 
     @Test
+    void shouldNotClaimEverythingIsUpToDateWhenNothingComesDown() throws IOException {
+        writeTwoTargetProject();
+
+        runTask("migrapheInit");
+
+        BuildResult result = runTask("migrapheRebuild");
+
+        assertThat(result.getOutput())
+                .doesNotContain("All migrations are up to date.")
+                .contains("Migration completed successfully. 2 migrations executed.");
+    }
+
+    @Test
     void shouldNameWhatIsAppliedForTheFirstTime() throws IOException {
         writeTwoTargetProject();
 
