@@ -259,6 +259,25 @@ public class ConfigLoader {
     }
 
     /**
+     * Returns the tasks whose {@code enabled:} resolved to false — the tasks {@link
+     * #loadTaskDefinitions} leaves out.
+     *
+     * @param mainConfig the merged main config containing the {@code task.*} entries
+     * @return the disabled task ids
+     * @throws ConfigurationException if an {@code enabled:} is neither {@code true} nor {@code
+     *     false}
+     */
+    public Set<NodeId> loadDisabledTaskIds(SmallRyeConfig mainConfig) {
+        Set<NodeId> disabled = new LinkedHashSet<>();
+        for (NodeId nodeId : extractTaskIds(mainConfig)) {
+            if (Boolean.FALSE.equals(declaredEnabled(mainConfig, nodeId))) {
+                disabled.add(nodeId);
+            }
+        }
+        return disabled;
+    }
+
+    /**
      * Loads a {@link TargetDefinition} for every target.
      *
      * <p>Target ids are discovered from the {@code target.*} keys of the merged config; each
