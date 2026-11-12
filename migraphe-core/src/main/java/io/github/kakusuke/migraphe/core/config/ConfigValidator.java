@@ -178,7 +178,12 @@ public class ConfigValidator {
             taskIds = Set.of();
         }
 
+        Set<NodeId> disabledTasks = new HashSet<>();
         for (NodeId taskId : taskIds) {
+            if (Boolean.FALSE.equals(ConfigLoader.declaredEnabled(resolved, taskId))) {
+                disabledTasks.add(taskId);
+                continue;
+            }
             PrefixedConfigSource task;
             try {
                 task =
@@ -203,7 +208,14 @@ public class ConfigValidator {
 
             for (String depId : taskInfo.dependencies()) {
                 NodeId depNodeId = NodeId.of(depId);
-                if (!validTasks.containsKey(depNodeId)) {
+                if (disabledTasks.contains(depNodeId)) {
+                    errors.add(
+                            "tasks/"
+                                    + taskId.value()
+                                    + ".yaml: Dependency '"
+                                    + depId
+                                    + "' is disabled (enabled: is false)");
+                } else if (!validTasks.containsKey(depNodeId)) {
                     errors.add(
                             "tasks/"
                                     + taskId.value()

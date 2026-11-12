@@ -523,6 +523,43 @@ class ConfigValidatorTest {
         assertThat(result.errors()).anyMatch(e -> e.contains("task.test-db/seed"));
     }
 
+    @Test
+    void shouldReportADependencyOnADisabledTaskAsDisabled() throws IOException {
+        // Given: 有効なタスクが、無効なタスクに依存する（無効なタスクはこの設定には存在しない
+        // ので、その target が無いことは問わない）
+        createValidProject(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("seed.yaml"),
+                """
+                name: Seed
+                target: missing-db
+                enabled: false
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("report.yaml"),
+                """
+                name: Report
+                target: test-db
+                enabled: true
+                dependencies:
+                  - test-db/seed
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .containsExactly(
+                        "tasks/test-db/report.yaml: Dependency 'test-db/seed' is disabled"
+                                + " (enabled: is false)");
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """
