@@ -297,6 +297,28 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldAcceptAnEnvironmentOverlayWithARawTaggedValue() throws IOException {
+        // Given: !raw タグ付きの値を持つオーバーレイ
+        createValidProject(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                target:
+                  test-db:
+                    password: !raw "pa$$word"
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
     void shouldValidateTargetTypeIntroducedByEnvironmentOverlay() throws IOException {
         // Given: ベースは正しいが、オーバーレイが未知のプラグイン型に差し替える
         createValidProject(tempDir);

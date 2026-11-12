@@ -204,7 +204,7 @@ public class ConfigValidator {
         }
 
         try {
-            overlay.putAll(new YamlConfigSource(envFile.toUri().toURL()).getProperties());
+            overlay.putAll(MultiFileYamlConfigSource.rawAwareYamlSource(envFile).getProperties());
             return List.of();
         } catch (IOException e) {
             return List.of(relativePath + ": Failed to load - " + e.getMessage());
