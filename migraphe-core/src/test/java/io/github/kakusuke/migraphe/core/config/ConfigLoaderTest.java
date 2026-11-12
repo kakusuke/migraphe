@@ -448,6 +448,36 @@ class ConfigLoaderTest {
                 .isEqualTo("pa$$word ${x} ${abc");
     }
 
+    @Test
+    void shouldKeepRawTaggedTaskValueExactlyAsWritten(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                x: expanded
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Files.writeString(
+                tasksDir.resolve("fn.yaml"),
+                """
+                name: Function
+                target: db1
+                up: !raw "DO $$ ${x} $$"
+                """);
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getValue("task.\"db1/fn\".up", String.class)).isEqualTo("DO $$ ${x} $$");
+    }
+
     /** テスト用のプロジェクト構造を作成する。 */
     private void createProjectStructure(Path baseDir) throws IOException {
         // migraphe.yaml

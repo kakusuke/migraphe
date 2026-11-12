@@ -117,7 +117,7 @@ public class MultiFileYamlConfigSource implements ConfigSource {
 
             try {
                 // Load the YAML.
-                YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
+                YamlConfigSource yamlSource = rawAwareYamlSource(file);
 
                 // Merge in with the prefix applied.
                 // When a task id contains slashes, the form is "task.\"db1/create_users\".*".
