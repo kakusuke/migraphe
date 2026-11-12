@@ -18,6 +18,7 @@ import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
 import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
 import org.yaml.snakeyaml.nodes.Tag;
 
 /**
@@ -186,14 +187,15 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                     scalar.getScalarStyle());
         }
         if (node instanceof MappingNode mapping) {
-            mapping.setValue(
-                    mapping.getValue().stream()
-                            .map(
-                                    tuple ->
-                                            new NodeTuple(
-                                                    tuple.getKeyNode(),
-                                                    escapeRawScalars(tuple.getValueNode())))
-                            .toList());
+            mapping.getValue()
+                    .replaceAll(
+                            tuple ->
+                                    new NodeTuple(
+                                            tuple.getKeyNode(),
+                                            escapeRawScalars(tuple.getValueNode())));
+        }
+        if (node instanceof SequenceNode sequence) {
+            sequence.getValue().replaceAll(MultiFileYamlConfigSource::escapeRawScalars);
         }
         return node;
     }
