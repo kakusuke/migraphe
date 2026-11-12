@@ -170,7 +170,7 @@ public class ConfigValidator {
         // 3. Validate each task as resolved.
         Map<NodeId, TaskInfo> validTasks = new HashMap<>();
 
-        for (NodeId taskId : readableTaskFiles.keySet()) {
+        for (NodeId taskId : ConfigLoader.extractTaskIds(resolved)) {
             PrefixedConfigSource task;
             try {
                 task =

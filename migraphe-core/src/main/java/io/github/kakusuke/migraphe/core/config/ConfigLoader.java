@@ -398,7 +398,7 @@ public class ConfigLoader {
      * @param config the merged config to inspect
      * @return the distinct task ids found
      */
-    private Set<NodeId> extractTaskIds(SmallRyeConfig config) {
+    static Set<NodeId> extractTaskIds(SmallRyeConfig config) {
         Set<NodeId> taskIds = new LinkedHashSet<>();
         for (String name : config.getPropertyNames()) {
             if (!name.startsWith("task.")) {

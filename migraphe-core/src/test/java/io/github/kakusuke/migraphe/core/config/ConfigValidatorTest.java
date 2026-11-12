@@ -469,6 +469,40 @@ class ConfigValidatorTest {
                 .noneMatch(e -> e.contains("Missing required property 'type'"));
     }
 
+    @Test
+    void shouldValidateATaskDefinedOnlyByConfigurationKeys() throws IOException {
+        // Given: ファイルのない task をオーバーレイが定義し、ファイルの task がそれに依存する
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                target: test-db
+                dependencies:
+                  - test-db/seed
+                up: CREATE TABLE users (id SERIAL PRIMARY KEY);
+                down: DROP TABLE users;
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                task:
+                  test-db/seed:
+                    name: Seed
+                    target: test-db
+                    up: SELECT 1;
+                    down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then: ファイルのない task も task として数えられ、依存が解決する
+        assertThat(result.errors()).isEmpty();
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """
