@@ -217,6 +217,39 @@ class ExecutionContextTest {
         assertThat(context.graph().unresolvedDependencies()).isEmpty();
     }
 
+    @Test
+    void aTaskWithoutEnabledThatDependsOnOneWithItIsKnownWhateverTheValue() throws IOException {
+        createTestProject(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("003_seed.yaml"),
+                """
+                name: Seed
+                target: test-db
+                enabled: true
+                up: INSERT INTO users (name) VALUES ('alice');
+                down: DELETE FROM users;
+                """);
+        Files.writeString(
+                tasksDir.resolve("004_report.yaml"),
+                """
+                name: Report
+                target: test-db
+                dependencies:
+                  - test-db/003_seed
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+
+        ExecutionContext context = ExecutionContext.load(tempDir, pluginRegistry);
+
+        assertThat(context.graph().conditionalDependencies())
+                .containsExactly(
+                        Map.entry(
+                                NodeId.of("test-db/004_report"),
+                                java.util.Set.of(NodeId.of("test-db/003_seed"))));
+    }
+
     /**
      * テスト用のプロジェクト構造を作成する。
      *
