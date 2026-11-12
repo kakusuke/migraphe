@@ -109,20 +109,35 @@ public class ConfigValidator {
 
         // 2. Load and validate each targets/*.yaml individually.
         List<Path> targetFiles = scanner.scanTargetFiles(scanRoot);
+        List<Path> readableTargetFiles = new ArrayList<>();
         Set<String> validTargetIds = new HashSet<>();
         Map<String, String> targetTypes = new HashMap<>();
 
         for (Path targetFile : targetFiles) {
-            String targetId = targetFile.getFileName().toString().replaceAll("\\.yaml$", "");
-            String typeOverride = overlay.get("target." + targetId + ".type");
-            List<String> targetErrors = validateTargetFile(targetFile, targetId, typeOverride);
-            if (targetErrors.isEmpty()) {
+            String targetId = targetIdOf(targetFile);
+            List<String> readErrors = readTargetFile(targetFile, targetId);
+            if (readErrors.isEmpty()) {
+                readableTargetFiles.add(targetFile);
+            } else {
+                errors.addAll(readErrors);
+            }
+        }
+
+        SmallRyeConfig resolved =
+                ConfigLoader.buildConfig(
+                        new MultiFileYamlConfigSource(
+                                projectConfigFile, readableTargetFiles, Map.of()),
+                        overlay.isEmpty() ? null : new MapConfigSource(overlay, 500),
+                        Map.of());
+
+        for (Path targetFile : readableTargetFiles) {
+            String targetId = targetIdOf(targetFile);
+            String type = resolved.getConfigValue("target." + targetId + ".type").getValue();
+            List<String> targetErrors = validateTargetType(targetId, type);
+            if (targetErrors.isEmpty() && type != null) {
                 validTargetIds.add(targetId);
                 // Capture the effective target type for later plugin-specific task validation.
-                String type = typeOverride != null ? typeOverride : getTargetType(targetFile);
-                if (type != null) {
-                    targetTypes.put(targetId, type);
-                }
+                targetTypes.put(targetId, type);
             } else {
                 errors.addAll(targetErrors);
             }
@@ -213,43 +228,34 @@ public class ConfigValidator {
         }
     }
 
-    /** Validates a single target file, honouring an overlay-supplied {@code type} when present. */
-    private List<String> validateTargetFile(
-            Path targetFile, String targetId, @Nullable String typeOverride) {
-        List<String> errors = new ArrayList<>();
-        String relativePath = "targets/" + targetId + ".yaml";
-
-        try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
-            Map<String, String> props = source.getProperties();
-
-            // The environment overlay wins over the target file, exactly as it does at run time.
-            String type = typeOverride != null ? typeOverride : props.get("type");
-
-            // 'type' is required.
-            if (type == null) {
-                errors.add(relativePath + ": Missing required property 'type'");
-            } else if (!pluginRegistry.hasPlugin(type)) {
-                // Ensure 'type' names a registered plugin.
-                errors.add(relativePath + ": Unknown plugin type '" + type + "'");
-            }
-        } catch (IOException e) {
-            errors.add(relativePath + ": Failed to load - " + e.getMessage());
-        } catch (Exception e) {
-            errors.add(relativePath + ": Invalid YAML - " + e.getMessage());
-        }
-
-        return errors;
+    /** Derives a target's id from its file name ({@code db1.yaml} &rarr; {@code db1}). */
+    private static String targetIdOf(Path targetFile) {
+        return targetFile.getFileName().toString().replaceAll("\\.yaml$", "");
     }
 
-    /** Reads the {@code type} property from a target file, or {@code null} if it cannot be read. */
-    private @Nullable String getTargetType(Path targetFile) {
+    /** Reads a single target file, reporting it when it cannot be loaded or parsed. */
+    private List<String> readTargetFile(Path targetFile, String targetId) {
+        String relativePath = "targets/" + targetId + ".yaml";
         try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
-            return source.getProperties().get("type");
+            MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
+            return List.of();
+        } catch (IOException e) {
+            return List.of(relativePath + ": Failed to load - " + e.getMessage());
         } catch (Exception e) {
-            return null;
+            return List.of(relativePath + ": Invalid YAML - " + e.getMessage());
         }
+    }
+
+    /** Validates a target's resolved {@code type}. */
+    private List<String> validateTargetType(String targetId, @Nullable String type) {
+        String relativePath = "targets/" + targetId + ".yaml";
+        if (type == null) {
+            return List.of(relativePath + ": Missing required property 'type'");
+        }
+        if (!pluginRegistry.hasPlugin(type)) {
+            return List.of(relativePath + ": Unknown plugin type '" + type + "'");
+        }
+        return List.of();
     }
 
     /** Validates a single task file. */

@@ -8,7 +8,6 @@ import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
-import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -19,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
+import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -130,12 +130,7 @@ public class ConfigLoader {
         MultiFileYamlConfigSource multiFileSource =
                 new MultiFileYamlConfigSource(projectConfigFile, targetFiles, taskFiles);
 
-        // 5. Build the SmallRyeConfigBuilder.
-        // Note: only ProjectConfig is bound via withMapping. TargetConfig and TaskConfig live under
-        // dynamic prefixes and must be retrieved programmatically.
-        SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().addDefaultInterceptors();
-
-        // 6. Load the environment override file if present (ordinal 500).
+        // 5. Load the environment override file if present (ordinal 500).
         Path envFile = envName != null ? scanner.findEnvironmentFile(scanRoot, envName) : null;
 
         if (envName != null && envFile == null) {
@@ -143,29 +138,49 @@ public class ConfigLoader {
                     environmentNotFoundMessage(scanner, scanRoot, envName));
         }
 
+        ConfigSource envSource = null;
         if (envFile != null) {
             try {
-                YamlConfigSource envSource =
-                        MultiFileYamlConfigSource.rawAwareYamlSource(envFile, 500);
-                // Register the environment file and the MultiFileYamlConfigSource together.
-                builder.withSources(envSource, multiFileSource);
+                envSource = MultiFileYamlConfigSource.rawAwareYamlSource(envFile, 500);
             } catch (IOException e) {
                 throw new ConfigurationException("Failed to load environment file: " + envFile, e);
             }
+        }
+
+        return buildConfig(multiFileSource, envSource, variables);
+    }
+
+    /**
+     * Stacks the merged YAML files, the environment overlay, the OS environment, system properties
+     * and explicit variables into one config (see the class documentation for the precedence).
+     *
+     * @param multiFileSource the merged YAML files
+     * @param envSource the environment overlay at ordinal 500, or {@code null} for none
+     * @param variables externally-supplied variables (ordinal 600); ignored when empty
+     * @return the built config
+     */
+    static SmallRyeConfig buildConfig(
+            MultiFileYamlConfigSource multiFileSource,
+            @Nullable ConfigSource envSource,
+            Map<String, String> variables) {
+        // Note: only ProjectConfig is bound via withMapping. TargetConfig and TaskConfig live under
+        // dynamic prefixes and must be retrieved programmatically.
+        SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().addDefaultInterceptors();
+
+        if (envSource != null) {
+            builder.withSources(envSource, multiFileSource);
         } else {
-            // No environment file: register only the MultiFileYamlConfigSource.
             builder.withSources(multiFileSource);
         }
 
-        // 7. Register System.getenv() under env.<NAME> keys (ordinal 300): referenced as
-        // ${env.VAR}.
+        // Register System.getenv() under env.<NAME> keys (ordinal 300): referenced as ${env.VAR}.
         Map<String, String> envVars = new HashMap<>();
         for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
             envVars.put("env." + entry.getKey(), entry.getValue());
         }
         builder.withSources(new MapConfigSource(envVars, 300));
 
-        // 8. Register system properties under their raw keys (ordinal 400): referenced as ${name}.
+        // Register system properties under their raw keys (ordinal 400): referenced as ${name}.
         Map<String, String> sysProps = new HashMap<>();
         for (Map.Entry<Object, Object> entry : System.getProperties().entrySet()) {
             if (entry.getKey() instanceof String k && entry.getValue() instanceof String v) {
@@ -174,12 +189,11 @@ public class ConfigLoader {
         }
         builder.withSources(new MapConfigSource(sysProps, 400));
 
-        // 9. Register explicit variables, if any, at the highest precedence (ordinal 600).
+        // Register explicit variables, if any, at the highest precedence (ordinal 600).
         if (!variables.isEmpty()) {
             builder.withSources(new MapConfigSource(variables));
         }
 
-        // 10. Configure the mapping and validation.
         builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // allow unmapped keys
 
         return builder.build();

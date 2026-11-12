@@ -370,6 +370,33 @@ class ConfigValidatorTest {
         assertThat(result.errors()).noneMatch(e -> e.contains("not-a-registered-plugin"));
     }
 
+    @Test
+    void shouldResolveATargetTypeFromAVariable() throws IOException {
+        // Given: target の type が migraphe.yaml の変数で決まる
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                dbtype: postgresql
+                """);
+        Files.writeString(
+                tempDir.resolve("targets").resolve("test-db.yaml"),
+                """
+                type: ${dbtype}
+                jdbc_url: jdbc:postgresql://localhost:5432/test
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors()).isEmpty();
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """
