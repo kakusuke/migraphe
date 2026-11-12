@@ -248,12 +248,7 @@ public class ConfigLoader {
         Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
         for (NodeId nodeId : extractTaskIds(mainConfig)) {
-            String enabled =
-                    mainConfig
-                            .getConfigValue(
-                                    MultiFileYamlConfigSource.taskKeyPrefix(nodeId) + "enabled")
-                            .getValue();
-            if (enabled != null && !mainConfig.convert(enabled, Boolean.class)) {
+            if (Boolean.FALSE.equals(declaredEnabled(mainConfig, nodeId))) {
                 continue;
             }
             TaskDefinition<?> taskDef = loadTaskDefinition(nodeId, mainConfig, pluginRegistry);
@@ -397,6 +392,34 @@ public class ConfigLoader {
                 .forEach(targetIds::add);
 
         return targetIds;
+    }
+
+    /**
+     * Reads what a task's {@code enabled:} resolved to.
+     *
+     * @param config the merged config
+     * @param taskId the task
+     * @return the resolved value, or {@code null} when the task does not declare {@code enabled:}
+     * @throws ConfigurationException if the value is neither {@code true} nor {@code false}
+     */
+    static @Nullable Boolean declaredEnabled(SmallRyeConfig config, NodeId taskId) {
+        String enabled =
+                config.getConfigValue(MultiFileYamlConfigSource.taskKeyPrefix(taskId) + "enabled")
+                        .getValue();
+        if (enabled == null) {
+            return null;
+        }
+        if (enabled.equalsIgnoreCase("true")) {
+            return true;
+        }
+        if (enabled.equalsIgnoreCase("false")) {
+            return false;
+        }
+        throw new ConfigurationException(
+                "enabled: of task "
+                        + taskId.value()
+                        + " must be true or false, but is: "
+                        + enabled);
     }
 
     /**

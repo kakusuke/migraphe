@@ -736,6 +736,40 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void shouldRejectAnEnabledValueThatIsNotABoolean(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Files.writeString(
+                tasksDir.resolve("seed.yaml"),
+                """
+                name: Seed
+                target: db1
+                enabled: ture
+                up: SELECT 1;
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThatThrownBy(() -> loader.loadTaskDefinitions(tempDir, config, pluginRegistry))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining("db1/seed")
+                .hasMessageContaining("ture");
+    }
+
+    @Test
     void shouldKeepRawTaggedOverlayValueExactlyAsWritten(@TempDir Path tempDir) throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),
