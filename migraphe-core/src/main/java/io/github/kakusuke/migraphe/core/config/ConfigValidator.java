@@ -11,6 +11,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -59,7 +60,8 @@ public class ConfigValidator {
     }
 
     /**
-     * Validates the configuration rooted at the given directory.
+     * Validates the configuration rooted at the given directory, under the base configuration and
+     * every overlay in {@code environments/} (see {@link #validate(Path, String)}).
      *
      * <p>Resolves the scan root from {@code project.scan-root}, then validates targets, tasks, task
      * dependencies and dependency cycles, accumulating all problems. If {@code migraphe.yaml} is
@@ -75,18 +77,49 @@ public class ConfigValidator {
     /**
      * Validates the configuration rooted at the given directory, applying an environment overlay.
      *
-     * <p>Behaves like {@link #validate(Path)} but, when {@code envName} is given, resolves each
-     * target's effective {@code type} through {@code environments/<envName>.yaml}, so the
-     * configuration that would actually be used at run time is the one validated. A requested
-     * overlay that does not exist is reported as a validation error rather than thrown, because
-     * {@code validate} accumulates problems instead of aborting.
+     * <p>When {@code envName} is given, the configuration is resolved through {@code
+     * environments/<envName>.yaml}, so what would actually be used at run time is what is
+     * validated, and only that. A requested overlay that does not exist is reported as a validation
+     * error rather than thrown, because {@code validate} accumulates problems instead of aborting.
+     *
+     * <p>When it is {@code null}, the project is validated under the base configuration and under
+     * every overlay, since a value an overlay changes can break something only there (decision 38).
+     * Each distinct error is reported once, prefixed with every configuration it occurs under —
+     * {@code [base, env: dev] ...}. A project without overlays is validated once, unprefixed.
      *
      * @param baseDir the project base directory
      * @param envName the deployment-environment name whose overlay is applied, or {@code null} to
-     *     validate the base configuration only
+     *     validate the base configuration and every overlay
      * @return the accumulated validation result
      */
     public ValidationOutput validate(Path baseDir, @Nullable String envName) {
+        if (envName != null) {
+            return validateUnder(baseDir, envName);
+        }
+        Path scanRoot = new ConfigLoader().resolveScanRoot(baseDir);
+        List<String> overlays = new YamlFileScanner().listEnvironmentNames(scanRoot);
+        if (overlays.isEmpty()) {
+            return validateUnder(baseDir, null);
+        }
+
+        // Each distinct error once, labelled with every configuration it occurs under.
+        Map<String, List<String>> labelsByError = new LinkedHashMap<>();
+        for (String error : validateUnder(baseDir, null).errors()) {
+            labelsByError.computeIfAbsent(error, e -> new ArrayList<>()).add("base");
+        }
+        for (String overlay : overlays) {
+            for (String error : validateUnder(baseDir, overlay).errors()) {
+                labelsByError.computeIfAbsent(error, e -> new ArrayList<>()).add("env: " + overlay);
+            }
+        }
+        List<String> errors = new ArrayList<>();
+        labelsByError.forEach(
+                (error, labels) -> errors.add("[" + String.join(", ", labels) + "] " + error));
+        return new ValidationOutput(errors);
+    }
+
+    /** Validates the configuration under the base configuration or one overlay. */
+    private ValidationOutput validateUnder(Path baseDir, @Nullable String envName) {
         List<String> errors = new ArrayList<>();
         YamlFileScanner scanner = new YamlFileScanner();
         TaskIdGenerator idGenerator = new TaskIdGenerator();
