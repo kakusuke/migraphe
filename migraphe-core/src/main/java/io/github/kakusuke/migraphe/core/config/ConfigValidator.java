@@ -365,7 +365,7 @@ public class ConfigValidator {
     /** Extracts a {@link TaskInfo} (target and dependencies) from a task file. */
     private @Nullable TaskInfo extractTaskInfo(Path taskFile) {
         try {
-            YamlConfigSource source = new YamlConfigSource(taskFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             Map<String, String> props = source.getProperties();
 
             String target = props.getOrDefault("target", "");

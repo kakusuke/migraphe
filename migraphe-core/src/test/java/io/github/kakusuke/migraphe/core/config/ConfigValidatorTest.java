@@ -203,6 +203,40 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldDetectCircularDependencyBetweenRawTaggedTasks() throws IOException {
+        // Given: !raw タグ付きの up: を持つタスク同士の循環依存
+        createProjectWithCircularDependency(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("a.yaml"),
+                """
+                name: Task A
+                target: test-db
+                dependencies:
+                  - test-db/b
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("b.yaml"),
+                """
+                name: Task B
+                target: test-db
+                dependencies:
+                  - test-db/a
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.toLowerCase(Locale.ROOT).contains("circular"));
+    }
+
+    @Test
     void shouldAccumulateMultipleErrors() throws IOException {
         // Given: 複数のエラー
         createProjectWithMultipleErrors(tempDir);
