@@ -288,6 +288,8 @@ Every value your definition receives has **already been resolved** by core: `${.
 against the whole configuration, and a value the user tagged `!raw` arrives exactly as written. Do not expand or unescape anything yourself
 — a second expansion would turn `$$` back into `$`. A target definition is read the same way.
 
+`enabled` is a key core reads on every task (whether the task exists under the configuration in use). Do not give your task definition an `enabled` member, and do not fold a catch-all `Map` of unknown keys into the fingerprint — toggling `enabled:` would then show `[!]`.
+
 ## Core Interfaces to Implement
 
 ### Target

@@ -434,6 +434,34 @@ task:
 
 ドットを含む id は引用符で囲んでください（`"db1/v1.2":`）。`tasks/` にファイルのない id を書くと、その id の task が定義されます。つまり overlay から task を追加することができます。そのため id を書き間違えると、項目の足りない task として現れ、`validate` でもロード時でもエラーになります。`validate` は、`--env` で指定した overlay を適用し、値を解決した後の設定を検査します。
 
+**一部の環境にだけある task: `enabled:`。** task には `enabled:` を書くことができます。値はほかの値と同じように解決されます。よくあるのは、dev と test でだけ seed データを入れる場合です。
+
+```yaml
+# tasks/db1/900_seed_users.yaml
+name: Seed users
+target: db1
+enabled: ${seed.enabled:false}
+dependencies:
+  - db1/001_create_users
+up: INSERT INTO users (name) VALUES ('alice');
+down: DELETE FROM users WHERE name = 'alice';
+```
+
+```yaml
+# environments/dev.yaml
+seed:
+  enabled: true
+```
+
+値は `true` か `false` でなければならず、それ以外はエラーです。`enabled:` が false の task は、その設定では存在しないものとして扱われます。`up` はその task を適用しません。以前に適用済みなら、`status` では orphan と表示され、`down` や `rebuild` で rollback されます。task のファイルを消したときと同じ扱いです。`enabled:` は `status` の比較対象に含まれないので、切り替えても `[!]` にはなりません。
+
+disabled な task が、ほかの task の土台を失わせないように、2つのルールがあります。どちらも `validate` が報告し、`up` は何も適用する前に拒否します。
+
+- `enabled:` を宣言していない task は、値にかかわらず、宣言している task に依存することができません。値が false の環境で壊れるからです。依存する側にも `enabled:` を書くか、依存を外してください。
+- 有効な task は、実行時の設定で disabled な task に依存することができません。
+
+`--env` を付けない `validate` は、base の設定と `environments/` のすべての overlay を検査し、各エラーの先頭に、そのエラーが出た設定を付けます（`[env: dev]`。3つすべてで出たエラーは `[base, env: dev, env: prod]`）。`--env` を付けると、その overlay だけを前置きなしで検査します。`environments/` のないプロジェクトは、これまでどおり前置きなしで検査します。`-D` や OS の環境変数による値の違いは検査しません。
+
 **値を変えたときの扱い。** task は、実行時の設定で解決した内容で履歴と比較されます。task の本文に届く値（変数、overlay、SQL から参照しているパスワードの変更など）を変えると、`status` でその task に `[!]` が付きます。今実行される内容が、適用済みの内容と違うからです。ほかの編集と同じく、[`amend`](#定義を適用済みとして記録amend) か `rebuild` で解消してください。同じデータベースを指す2つの overlay で task の解決結果が違う場合は、それぞれ相手が適用した内容に `[!]` が付きます。
 
 ## マイグレーションの作成

@@ -287,6 +287,8 @@ public interface SqlTaskDefinition extends TaskDefinition<String> {
 プラグイン側で展開やエスケープの解除をしないでください。もう一度展開すると、`$$` が `$` に戻ってしまいます。
 target の定義も同じように読み込まれます。
 
+`enabled` は core が使うキーです（その task をその設定で使うかどうか）。task 定義に `enabled` という項目を作ったり、未知のキーをまとめて受け取る `Map` を fingerprint に含めたりしないでください。`enabled:` を切り替えるたびに `[!]` が出てしまいます。
+
 ## 実装が必要なコアインターフェース
 
 ### Target
