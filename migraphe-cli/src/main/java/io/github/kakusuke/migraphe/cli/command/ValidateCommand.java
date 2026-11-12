@@ -148,12 +148,14 @@ public class ValidateCommand implements Command {
         }
 
         // 1b. Environment overlay (only when one was requested).
+        List<String> envErrors = filterErrors(errors, "environments/");
         if (envName != null) {
-            List<String> envErrors = filterErrors(errors, "environments/");
             printCheckResult(
                     "Checking environment overlay (" + envName + ")...",
                     envErrors.isEmpty(),
                     envErrors);
+        } else if (!envErrors.isEmpty()) {
+            printCheckResult("Checking environment overlays...", false, envErrors);
         }
 
         // 2. Targets

@@ -125,6 +125,26 @@ class ValidateCommandTest {
     }
 
     @Test
+    void shouldListABrokenOverlayWhenEveryOverlayIsChecked() throws IOException {
+        // Given: --env なしで、読めない overlay がある
+        createValidProject(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(environmentsDir.resolve("dev.yaml"), "a: [unclosed\n");
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
+
+        // When
+        int exitCode = command.execute();
+
+        // Then
+        assertThat(exitCode).isEqualTo(1);
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(output)
+                .contains("Checking environment overlays... FAIL")
+                .contains("[env: dev] environments/dev.yaml: Invalid YAML");
+    }
+
+    @Test
     void shouldDisplayErrorCountInSummary() throws IOException {
         // Given: 複数のエラー
         createProjectWithMultipleErrors(tempDir);
