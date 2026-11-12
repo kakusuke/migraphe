@@ -421,6 +421,33 @@ class ConfigLoaderTest {
                 .hasMessageContaining("SRCFG00011");
     }
 
+    @Test
+    void shouldKeepRawTaggedValueExactlyAsWritten(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                x: expanded
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(
+                targetsDir.resolve("db1.yaml"),
+                """
+                type: noop
+                password: !raw "pa$$word ${x} ${abc"
+                """);
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getValue("target.db1.password", String.class))
+                .isEqualTo("pa$$word ${x} ${abc");
+    }
+
     /** テスト用のプロジェクト構造を作成する。 */
     private void createProjectStructure(Path baseDir) throws IOException {
         // migraphe.yaml

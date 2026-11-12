@@ -3,6 +3,9 @@ package io.github.kakusuke.migraphe.core.config;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.StringWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -10,6 +13,12 @@ import java.util.Map;
 import java.util.Set;
 import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.Tag;
 
 /**
  * A {@link ConfigSource} that merges Migraphe's several YAML files into a single flat key space.
@@ -80,7 +89,7 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                 String targetId = file.getFileName().toString().replaceAll("\\.yaml$", "");
 
                 // Load the YAML.
-                YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
+                YamlConfigSource yamlSource = rawAwareYamlSource(file);
 
                 // Merge in with the prefix applied.
                 for (Map.Entry<String, String> entry : yamlSource.getProperties().entrySet()) {
@@ -120,6 +129,60 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                 throw new ConfigurationException("Failed to load task config: " + file, e);
             }
         }
+    }
+
+    /**
+     * Loads a YAML file, first rewriting every {@code !raw} scalar so that expansion yields it
+     * verbatim.
+     *
+     * <p>{@link YamlConfigSource} rejects an unknown tag, so the file is composed into nodes, the
+     * tagged scalars are replaced, and the result is serialized back for {@link YamlConfigSource}
+     * to flatten as usual.
+     *
+     * @param file the YAML file
+     * @return the loaded source
+     * @throws IOException if the file cannot be read
+     */
+    private static YamlConfigSource rawAwareYamlSource(Path file) throws IOException {
+        Yaml yaml = new Yaml();
+        StringWriter rewritten = new StringWriter();
+        try (Reader reader = Files.newBufferedReader(file)) {
+            for (Node document : yaml.composeAll(reader)) {
+                rewritten.write("---\n");
+                yaml.serialize(escapeRawScalars(document), rewritten);
+            }
+        }
+        return new YamlConfigSource(file.toUri().toString(), rewritten.toString());
+    }
+
+    /**
+     * Replaces each {@code !raw} scalar under {@code node} with a plain string whose every {@code
+     * $} is escaped as {@code \$}, which the one expansion in the main config turns back into the
+     * original text.
+     *
+     * @param node the node to rewrite
+     * @return the rewritten node
+     */
+    private static Node escapeRawScalars(Node node) {
+        if (node instanceof ScalarNode scalar && scalar.getTag().getValue().equals("!raw")) {
+            return new ScalarNode(
+                    Tag.STR,
+                    scalar.getValue().replace("$", "\\$"),
+                    scalar.getStartMark(),
+                    scalar.getEndMark(),
+                    scalar.getScalarStyle());
+        }
+        if (node instanceof MappingNode mapping) {
+            mapping.setValue(
+                    mapping.getValue().stream()
+                            .map(
+                                    tuple ->
+                                            new NodeTuple(
+                                                    tuple.getKeyNode(),
+                                                    escapeRawScalars(tuple.getValueNode())))
+                            .toList());
+        }
+        return node;
     }
 
     @Override

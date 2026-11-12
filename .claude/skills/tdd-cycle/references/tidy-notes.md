@@ -655,6 +655,13 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   pass a token otherwise. Two dozen fixture rows across `DownServiceTest` and
   `DagExecutorRollbackTest` used the short form and froze the moment the rule landed
 
+- **A `!raw` value survives only because expansion runs exactly once, in `mainConfig`.** The YAML
+  loader escapes every `$` of a `!raw` scalar as `\$`, and that one expansion consumes the escape. A
+  config built over `PrefixedConfigSource` (the per-target and per-task mapping configs) must **not**
+  call `addDefaultInterceptors()`: a second expansion sees the bare `$$` and `${` again, turns `$$` into
+  `$` and silently drops a value holding an unclosed `${`. Likewise, a new site that reads a YAML file
+  must go through the `!raw`-aware loader — a bare `new YamlConfigSource(url)` throws on the tag.
+
 ## A node has more than one history row
 
 `amend` appends rather than rewriting, so "the one history row" stopped being a thing. Anything that
