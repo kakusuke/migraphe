@@ -548,6 +548,25 @@ class ConfigLoaderTest {
         assertThat(config.getValue("secret", String.class)).isEqualTo("pa$$ ${x}");
     }
 
+    @Test
+    void shouldKeepRawTaggedProjectValueExactlyAsWritten(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                x: expanded
+                banner: !raw "pa$$ ${x}"
+                """);
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThat(config.getValue("banner", String.class)).isEqualTo("pa$$ ${x}");
+    }
+
     /** テスト用のプロジェクト構造を作成する。 */
     private void createProjectStructure(Path baseDir) throws IOException {
         // migraphe.yaml

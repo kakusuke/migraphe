@@ -68,7 +68,7 @@ public class MultiFileYamlConfigSource implements ConfigSource {
      */
     private void loadProjectConfig(Path file) {
         try {
-            YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
+            YamlConfigSource yamlSource = rawAwareYamlSource(file);
             properties.putAll(yamlSource.getProperties());
         } catch (IOException e) {
             throw new ConfigurationException("Failed to load project config: " + file, e);
