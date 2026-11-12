@@ -52,4 +52,23 @@ class UpPlanFormatterTest {
                 .doesNotContain("not defined");
         assertThat(undefined).contains("not defined").contains("  db/users → db/seed");
     }
+
+    @Test
+    @DisplayName("enabled: を宣言しないタスクの依存は、宣言を足すか依存を外すよう案内する")
+    void namesBothWaysOutOfAnUnconditionalDependencyOnAConditionalTask() {
+        String message =
+                String.join(
+                        "\n",
+                        UpPlanFormatter.format(
+                                new UpBlocker.ConditionalDependencies(
+                                        java.util.Map.of(
+                                                NodeId.of("db/report"),
+                                                Set.of(NodeId.of("db/seed")))),
+                                RepairVocabulary.CLI));
+
+        assertThat(message)
+                .contains("without enabled:")
+                .contains("Declare enabled: on them too, or drop the dependency")
+                .contains("  db/report → db/seed");
+    }
 }
