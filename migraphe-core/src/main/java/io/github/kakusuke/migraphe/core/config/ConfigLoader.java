@@ -397,15 +397,16 @@ public class ConfigLoader {
     }
 
     /**
-     * Loads a single {@link TaskDefinition} from the task's {@code task."<id>".} keys in {@code
-     * mainConfig}.
+     * Loads a single {@link TaskDefinition} from the task's task keys ({@link
+     * MultiFileYamlConfigSource#taskKeyPrefix}) in {@code mainConfig}.
      *
      * <p>First reads just the {@code target} field, looks up that target's {@code type} in {@code
      * mainConfig}, resolves the plugin, then maps the task's keys onto the plugin's task-definition
      * type. Reading them from {@code mainConfig} rather than from the file is what lets a task's
      * values be expanded and overridden the way a target's are.
      *
-     * @param nodeId the task's id, which names its {@code task."<id>".} keys in {@code mainConfig}
+     * @param nodeId the task's id, which names its task keys ({@link
+     *     MultiFileYamlConfigSource#taskKeyPrefix}) in {@code mainConfig}
      * @param taskFile the path to the task file, named in error messages
      * @param mainConfig the merged main config, used to look up the target's type
      * @param pluginRegistry the registry used to resolve the plugin by type
@@ -417,7 +418,7 @@ public class ConfigLoader {
             Path taskFile,
             SmallRyeConfig mainConfig,
             PluginRegistry pluginRegistry) {
-        String prefix = "task.\"" + nodeId.value() + "\".";
+        String prefix = MultiFileYamlConfigSource.taskKeyPrefix(nodeId);
 
         // 1. Read only the target field first.
         SmallRyeConfig targetOnlyConfig =
