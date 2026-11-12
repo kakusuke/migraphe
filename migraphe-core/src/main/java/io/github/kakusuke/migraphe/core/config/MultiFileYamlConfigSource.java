@@ -143,7 +143,7 @@ public class MultiFileYamlConfigSource implements ConfigSource {
      * @return the loaded source
      * @throws IOException if the file cannot be read
      */
-    private static YamlConfigSource rawAwareYamlSource(Path file) throws IOException {
+    static YamlConfigSource rawAwareYamlSource(Path file) throws IOException {
         Yaml yaml = new Yaml();
         StringWriter rewritten = new StringWriter();
         try (Reader reader = Files.newBufferedReader(file)) {

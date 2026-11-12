@@ -220,7 +220,7 @@ public class ConfigValidator {
         String relativePath = "targets/" + targetId + ".yaml";
 
         try {
-            YamlConfigSource source = new YamlConfigSource(targetFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
             Map<String, String> props = source.getProperties();
 
             // The environment overlay wins over the target file, exactly as it does at run time.
@@ -245,7 +245,7 @@ public class ConfigValidator {
     /** Reads the {@code type} property from a target file, or {@code null} if it cannot be read. */
     private @Nullable String getTargetType(Path targetFile) {
         try {
-            YamlConfigSource source = new YamlConfigSource(targetFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
             return source.getProperties().get("type");
         } catch (Exception e) {
             return null;

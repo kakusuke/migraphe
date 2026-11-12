@@ -67,6 +67,27 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldAcceptATargetWithARawTaggedValue() throws IOException {
+        // Given: !raw タグ付きの値を持つ target
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("targets").resolve("test-db.yaml"),
+                """
+                type: postgresql
+                jdbc_url: jdbc:postgresql://localhost:5432/test
+                username: test
+                password: !raw "pa$$word"
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
     void shouldDetectATaskThatNeitherRollsBackNorSaysWhyNot() throws IOException {
         // Given: down: も no_way_back: も無いタスク
         createValidProject(tempDir);
