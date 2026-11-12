@@ -584,6 +584,53 @@ class ConfigValidatorTest {
                                 + " false, but is: ture");
     }
 
+    @Test
+    void shouldReportATaskWithoutEnabledThatDependsOnOneWithIt() throws IOException {
+        // Given: enabled: を宣言しないタスクが、宣言するタスク（値は true）に依存する
+        createValidProject(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("seed.yaml"),
+                """
+                name: Seed
+                target: test-db
+                enabled: true
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("report.yaml"),
+                """
+                name: Report
+                target: test-db
+                dependencies:
+                  - test-db/seed
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("more_seed.yaml"),
+                """
+                name: More seed
+                target: test-db
+                enabled: true
+                dependencies:
+                  - test-db/seed
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then: enabled: を宣言したタスク同士の依存は問わない
+        assertThat(result.errors())
+                .containsExactly(
+                        "tasks/test-db/report.yaml: Dependency 'test-db/seed' declares enabled:"
+                                + " and this task does not; declare enabled: here too, or drop"
+                                + " the dependency");
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """

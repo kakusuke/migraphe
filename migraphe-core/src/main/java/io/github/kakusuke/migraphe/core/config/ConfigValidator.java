@@ -179,12 +179,16 @@ public class ConfigValidator {
         }
 
         Set<NodeId> disabledTasks = new HashSet<>();
+        Set<NodeId> conditionalTasks = new HashSet<>();
         for (NodeId taskId : taskIds) {
             Boolean enabled = null;
             try {
                 enabled = ConfigLoader.declaredEnabled(resolved, taskId);
             } catch (ConfigurationException e) {
                 errors.add("tasks/" + taskId.value() + ".yaml: " + e.getMessage());
+            }
+            if (enabled != null) {
+                conditionalTasks.add(taskId);
             }
             if (Boolean.FALSE.equals(enabled)) {
                 disabledTasks.add(taskId);
@@ -221,6 +225,15 @@ public class ConfigValidator {
                                     + ".yaml: Dependency '"
                                     + depId
                                     + "' is disabled (enabled: is false)");
+                } else if (conditionalTasks.contains(depNodeId)
+                        && !conditionalTasks.contains(taskId)) {
+                    errors.add(
+                            "tasks/"
+                                    + taskId.value()
+                                    + ".yaml: Dependency '"
+                                    + depId
+                                    + "' declares enabled: and this task does not; declare"
+                                    + " enabled: here too, or drop the dependency");
                 } else if (!validTasks.containsKey(depNodeId)) {
                     errors.add(
                             "tasks/"
