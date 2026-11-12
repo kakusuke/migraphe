@@ -204,7 +204,7 @@ public class ConfigValidator {
         }
 
         try {
-            overlay.putAll(new YamlConfigSource(envFile.toUri().toURL()).getProperties());
+            overlay.putAll(MultiFileYamlConfigSource.rawAwareYamlSource(envFile).getProperties());
             return List.of();
         } catch (IOException e) {
             return List.of(relativePath + ": Failed to load - " + e.getMessage());
@@ -220,7 +220,7 @@ public class ConfigValidator {
         String relativePath = "targets/" + targetId + ".yaml";
 
         try {
-            YamlConfigSource source = new YamlConfigSource(targetFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
             Map<String, String> props = source.getProperties();
 
             // The environment overlay wins over the target file, exactly as it does at run time.
@@ -245,7 +245,7 @@ public class ConfigValidator {
     /** Reads the {@code type} property from a target file, or {@code null} if it cannot be read. */
     private @Nullable String getTargetType(Path targetFile) {
         try {
-            YamlConfigSource source = new YamlConfigSource(targetFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
             return source.getProperties().get("type");
         } catch (Exception e) {
             return null;
@@ -262,7 +262,7 @@ public class ConfigValidator {
         String relativePath = "tasks/" + taskId.value() + ".yaml";
 
         try {
-            YamlConfigSource source = new YamlConfigSource(taskFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             Map<String, String> props = source.getProperties();
 
             // 'name' is required.
@@ -308,7 +308,7 @@ public class ConfigValidator {
             Class<?> taskDefClass = plugin.taskDefinitionClass();
 
             // Attempt the SmallRye Config mapping.
-            YamlConfigSource source = new YamlConfigSource(taskFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             SmallRyeConfig config =
                     new SmallRyeConfigBuilder()
                             .withSources(source)
@@ -365,7 +365,7 @@ public class ConfigValidator {
     /** Extracts a {@link TaskInfo} (target and dependencies) from a task file. */
     private @Nullable TaskInfo extractTaskInfo(Path taskFile) {
         try {
-            YamlConfigSource source = new YamlConfigSource(taskFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             Map<String, String> props = source.getProperties();
 
             String target = props.getOrDefault("target", "");

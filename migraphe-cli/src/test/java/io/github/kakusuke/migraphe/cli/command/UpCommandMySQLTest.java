@@ -144,7 +144,7 @@ class UpCommandMySQLTest {
                 """
                 name: Create procedure with DELIMITER
                 target: test-db
-                up: |
+                up: !raw |
                   CREATE TABLE delim_target (id INT);
                   DELIMITER $$
                   CREATE PROCEDURE delim_proc()

@@ -284,6 +284,10 @@ public interface SqlTaskDefinition extends TaskDefinition<String> {
 }
 ```
 
+Every value your definition receives has **already been resolved** by core: `${...}` is expanded
+against the whole configuration, and a value the user tagged `!raw` arrives exactly as written. Do not expand or unescape anything yourself
+— a second expansion would turn `$$` back into `$`. A target definition is read the same way.
+
 ## Core Interfaces to Implement
 
 ### Target

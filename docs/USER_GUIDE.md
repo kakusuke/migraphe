@@ -404,7 +404,30 @@ target:
 
 ```
 
-Variable substitution using `${VAR}` is supported via MicroProfile Config. Values resolve in this priority order (highest first): Gradle-injected variables, `environments/*.yaml` profiles, system properties (`-D`), then `migraphe.yaml`/`targets`/`tasks`. **OS environment variables must be referenced with the `env.` prefix — `${env.VAR}`, not `${VAR}`** — so that environment variables cannot leak into config keys such as `target.*`. Inline defaults are supported: `${env.VAR:default}`.
+### Variables in Configuration Files
+
+`${VAR}` is expanded in every YAML file Migraphe reads — `migraphe.yaml`, `targets/*.yaml`, `tasks/**/*.yaml` and `environments/*.yaml`. Values resolve in this priority order (highest first): Gradle-injected variables, `environments/*.yaml` profiles, system properties (`-D`), then `migraphe.yaml`/`targets`/`tasks`. **OS environment variables must be referenced with the `env.` prefix — `${env.VAR}`, not `${VAR}`** — so that environment variables cannot leak into config keys such as `target.*`. Inline defaults are supported: `${env.VAR:default}`. A reference may point at another value that itself holds `${...}`; it is expanded in turn.
+
+```yaml
+# tasks/db1/003_seed_users.yaml
+name: Seed users into ${seed.schema}
+target: db1
+up: INSERT INTO ${seed.schema}.users (name) VALUES ('alice');
+down: DELETE FROM ${seed.schema}.users WHERE name = 'alice';
+```
+
+**Keeping a value as written: `!raw`.** Expansion also changes a few things besides `${...}`: `$$` becomes `$`, a `\` before `$` is dropped, and a value holding an unclosed `${` is treated as **absent, without an error**. PostgreSQL `DO $$ … $$` blocks and `$$`-quoted function bodies, and MySQL `DELIMITER $$` scripts, are the common case. Tag such a value `!raw` and it reaches the database exactly as written:
+
+```yaml
+up: !raw |
+  CREATE FUNCTION add(a int, b int) RETURNS int AS $$
+    SELECT a + b;
+  $$ LANGUAGE sql;
+```
+
+`!raw` works on any scalar value, including a list element, in any of the files above. A value given with `-D` or an environment variable is not YAML; escape `$` there as `\$`.
+
+**What changing a value means.** A task is compared with the history as it resolves under the configuration you run with. Changing a value that reaches a task's text — a variable, an overlay, a rotated password referenced from SQL — makes that task show `[!]` in `status`, because what would run now differs from what was applied. Resolve it with [`amend`](#recording-definitions-as-applied-amend) or `rebuild` as for any edit. Two overlays that point at the same database and resolve a task differently will each show `[!]` for what the other applied.
 
 ## Writing Migrations
 

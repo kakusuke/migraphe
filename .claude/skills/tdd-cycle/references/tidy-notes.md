@@ -433,7 +433,7 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `JdbcMigrationNode.builder()` chain; only the environment cast and the exception type differ. A
   field added to `SqlTaskDefinition` and wired into one of them **compiles and goes green while doing
   nothing on the other two** — the two DB-specific plugins are the ones real projects use, and
-  `withValidateUnknown(false)` at `ConfigLoader.java:430` means an unread key is dropped rather than
+  `withValidateUnknown(false)` in `ConfigLoader.loadTaskDefinition` means an unread key is dropped rather than
   reported, so it fails at execution and stays silent in `validate`. After touching any of the three,
   grep the other two. Collapsing them into one is a design decision, not a tidy: they differ in the
   environment type they demand and in which `JdbcException` subclass they throw.
@@ -654,6 +654,20 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   payload, ms)` overload builds an *incomplete* row: use it only when the test is about that, and
   pass a token otherwise. Two dozen fixture rows across `DownServiceTest` and
   `DagExecutorRollbackTest` used the short form and froze the moment the rule landed
+
+- **A `!raw` value survives only because expansion runs exactly once, in `mainConfig`.** The YAML
+  loader escapes every `$` of a `!raw` scalar as `\$`, and that one expansion consumes the escape. A
+  config built over `PrefixedConfigSource` (the per-target and per-task mapping configs) must **not**
+  call `addDefaultInterceptors()`: a second expansion sees the bare `$$` and `${` again, turns `$$` into
+  `$` and silently drops a value holding an unclosed `${`. Likewise, a new site that reads a YAML file
+  must go through the `!raw`-aware loader — a bare `new YamlConfigSource(url)` throws on the tag.
+
+- **`ConfigValidator` swallows most read failures, so an "accepts X" test cannot show its checks
+  ran.** `validateWithPlugin` drops any exception whose message lacks "required", and
+  `extractTaskInfo` returns `null` and the task silently leaves cycle detection. A file one of them
+  cannot read therefore *passes* `validate` with those checks skipped. When changing how the validator
+  reads a file, pin each read site with a test that expects that site's error, not only one that
+  expects a clean result.
 
 ## A node has more than one history row
 
