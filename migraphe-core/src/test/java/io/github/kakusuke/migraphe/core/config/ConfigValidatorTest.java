@@ -503,6 +503,26 @@ class ConfigValidatorTest {
         assertThat(result.errors()).isEmpty();
     }
 
+    @Test
+    void shouldReportATaskKeyThatNamesNoField() throws IOException {
+        // Given: オーバーレイの task がマップではなくスカラー
+        createValidProject(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                task:
+                  test-db/seed: Seed
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then
+        assertThat(result.errors()).anyMatch(e -> e.contains("task.test-db/seed"));
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """
