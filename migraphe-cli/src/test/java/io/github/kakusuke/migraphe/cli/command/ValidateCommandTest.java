@@ -95,6 +95,36 @@ class ValidateCommandTest {
     }
 
     @Test
+    void shouldListATaskErrorFoundUnderEveryConfigurationUnderTasks() throws IOException {
+        // Given: overlay があり、task の target がどの構成でも存在しない
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                target: nonexistent
+                up: CREATE TABLE users (id SERIAL PRIMARY KEY);
+                down: DROP TABLE users;
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(environmentsDir.resolve("dev.yaml"), "greeting: dev\n");
+        ValidateCommand command = new ValidateCommand(tempDir, pluginRegistry, null, false);
+
+        // When
+        int exitCode = command.execute();
+
+        // Then
+        assertThat(exitCode).isEqualTo(1);
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(output)
+                .contains("Checking tasks (1 file)... FAIL")
+                .contains(
+                        "[base, env: dev] tasks/test-db/001_create_users.yaml: Target"
+                                + " 'nonexistent' not found");
+    }
+
+    @Test
     void shouldDisplayErrorCountInSummary() throws IOException {
         // Given: 複数のエラー
         createProjectWithMultipleErrors(tempDir);

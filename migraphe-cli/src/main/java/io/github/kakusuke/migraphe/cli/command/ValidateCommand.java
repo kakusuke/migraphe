@@ -196,7 +196,9 @@ public class ValidateCommand implements Command {
     private List<String> filterTaskFileErrors(List<String> errors) {
         List<String> filtered = new ArrayList<>();
         for (String error : errors) {
-            if (error.startsWith("tasks/") && !error.contains("Dependency")) {
+            String message =
+                    error.startsWith("[") ? error.substring(error.indexOf("] ") + 2) : error;
+            if (message.startsWith("tasks/") && !error.contains("Dependency")) {
                 filtered.add(error);
             }
         }
