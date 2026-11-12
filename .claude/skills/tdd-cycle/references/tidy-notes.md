@@ -662,6 +662,13 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `$` and silently drops a value holding an unclosed `${`. Likewise, a new site that reads a YAML file
   must go through the `!raw`-aware loader — a bare `new YamlConfigSource(url)` throws on the tag.
 
+- **`ConfigValidator` swallows most read failures, so an "accepts X" test cannot show its checks
+  ran.** `validateWithPlugin` drops any exception whose message lacks "required", and
+  `extractTaskInfo` returns `null` and the task silently leaves cycle detection. A file one of them
+  cannot read therefore *passes* `validate` with those checks skipped. When changing how the validator
+  reads a file, pin each read site with a test that expects that site's error, not only one that
+  expects a clean result.
+
 ## A node has more than one history row
 
 `amend` appends rather than rewriting, so "the one history row" stopped being a thing. Anything that

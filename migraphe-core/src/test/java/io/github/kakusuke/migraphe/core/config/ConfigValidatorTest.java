@@ -109,6 +109,26 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldDetectARawTaggedTaskThatNeitherRollsBackNorSaysWhyNot() throws IOException {
+        // Given: !raw タグ付きの up: を持ち、down: も no_way_back: も無いタスク
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("002_do_block.yaml"),
+                """
+                name: Run a DO block
+                target: test-db
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("no_way_back"));
+    }
+
+    @Test
     void shouldDetectATaskThatNeitherRollsBackNorSaysWhyNot() throws IOException {
         // Given: down: も no_way_back: も無いタスク
         createValidProject(tempDir);

@@ -308,7 +308,7 @@ public class ConfigValidator {
             Class<?> taskDefClass = plugin.taskDefinitionClass();
 
             // Attempt the SmallRye Config mapping.
-            YamlConfigSource source = new YamlConfigSource(taskFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             SmallRyeConfig config =
                     new SmallRyeConfigBuilder()
                             .withSources(source)
