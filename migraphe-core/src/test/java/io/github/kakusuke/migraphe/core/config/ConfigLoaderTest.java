@@ -2,6 +2,9 @@ package io.github.kakusuke.migraphe.core.config;
 
 import static org.assertj.core.api.Assertions.*;
 
+import io.github.kakusuke.migraphe.api.graph.NodeId;
+import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
+import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -476,6 +479,52 @@ class ConfigLoaderTest {
         SmallRyeConfig config = loader.loadConfig(tempDir, null);
 
         assertThat(config.getValue("task.\"db1/fn\".up", String.class)).isEqualTo("DO $$ ${x} $$");
+    }
+
+    @Test
+    void shouldBindTaskDefinitionsFromTheWholeConfiguration(@TempDir Path tempDir)
+            throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                greeting: base
+                x: expanded
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Files.writeString(
+                tasksDir.resolve("greet.yaml"),
+                """
+                name: "hello ${greeting}"
+                target: db1
+                up: !raw "DO $$ ${x} $$"
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(environmentsDir.resolve("dev.yaml"), "greeting: overlay\n");
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+
+        TaskDefinition<?> base =
+                loader.loadTaskDefinitions(
+                                tempDir, loader.loadConfig(tempDir, null), pluginRegistry)
+                        .get(NodeId.of("db1/greet"));
+        TaskDefinition<?> overlay =
+                loader.loadTaskDefinitions(
+                                tempDir, loader.loadConfig(tempDir, "dev"), pluginRegistry)
+                        .get(NodeId.of("db1/greet"));
+
+        assertThat(base.name()).isEqualTo("hello base");
+        assertThat(overlay.name()).isEqualTo("hello overlay");
+        assertThat(base.up()).isEqualTo("DO $$ ${x} $$");
     }
 
     /** テスト用のプロジェクト構造を作成する。 */
