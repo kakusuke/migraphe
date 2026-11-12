@@ -433,7 +433,7 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `JdbcMigrationNode.builder()` chain; only the environment cast and the exception type differ. A
   field added to `SqlTaskDefinition` and wired into one of them **compiles and goes green while doing
   nothing on the other two** — the two DB-specific plugins are the ones real projects use, and
-  `withValidateUnknown(false)` at `ConfigLoader.java:430` means an unread key is dropped rather than
+  `withValidateUnknown(false)` in `ConfigLoader.loadTaskDefinition` means an unread key is dropped rather than
   reported, so it fails at execution and stays silent in `validate`. After touching any of the three,
   grep the other two. Collapsing them into one is a design decision, not a tidy: they differ in the
   environment type they demand and in which `JdbcException` subclass they throw.
