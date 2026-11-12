@@ -425,6 +425,30 @@ class ConfigValidatorTest {
         assertThat(result.errors()).isEmpty();
     }
 
+    @Test
+    void shouldReportAnUnresolvableVariableInATask() throws IOException {
+        // Given: task が未定義の変数を参照する
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                target: test-db
+                up: CREATE SCHEMA ${app.schema};
+                down: DROP SCHEMA ${app.schema};
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .anyMatch(
+                        e ->
+                                e.startsWith("tasks/test-db/001_create_users.yaml: ")
+                                        && e.contains("app.schema"));
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """

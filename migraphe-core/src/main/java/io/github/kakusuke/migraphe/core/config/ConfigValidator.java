@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
@@ -160,9 +161,15 @@ public class ConfigValidator {
         Map<NodeId, TaskInfo> validTasks = new HashMap<>();
 
         for (NodeId taskId : readableTaskFiles.keySet()) {
-            PrefixedConfigSource task =
-                    new PrefixedConfigSource(
-                            resolved, MultiFileYamlConfigSource.taskKeyPrefix(taskId));
+            PrefixedConfigSource task;
+            try {
+                task =
+                        new PrefixedConfigSource(
+                                resolved, MultiFileYamlConfigSource.taskKeyPrefix(taskId));
+            } catch (NoSuchElementException e) {
+                errors.add("tasks/" + taskId.value() + ".yaml: " + e.getMessage());
+                continue;
+            }
             List<String> taskErrors = validateTask(task, taskId, validTargetIds, targetTypes);
             if (taskErrors.isEmpty()) {
                 validTasks.put(taskId, extractTaskInfo(task));
