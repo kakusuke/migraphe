@@ -35,8 +35,8 @@ import org.yaml.snakeyaml.nodes.Tag;
  * <ul>
  *   <li>{@code migraphe.yaml} &rarr; no prefix ({@code project.*}, {@code history.*})
  *   <li>{@code targets/db1.yaml} &rarr; {@code "target.db1.*"} prefix
- *   <li>{@code tasks/db1/create_users.yaml} &rarr; {@code "task.\"db1/create_users\".*"} prefix
- *       (the task id is quoted so embedded slashes are not treated as key separators)
+ *   <li>{@code tasks/db1/create_users.yaml} &rarr; {@code "task.db1/create_users.*"} prefix (see
+ *       {@link #taskKeyPrefix})
  * </ul>
  */
 public class MultiFileYamlConfigSource implements ConfigSource {
@@ -104,9 +104,7 @@ public class MultiFileYamlConfigSource implements ConfigSource {
     }
 
     /**
-     * Loads each task file under a {@code "task.\"<taskId>\".*"} prefix. The task id is quoted so
-     * that ids containing slashes (such as {@code db1/create_users}) are not split into nested
-     * keys.
+     * Loads each task file under its {@link #taskKeyPrefix}.
      *
      * @param taskFiles the task files keyed by their {@link NodeId}
      * @throws ConfigurationException if any YAML file cannot be read
@@ -121,15 +119,26 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                 YamlConfigSource yamlSource = rawAwareYamlSource(file);
 
                 // Merge in with the prefix applied.
-                // When a task id contains slashes, the form is "task.\"db1/create_users\".*".
                 for (Map.Entry<String, String> prop : yamlSource.getProperties().entrySet()) {
-                    String prefixedKey = "task.\"" + taskId.value() + "\"." + prop.getKey();
+                    String prefixedKey = taskKeyPrefix(taskId) + prop.getKey();
                     properties.put(prefixedKey, prop.getValue());
                 }
             } catch (IOException e) {
                 throw new ConfigurationException("Failed to load task config: " + file, e);
             }
         }
+    }
+
+    /**
+     * The prefix of a task's keys, written the way {@link YamlConfigSource} flattens a {@code
+     * task:} map in an overlay: the id is quoted only when it contains a dot.
+     *
+     * @param taskId the task id
+     * @return the prefix, ending in a dot
+     */
+    static String taskKeyPrefix(NodeId taskId) {
+        String id = taskId.value();
+        return "task." + (id.contains(".") ? "\"" + id + "\"" : id) + ".";
     }
 
     /**

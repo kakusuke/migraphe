@@ -416,7 +416,7 @@ up: INSERT INTO ${seed.schema}.users (name) VALUES ('alice');
 down: DELETE FROM ${seed.schema}.users WHERE name = 'alice';
 ```
 
-**Keeping a value as written: `!raw`.** Expansion also changes a few things besides `${...}`: `$$` becomes `$`, a `\` before `$` is dropped, and a value holding an unclosed `${` is treated as **absent, without an error**. PostgreSQL `DO $$ … $$` blocks and `$$`-quoted function bodies, and MySQL `DELIMITER $$` scripts, are the common case. Tag such a value `!raw` and it reaches the database exactly as written:
+**Keeping a value as written: `!raw`.** Expansion also changes a few things besides `${...}`: `$$` becomes `$`, a `\` before `$` is dropped, and a value holding an unclosed `${` cannot be expanded — in a task that is an error naming the property, elsewhere the value is treated as absent. PostgreSQL `DO $$ … $$` blocks and `$$`-quoted function bodies, and MySQL `DELIMITER $$` scripts, are the common case. Tag such a value `!raw` and it reaches the database exactly as written:
 
 ```yaml
 up: !raw |
@@ -425,7 +425,18 @@ up: !raw |
   $$ LANGUAGE sql;
 ```
 
-`!raw` works on any scalar value, including a list element, in any of the files above. A value given with `-D` or an environment variable is not YAML; escape `$` there as `\$`.
+`!raw` works on any scalar value, including a list element, in any of the files above. 
+
+**Overriding a task from an overlay.** An overlay can set any key of a task under `task:`, keyed by the task's id (its path under `tasks/` without `.yaml`):
+
+```yaml
+# environments/dev.yaml
+task:
+  db1/003_seed_users:
+    name: Seed users (dev)
+```
+
+An id that holds a dot must be quoted (`"db1/v1.2":`). An id with no file under `tasks/` defines a task of that id, so an overlay can add a task; a mistyped id therefore shows up as a task with missing fields, which both `validate` and the load report. `validate` checks the configuration as it resolves, with the overlay given by `--env` applied. A value given with `-D` or an environment variable is not YAML; escape `$` there as `\$`.
 
 **What changing a value means.** A task is compared with the history as it resolves under the configuration you run with. Changing a value that reaches a task's text — a variable, an overlay, a rotated password referenced from SQL — makes that task show `[!]` in `status`, because what would run now differs from what was applied. Resolve it with [`amend`](#recording-definitions-as-applied-amend) or `rebuild` as for any edit. Two overlays that point at the same database and resolve a task differently will each show `[!]` for what the other applied.
 

@@ -2,6 +2,16 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-11-13 (Session 81)
+
+**決定 37 の残りを片付けた。`validate` を解決済みの設定の上に作り直し、task を `task.*` キーから見つけるようにした。** PR #97 に積む PR。
+
+- **overlay から task を上書きできていなかった**。`YamlConfigSource` は overlay の `task: {db1/x: …}` を `task.db1/x.*` に平坦化し、ドットを含むときだけ引用符で囲む。一方 task ファイルは常に `task."db1/x".*` で登録していた。SmallRye はキーを書かれたとおりに比べるので、overlay の上書きは一度も届いていなかった（実験で確認）。task のキーを SmallRye と同じ規則にした（`MultiFileYamlConfigSource.taskKeyPrefix`）。ドット入りの id もテストで固定した。
+- **task を `task.*` キーから見つける**（決定 37 の方式 i）。ファイルのない id のキーは、その id の task を定義する。`task: {db1/seed: Seed}` のように id の後にキーがないものは、`StringIndexOutOfBounds` ではなく、キーを示す `ConfigurationException` にした。
+- **`validate` をロードと同じ解決で検査する**。各ファイルを単体で構文検査してから、ロードと同じ設定スタック（`ConfigLoader.buildConfig` として切り出し）を組み、target の `type`、task の `name`・`target`・プラグインのマッピング・`dependencies` を解決後の値で検査する。`type: ${dbtype}`、overlay から来る `target:`、ファイルのない task への依存が正しく扱われる。
+- **解決できない `${...}` は `validate` で例外にせず報告する**。`getConfigValue` は展開失敗を握りつぶして値を null にし、`getValue`（と `PrefixedConfigSource`）は SRCFG00011 を投げる。読む箇所ごとに扱いが違うので、tidy-notes に罠として記録した。task の閉じていない `${` は、ロードでも `validate` でもプロパティ名つきのエラーになる（`validate` で実測）。前の PR で「値が黙って消える」と書いていた記述は、task については事実と違ったので直した。
+- Tests: core・cli 100% passing。TDD 9 サイクル、すべて cycle-verifier で closed。そのうち 2 サイクルは、テストのない分岐（ドット入り id の引用符、`continue`）を指摘されてテストを足し、ミューテーションで効いていることを確かめてから閉じた。
+
 ### 2026-11-13 (Session 80)
 
 **task ファイルの `${...}` を展開するようにし、展開させない値のための `!raw` タグを入れた（決定 37）。** あわせて、seed のような環境限定のタスクを書く `enabled:`（決定 38）を設計として決めた。`enabled:` の実装は次の PR。

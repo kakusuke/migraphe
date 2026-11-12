@@ -662,12 +662,17 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `$` and silently drops a value holding an unclosed `${`. Likewise, a new site that reads a YAML file
   must go through the `!raw`-aware loader — a bare `new YamlConfigSource(url)` throws on the tag.
 
-- **`ConfigValidator` swallows most read failures, so an "accepts X" test cannot show its checks
-  ran.** `validateWithPlugin` drops any exception whose message lacks "required", and
-  `extractTaskInfo` returns `null` and the task silently leaves cycle detection. A file one of them
-  cannot read therefore *passes* `validate` with those checks skipped. When changing how the validator
-  reads a file, pin each read site with a test that expects that site's error, not only one that
-  expects a clean result.
+- **`ConfigValidator.validateWithPlugin` swallows failures, so an "accepts X" test cannot show its
+  check ran.** It drops any exception whose message lacks "required", so a task the plugin mapping
+  cannot read *passes* that check. When changing what the validator reads, pin each read site with a
+  test that expects that site's error, not only one that expects a clean result.
+
+- **`SmallRyeConfig.getConfigValue` and `getValue` disagree on an expression that cannot be
+  expanded.** `getConfigValue(k).getValue()` returns `null` — indistinguishable from an absent key
+  unless you also look at `getRawValue()` — while `getValue(k, String.class)` (and so
+  `PrefixedConfigSource`'s constructor, which reads every key under its prefix) throws
+  `NoSuchElementException` SRCFG00011. In the validator, which must accumulate rather than throw,
+  every site that reads the resolved config must handle the one it uses.
 
 ## A node has more than one history row
 

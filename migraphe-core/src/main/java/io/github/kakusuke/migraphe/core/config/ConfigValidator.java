@@ -3,9 +3,9 @@ package io.github.kakusuke.migraphe.core.config;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import io.smallrye.config.ConfigValue;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
-import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -13,7 +13,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
+import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -109,38 +111,86 @@ public class ConfigValidator {
 
         // 2. Load and validate each targets/*.yaml individually.
         List<Path> targetFiles = scanner.scanTargetFiles(scanRoot);
+        List<Path> readableTargetFiles = new ArrayList<>();
         Set<String> validTargetIds = new HashSet<>();
         Map<String, String> targetTypes = new HashMap<>();
 
         for (Path targetFile : targetFiles) {
-            String targetId = targetFile.getFileName().toString().replaceAll("\\.yaml$", "");
-            String typeOverride = overlay.get("target." + targetId + ".type");
-            List<String> targetErrors = validateTargetFile(targetFile, targetId, typeOverride);
-            if (targetErrors.isEmpty()) {
+            String targetId = targetIdOf(targetFile);
+            List<String> readErrors = readYamlFile(targetFile, "targets/" + targetId + ".yaml");
+            if (readErrors.isEmpty()) {
+                readableTargetFiles.add(targetFile);
+            } else {
+                errors.addAll(readErrors);
+            }
+        }
+
+        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
+        Map<NodeId, Path> readableTaskFiles = new HashMap<>();
+
+        for (Path taskFile : taskFiles) {
+            NodeId taskId = idGenerator.generateTaskId(scanRoot, taskFile);
+            List<String> readErrors = readYamlFile(taskFile, "tasks/" + taskId.value() + ".yaml");
+            if (readErrors.isEmpty()) {
+                readableTaskFiles.put(taskId, taskFile);
+            } else {
+                errors.addAll(readErrors);
+            }
+        }
+
+        SmallRyeConfig resolved =
+                ConfigLoader.buildConfig(
+                        new MultiFileYamlConfigSource(
+                                projectConfigFile, readableTargetFiles, readableTaskFiles),
+                        overlay.isEmpty() ? null : new MapConfigSource(overlay, 500),
+                        Map.of());
+
+        for (Path targetFile : readableTargetFiles) {
+            String targetId = targetIdOf(targetFile);
+            ConfigValue typeValue = resolved.getConfigValue("target." + targetId + ".type");
+            String type = typeValue.getValue();
+            if (type == null && typeValue.getRawValue() != null) {
+                errors.add(
+                        "targets/"
+                                + targetId
+                                + ".yaml: Could not expand 'type': "
+                                + typeValue.getRawValue());
+                continue;
+            }
+            List<String> targetErrors = validateTargetType(targetId, type);
+            if (targetErrors.isEmpty() && type != null) {
                 validTargetIds.add(targetId);
                 // Capture the effective target type for later plugin-specific task validation.
-                String type = typeOverride != null ? typeOverride : getTargetType(targetFile);
-                if (type != null) {
-                    targetTypes.put(targetId, type);
-                }
+                targetTypes.put(targetId, type);
             } else {
                 errors.addAll(targetErrors);
             }
         }
 
-        // 3. Load and validate each tasks/**/*.yaml individually.
-        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
+        // 3. Validate each task as resolved.
         Map<NodeId, TaskInfo> validTasks = new HashMap<>();
 
-        for (Path taskFile : taskFiles) {
-            NodeId taskId = idGenerator.generateTaskId(scanRoot, taskFile);
-            List<String> taskErrors =
-                    validateTaskFile(taskFile, taskId, validTargetIds, targetTypes);
+        Set<NodeId> taskIds;
+        try {
+            taskIds = ConfigLoader.extractTaskIds(resolved);
+        } catch (ConfigurationException e) {
+            errors.add(e.getMessage());
+            taskIds = Set.of();
+        }
+
+        for (NodeId taskId : taskIds) {
+            PrefixedConfigSource task;
+            try {
+                task =
+                        new PrefixedConfigSource(
+                                resolved, MultiFileYamlConfigSource.taskKeyPrefix(taskId));
+            } catch (NoSuchElementException e) {
+                errors.add("tasks/" + taskId.value() + ".yaml: " + e.getMessage());
+                continue;
+            }
+            List<String> taskErrors = validateTask(task, taskId, validTargetIds, targetTypes);
             if (taskErrors.isEmpty()) {
-                TaskInfo taskInfo = extractTaskInfo(taskFile);
-                if (taskInfo != null) {
-                    validTasks.put(taskId, taskInfo);
-                }
+                validTasks.put(taskId, extractTaskInfo(task));
             } else {
                 errors.addAll(taskErrors);
             }
@@ -213,81 +263,62 @@ public class ConfigValidator {
         }
     }
 
-    /** Validates a single target file, honouring an overlay-supplied {@code type} when present. */
-    private List<String> validateTargetFile(
-            Path targetFile, String targetId, @Nullable String typeOverride) {
-        List<String> errors = new ArrayList<>();
-        String relativePath = "targets/" + targetId + ".yaml";
+    /** Derives a target's id from its file name ({@code db1.yaml} &rarr; {@code db1}). */
+    private static String targetIdOf(Path targetFile) {
+        return targetFile.getFileName().toString().replaceAll("\\.yaml$", "");
+    }
 
+    /** Reads a single YAML file, reporting it when it cannot be loaded or parsed. */
+    private List<String> readYamlFile(Path file, String relativePath) {
         try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
-            Map<String, String> props = source.getProperties();
-
-            // The environment overlay wins over the target file, exactly as it does at run time.
-            String type = typeOverride != null ? typeOverride : props.get("type");
-
-            // 'type' is required.
-            if (type == null) {
-                errors.add(relativePath + ": Missing required property 'type'");
-            } else if (!pluginRegistry.hasPlugin(type)) {
-                // Ensure 'type' names a registered plugin.
-                errors.add(relativePath + ": Unknown plugin type '" + type + "'");
-            }
+            MultiFileYamlConfigSource.rawAwareYamlSource(file);
+            return List.of();
         } catch (IOException e) {
-            errors.add(relativePath + ": Failed to load - " + e.getMessage());
+            return List.of(relativePath + ": Failed to load - " + e.getMessage());
         } catch (Exception e) {
-            errors.add(relativePath + ": Invalid YAML - " + e.getMessage());
-        }
-
-        return errors;
-    }
-
-    /** Reads the {@code type} property from a target file, or {@code null} if it cannot be read. */
-    private @Nullable String getTargetType(Path targetFile) {
-        try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
-            return source.getProperties().get("type");
-        } catch (Exception e) {
-            return null;
+            return List.of(relativePath + ": Invalid YAML - " + e.getMessage());
         }
     }
 
-    /** Validates a single task file. */
-    private List<String> validateTaskFile(
-            Path taskFile,
+    /** Validates a target's resolved {@code type}. */
+    private List<String> validateTargetType(String targetId, @Nullable String type) {
+        String relativePath = "targets/" + targetId + ".yaml";
+        if (type == null) {
+            return List.of(relativePath + ": Missing required property 'type'");
+        }
+        if (!pluginRegistry.hasPlugin(type)) {
+            return List.of(relativePath + ": Unknown plugin type '" + type + "'");
+        }
+        return List.of();
+    }
+
+    /** Validates a single task's resolved keys. */
+    private List<String> validateTask(
+            ConfigSource task,
             NodeId taskId,
             Set<String> validTargetIds,
             Map<String, String> targetTypes) {
         List<String> errors = new ArrayList<>();
         String relativePath = "tasks/" + taskId.value() + ".yaml";
+        Map<String, String> props = task.getProperties();
 
-        try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
-            Map<String, String> props = source.getProperties();
+        // 'name' is required.
+        if (props.get("name") == null) {
+            errors.add(relativePath + ": Missing required property 'name'");
+        }
 
-            // 'name' is required.
-            if (!props.containsKey("name") || props.get("name") == null) {
-                errors.add(relativePath + ": Missing required property 'name'");
+        // 'target' is required.
+        String target = props.get("target");
+        if (target == null) {
+            errors.add(relativePath + ": Missing required property 'target'");
+        } else if (!validTargetIds.contains(target)) {
+            errors.add(relativePath + ": Target '" + target + "' not found");
+        } else {
+            // Run plugin-specific validation using the target's type.
+            String type = targetTypes.get(target);
+            if (type != null) {
+                errors.addAll(validateWithPlugin(task, type, relativePath));
             }
-
-            // 'target' is required.
-            String target = props.get("target");
-            if (target == null) {
-                errors.add(relativePath + ": Missing required property 'target'");
-            } else if (!validTargetIds.contains(target)) {
-                errors.add(relativePath + ": Target '" + target + "' not found");
-            } else {
-                // Run plugin-specific validation using the target's type.
-                String type = targetTypes.get(target);
-                if (type != null) {
-                    List<String> pluginErrors = validateWithPlugin(taskFile, type, relativePath);
-                    errors.addAll(pluginErrors);
-                }
-            }
-        } catch (IOException e) {
-            errors.add(relativePath + ": Failed to load - " + e.getMessage());
-        } catch (Exception e) {
-            errors.add(relativePath + ": Invalid YAML - " + e.getMessage());
         }
 
         return errors;
@@ -296,7 +327,7 @@ public class ConfigValidator {
     /**
      * Runs plugin-specific validation by mapping the task file onto the plugin's task definition.
      */
-    private List<String> validateWithPlugin(Path taskFile, String type, String relativePath) {
+    private List<String> validateWithPlugin(ConfigSource task, String type, String relativePath) {
         List<String> errors = new ArrayList<>();
 
         try {
@@ -308,10 +339,9 @@ public class ConfigValidator {
             Class<?> taskDefClass = plugin.taskDefinitionClass();
 
             // Attempt the SmallRye Config mapping.
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             SmallRyeConfig config =
                     new SmallRyeConfigBuilder()
-                            .withSources(source)
+                            .withSources(task)
                             .withMapping(taskDefClass)
                             .withValidateUnknown(false)
                             .build();
@@ -362,27 +392,22 @@ public class ConfigValidator {
         return problems;
     }
 
-    /** Extracts a {@link TaskInfo} (target and dependencies) from a task file. */
-    private @Nullable TaskInfo extractTaskInfo(Path taskFile) {
-        try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
-            Map<String, String> props = source.getProperties();
+    /** Extracts a {@link TaskInfo} (target and dependencies) from a task's resolved keys. */
+    private TaskInfo extractTaskInfo(ConfigSource task) {
+        Map<String, String> props = task.getProperties();
 
-            String target = props.getOrDefault("target", "");
-            List<String> dependencies = new ArrayList<>();
+        String target = props.getOrDefault("target", "");
+        List<String> dependencies = new ArrayList<>();
 
-            // Extract dependencies (list-indexed keys).
-            for (Map.Entry<String, String> entry : props.entrySet()) {
-                String key = entry.getKey();
-                if (key.startsWith("dependencies[") && key.endsWith("]")) {
-                    dependencies.add(entry.getValue());
-                }
+        // Extract dependencies (list-indexed keys).
+        for (Map.Entry<String, String> entry : props.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("dependencies[") && key.endsWith("]")) {
+                dependencies.add(entry.getValue());
             }
-
-            return new TaskInfo(target, dependencies);
-        } catch (Exception e) {
-            return null;
         }
+
+        return new TaskInfo(target, dependencies);
     }
 
     /** Detects circular task dependencies using depth-first search. */

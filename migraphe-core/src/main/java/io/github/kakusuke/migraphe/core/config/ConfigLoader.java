@@ -8,17 +8,18 @@ import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
-import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
+import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -130,12 +131,7 @@ public class ConfigLoader {
         MultiFileYamlConfigSource multiFileSource =
                 new MultiFileYamlConfigSource(projectConfigFile, targetFiles, taskFiles);
 
-        // 5. Build the SmallRyeConfigBuilder.
-        // Note: only ProjectConfig is bound via withMapping. TargetConfig and TaskConfig live under
-        // dynamic prefixes and must be retrieved programmatically.
-        SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().addDefaultInterceptors();
-
-        // 6. Load the environment override file if present (ordinal 500).
+        // 5. Load the environment override file if present (ordinal 500).
         Path envFile = envName != null ? scanner.findEnvironmentFile(scanRoot, envName) : null;
 
         if (envName != null && envFile == null) {
@@ -143,29 +139,49 @@ public class ConfigLoader {
                     environmentNotFoundMessage(scanner, scanRoot, envName));
         }
 
+        ConfigSource envSource = null;
         if (envFile != null) {
             try {
-                YamlConfigSource envSource =
-                        MultiFileYamlConfigSource.rawAwareYamlSource(envFile, 500);
-                // Register the environment file and the MultiFileYamlConfigSource together.
-                builder.withSources(envSource, multiFileSource);
+                envSource = MultiFileYamlConfigSource.rawAwareYamlSource(envFile, 500);
             } catch (IOException e) {
                 throw new ConfigurationException("Failed to load environment file: " + envFile, e);
             }
+        }
+
+        return buildConfig(multiFileSource, envSource, variables);
+    }
+
+    /**
+     * Stacks the merged YAML files, the environment overlay, the OS environment, system properties
+     * and explicit variables into one config (see the class documentation for the precedence).
+     *
+     * @param multiFileSource the merged YAML files
+     * @param envSource the environment overlay at ordinal 500, or {@code null} for none
+     * @param variables externally-supplied variables (ordinal 600); ignored when empty
+     * @return the built config
+     */
+    static SmallRyeConfig buildConfig(
+            MultiFileYamlConfigSource multiFileSource,
+            @Nullable ConfigSource envSource,
+            Map<String, String> variables) {
+        // Note: only ProjectConfig is bound via withMapping. TargetConfig and TaskConfig live under
+        // dynamic prefixes and must be retrieved programmatically.
+        SmallRyeConfigBuilder builder = new SmallRyeConfigBuilder().addDefaultInterceptors();
+
+        if (envSource != null) {
+            builder.withSources(envSource, multiFileSource);
         } else {
-            // No environment file: register only the MultiFileYamlConfigSource.
             builder.withSources(multiFileSource);
         }
 
-        // 7. Register System.getenv() under env.<NAME> keys (ordinal 300): referenced as
-        // ${env.VAR}.
+        // Register System.getenv() under env.<NAME> keys (ordinal 300): referenced as ${env.VAR}.
         Map<String, String> envVars = new HashMap<>();
         for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
             envVars.put("env." + entry.getKey(), entry.getValue());
         }
         builder.withSources(new MapConfigSource(envVars, 300));
 
-        // 8. Register system properties under their raw keys (ordinal 400): referenced as ${name}.
+        // Register system properties under their raw keys (ordinal 400): referenced as ${name}.
         Map<String, String> sysProps = new HashMap<>();
         for (Map.Entry<Object, Object> entry : System.getProperties().entrySet()) {
             if (entry.getKey() instanceof String k && entry.getValue() instanceof String v) {
@@ -174,12 +190,11 @@ public class ConfigLoader {
         }
         builder.withSources(new MapConfigSource(sysProps, 400));
 
-        // 9. Register explicit variables, if any, at the highest precedence (ordinal 600).
+        // Register explicit variables, if any, at the highest precedence (ordinal 600).
         if (!variables.isEmpty()) {
             builder.withSources(new MapConfigSource(variables));
         }
 
-        // 10. Configure the mapping and validation.
         builder.withMapping(ProjectConfig.class).withValidateUnknown(false); // allow unmapped keys
 
         return builder.build();
@@ -211,35 +226,29 @@ public class ConfigLoader {
     }
 
     /**
-     * Loads every {@link TaskDefinition} from the {@code tasks/} directory.
+     * Loads a {@link TaskDefinition} for every task.
      *
-     * <p>For each task file, the {@code target} field selects a target whose {@code type}
-     * identifies the plugin; the file is then mapped onto that plugin's task-definition type.
+     * <p>Task ids are discovered from the {@code task.*} keys of the merged config, as target ids
+     * are from {@code target.*}: a task file contributes its keys under the id its path gives, and
+     * a key whose id has no file defines a task of that id. Each task's {@code target} field
+     * selects a target whose {@code type} identifies the plugin; the task's keys are then mapped
+     * onto that plugin's task-definition type.
      *
-     * @param baseDir the project base directory (the scan root is resolved internally from {@code
-     *     project.scan-root})
-     * @param mainConfig the merged main config, used to look up target types
+     * @param baseDir the project base directory; no longer read, since the tasks come from {@code
+     *     mainConfig}
+     * @param mainConfig the merged main config containing the {@code task.*} entries
      * @param pluginRegistry the registry used to resolve plugins by type
-     * @return a map from task {@link NodeId} to its loaded {@link TaskDefinition}, in scan order
-     * @throws ConfigurationException if a task file cannot be loaded or its target type is unknown
+     * @return a map from task {@link NodeId} to its loaded {@link TaskDefinition}, in unspecified
+     *     order
+     * @throws ConfigurationException if a task's target type is unknown
      */
     public Map<NodeId, TaskDefinition<?>> loadTaskDefinitions(
             Path baseDir, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
 
-        YamlFileScanner scanner = new YamlFileScanner();
-        TaskIdGenerator idGenerator = new TaskIdGenerator();
         Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
-        // Scan all YAML files under the tasks/ directory.
-        Path projectConfigFile = scanner.findProjectConfig(baseDir);
-        Path scanRoot =
-                projectConfigFile != null ? resolveScanRoot(baseDir, projectConfigFile) : baseDir;
-        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
-
-        for (Path taskFile : taskFiles) {
-            NodeId nodeId = idGenerator.generateTaskId(scanRoot, taskFile);
-            TaskDefinition<?> taskDef =
-                    loadTaskDefinition(nodeId, taskFile, mainConfig, pluginRegistry);
+        for (NodeId nodeId : extractTaskIds(mainConfig)) {
+            TaskDefinition<?> taskDef = loadTaskDefinition(nodeId, mainConfig, pluginRegistry);
             taskDefinitions.put(nodeId, taskDef);
         }
 
@@ -383,27 +392,53 @@ public class ConfigLoader {
     }
 
     /**
-     * Loads a single {@link TaskDefinition} from the task's {@code task."<id>".} keys in {@code
-     * mainConfig}.
+     * Extracts the set of task ids from the {@code task.*} property names of the config. An id
+     * holding a dot is quoted in its keys (see {@link MultiFileYamlConfigSource#taskKeyPrefix}).
+     *
+     * @param config the merged config to inspect
+     * @return the distinct task ids found
+     */
+    static Set<NodeId> extractTaskIds(SmallRyeConfig config) {
+        Set<NodeId> taskIds = new LinkedHashSet<>();
+        for (String name : config.getPropertyNames()) {
+            if (!name.startsWith("task.")) {
+                continue;
+            }
+            String rest = name.substring("task.".length());
+            boolean quoted = rest.startsWith("\"");
+            int end = quoted ? rest.indexOf('"', 1) : rest.indexOf('.');
+            if (end < 0) {
+                throw new ConfigurationException(
+                        "A task key must name a field of the task, such as "
+                                + name
+                                + ".name: "
+                                + name);
+            }
+            String id = quoted ? rest.substring(1, end) : rest.substring(0, end);
+            taskIds.add(NodeId.of(id));
+        }
+        return taskIds;
+    }
+
+    /**
+     * Loads a single {@link TaskDefinition} from the task's task keys ({@link
+     * MultiFileYamlConfigSource#taskKeyPrefix}) in {@code mainConfig}.
      *
      * <p>First reads just the {@code target} field, looks up that target's {@code type} in {@code
      * mainConfig}, resolves the plugin, then maps the task's keys onto the plugin's task-definition
      * type. Reading them from {@code mainConfig} rather than from the file is what lets a task's
      * values be expanded and overridden the way a target's are.
      *
-     * @param nodeId the task's id, which names its {@code task."<id>".} keys in {@code mainConfig}
-     * @param taskFile the path to the task file, named in error messages
+     * @param nodeId the task's id, which names its task keys ({@link
+     *     MultiFileYamlConfigSource#taskKeyPrefix}) in {@code mainConfig}
      * @param mainConfig the merged main config, used to look up the target's type
      * @param pluginRegistry the registry used to resolve the plugin by type
      * @return the loaded task definition
      * @throws ConfigurationException if its target type is unknown
      */
     public TaskDefinition<?> loadTaskDefinition(
-            NodeId nodeId,
-            Path taskFile,
-            SmallRyeConfig mainConfig,
-            PluginRegistry pluginRegistry) {
-        String prefix = "task.\"" + nodeId.value() + "\".";
+            NodeId nodeId, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
+        String prefix = MultiFileYamlConfigSource.taskKeyPrefix(nodeId);
 
         // 1. Read only the target field first.
         SmallRyeConfig targetOnlyConfig =
@@ -420,7 +455,10 @@ public class ConfigLoader {
         String type = mainConfig.getValue("target." + targetId + ".type", String.class);
         if (type == null) {
             throw new ConfigurationException(
-                    "Target type not found for target: " + targetId + " in file: " + taskFile);
+                    "Target type not found for target: "
+                            + targetId
+                            + " in task: "
+                            + nodeId.value());
         }
 
         // 3. Resolve the plugin.

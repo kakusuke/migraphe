@@ -370,6 +370,159 @@ class ConfigValidatorTest {
         assertThat(result.errors()).noneMatch(e -> e.contains("not-a-registered-plugin"));
     }
 
+    @Test
+    void shouldResolveATargetTypeFromAVariable() throws IOException {
+        // Given: target の type が migraphe.yaml の変数で決まる
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test-project
+                history:
+                  target: test-db
+                dbtype: postgresql
+                """);
+        Files.writeString(
+                tempDir.resolve("targets").resolve("test-db.yaml"),
+                """
+                type: ${dbtype}
+                jdbc_url: jdbc:postgresql://localhost:5432/test
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void shouldAcceptATaskWhoseTargetComesFromAnEnvironmentOverlay() throws IOException {
+        // Given: task ファイルに target がなく、オーバーレイが与える
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                up: CREATE TABLE users (id SERIAL PRIMARY KEY);
+                down: DROP TABLE users;
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                task:
+                  test-db/001_create_users:
+                    target: test-db
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void shouldReportAnUnresolvableVariableInATask() throws IOException {
+        // Given: task が未定義の変数を参照する
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                target: test-db
+                up: CREATE SCHEMA ${app.schema};
+                down: DROP SCHEMA ${app.schema};
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .anyMatch(
+                        e ->
+                                e.startsWith("tasks/test-db/001_create_users.yaml: ")
+                                        && e.contains("app.schema"));
+    }
+
+    @Test
+    void shouldReportAnUnresolvableVariableInATargetType() throws IOException {
+        // Given: target の type が未定義の変数を参照する
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("targets").resolve("test-db.yaml"),
+                """
+                type: ${db.type}
+                jdbc_url: jdbc:postgresql://localhost:5432/test
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .anyMatch(e -> e.startsWith("targets/test-db.yaml: ") && e.contains("db.type"))
+                .noneMatch(e -> e.contains("Missing required property 'type'"));
+    }
+
+    @Test
+    void shouldValidateATaskDefinedOnlyByConfigurationKeys() throws IOException {
+        // Given: ファイルのない task をオーバーレイが定義し、ファイルの task がそれに依存する
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                target: test-db
+                dependencies:
+                  - test-db/seed
+                up: CREATE TABLE users (id SERIAL PRIMARY KEY);
+                down: DROP TABLE users;
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                task:
+                  test-db/seed:
+                    name: Seed
+                    target: test-db
+                    up: SELECT 1;
+                    down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then: ファイルのない task も task として数えられ、依存が解決する
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void shouldReportATaskKeyThatNamesNoField() throws IOException {
+        // Given: オーバーレイの task がマップではなくスカラー
+        createValidProject(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                task:
+                  test-db/seed: Seed
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then
+        assertThat(result.errors()).anyMatch(e -> e.contains("task.test-db/seed"));
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """
