@@ -3,6 +3,7 @@ package io.github.kakusuke.migraphe.core.config;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
+import io.smallrye.config.ConfigValue;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import java.io.IOException;
@@ -146,7 +147,16 @@ public class ConfigValidator {
 
         for (Path targetFile : readableTargetFiles) {
             String targetId = targetIdOf(targetFile);
-            String type = resolved.getConfigValue("target." + targetId + ".type").getValue();
+            ConfigValue typeValue = resolved.getConfigValue("target." + targetId + ".type");
+            String type = typeValue.getValue();
+            if (type == null && typeValue.getRawValue() != null) {
+                errors.add(
+                        "targets/"
+                                + targetId
+                                + ".yaml: Could not expand 'type': "
+                                + typeValue.getRawValue());
+                continue;
+            }
             List<String> targetErrors = validateTargetType(targetId, type);
             if (targetErrors.isEmpty() && type != null) {
                 validTargetIds.add(targetId);

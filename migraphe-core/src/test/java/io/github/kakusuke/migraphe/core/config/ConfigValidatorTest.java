@@ -449,6 +449,26 @@ class ConfigValidatorTest {
                                         && e.contains("app.schema"));
     }
 
+    @Test
+    void shouldReportAnUnresolvableVariableInATargetType() throws IOException {
+        // Given: target の type が未定義の変数を参照する
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("targets").resolve("test-db.yaml"),
+                """
+                type: ${db.type}
+                jdbc_url: jdbc:postgresql://localhost:5432/test
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .anyMatch(e -> e.startsWith("targets/test-db.yaml: ") && e.contains("db.type"))
+                .noneMatch(e -> e.contains("Missing required property 'type'"));
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """
