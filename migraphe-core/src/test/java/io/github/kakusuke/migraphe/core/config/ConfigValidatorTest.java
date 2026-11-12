@@ -560,6 +560,30 @@ class ConfigValidatorTest {
                                 + " (enabled: is false)");
     }
 
+    @Test
+    void shouldReportAnEnabledValueThatIsNotABoolean() throws IOException {
+        // Given: enabled: の値が true/false 以外
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("seed.yaml"),
+                """
+                name: Seed
+                target: test-db
+                enabled: ture
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .containsExactly(
+                        "tasks/test-db/seed.yaml: enabled: of task test-db/seed must be true or"
+                                + " false, but is: ture");
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """

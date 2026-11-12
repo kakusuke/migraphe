@@ -180,7 +180,13 @@ public class ConfigValidator {
 
         Set<NodeId> disabledTasks = new HashSet<>();
         for (NodeId taskId : taskIds) {
-            if (Boolean.FALSE.equals(ConfigLoader.declaredEnabled(resolved, taskId))) {
+            Boolean enabled = null;
+            try {
+                enabled = ConfigLoader.declaredEnabled(resolved, taskId);
+            } catch (ConfigurationException e) {
+                errors.add("tasks/" + taskId.value() + ".yaml: " + e.getMessage());
+            }
+            if (Boolean.FALSE.equals(enabled)) {
                 disabledTasks.add(taskId);
                 continue;
             }
