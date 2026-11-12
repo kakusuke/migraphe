@@ -145,7 +145,8 @@ public class ConfigLoader {
 
         if (envFile != null) {
             try {
-                YamlConfigSource envSource = new YamlConfigSource(envFile.toUri().toURL(), 500);
+                YamlConfigSource envSource =
+                        MultiFileYamlConfigSource.rawAwareYamlSource(envFile, 500);
                 // Register the environment file and the MultiFileYamlConfigSource together.
                 builder.withSources(envSource, multiFileSource);
             } catch (IOException e) {

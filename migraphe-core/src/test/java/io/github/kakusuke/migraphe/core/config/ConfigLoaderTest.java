@@ -527,6 +527,27 @@ class ConfigLoaderTest {
         assertThat(base.up()).isEqualTo("DO $$ ${x} $$");
     }
 
+    @Test
+    void shouldKeepRawTaggedOverlayValueExactlyAsWritten(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                x: expanded
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(environmentsDir.resolve("dev.yaml"), "secret: !raw \"pa$$ ${x}\"\n");
+
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, "dev");
+
+        assertThat(config.getValue("secret", String.class)).isEqualTo("pa$$ ${x}");
+    }
+
     /** テスト用のプロジェクト構造を作成する。 */
     private void createProjectStructure(Path baseDir) throws IOException {
         // migraphe.yaml

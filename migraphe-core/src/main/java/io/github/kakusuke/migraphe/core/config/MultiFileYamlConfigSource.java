@@ -140,10 +140,11 @@ public class MultiFileYamlConfigSource implements ConfigSource {
      * to flatten as usual.
      *
      * @param file the YAML file
+     * @param ordinal the ordinal of the returned source
      * @return the loaded source
      * @throws IOException if the file cannot be read
      */
-    static YamlConfigSource rawAwareYamlSource(Path file) throws IOException {
+    static YamlConfigSource rawAwareYamlSource(Path file, int ordinal) throws IOException {
         Yaml yaml = new Yaml();
         StringWriter rewritten = new StringWriter();
         try (Reader reader = Files.newBufferedReader(file)) {
@@ -152,7 +153,19 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                 yaml.serialize(escapeRawScalars(document), rewritten);
             }
         }
-        return new YamlConfigSource(file.toUri().toString(), rewritten.toString());
+        return new YamlConfigSource(file.toUri().toString(), rewritten.toString(), ordinal);
+    }
+
+    /**
+     * Loads a YAML file as {@link #rawAwareYamlSource(Path, int)} does, at this source's ordinal —
+     * for callers that only read the file's properties.
+     *
+     * @param file the YAML file
+     * @return the loaded source
+     * @throws IOException if the file cannot be read
+     */
+    static YamlConfigSource rawAwareYamlSource(Path file) throws IOException {
+        return rawAwareYamlSource(file, ORDINAL);
     }
 
     /**
