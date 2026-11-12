@@ -248,6 +248,14 @@ public class ConfigLoader {
         Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
         for (NodeId nodeId : extractTaskIds(mainConfig)) {
+            String enabled =
+                    mainConfig
+                            .getConfigValue(
+                                    MultiFileYamlConfigSource.taskKeyPrefix(nodeId) + "enabled")
+                            .getValue();
+            if (enabled != null && !mainConfig.convert(enabled, Boolean.class)) {
+                continue;
+            }
             TaskDefinition<?> taskDef = loadTaskDefinition(nodeId, mainConfig, pluginRegistry);
             taskDefinitions.put(nodeId, taskDef);
         }
