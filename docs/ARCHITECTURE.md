@@ -113,6 +113,32 @@ Detailed rationale for the key design decisions behind Migraphe. The one-line su
     as an orphan when its id is undeclared; when the id is still declared, the node reports normally
     and only a rollback discovers the missing connection.
 
+37. **A task file resolves `${...}`, and D is the definition as resolved (decided 2026-11-12, not yet implemented)**: `ConfigLoader.loadTaskDefinition` binds each task file from a `YamlConfigSource` of that file alone, so a `${...}` in a task file is never expanded — `name: "hello ${greeting}"` displays literally under `--env dev`. `docs/USER_GUIDE.md` has listed task files in the variable-resolution order since `a5d883ad`, so this is a defect against the stated contract, not a missing feature. It is an oversight, not a decision: Phase 10-1 (`93435eda`) already registered every task file in `MultiFileYamlConfigSource` under `task."<id>".*` and deferred variable expansion with a `@Disabled` test written about a *target*; Phase 10-2 (`522dcf06`) loaded each task file into a config of its own, with no stated reason; Phase 12 (`c7f333c6`) moved targets onto `mainConfig` through `PrefixedConfigSource`, which is how targets came to resolve, and tasks were left on the per-file path, which has neither the other sources nor `addDefaultInterceptors()`. Nothing has ever read the `task.*` keys.
+
+    **Resolution: a task is read exactly as a target is.** It is bound from `mainConfig` through its `task."<id>".` prefix, so every field resolves (`${...}` is expanded on read, recursively, against every source — SmallRye 3.9.1, verified), and every key can be overridden by an overlay, `-D` or a Gradle variable at the ordinals of decision 5. Tasks are **discovered from the configuration's `task.*` keys**, as targets are from `target.*` (`ConfigLoader.extractTargetIds`): a task file still contributes its keys under the id its path gives (decision 7), and a key whose id has no file defines a task of that id. Rejected: discovering tasks from files only and refusing a `task.*` key with no file — a rule tasks would have and targets would not, to prevent something targets already allow. A mistyped id in an override is not silent either way: it defines a task without a `target:`, which fails to load. `validate` must resolve the same way the load does — it currently reads target, task and overlay files as raw YAML, so a target with `type: ${dbtype}` passes `status` and fails `validate` with `Unknown plugin type '${dbtype}'` (verified); that is fixed with this. Note for the implementation: `SmallRyeConfig.getRawValue` returns the **expanded** value despite its name; the unexpanded text is `ConfigValue.getRawValue`.
+
+    **What D means once values vary.** D is the task files **as resolved under the configuration the command runs with**, not the unresolved template. Everything that reads a definition reads that one resolved text: execution, the fingerprint, the rollback payload written to H, `enabled:` (decision 38) and what `status` displays. Two splits were considered and rejected. *Fingerprint over the unresolved text, payload resolved*: the two halves of one row would describe different things, and a value change that alters what would run now goes undetected. *Both unresolved, payload re-resolved at rollback*: a rollback would undo what today's configuration names rather than what was applied — an orphan's rollback would follow the overlay to an object it never created — and `serialized_down_task` would stop being copy-and-run (see "The rollback payload"). **A token that depends on configuration is not a problem** because a token is only ever compared with the H of the database the command reaches, under the configuration that command runs with; no comparison crosses environments.
+
+    **Accepted consequences.** Changing a value that reaches a task's text moves its token and shows `[!]`. That is a true disagreement between what was applied and what would run now, and the operator chooses `amend` or `rebuild` as for any edit — including when the value is a rotated secret referenced from SQL. Two overlays that share one database (decision 29) and resolve a task differently each show `[!]` for what the other applied, which is also true: they would run different SQL against the same objects. A secret referenced from `down:` lands in `serialized_down_task` in plain text; that is not new with resolution (a literal secret in `down:` did the same) and is left to a separate mechanism (Future Phases).
+
+    **`target:` and `dependencies:` get no exception.** They resolve and can be overridden like every other field. Decision 29 fixes a target's *id* across overlays, not which target a task names; a task whose `target:` differs from what was applied is already content that differs (see "The difference"), and the token covers both fields. A configuration that produces a cycle or an unresolved dependency fails under that configuration as any other would, and `validate` checks every overlay (decision 38).
+
+    **Compatibility.** A task whose text held a literal `${...}` used to run it verbatim; it now resolves, or fails to load when nothing defines the key — loudly, not silently. A literal `${` is written `\${` or `$${` (verified). The token of a task without `${` does not move.
+
+38. **`enabled:` — a task that exists only under some configurations (decided 2026-11-12, not yet implemented)**: the use case is seed data loaded in dev/test only. A task may declare `enabled:`, a boolean resolved like any other field (decision 37) — typically `enabled: ${seed.enabled:false}`, with the overlay setting the value. Absent means enabled. **The condition is a value, not the `--env` name**: an overlay only rewrites values (decision 29), and keying D to the overlay's name would give two overlays sharing one database two different D's by construction. **No expression language** — a boolean, nothing to evaluate.
+
+    **A disabled task is absent from D.** It is dropped at load, so nothing downstream gains a state: it is not in the graph, `up` does not apply it, and no closure contains it (a dependency on it is an error, below). A task applied earlier and disabled since has an H row and no D counterpart, so it is an **orphan** — reported by `status`, rolled back by `down` and `rebuild` — the same disagreement as deleting its file, which under that configuration is what it is. Rejected: keeping it in D as "skipped", which adds a state to `status` and makes the executor decide whether what stands on it runs.
+
+    **`enabled:` is not in the fingerprint**, and that follows the rule rather than carving out of it: the token covers every attribute H records, and H does not record `enabled:` — a node in H was enabled when it was applied. Toggling it is not an edit of anything that was applied.
+
+    **A dependency on a disabled task is an error, by two rules.** Both follow the "unresolved dependency" tier: the project loads, `status` works, `validate` reports, and `up` refuses before applying anything.
+    - **Static**: a task that does not declare `enabled:` may not depend on one that does. Judged on the *presence* of the key in the resolved definition, not its value — so it fires in dev, where everything is enabled, about a dependency that would break wherever the value is false. An override can add or remove the key, which is why `validate` checks every overlay.
+    - **Runtime**: under the configuration in use, an enabled task depends on a disabled one. The static rule cannot see this when both declare `enabled:`. The message names the dependency as *disabled*, not missing: the disabled task was read before being dropped, so the two causes are distinguishable.
+
+    Rejected: *propagating* disabled to dependents — a task whose own `enabled:` resolved true would silently not run, the tool deciding; the error makes the author say so. *Contracting the edge* past the disabled task — the closure would change with a toggle, the `dependencies` column would record an edge to a node absent from H, and dropping a declared dependency is guessing. *An ordering-only edge kind* — a second kind of edge through both graphs, the reduction and the column, for one use case. **The cost**: an unconditional task cannot be ordered after a seed. A seed depends on the schema; when the schema changes, the seed is rewritten against it (a dev database is rebuilt), or the DDL is written to be safe on existing data, which production needs anyway.
+
+    **`validate` loads and checks the project under the base configuration and under every overlay in `environments/`** — both rules here, and everything an override can break (decision 37) — because otherwise a problem fires first in whichever environment the values diverge in. Values supplied by `-D` or OS environment variables are not covered; this is best effort, and `up` remains the backstop.
+
 ## Drift and its repair
 
 The design behind `status`'s markers, the fingerprint, `amend`, `rebuild`, orphan rollback and the
@@ -126,7 +152,7 @@ Three stores. Migraphe can read two of them.
 
 | | what it is | readable |
 |---|---|---|
-| **D** | the definitions — `tasks/**/*.yaml` | yes |
+| **D** | the definitions — `tasks/**/*.yaml`, as resolved under the configuration the command runs with, enabled tasks only (decisions 37, 38) | yes |
 | **H** | the history table | yes |
 | **W** | the database itself — the objects a migration created | **no** |
 
@@ -358,6 +384,10 @@ impossible. So the token covers `up:` SQL, `down:` SQL, `no_way_back:`, `autocom
 
 **Covered is not the same as copied**, and the dependencies are where the two come apart: H stores what
 the node **declared**, and the token folds the **transitive closure** of it.
+
+**What it folds is the resolved definition** (decision 37), so a changed value that reaches a task's
+text moves its token exactly as an edit to the file would. `enabled:` is not folded, because H does not
+record it (decision 38).
 
 It answers one question: *is this node a candidate for rebuilding?* — where "candidate" means H and D
 disagree about something H records, not that the objects are known to be stale. Migraphe cannot know
@@ -732,4 +762,5 @@ still declare, `amend <id>` to withdraw one they do not.
 - **Fix the dangling Markdown link for cross-database exported keys (MySQL)** — with the Session 66 fix, a child table in another database now appears in `## Exported Keys`, but `referencedSchema` is `""` (MySQL leaves `FKTABLE_SCHEM` `NULL`) and `JdbcMarkdownGenerator.resolveReferencedSchema` falls back to the *current* schema, so the row links to a page that does not exist. The shape pre-dates the fix; the fix increases how often it appears. ER diagrams are unaffected — descendant traversal skips targets outside the known set.
 - **Cover the case where `FKTABLE_CAT` is load-bearing** — `MySQLSchemaInfoProviderTest`'s collision test uses two child tables with *different* names, so `FKTABLE_NAME` alone would already discriminate. Only two children sharing a **table name** across databases exercise the catalog component of the key.
 - **Split up `JdbcMarkdownGenerator` (~1,200 lines)** — extracting an `ErDiagramRenderer` is the obvious first cut.
+- **Keep secrets out of logs and the history** — with task files resolving `${...}` (decision 37), a secret referenced from SQL reaches console output and, from `down:`, `serialized_down_task` in plain text. Needs its own mechanism (masking, marking a variable as secret); deliberately not part of decision 37.
 - **Character-count-based ER diagram size cap** — `er-diagram-per-table-max-entities` uses entity count as a proxy; measuring the rendered diagram length would track Mermaid's real limit more accurately.
