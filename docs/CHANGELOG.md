@@ -2,6 +2,20 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-11-13 (Session 80)
+
+**task ファイルの `${...}` を展開するようにし、展開させない値のための `!raw` タグを入れた（決定 37）。** あわせて、seed のような環境限定のタスクを書く `enabled:`（決定 38）を設計として決めた。`enabled:` の実装は次の PR。
+
+- **task ファイルの `${...}` は一度も展開されていなかった**。`ConfigLoader.loadTaskDefinition` が task ファイル単体を interceptor なしで読んでいたため。USER_GUIDE は解決順に `tasks` を挙げていたので、仕様に対する不具合として扱った。経緯は Phase 10-1 で変数展開を target 向けに先送りし、Phase 12 で target だけが `mainConfig` 経由になって直った、というもの。task は target と同じく `mainConfig` の `task."<id>".` から結び付けるようにした。
+- **D は「実行時の設定で解決した定義」と決めた**。実行・fingerprint・rollback payload・`enabled:` がすべて展開後の同じテキストを見る。fingerprint だけ展開前にする案、payload を展開前にする案は、H の 1 行の中で食い違うので退けた。値を変えると `[!]` になるのは、適用済みと今実行される内容が実際に違うからで、定義どおり。
+- **SmallRye の展開は `${...}` 以外も変える**（3.9.1 で実測）。`$$`→`$`、`$` の前の `\` が消える、閉じていない `${` は値がエラーなしで消える、`${a::b}` は secret handler を探して失敗する。止めるフラグも値ごとの指定も無い。PostgreSQL の `DO $$` や関数本体、MySQL の `DELIMITER $$` がそのままでは壊れる。
+- **`!raw` タグ**: YAML のスカラーに `!raw` を付けると書いたとおりの値になる。SnakeYAML（`smallrye-config-source-yaml` の compile 依存で既に同梱）でノードに組み立て、`!raw` の値の `$` を `\$` にエスケープして書き戻し、`YamlConfigSource` に渡す。展開は `mainConfig` で 1 回だけなので元の文字列に戻る（`$$`・`${x}`・閉じていない `${`・`\$`・`::` で実測）。`migraphe.yaml`・target・task・overlay のすべてと `validate` の読み込みに適用し、リストの要素にも効く。`.raw` サフィックス案（予約語と ordinal の問題）や、`${...}` だけを自前で展開する案（target と構文が分かれる）は退けた。
+- **互換性を壊す変更**: `$$`・`\$`・`${` を本文に含む task は意味が変わる。`!raw` を付けて移行する。CLI テスト 3 件（PostgreSQL の DO ブロック・`$$` 関数、MySQL の `DELIMITER $$`）を `up: !raw |` に移した。閉じていない `${` で値が消えるのは SmallRye の仕様として受け入れた。
+- **`validate` の読み込みも揃えた**が、値は展開も上書きもしないまま検査している（`target: ${t}` を「無い」と報告する）。task を `task.*` キーから見つける部分（決定 37 で選んだ方式）とあわせて、次の PR で `validate` を解決済みの設定の上に作り直す。
+- **`validate` は読み込みの失敗を握りつぶす箇所がある**（`validateWithPlugin`、`extractTaskInfo`）。「受け付ける」テストだけでは検査が走ったか分からないので、読み込み箇所ごとにエラーを期待するテストで固定した。一度 Verify に over-implementation と指摘され、テストの無い置き換え 2 か所を戻してから入れ直している。tidy-notes に罠として記録。
+- **ついでの修正**: `Environment`→`Target` の一括リネームで壊れた Javadoc 4 か所（`MapConfigSource` は「`target.` 接頭辞」と事実と逆のことを書いていた）。
+- Tests: core・cli・gradle-plugin 100% passing。TDD 11 サイクル、すべて cycle-verifier で closed（途中で破棄した 1 サイクルは除く）。
+
 ### 2026-10-16 (Session 79) — v0.7.1
 
 **`rebuild` の不具合 3 件（#88〜#90）と、その途中で見つけた Gradle 側の 1 件を直した。** 期待する動きは「ブランチ切り替えと既存の書き換えは `rebuild`、新規追加は `up`」がそのまま通ること。

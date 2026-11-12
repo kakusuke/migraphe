@@ -400,7 +400,30 @@ target:
     password: ${env.DB_PASSWORD}  # OS環境変数
 ```
 
-`${VAR}`を使用した変数置換はMicroProfile Configによりサポートされています。値は次の優先順位（高い順）で解決されます: Gradle注入のvariables、`environments/*.yaml`プロファイル、システムプロパティ（`-D`）、`migraphe.yaml`/`targets`/`tasks`。**OS環境変数は `env.` 接頭辞付きで参照する必要があります（`${VAR}` ではなく `${env.VAR}`）** — これにより環境変数が `target.*` などの設定キーに混入しません。インライン既定値も利用できます: `${env.VAR:default}`。
+### 設定ファイル内の変数
+
+`${VAR}` は、Migraphe が読むすべての YAML ファイル（`migraphe.yaml`、`targets/*.yaml`、`tasks/**/*.yaml`、`environments/*.yaml`）で展開されます。値は次の優先順位（高い順）で解決されます: Gradle注入のvariables、`environments/*.yaml`プロファイル、システムプロパティ（`-D`）、`migraphe.yaml`/`targets`/`tasks`。**OS環境変数は `env.` 接頭辞付きで参照する必要があります（`${VAR}` ではなく `${env.VAR}`）** — これにより環境変数が `target.*` などの設定キーに混入しません。インライン既定値も利用できます: `${env.VAR:default}`。参照先の値がさらに `${...}` を含んでいれば、それも続けて展開されます。
+
+```yaml
+# tasks/db1/003_seed_users.yaml
+name: Seed users into ${seed.schema}
+target: db1
+up: INSERT INTO ${seed.schema}.users (name) VALUES ('alice');
+down: DELETE FROM ${seed.schema}.users WHERE name = 'alice';
+```
+
+**書いたとおりの値を使う: `!raw`。** 展開では `${...}` 以外にも次の変換が起きます。`$$` は `$` になり、`$` の直前の `\` は消えます。閉じていない `${` を含む値は、**エラーにならずに値が存在しない扱い**になります。よく問題になるのは、PostgreSQL の `DO $$ … $$` ブロックや `$$` で本体を書く関数定義、MySQL の `DELIMITER $$` スクリプトです。このような値に `!raw` タグを付けると、書いたとおりの文字列がデータベースに渡ります。
+
+```yaml
+up: !raw |
+  CREATE FUNCTION add(a int, b int) RETURNS int AS $$
+    SELECT a + b;
+  $$ LANGUAGE sql;
+```
+
+`!raw` は、上のどのファイルでも、リストの要素を含むすべてのスカラー値に付けることができます。`-D` や環境変数で渡す値は YAML ではないので、`$` を `\$` とエスケープしてください。
+
+**値を変えたときの扱い。** task は、実行時の設定で解決した内容で履歴と比較されます。task の本文に届く値（変数、overlay、SQL から参照しているパスワードの変更など）を変えると、`status` でその task に `[!]` が付きます。今実行される内容が、適用済みの内容と違うからです。ほかの編集と同じく、[`amend`](#定義を適用済みとして記録amend) か `rebuild` で解消してください。同じデータベースを指す2つの overlay で task の解決結果が違う場合は、それぞれ相手が適用した内容に `[!]` が付きます。
 
 ## マイグレーションの作成
 
