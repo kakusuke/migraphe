@@ -88,6 +88,27 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldAcceptATaskWithARawTaggedValue() throws IOException {
+        // Given: !raw タグ付きの up: を持つタスク
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                target: test-db
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                down: DROP TABLE users;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
     void shouldDetectATaskThatNeitherRollsBackNorSaysWhyNot() throws IOException {
         // Given: down: も no_way_back: も無いタスク
         createValidProject(tempDir);

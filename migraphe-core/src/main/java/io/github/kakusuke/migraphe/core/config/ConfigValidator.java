@@ -262,7 +262,7 @@ public class ConfigValidator {
         String relativePath = "tasks/" + taskId.value() + ".yaml";
 
         try {
-            YamlConfigSource source = new YamlConfigSource(taskFile.toUri().toURL());
+            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             Map<String, String> props = source.getProperties();
 
             // 'name' is required.
