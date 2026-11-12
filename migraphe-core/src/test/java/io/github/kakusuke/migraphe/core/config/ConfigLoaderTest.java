@@ -615,6 +615,43 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void shouldDiscoverATaskDefinedOnlyByConfigurationKeys(@TempDir Path tempDir)
+            throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("dev.yaml"),
+                """
+                task:
+                  db1/seed:
+                    name: Seed
+                    target: db1
+                    up: SELECT 1;
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+
+        Map<NodeId, TaskDefinition<?>> tasks =
+                loader.loadTaskDefinitions(
+                        tempDir, loader.loadConfig(tempDir, "dev"), pluginRegistry);
+
+        assertThat(tasks).containsOnlyKeys(NodeId.of("db1/seed"));
+        assertThat(tasks.get(NodeId.of("db1/seed")).name()).isEqualTo("Seed");
+    }
+
+    @Test
     void shouldKeepRawTaggedOverlayValueExactlyAsWritten(@TempDir Path tempDir) throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),

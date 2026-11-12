@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -225,35 +226,29 @@ public class ConfigLoader {
     }
 
     /**
-     * Loads every {@link TaskDefinition} from the {@code tasks/} directory.
+     * Loads a {@link TaskDefinition} for every task.
      *
-     * <p>For each task file, the {@code target} field selects a target whose {@code type}
-     * identifies the plugin; the file is then mapped onto that plugin's task-definition type.
+     * <p>Task ids are discovered from the {@code task.*} keys of the merged config, as target ids
+     * are from {@code target.*}: a task file contributes its keys under the id its path gives, and
+     * a key whose id has no file defines a task of that id. Each task's {@code target} field
+     * selects a target whose {@code type} identifies the plugin; the task's keys are then mapped
+     * onto that plugin's task-definition type.
      *
-     * @param baseDir the project base directory (the scan root is resolved internally from {@code
-     *     project.scan-root})
-     * @param mainConfig the merged main config, used to look up target types
+     * @param baseDir the project base directory; no longer read, since the tasks come from {@code
+     *     mainConfig}
+     * @param mainConfig the merged main config containing the {@code task.*} entries
      * @param pluginRegistry the registry used to resolve plugins by type
-     * @return a map from task {@link NodeId} to its loaded {@link TaskDefinition}, in scan order
-     * @throws ConfigurationException if a task file cannot be loaded or its target type is unknown
+     * @return a map from task {@link NodeId} to its loaded {@link TaskDefinition}, in unspecified
+     *     order
+     * @throws ConfigurationException if a task's target type is unknown
      */
     public Map<NodeId, TaskDefinition<?>> loadTaskDefinitions(
             Path baseDir, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
 
-        YamlFileScanner scanner = new YamlFileScanner();
-        TaskIdGenerator idGenerator = new TaskIdGenerator();
         Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
-        // Scan all YAML files under the tasks/ directory.
-        Path projectConfigFile = scanner.findProjectConfig(baseDir);
-        Path scanRoot =
-                projectConfigFile != null ? resolveScanRoot(baseDir, projectConfigFile) : baseDir;
-        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
-
-        for (Path taskFile : taskFiles) {
-            NodeId nodeId = idGenerator.generateTaskId(scanRoot, taskFile);
-            TaskDefinition<?> taskDef =
-                    loadTaskDefinition(nodeId, taskFile, mainConfig, pluginRegistry);
+        for (NodeId nodeId : extractTaskIds(mainConfig)) {
+            TaskDefinition<?> taskDef = loadTaskDefinition(nodeId, mainConfig, pluginRegistry);
             taskDefinitions.put(nodeId, taskDef);
         }
 
@@ -397,6 +392,28 @@ public class ConfigLoader {
     }
 
     /**
+     * Extracts the set of task ids from the {@code task.*} property names of the config. An id
+     * holding a dot is quoted in its keys (see {@link MultiFileYamlConfigSource#taskKeyPrefix}).
+     *
+     * @param config the merged config to inspect
+     * @return the distinct task ids found
+     */
+    private Set<NodeId> extractTaskIds(SmallRyeConfig config) {
+        Set<NodeId> taskIds = new LinkedHashSet<>();
+        for (String name : config.getPropertyNames()) {
+            if (!name.startsWith("task.")) {
+                continue;
+            }
+            String rest = name.substring("task.".length());
+            boolean quoted = rest.startsWith("\"");
+            int end = quoted ? rest.indexOf('"', 1) : rest.indexOf('.');
+            String id = quoted ? rest.substring(1, end) : rest.substring(0, end);
+            taskIds.add(NodeId.of(id));
+        }
+        return taskIds;
+    }
+
+    /**
      * Loads a single {@link TaskDefinition} from the task's task keys ({@link
      * MultiFileYamlConfigSource#taskKeyPrefix}) in {@code mainConfig}.
      *
@@ -407,17 +424,13 @@ public class ConfigLoader {
      *
      * @param nodeId the task's id, which names its task keys ({@link
      *     MultiFileYamlConfigSource#taskKeyPrefix}) in {@code mainConfig}
-     * @param taskFile the path to the task file, named in error messages
      * @param mainConfig the merged main config, used to look up the target's type
      * @param pluginRegistry the registry used to resolve the plugin by type
      * @return the loaded task definition
      * @throws ConfigurationException if its target type is unknown
      */
     public TaskDefinition<?> loadTaskDefinition(
-            NodeId nodeId,
-            Path taskFile,
-            SmallRyeConfig mainConfig,
-            PluginRegistry pluginRegistry) {
+            NodeId nodeId, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
         String prefix = MultiFileYamlConfigSource.taskKeyPrefix(nodeId);
 
         // 1. Read only the target field first.
@@ -435,7 +448,10 @@ public class ConfigLoader {
         String type = mainConfig.getValue("target." + targetId + ".type", String.class);
         if (type == null) {
             throw new ConfigurationException(
-                    "Target type not found for target: " + targetId + " in file: " + taskFile);
+                    "Target type not found for target: "
+                            + targetId
+                            + " in task: "
+                            + nodeId.value());
         }
 
         // 3. Resolve the plugin.
