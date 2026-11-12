@@ -407,6 +407,13 @@ public class ConfigLoader {
             String rest = name.substring("task.".length());
             boolean quoted = rest.startsWith("\"");
             int end = quoted ? rest.indexOf('"', 1) : rest.indexOf('.');
+            if (end < 0) {
+                throw new ConfigurationException(
+                        "A task key must name a field of the task, such as "
+                                + name
+                                + ".name: "
+                                + name);
+            }
             String id = quoted ? rest.substring(1, end) : rest.substring(0, end);
             taskIds.add(NodeId.of(id));
         }

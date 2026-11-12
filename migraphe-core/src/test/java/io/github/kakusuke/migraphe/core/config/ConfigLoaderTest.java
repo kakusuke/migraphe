@@ -652,6 +652,37 @@ class ConfigLoaderTest {
     }
 
     @Test
+    void shouldRejectATaskKeyThatNamesNoField(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("dev.yaml"),
+                """
+                task:
+                  db1/seed: Seed
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, "dev");
+
+        assertThatThrownBy(() -> loader.loadTaskDefinitions(tempDir, config, pluginRegistry))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining("task.db1/seed");
+    }
+
+    @Test
     void shouldKeepRawTaggedOverlayValueExactlyAsWritten(@TempDir Path tempDir) throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),
