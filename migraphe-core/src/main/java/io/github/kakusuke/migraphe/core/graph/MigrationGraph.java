@@ -33,10 +33,24 @@ import java.util.HexFormat;
 public final class MigrationGraph implements MigrationGraphView {
     private final Map<NodeId, MigrationNode> nodes;
     private final Map<NodeId, Set<NodeId>> adjacencyList; // node -> nodes it depends on
+    private final Set<NodeId> disabled; // tasks whose enabled: resolved to false
 
     private MigrationGraph() {
         this.nodes = new HashMap<>();
         this.adjacencyList = new HashMap<>();
+        this.disabled = new HashSet<>();
+    }
+
+    /**
+     * Records that a task's {@code enabled:} resolved to false.
+     *
+     * <p>A disabled task is not a node of the graph — it is absent from D — but a dependency on it
+     * is told apart from one on nothing by this record.
+     *
+     * @param taskId the disabled task
+     */
+    public void declareDisabled(NodeId taskId) {
+        disabled.add(taskId);
     }
 
     /**
@@ -471,7 +485,7 @@ public final class MigrationGraph implements MigrationGraphView {
         for (MigrationNode node : nodes.values()) {
             Set<NodeId> missing = new LinkedHashSet<>();
             for (NodeId depId : node.dependencies()) {
-                if (!nodes.containsKey(depId)) {
+                if (!nodes.containsKey(depId) && !isDisabled(depId)) {
                     missing.add(depId);
                 }
             }
@@ -480,6 +494,34 @@ public final class MigrationGraph implements MigrationGraphView {
             }
         }
         return unresolved;
+    }
+
+    /**
+     * Returns the declared dependencies that name a task whose {@code enabled:} resolved to false.
+     *
+     * <p>Such a task was read and dropped, so the dependency is not missing but disabled — and
+     * applying the task that declares it would build on something this configuration does not have.
+     *
+     * @return each node with disabled dependencies mapped to the ids it names, empty when none
+     */
+    public Map<NodeId, Set<NodeId>> disabledDependencies() {
+        Map<NodeId, Set<NodeId>> disabled = new LinkedHashMap<>();
+        for (MigrationNode node : nodes.values()) {
+            Set<NodeId> named = new LinkedHashSet<>();
+            for (NodeId depId : node.dependencies()) {
+                if (isDisabled(depId)) {
+                    named.add(depId);
+                }
+            }
+            if (!named.isEmpty()) {
+                disabled.put(node.id(), named);
+            }
+        }
+        return disabled;
+    }
+
+    private boolean isDisabled(NodeId taskId) {
+        return disabled.contains(taskId);
     }
 
     /** {@inheritDoc} */

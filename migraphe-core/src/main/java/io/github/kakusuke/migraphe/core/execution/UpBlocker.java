@@ -32,6 +32,18 @@ public sealed interface UpBlocker {
     record UnresolvedDependencies(Map<NodeId, Set<NodeId>> byNode) implements UpBlocker {}
 
     /**
+     * Tasks whose declared dependencies name a task disabled under this configuration.
+     *
+     * <p>The disabled task is absent from D, so applying a task that stands on it would build on
+     * something this configuration does not have. Named apart from {@link UnresolvedDependencies}
+     * because the remedy differs: the dependency exists, and either it or the dependent has to
+     * change its {@code enabled:}.
+     *
+     * @param byNode each task with disabled dependencies mapped to the ids it names
+     */
+    record DisabledDependencies(Map<NodeId, Set<NodeId>> byNode) implements UpBlocker {}
+
+    /**
      * Tasks that define neither a rollback nor a reason there is none.
      *
      * <p>Once a migration has run it is too late to decide, so the choice is demanded before the
