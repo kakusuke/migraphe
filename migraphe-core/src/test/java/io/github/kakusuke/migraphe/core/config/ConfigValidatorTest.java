@@ -397,6 +397,34 @@ class ConfigValidatorTest {
         assertThat(result.errors()).isEmpty();
     }
 
+    @Test
+    void shouldAcceptATaskWhoseTargetComesFromAnEnvironmentOverlay() throws IOException {
+        // Given: task ファイルに target がなく、オーバーレイが与える
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                up: CREATE TABLE users (id SERIAL PRIMARY KEY);
+                down: DROP TABLE users;
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                task:
+                  test-db/001_create_users:
+                    target: test-db
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then
+        assertThat(result.errors()).isEmpty();
+    }
+
     private void createValidProject(Path baseDir) throws IOException {
         String projectYaml =
                 """

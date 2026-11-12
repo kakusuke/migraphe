@@ -5,7 +5,6 @@ import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
-import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -14,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -115,9 +115,22 @@ public class ConfigValidator {
 
         for (Path targetFile : targetFiles) {
             String targetId = targetIdOf(targetFile);
-            List<String> readErrors = readTargetFile(targetFile, targetId);
+            List<String> readErrors = readYamlFile(targetFile, "targets/" + targetId + ".yaml");
             if (readErrors.isEmpty()) {
                 readableTargetFiles.add(targetFile);
+            } else {
+                errors.addAll(readErrors);
+            }
+        }
+
+        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
+        Map<NodeId, Path> readableTaskFiles = new HashMap<>();
+
+        for (Path taskFile : taskFiles) {
+            NodeId taskId = idGenerator.generateTaskId(scanRoot, taskFile);
+            List<String> readErrors = readYamlFile(taskFile, "tasks/" + taskId.value() + ".yaml");
+            if (readErrors.isEmpty()) {
+                readableTaskFiles.put(taskId, taskFile);
             } else {
                 errors.addAll(readErrors);
             }
@@ -126,7 +139,7 @@ public class ConfigValidator {
         SmallRyeConfig resolved =
                 ConfigLoader.buildConfig(
                         new MultiFileYamlConfigSource(
-                                projectConfigFile, readableTargetFiles, Map.of()),
+                                projectConfigFile, readableTargetFiles, readableTaskFiles),
                         overlay.isEmpty() ? null : new MapConfigSource(overlay, 500),
                         Map.of());
 
@@ -143,19 +156,16 @@ public class ConfigValidator {
             }
         }
 
-        // 3. Load and validate each tasks/**/*.yaml individually.
-        List<Path> taskFiles = scanner.scanTaskFiles(scanRoot);
+        // 3. Validate each task as resolved.
         Map<NodeId, TaskInfo> validTasks = new HashMap<>();
 
-        for (Path taskFile : taskFiles) {
-            NodeId taskId = idGenerator.generateTaskId(scanRoot, taskFile);
-            List<String> taskErrors =
-                    validateTaskFile(taskFile, taskId, validTargetIds, targetTypes);
+        for (NodeId taskId : readableTaskFiles.keySet()) {
+            PrefixedConfigSource task =
+                    new PrefixedConfigSource(
+                            resolved, MultiFileYamlConfigSource.taskKeyPrefix(taskId));
+            List<String> taskErrors = validateTask(task, taskId, validTargetIds, targetTypes);
             if (taskErrors.isEmpty()) {
-                TaskInfo taskInfo = extractTaskInfo(taskFile);
-                if (taskInfo != null) {
-                    validTasks.put(taskId, taskInfo);
-                }
+                validTasks.put(taskId, extractTaskInfo(task));
             } else {
                 errors.addAll(taskErrors);
             }
@@ -233,11 +243,10 @@ public class ConfigValidator {
         return targetFile.getFileName().toString().replaceAll("\\.yaml$", "");
     }
 
-    /** Reads a single target file, reporting it when it cannot be loaded or parsed. */
-    private List<String> readTargetFile(Path targetFile, String targetId) {
-        String relativePath = "targets/" + targetId + ".yaml";
+    /** Reads a single YAML file, reporting it when it cannot be loaded or parsed. */
+    private List<String> readYamlFile(Path file, String relativePath) {
         try {
-            MultiFileYamlConfigSource.rawAwareYamlSource(targetFile);
+            MultiFileYamlConfigSource.rawAwareYamlSource(file);
             return List.of();
         } catch (IOException e) {
             return List.of(relativePath + ": Failed to load - " + e.getMessage());
@@ -258,42 +267,33 @@ public class ConfigValidator {
         return List.of();
     }
 
-    /** Validates a single task file. */
-    private List<String> validateTaskFile(
-            Path taskFile,
+    /** Validates a single task's resolved keys. */
+    private List<String> validateTask(
+            ConfigSource task,
             NodeId taskId,
             Set<String> validTargetIds,
             Map<String, String> targetTypes) {
         List<String> errors = new ArrayList<>();
         String relativePath = "tasks/" + taskId.value() + ".yaml";
+        Map<String, String> props = task.getProperties();
 
-        try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
-            Map<String, String> props = source.getProperties();
+        // 'name' is required.
+        if (props.get("name") == null) {
+            errors.add(relativePath + ": Missing required property 'name'");
+        }
 
-            // 'name' is required.
-            if (!props.containsKey("name") || props.get("name") == null) {
-                errors.add(relativePath + ": Missing required property 'name'");
+        // 'target' is required.
+        String target = props.get("target");
+        if (target == null) {
+            errors.add(relativePath + ": Missing required property 'target'");
+        } else if (!validTargetIds.contains(target)) {
+            errors.add(relativePath + ": Target '" + target + "' not found");
+        } else {
+            // Run plugin-specific validation using the target's type.
+            String type = targetTypes.get(target);
+            if (type != null) {
+                errors.addAll(validateWithPlugin(task, type, relativePath));
             }
-
-            // 'target' is required.
-            String target = props.get("target");
-            if (target == null) {
-                errors.add(relativePath + ": Missing required property 'target'");
-            } else if (!validTargetIds.contains(target)) {
-                errors.add(relativePath + ": Target '" + target + "' not found");
-            } else {
-                // Run plugin-specific validation using the target's type.
-                String type = targetTypes.get(target);
-                if (type != null) {
-                    List<String> pluginErrors = validateWithPlugin(taskFile, type, relativePath);
-                    errors.addAll(pluginErrors);
-                }
-            }
-        } catch (IOException e) {
-            errors.add(relativePath + ": Failed to load - " + e.getMessage());
-        } catch (Exception e) {
-            errors.add(relativePath + ": Invalid YAML - " + e.getMessage());
         }
 
         return errors;
@@ -302,7 +302,7 @@ public class ConfigValidator {
     /**
      * Runs plugin-specific validation by mapping the task file onto the plugin's task definition.
      */
-    private List<String> validateWithPlugin(Path taskFile, String type, String relativePath) {
+    private List<String> validateWithPlugin(ConfigSource task, String type, String relativePath) {
         List<String> errors = new ArrayList<>();
 
         try {
@@ -314,10 +314,9 @@ public class ConfigValidator {
             Class<?> taskDefClass = plugin.taskDefinitionClass();
 
             // Attempt the SmallRye Config mapping.
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
             SmallRyeConfig config =
                     new SmallRyeConfigBuilder()
-                            .withSources(source)
+                            .withSources(task)
                             .withMapping(taskDefClass)
                             .withValidateUnknown(false)
                             .build();
@@ -368,27 +367,22 @@ public class ConfigValidator {
         return problems;
     }
 
-    /** Extracts a {@link TaskInfo} (target and dependencies) from a task file. */
-    private @Nullable TaskInfo extractTaskInfo(Path taskFile) {
-        try {
-            YamlConfigSource source = MultiFileYamlConfigSource.rawAwareYamlSource(taskFile);
-            Map<String, String> props = source.getProperties();
+    /** Extracts a {@link TaskInfo} (target and dependencies) from a task's resolved keys. */
+    private TaskInfo extractTaskInfo(ConfigSource task) {
+        Map<String, String> props = task.getProperties();
 
-            String target = props.getOrDefault("target", "");
-            List<String> dependencies = new ArrayList<>();
+        String target = props.getOrDefault("target", "");
+        List<String> dependencies = new ArrayList<>();
 
-            // Extract dependencies (list-indexed keys).
-            for (Map.Entry<String, String> entry : props.entrySet()) {
-                String key = entry.getKey();
-                if (key.startsWith("dependencies[") && key.endsWith("]")) {
-                    dependencies.add(entry.getValue());
-                }
+        // Extract dependencies (list-indexed keys).
+        for (Map.Entry<String, String> entry : props.entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("dependencies[") && key.endsWith("]")) {
+                dependencies.add(entry.getValue());
             }
-
-            return new TaskInfo(target, dependencies);
-        } catch (Exception e) {
-            return null;
         }
+
+        return new TaskInfo(target, dependencies);
     }
 
     /** Detects circular task dependencies using depth-first search. */
