@@ -27,4 +27,29 @@ class UpPlanFormatterTest {
         assertThat(message.indexOf("migraphe down <id>"))
                 .isLessThan(message.indexOf("migraphe rebuild"));
     }
+
+    @Test
+    @DisplayName("無効なタスクへの依存は、未定義の依存とは別の言葉で報告する")
+    void namesADisabledDependencyAsDisabledNotAsUndefined() {
+        java.util.Map<NodeId, Set<NodeId>> byNode =
+                java.util.Map.of(NodeId.of("db/users"), Set.of(NodeId.of("db/seed")));
+
+        String disabled =
+                String.join(
+                        "\n",
+                        UpPlanFormatter.format(
+                                new UpBlocker.DisabledDependencies(byNode), RepairVocabulary.CLI));
+        String undefined =
+                String.join(
+                        "\n",
+                        UpPlanFormatter.format(
+                                new UpBlocker.UnresolvedDependencies(byNode),
+                                RepairVocabulary.CLI));
+
+        assertThat(disabled)
+                .contains("disabled")
+                .contains("  db/users → db/seed")
+                .doesNotContain("not defined");
+        assertThat(undefined).contains("not defined").contains("  db/users → db/seed");
+    }
 }
