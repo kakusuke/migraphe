@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.HexFormat;
+import java.util.function.Predicate;
 
 /**
  * A directed acyclic graph (DAG) of migration nodes.
@@ -34,11 +35,13 @@ public final class MigrationGraph implements MigrationGraphView {
     private final Map<NodeId, MigrationNode> nodes;
     private final Map<NodeId, Set<NodeId>> adjacencyList; // node -> nodes it depends on
     private final Set<NodeId> disabled; // tasks whose enabled: resolved to false
+    private final Set<NodeId> conditional; // tasks that declare enabled:
 
     private MigrationGraph() {
         this.nodes = new HashMap<>();
         this.adjacencyList = new HashMap<>();
         this.disabled = new HashSet<>();
+        this.conditional = new HashSet<>();
     }
 
     /**
@@ -51,6 +54,15 @@ public final class MigrationGraph implements MigrationGraphView {
      */
     public void declareDisabled(NodeId taskId) {
         disabled.add(taskId);
+    }
+
+    /**
+     * Records that a task declares {@code enabled:}, whatever it resolved to.
+     *
+     * @param taskId the task declaring {@code enabled:}
+     */
+    public void declareConditional(NodeId taskId) {
+        conditional.add(taskId);
     }
 
     /**
@@ -481,19 +493,8 @@ public final class MigrationGraph implements MigrationGraphView {
      *     declared dependency resolves
      */
     public Map<NodeId, Set<NodeId>> unresolvedDependencies() {
-        Map<NodeId, Set<NodeId>> unresolved = new LinkedHashMap<>();
-        for (MigrationNode node : nodes.values()) {
-            Set<NodeId> missing = new LinkedHashSet<>();
-            for (NodeId depId : node.dependencies()) {
-                if (!nodes.containsKey(depId) && !isDisabled(depId)) {
-                    missing.add(depId);
-                }
-            }
-            if (!missing.isEmpty()) {
-                unresolved.put(node.id(), missing);
-            }
-        }
-        return unresolved;
+        return dependenciesNaming(
+                node -> true, depId -> !nodes.containsKey(depId) && !isDisabled(depId));
     }
 
     /**
@@ -505,19 +506,46 @@ public final class MigrationGraph implements MigrationGraphView {
      * @return each node with disabled dependencies mapped to the ids it names, empty when none
      */
     public Map<NodeId, Set<NodeId>> disabledDependencies() {
-        Map<NodeId, Set<NodeId>> disabled = new LinkedHashMap<>();
+        return dependenciesNaming(node -> true, this::isDisabled);
+    }
+
+    /**
+     * Returns the dependencies a task that does not declare {@code enabled:} has on one that does.
+     *
+     * <p>Judged on the declaration, not its value: the dependent exists under every configuration
+     * and the dependency does not, so the dependency breaks wherever the value is false — which is
+     * worth reporting under the configuration where it is true.
+     *
+     * @return each such task mapped to the conditional tasks it names, empty when none
+     */
+    public Map<NodeId, Set<NodeId>> conditionalDependencies() {
+        return dependenciesNaming(node -> !conditional.contains(node.id()), conditional::contains);
+    }
+
+    /**
+     * Collects, for each node {@code from} accepts, the declared dependencies {@code to} accepts.
+     *
+     * <p>Reads {@code node.dependencies()} rather than the adjacency list, for the reason {@link
+     * #unresolvedDependencies()} gives.
+     */
+    private Map<NodeId, Set<NodeId>> dependenciesNaming(
+            Predicate<MigrationNode> from, Predicate<NodeId> to) {
+        Map<NodeId, Set<NodeId>> result = new LinkedHashMap<>();
         for (MigrationNode node : nodes.values()) {
+            if (!from.test(node)) {
+                continue;
+            }
             Set<NodeId> named = new LinkedHashSet<>();
             for (NodeId depId : node.dependencies()) {
-                if (isDisabled(depId)) {
+                if (to.test(depId)) {
                     named.add(depId);
                 }
             }
             if (!named.isEmpty()) {
-                disabled.put(node.id(), named);
+                result.put(node.id(), named);
             }
         }
-        return disabled;
+        return result;
     }
 
     private boolean isDisabled(NodeId taskId) {

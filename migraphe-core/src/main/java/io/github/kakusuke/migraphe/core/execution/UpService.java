@@ -80,6 +80,11 @@ public final class UpService {
             return new UpPlan(new UpBlocker.DisabledDependencies(disabled), Set.of());
         }
 
+        Map<NodeId, Set<NodeId>> conditional = graph.conditionalDependencies();
+        if (!conditional.isEmpty()) {
+            return new UpPlan(new UpBlocker.ConditionalDependencies(conditional), Set.of());
+        }
+
         Set<NodeId> undeclared = graph.undeclaredIrreversibleNodes();
         if (!undeclared.isEmpty()) {
             return new UpPlan(new UpBlocker.UndeclaredIrreversible(undeclared), Set.of());

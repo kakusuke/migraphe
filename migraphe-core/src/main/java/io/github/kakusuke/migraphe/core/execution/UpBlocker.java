@@ -44,6 +44,16 @@ public sealed interface UpBlocker {
     record DisabledDependencies(Map<NodeId, Set<NodeId>> byNode) implements UpBlocker {}
 
     /**
+     * Tasks that do not declare {@code enabled:} depending on tasks that do.
+     *
+     * <p>Judged on the declaration, not its value, so it fires where everything is enabled about a
+     * dependency that would break wherever the value is false.
+     *
+     * @param byNode each such task mapped to the conditional tasks it names
+     */
+    record ConditionalDependencies(Map<NodeId, Set<NodeId>> byNode) implements UpBlocker {}
+
+    /**
      * Tasks that define neither a rollback nor a reason there is none.
      *
      * <p>Once a migration has run it is too late to decide, so the choice is demanded before the

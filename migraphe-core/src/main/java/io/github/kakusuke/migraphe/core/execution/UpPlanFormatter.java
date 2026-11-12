@@ -34,6 +34,8 @@ public final class UpPlanFormatter {
             case UpBlocker.UnresolvedDependencies unresolved ->
                     unresolvedLines(unresolved.byNode());
             case UpBlocker.DisabledDependencies disabled -> disabledLines(disabled.byNode());
+            case UpBlocker.ConditionalDependencies conditional ->
+                    conditionalLines(conditional.byNode());
             case UpBlocker.UndeclaredIrreversible undeclared -> undeclaredLines(undeclared.nodes());
             case UpBlocker.UnrecordableRollback unrecordable ->
                     unrecordableLines(unrecordable.nodes());
@@ -63,6 +65,18 @@ public final class UpPlanFormatter {
                         + byNode.size()
                         + " task(s) depend on migrations that are disabled under this"
                         + " configuration (enabled: is false):");
+        lines.addAll(edgeLines(byNode));
+        return List.copyOf(lines);
+    }
+
+    private static List<String> conditionalLines(Map<NodeId, Set<NodeId>> byNode) {
+        List<String> lines = new ArrayList<>();
+        lines.add(
+                "Error: "
+                        + byNode.size()
+                        + " task(s) without enabled: depend on tasks that declare it, so they"
+                        + " would stand on nothing wherever it is false. Declare enabled: on them"
+                        + " too, or drop the dependency:");
         lines.addAll(edgeLines(byNode));
         return List.copyOf(lines);
     }
