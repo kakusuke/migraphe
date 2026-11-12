@@ -438,6 +438,34 @@ task:
 
 An id that holds a dot must be quoted (`"db1/v1.2":`). An id with no file under `tasks/` defines a task of that id, so an overlay can add a task; a mistyped id therefore shows up as a task with missing fields, which both `validate` and the load report. `validate` checks the configuration as it resolves, with the overlay given by `--env` applied. A value given with `-D` or an environment variable is not YAML; escape `$` there as `\$`.
 
+**A task that exists only in some environments: `enabled:`.** A task may declare `enabled:`, resolved like any other value. Seed data loaded in dev and test only is the usual case:
+
+```yaml
+# tasks/db1/900_seed_users.yaml
+name: Seed users
+target: db1
+enabled: ${seed.enabled:false}
+dependencies:
+  - db1/001_create_users
+up: INSERT INTO users (name) VALUES ('alice');
+down: DELETE FROM users WHERE name = 'alice';
+```
+
+```yaml
+# environments/dev.yaml
+seed:
+  enabled: true
+```
+
+The value must be `true` or `false`; anything else is an error. A task whose `enabled:` is false does not exist under that configuration: `up` does not apply it, and if it was applied before, `status` shows it as an orphan and `down` / `rebuild` roll it back — the same as deleting its file. `enabled:` is not part of what `status` compares, so toggling it never shows `[!]`.
+
+Two rules keep a disabled task from leaving something without its ground; `validate` reports both and `up` refuses before applying anything:
+
+- A task that does not declare `enabled:` may not depend on one that does, whatever the value — it would break wherever the value is false. Declare `enabled:` on the dependent too, or drop the dependency.
+- A task that is enabled may not depend on one that is disabled under the configuration in use.
+
+Without `--env`, `validate` checks the base configuration and every overlay in `environments/`, and prefixes each error with the configurations it occurs under (`[env: dev]`, or `[base, env: dev, env: prod]` for one that occurs under all three); with `--env`, only that overlay, without a prefix. A project without `environments/` is checked as before, without a prefix. Values from `-D` and OS environment variables are not varied.
+
 **What changing a value means.** A task is compared with the history as it resolves under the configuration you run with. Changing a value that reaches a task's text — a variable, an overlay, a rotated password referenced from SQL — makes that task show `[!]` in `status`, because what would run now differs from what was applied. Resolve it with [`amend`](#recording-definitions-as-applied-amend) or `rebuild` as for any edit. Two overlays that point at the same database and resolve a task differently will each show `[!]` for what the other applied.
 
 ## Writing Migrations

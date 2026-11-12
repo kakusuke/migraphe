@@ -17,7 +17,9 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.StreamSupport;
 import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
@@ -248,11 +250,51 @@ public class ConfigLoader {
         Map<NodeId, TaskDefinition<?>> taskDefinitions = new LinkedHashMap<>();
 
         for (NodeId nodeId : extractTaskIds(mainConfig)) {
+            if (Boolean.FALSE.equals(declaredEnabled(mainConfig, nodeId))) {
+                continue;
+            }
             TaskDefinition<?> taskDef = loadTaskDefinition(nodeId, mainConfig, pluginRegistry);
             taskDefinitions.put(nodeId, taskDef);
         }
 
         return taskDefinitions;
+    }
+
+    /**
+     * Returns the tasks whose {@code enabled:} resolved to false — the tasks {@link
+     * #loadTaskDefinitions} leaves out.
+     *
+     * @param mainConfig the merged main config containing the {@code task.*} entries
+     * @return the disabled task ids
+     * @throws ConfigurationException if an {@code enabled:} is neither {@code true} nor {@code
+     *     false}
+     */
+    public Set<NodeId> loadDisabledTaskIds(SmallRyeConfig mainConfig) {
+        return taskIdsWhoseEnabled(mainConfig, Boolean.FALSE::equals);
+    }
+
+    /**
+     * Returns the tasks that declare {@code enabled:}, whatever it resolved to.
+     *
+     * @param mainConfig the merged main config containing the {@code task.*} entries
+     * @return the conditional task ids
+     * @throws ConfigurationException if an {@code enabled:} is neither {@code true} nor {@code
+     *     false}
+     */
+    public Set<NodeId> loadConditionalTaskIds(SmallRyeConfig mainConfig) {
+        return taskIdsWhoseEnabled(mainConfig, Objects::nonNull);
+    }
+
+    /** The task ids whose {@link #declaredEnabled} value {@code test} accepts. */
+    private static Set<NodeId> taskIdsWhoseEnabled(
+            SmallRyeConfig mainConfig, Predicate<@Nullable Boolean> test) {
+        Set<NodeId> taskIds = new LinkedHashSet<>();
+        for (NodeId nodeId : extractTaskIds(mainConfig)) {
+            if (test.test(declaredEnabled(mainConfig, nodeId))) {
+                taskIds.add(nodeId);
+            }
+        }
+        return taskIds;
     }
 
     /**
@@ -389,6 +431,34 @@ public class ConfigLoader {
                 .forEach(targetIds::add);
 
         return targetIds;
+    }
+
+    /**
+     * Reads what a task's {@code enabled:} resolved to.
+     *
+     * @param config the merged config
+     * @param taskId the task
+     * @return the resolved value, or {@code null} when the task does not declare {@code enabled:}
+     * @throws ConfigurationException if the value is neither {@code true} nor {@code false}
+     */
+    static @Nullable Boolean declaredEnabled(SmallRyeConfig config, NodeId taskId) {
+        String enabled =
+                config.getConfigValue(MultiFileYamlConfigSource.taskKeyPrefix(taskId) + "enabled")
+                        .getValue();
+        if (enabled == null) {
+            return null;
+        }
+        if (enabled.equalsIgnoreCase("true")) {
+            return true;
+        }
+        if (enabled.equalsIgnoreCase("false")) {
+            return false;
+        }
+        throw new ConfigurationException(
+                "enabled: of task "
+                        + taskId.value()
+                        + " must be true or false, but is: "
+                        + enabled);
     }
 
     /**

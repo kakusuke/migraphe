@@ -332,8 +332,10 @@ class ConfigValidatorTest {
                     type: not-a-registered-plugin
                 """);
 
-        // 対照群: --env なしならベースの type: postgresql で妥当
-        assertThat(validator.validate(tempDir).isValid()).isTrue();
+        // 対照群: ベースの type: postgresql は妥当で、エラーはオーバーレイの下でだけ出る
+        assertThat(validator.validate(tempDir).errors())
+                .isNotEmpty()
+                .allMatch(e -> e.startsWith("[env: production] "));
 
         // When: オーバーレイ適用時は実際に使われる型を検証する
         ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
@@ -521,6 +523,155 @@ class ConfigValidatorTest {
 
         // Then
         assertThat(result.errors()).anyMatch(e -> e.contains("task.test-db/seed"));
+    }
+
+    @Test
+    void shouldReportADependencyOnADisabledTaskAsDisabled() throws IOException {
+        // Given: 有効なタスクが、無効なタスクに依存する（無効なタスクはこの設定には存在しない
+        // ので、その target が無いことは問わない）
+        createValidProject(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("seed.yaml"),
+                """
+                name: Seed
+                target: missing-db
+                enabled: false
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("report.yaml"),
+                """
+                name: Report
+                target: test-db
+                enabled: true
+                dependencies:
+                  - test-db/seed
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .containsExactly(
+                        "tasks/test-db/report.yaml: Dependency 'test-db/seed' is disabled"
+                                + " (enabled: is false)");
+    }
+
+    @Test
+    void shouldReportAnEnabledValueThatIsNotABoolean() throws IOException {
+        // Given: enabled: の値が true/false 以外
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("seed.yaml"),
+                """
+                name: Seed
+                target: test-db
+                enabled: ture
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.errors())
+                .containsExactly(
+                        "tasks/test-db/seed.yaml: enabled: of task test-db/seed must be true or"
+                                + " false, but is: ture");
+    }
+
+    @Test
+    void shouldReportATaskWithoutEnabledThatDependsOnOneWithIt() throws IOException {
+        // Given: enabled: を宣言しないタスクが、宣言するタスク（値は true）に依存する
+        createValidProject(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("seed.yaml"),
+                """
+                name: Seed
+                target: test-db
+                enabled: true
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("report.yaml"),
+                """
+                name: Report
+                target: test-db
+                dependencies:
+                  - test-db/seed
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("more_seed.yaml"),
+                """
+                name: More seed
+                target: test-db
+                enabled: true
+                dependencies:
+                  - test-db/seed
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then: enabled: を宣言したタスク同士の依存は問わない
+        assertThat(result.errors())
+                .containsExactly(
+                        "tasks/test-db/report.yaml: Dependency 'test-db/seed' declares enabled:"
+                                + " and this task does not; declare enabled: here too, or drop"
+                                + " the dependency");
+    }
+
+    @Test
+    void shouldCheckTheBaseConfigurationAndEveryOverlayWhenNoEnvironmentIsGiven()
+            throws IOException {
+        // Given: dev でだけ有効になる seed は target が壊れている。report の依存は全構成で未定義
+        createValidProject(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("seed.yaml"),
+                """
+                name: Seed
+                target: missing-db
+                enabled: ${seed.enabled:false}
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("report.yaml"),
+                """
+                name: Report
+                target: test-db
+                dependencies:
+                  - test-db/nothing
+                up: SELECT 1;
+                down: SELECT 1;
+                """);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(environmentsDir.resolve("dev.yaml"), "seed:\n  enabled: true\n");
+        Files.writeString(environmentsDir.resolve("prod.yaml"), "seed:\n  enabled: false\n");
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then: 全構成で同じエラーは1行にまとめ、dev でだけ出るエラーは dev として出る
+        assertThat(result.errors())
+                .containsExactly(
+                        "[base, env: dev, env: prod] tasks/test-db/report.yaml: Dependency"
+                                + " 'test-db/nothing' not found",
+                        "[env: dev] tasks/test-db/seed.yaml: Target 'missing-db' not found");
     }
 
     private void createValidProject(Path baseDir) throws IOException {

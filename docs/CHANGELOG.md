@@ -2,6 +2,16 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-11-13 (Session 82)
+
+**`enabled:`（決定 38）を実装した。dev/test でだけ seed を入れるという、このシリーズの元の目的。** #98 に積む PR。
+
+- **disabled な task は D に入らない**。`enabled:` が false に解決された task はロード時に落とす。適用済みなら orphan になる。値は `true`/`false`（大文字小文字は問わない）だけを受け付ける。SmallRye の boolean 変換は未知の文字列を黙って false にするので使わない（打ち間違いで task が消え、適用済みのものが rollback 対象になるため）。
+- **2 つのルール**。どちらも「未解決の依存」と同じ層に置いた（ロードは通り、`status` は動き、`validate` は報告し、`up` は何も適用する前に拒否する）。runtime: 有効な task が disabled な task に依存する（「not defined」ではなく「disabled」と報告する）。static: `enabled:` を宣言しない task が、宣言する task に値によらず依存する。グラフに `declareDisabled` / `declareConditional` で記録するので、`UpService(graph, history)` のシグネチャは変えていない。
+- **`validate`**: 上の 2 ルールと、値の不正を報告する。disabled な task の項目は、それを無効にする構成では検査しない（ロードと同じ）。`--env` なしなら base と `environments/` のすべての overlay で検査し、同じエラーは 1 行にまとめて `[base, env: dev] …` と構成を前置きする。`--env` ありならその overlay だけ（ユーザーと決めた）。CLI の振り分けが前置き付きのエラーを落としていたのを直した。
+- **確認**: #98 の内容を CLI と Gradle の両方で実際に動かして確認した（overlay での上書き、ファイルのない task の追加と `up`、`${dbtype}` の解決、overlay の target 補完）。Gradle デーモンが H2 のファイルロックを持ち続ける件は環境の問題で、本変更とは無関係。
+- Tests: TDD サイクルはすべて cycle-verifier で closed。not-closed は 3 回あり、いずれも「テストのない分岐」の指摘だった。テストを足し、ミューテーションでその分岐が効いていることを確かめてから閉じた。
+
 ### 2026-11-13 (Session 81)
 
 **決定 37 の残りを片付けた。`validate` を解決済みの設定の上に作り直し、task を `task.*` キーから見つけるようにした。** PR #97 に積む PR。

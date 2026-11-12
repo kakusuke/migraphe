@@ -33,6 +33,9 @@ public final class UpPlanFormatter {
         return switch (blocker) {
             case UpBlocker.UnresolvedDependencies unresolved ->
                     unresolvedLines(unresolved.byNode());
+            case UpBlocker.DisabledDependencies disabled -> disabledLines(disabled.byNode());
+            case UpBlocker.ConditionalDependencies conditional ->
+                    conditionalLines(conditional.byNode());
             case UpBlocker.UndeclaredIrreversible undeclared -> undeclaredLines(undeclared.nodes());
             case UpBlocker.UnrecordableRollback unrecordable ->
                     unrecordableLines(unrecordable.nodes());
@@ -51,11 +54,41 @@ public final class UpPlanFormatter {
                         + byNode.size()
                         + " task(s) depend on migrations that are not defined. Applying them would"
                         + " build on ground nothing describes:");
-        byNode.forEach(
-                (nodeId, missing) ->
-                        missing.forEach(
-                                dep -> lines.add("  " + nodeId.value() + " → " + dep.value())));
+        lines.addAll(edgeLines(byNode));
         return List.copyOf(lines);
+    }
+
+    private static List<String> disabledLines(Map<NodeId, Set<NodeId>> byNode) {
+        List<String> lines = new ArrayList<>();
+        lines.add(
+                "Error: "
+                        + byNode.size()
+                        + " task(s) depend on migrations that are disabled under this"
+                        + " configuration (enabled: is false):");
+        lines.addAll(edgeLines(byNode));
+        return List.copyOf(lines);
+    }
+
+    private static List<String> conditionalLines(Map<NodeId, Set<NodeId>> byNode) {
+        List<String> lines = new ArrayList<>();
+        lines.add(
+                "Error: "
+                        + byNode.size()
+                        + " task(s) without enabled: depend on tasks that declare it, so they"
+                        + " would stand on nothing wherever it is false. Declare enabled: on them"
+                        + " too, or drop the dependency:");
+        lines.addAll(edgeLines(byNode));
+        return List.copyOf(lines);
+    }
+
+    /** One {@code " task → dependency"} line per declared edge. */
+    private static List<String> edgeLines(Map<NodeId, Set<NodeId>> byNode) {
+        List<String> lines = new ArrayList<>();
+        byNode.forEach(
+                (nodeId, deps) ->
+                        deps.forEach(
+                                dep -> lines.add("  " + nodeId.value() + " → " + dep.value())));
+        return lines;
     }
 
     /**

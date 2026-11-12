@@ -42,6 +42,51 @@ class UpServiceTest {
     }
 
     @Test
+    @DisplayName("無効なタスクへの依存は、未定義ではなく無効な依存としてブロッカーを返す")
+    void shouldRefuseWhileADependencyIsDisabled() {
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(node("b", Set.of(NodeId.of("seed")), "DOWN: b", null));
+        graph.declareDisabled(NodeId.of("seed"));
+
+        UpService.UpPlan plan = new UpService(graph, new InMemoryHistoryRepository()).plan(null);
+
+        assertThat(plan.blocker())
+                .isInstanceOfSatisfying(
+                        UpBlocker.DisabledDependencies.class,
+                        disabled ->
+                                assertThat(disabled.byNode())
+                                        .containsExactly(
+                                                java.util.Map.entry(
+                                                        NodeId.of("b"),
+                                                        Set.of(NodeId.of("seed")))));
+        assertThat(plan.selectedNodes()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("enabled: を宣言しないタスクが、宣言するタスクに依存すると、値によらずブロッカーを返す")
+    void shouldRefuseAnUnconditionalTaskThatDependsOnAConditionalOne() {
+        MigrationGraph graph = MigrationGraph.create();
+        graph.addNode(node("seed", Set.of(), "DOWN: seed", null));
+        graph.addNode(node("report", Set.of(NodeId.of("seed")), "DOWN: report", null));
+        graph.addNode(node("more_seed", Set.of(NodeId.of("seed")), "DOWN: more_seed", null));
+        graph.declareConditional(NodeId.of("seed"));
+        graph.declareConditional(NodeId.of("more_seed"));
+
+        UpService.UpPlan plan = new UpService(graph, new InMemoryHistoryRepository()).plan(null);
+
+        assertThat(plan.blocker())
+                .isInstanceOfSatisfying(
+                        UpBlocker.ConditionalDependencies.class,
+                        conditional ->
+                                assertThat(conditional.byNode())
+                                        .containsExactly(
+                                                java.util.Map.entry(
+                                                        NodeId.of("report"),
+                                                        Set.of(NodeId.of("seed")))));
+        assertThat(plan.selectedNodes()).isEmpty();
+    }
+
+    @Test
     @DisplayName("down: も no_way_back: も無いタスクがあるとブロッカーを返す")
     void shouldRefuseATaskThatNeitherRollsBackNorSaysWhyNot() {
         MigrationGraph graph = MigrationGraph.create();

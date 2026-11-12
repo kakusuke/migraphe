@@ -27,4 +27,48 @@ class UpPlanFormatterTest {
         assertThat(message.indexOf("migraphe down <id>"))
                 .isLessThan(message.indexOf("migraphe rebuild"));
     }
+
+    @Test
+    @DisplayName("無効なタスクへの依存は、未定義の依存とは別の言葉で報告する")
+    void namesADisabledDependencyAsDisabledNotAsUndefined() {
+        java.util.Map<NodeId, Set<NodeId>> byNode =
+                java.util.Map.of(NodeId.of("db/users"), Set.of(NodeId.of("db/seed")));
+
+        String disabled =
+                String.join(
+                        "\n",
+                        UpPlanFormatter.format(
+                                new UpBlocker.DisabledDependencies(byNode), RepairVocabulary.CLI));
+        String undefined =
+                String.join(
+                        "\n",
+                        UpPlanFormatter.format(
+                                new UpBlocker.UnresolvedDependencies(byNode),
+                                RepairVocabulary.CLI));
+
+        assertThat(disabled)
+                .contains("disabled")
+                .contains("  db/users → db/seed")
+                .doesNotContain("not defined");
+        assertThat(undefined).contains("not defined").contains("  db/users → db/seed");
+    }
+
+    @Test
+    @DisplayName("enabled: を宣言しないタスクの依存は、宣言を足すか依存を外すよう案内する")
+    void namesBothWaysOutOfAnUnconditionalDependencyOnAConditionalTask() {
+        String message =
+                String.join(
+                        "\n",
+                        UpPlanFormatter.format(
+                                new UpBlocker.ConditionalDependencies(
+                                        java.util.Map.of(
+                                                NodeId.of("db/report"),
+                                                Set.of(NodeId.of("db/seed")))),
+                                RepairVocabulary.CLI));
+
+        assertThat(message)
+                .contains("without enabled:")
+                .contains("Declare enabled: on them too, or drop the dependency")
+                .contains("  db/report → db/seed");
+    }
 }

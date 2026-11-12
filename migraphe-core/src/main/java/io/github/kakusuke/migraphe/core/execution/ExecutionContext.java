@@ -186,6 +186,8 @@ public record ExecutionContext(
         // 5. Build the MigrationGraph (adding nodes in dependency order).
         List<MigrationNode> sortedNodes = sortNodesByDependencies(nodes);
         MigrationGraph graph = MigrationGraph.fromNodesUp(sortedNodes);
+        configLoader.loadDisabledTaskIds(config).forEach(graph::declareDisabled);
+        configLoader.loadConditionalTaskIds(config).forEach(graph::declareConditional);
 
         // 6. A cycle means no order exists, so nothing can be built from this. An unresolved
         // dependency is only incompleteness, and a project in that state must still be able to
