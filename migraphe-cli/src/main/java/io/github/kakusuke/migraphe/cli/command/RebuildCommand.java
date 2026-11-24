@@ -211,14 +211,24 @@ public class RebuildCommand implements Command {
             }
 
             ConsoleExecutionListener listener = new ConsoleExecutionListener(colorEnabled);
-            ExecutionResult down =
-                    // Sequential because that is how `down` rolls back, not because a rebuild
-                    // decided so. When `down` reads the configuration this follows it.
-                    new DagExecutor(plan.graph(), historyRepo, listener, ExecutionDirection.DOWN, 1)
-                            .execute(plan.toRollBack());
-            if (!down.success()) {
-                System.err.println("Rebuild stopped: the rollback did not complete.");
-                return 1;
+            // Skipped, not run empty: an empty run writes nothing, but still reports itself as a
+            // finished run in which nothing needed doing — "all migrations are up to date" — right
+            // before the re-apply runs.
+            if (!plan.toRollBack().isEmpty()) {
+                ExecutionResult down =
+                        // Sequential because that is how `down` rolls back, not because a rebuild
+                        // decided so. When `down` reads the configuration this follows it.
+                        new DagExecutor(
+                                        plan.graph(),
+                                        historyRepo,
+                                        listener,
+                                        ExecutionDirection.DOWN,
+                                        1)
+                                .execute(plan.toRollBack());
+                if (!down.success()) {
+                    System.err.println("Rebuild stopped: the rollback did not complete.");
+                    return 1;
+                }
             }
 
             // Everything not applied, which after the rollback is the difference set and whatever

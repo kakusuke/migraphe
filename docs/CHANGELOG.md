@@ -2,7 +2,7 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
-### 2026-11-13 (Session 80)
+### 2026-11-13 (Session 81)
 
 **task ファイルの `${...}` を展開するようにし、展開させない値のための `!raw` タグを入れた（決定 37）。** あわせて、seed のような環境限定のタスクを書く `enabled:`（決定 38）を設計として決めた。`enabled:` の実装は次の PR。
 
@@ -15,6 +15,10 @@ Claude session records. Newest entries first. This is the only place session rec
 - **`validate` は読み込みの失敗を握りつぶす箇所がある**（`validateWithPlugin`、`extractTaskInfo`）。「受け付ける」テストだけでは検査が走ったか分からないので、読み込み箇所ごとにエラーを期待するテストで固定した。一度 Verify に over-implementation と指摘され、テストの無い置き換え 2 か所を戻してから入れ直している。tidy-notes に罠として記録。
 - **ついでの修正**: `Environment`→`Target` の一括リネームで壊れた Javadoc 4 か所（`MapConfigSource` は「`target.` 接頭辞」と事実と逆のことを書いていた）。
 - Tests: core・cli・gradle-plugin 100% passing。TDD 11 サイクル、すべて cycle-verifier で closed（途中で破棄した 1 サイクルは除く）。
+
+### 2026-11-11 (Session 80)
+
+**#94 `rebuild` で戻すものが無いとき、「All migrations are up to date.」と出た直後に適用が走っていた（CLI・Gradle）。** ロールバック対象が空でも DOWN の `DagExecutor` を回しており、その完了通知で listener が「何も実行していない」側の文言を出していた。対象が空ならロールバックの段ごと飛ばすようにした。`DagExecutor.execute` は空集合だと `onCompleted` を呼んで返すだけで履歴を読み書きしないので、飛ばしても失うものは無い（issue で確認が必要とされていた点）。
 
 ### 2026-10-16 (Session 79) — v0.7.1
 

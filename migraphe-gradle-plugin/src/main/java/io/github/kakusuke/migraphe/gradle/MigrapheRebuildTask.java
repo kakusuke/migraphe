@@ -208,20 +208,25 @@ public abstract class MigrapheRebuildTask extends AbstractMigrapheTask {
                     }
 
                     GradleExecutionListener listener = new GradleExecutionListener(getLogger());
-                    ExecutionResult down =
-                            // Sequential because that is how `down` rolls back, not because a
-                            // rebuild decided so. When `down` reads the configuration this
-                            // follows it.
-                            new DagExecutor(
-                                            plan.graph(),
-                                            historyRepo,
-                                            listener,
-                                            ExecutionDirection.DOWN,
-                                            1)
-                                    .execute(plan.toRollBack());
-                    if (!down.success()) {
-                        throw new GradleException(
-                                "Rebuild stopped: the rollback did not complete.");
+                    // Skipped, not run empty: an empty run writes nothing, but still reports
+                    // itself as a finished run in which nothing needed doing — "all migrations
+                    // are up to date" — right before the re-apply runs.
+                    if (!plan.toRollBack().isEmpty()) {
+                        ExecutionResult down =
+                                // Sequential because that is how `down` rolls back, not because a
+                                // rebuild decided so. When `down` reads the configuration this
+                                // follows it.
+                                new DagExecutor(
+                                                plan.graph(),
+                                                historyRepo,
+                                                listener,
+                                                ExecutionDirection.DOWN,
+                                                1)
+                                        .execute(plan.toRollBack());
+                        if (!down.success()) {
+                            throw new GradleException(
+                                    "Rebuild stopped: the rollback did not complete.");
+                        }
                     }
 
                     // Asking UpService rather than replaying the rollback set keeps a node that

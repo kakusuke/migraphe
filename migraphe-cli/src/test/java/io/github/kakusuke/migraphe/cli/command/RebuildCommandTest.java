@@ -594,6 +594,28 @@ class RebuildCommandTest {
                 .doesNotContain("db/001_create_users");
     }
 
+    @Test
+    void withNothingToRollBackItDoesNotClaimEverythingIsUpToDate() throws Exception {
+        writeProject();
+        new UpCommand(
+                        ExecutionContext.load(tempDir, pluginRegistry),
+                        NodeId.of("db/001_create_users"),
+                        true,
+                        false)
+                .execute();
+        outputStream.reset();
+
+        int exitCode =
+                new RebuildCommand(ExecutionContext.load(tempDir, pluginRegistry), true, false)
+                        .execute();
+
+        String output = outputStream.toString(StandardCharsets.UTF_8);
+        assertThat(exitCode).isZero();
+        assertThat(output)
+                .doesNotContain("All migrations are up to date.")
+                .contains("Migration completed successfully. 1 migration executed.");
+    }
+
     private void writeProject() throws IOException {
         Files.writeString(
                 tempDir.resolve("migraphe.yaml"),
