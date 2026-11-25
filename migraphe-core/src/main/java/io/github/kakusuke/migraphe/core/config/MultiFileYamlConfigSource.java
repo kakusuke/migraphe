@@ -14,6 +14,7 @@ import java.util.Set;
 import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.error.YAMLException;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
 import org.yaml.snakeyaml.nodes.NodeTuple;
@@ -35,8 +36,8 @@ import org.yaml.snakeyaml.nodes.Tag;
  * <ul>
  *   <li>{@code migraphe.yaml} &rarr; no prefix ({@code project.*}, {@code history.*})
  *   <li>{@code targets/db1.yaml} &rarr; {@code "target.db1.*"} prefix
- *   <li>{@code tasks/db1/create_users.yaml} &rarr; {@code "task.\"db1/create_users\".*"} prefix
- *       (the task id is quoted so embedded slashes are not treated as key separators)
+ *   <li>{@code tasks/db1/create_users.yaml} &rarr; {@code "task.db1/create_users.*"} prefix (see
+ *       {@link #taskKeyPrefix(NodeId)})
  * </ul>
  */
 public class MultiFileYamlConfigSource implements ConfigSource {
@@ -71,7 +72,7 @@ public class MultiFileYamlConfigSource implements ConfigSource {
         try {
             YamlConfigSource yamlSource = rawAwareYamlSource(file);
             properties.putAll(yamlSource.getProperties());
-        } catch (IOException e) {
+        } catch (IOException | YAMLException e) {
             throw new ConfigurationException("Failed to load project config: " + file, e);
         }
     }
@@ -97,16 +98,14 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                     String prefixedKey = "target." + targetId + "." + entry.getKey();
                     properties.put(prefixedKey, entry.getValue());
                 }
-            } catch (IOException e) {
+            } catch (IOException | YAMLException e) {
                 throw new ConfigurationException("Failed to load target config: " + file, e);
             }
         }
     }
 
     /**
-     * Loads each task file under a {@code "task.\"<taskId>\".*"} prefix. The task id is quoted so
-     * that ids containing slashes (such as {@code db1/create_users}) are not split into nested
-     * keys.
+     * Loads each task file under its {@link #taskKeyPrefix(NodeId)}.
      *
      * @param taskFiles the task files keyed by their {@link NodeId}
      * @throws ConfigurationException if any YAML file cannot be read
@@ -121,15 +120,30 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                 YamlConfigSource yamlSource = rawAwareYamlSource(file);
 
                 // Merge in with the prefix applied.
-                // When a task id contains slashes, the form is "task.\"db1/create_users\".*".
                 for (Map.Entry<String, String> prop : yamlSource.getProperties().entrySet()) {
-                    String prefixedKey = "task.\"" + taskId.value() + "\"." + prop.getKey();
+                    String prefixedKey = taskKeyPrefix(taskId) + prop.getKey();
                     properties.put(prefixedKey, prop.getValue());
                 }
-            } catch (IOException e) {
+            } catch (IOException | YAMLException e) {
                 throw new ConfigurationException("Failed to load task config: " + file, e);
             }
         }
+    }
+
+    /**
+     * Returns the prefix a task's keys carry in the merged config: {@code task.<id>.}, with the id
+     * quoted only when it contains a dot ({@code task."db1/v1.0_seed".}).
+     *
+     * <p>This is the key {@link YamlConfigSource} itself produces for {@code task: {<id>: {...}}},
+     * so a {@code task:} block in an environment overlay lands on the same keys a task file
+     * registers and overrides them. A slash is not a key separator and needs no quoting.
+     *
+     * @param taskId the task's id
+     * @return the prefix, including the trailing {@code "."}
+     */
+    static String taskKeyPrefix(NodeId taskId) {
+        String id = taskId.value();
+        return id.contains(".") ? "task.\"" + id + "\"." : "task." + id + ".";
     }
 
     /**

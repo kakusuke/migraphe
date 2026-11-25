@@ -2,6 +2,19 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-11-24 (Session 82)
+
+**task の変数展開（決定 37、Session 81）をコードレビューにかけ、読み込みまわりの不具合 4 件を直した。** あわせて main を取り込み、CHANGELOG の衝突を解消した（Session 番号が重なったので 11-13 の記録を 81 に振り直した）。
+
+- **空で書いた値で全コマンドが落ちていた**。`dependencies: []` や `description: ""` は空文字のキーになり、`PrefixedConfigSource` の `getValue(name, String.class)` が SRCFG00040 を投げていた。空の値は「書かれていない」として読む。target も同じ経路なので同時に直っている。
+- **展開できない値のエラーに task ファイル名を付けた**。未定義の `${name}` や閉じていない `${` は、ファイル名のない `NoSuchElementException` で止まっていた。`ConfigurationException` に包んでファイルを示す。target 側はまだファイル名が付かない。
+- **「閉じていない `${` は値がエラーなしで消える」という記述は、task・target の読み込みでは成り立っていなかった**（Session 81 の時点から読み込みエラー）。SmallRye は展開の失敗を、必須の読み方（`getValue`）では例外にし、任意の読み方（`getOptionalValue`・`getConfigValue`）では値なしとして返す。記述は後者での測定だった。ARCHITECTURE 決定 37、USER_GUIDE（日英）、tidy-notes を書き換えた。1 件目の修正を `getConfigValue` だけで書いたところ、実際に `down:` が黙って消える状態を一度作っており、2 件目のテストで見つけて塞いだ。罠として tidy-notes に記録。
+- **YAML の構文エラーからファイル名が消えていた**。`!raw` のために SnakeYAML で先に読むようになり、その `YAMLException` が呼び出し側の `catch (IOException)` をすり抜けていた。実行時の読み込み 4 か所（`migraphe.yaml`・target・task・overlay）で捕まえる。共通関数の中で `IOException` に変える案は、`validate` の表示が「Invalid YAML」から「Failed to load」に変わるので退けた。
+- **overlay の `task:` ブロックが task を上書きできていなかった**。task ファイルのキーは `task."db1/greet".name`、overlay の YAML が平坦化されるキーは `task.db1/greet.name` で、別物だった（YAML 側で引用符を付けても同じ）。task のキーを SmallRye の平坦化と同じ形（id にドットがあるときだけ引用符）に揃えた。決定 37 が保留していた「overlay の YAML が task キーに届くか」への答え。これまで `task.*` キーを読むものは無かったので、互換性の問題は無い。
+- **決定 37 の冒頭が修正前の状態を現在形で書いていた**のを書き直した。`loadTaskDefinitions` と `PrefixedConfigSource` の Javadoc も同様。
+- **持ち越し**（レビューと監査が挙げたもの）: CLI の `PluginConfigPreParser` が壊れた `migraphe.yaml` でファイル名のない SnakeYAML 例外を出す（`ConfigLoader` より先に走るので、今回の修正が CLI では効かない）。id にドットを含む target（`targets/db.v2.yaml`）は `extractTargetIds` が最初のドットで切る。スカラー以外に付けた `!raw` のエラーが分かりにくい。task 数に対して読み込みが二乗。`validate` の作り直しと task の発見元は Session 81 のとおり次の PR。
+- Tests: 全モジュール 100% passing。TDD 4 サイクル、すべて cycle-verifier で closed。
+
 ### 2026-11-13 (Session 81)
 
 **task ファイルの `${...}` を展開するようにし、展開させない値のための `!raw` タグを入れた（決定 37）。** あわせて、seed のような環境限定のタスクを書く `enabled:`（決定 38）を設計として決めた。`enabled:` の実装は次の PR。

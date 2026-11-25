@@ -416,7 +416,7 @@ up: INSERT INTO ${seed.schema}.users (name) VALUES ('alice');
 down: DELETE FROM ${seed.schema}.users WHERE name = 'alice';
 ```
 
-**Keeping a value as written: `!raw`.** Expansion also changes a few things besides `${...}`: `$$` becomes `$`, a `\` before `$` is dropped, and a value holding an unclosed `${` is treated as **absent, without an error**. PostgreSQL `DO $$ … $$` blocks and `$$`-quoted function bodies, and MySQL `DELIMITER $$` scripts, are the common case. Tag such a value `!raw` and it reaches the database exactly as written:
+**Keeping a value as written: `!raw`.** Expansion also changes a few things besides `${...}`: `$$` becomes `$`, a `\` before `$` is dropped, and a value holding an unclosed `${` **fails to load**. PostgreSQL `DO $$ … $$` blocks and `$$`-quoted function bodies, and MySQL `DELIMITER $$` scripts, are the common case. Tag such a value `!raw` and it reaches the database exactly as written:
 
 ```yaml
 up: !raw |
