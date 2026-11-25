@@ -349,4 +349,25 @@ class PluginConfigPreParserTest {
 
         assertThat(result.scanRoot()).contains("custom/path");
     }
+
+    @Test
+    void parseReadsARawTaggedValueAsItsText() throws IOException {
+        Path migrapheYaml = tempDir.resolve("migraphe.yaml");
+        Files.writeString(
+                migrapheYaml,
+                """
+                plugins:
+                  - io.github.kakusuke:migraphe-plugin-generator-json:0.1.0-SNAPSHOT
+                project:
+                  scan-root: !raw "custom/$path"
+                history:
+                  table: !raw "h$$"
+                """);
+        var parser = new PluginConfigPreParser();
+
+        PluginConfigParseResult result = parser.parse(migrapheYaml);
+
+        assertThat(result.plugins()).hasSize(1);
+        assertThat(result.scanRoot()).contains("custom/$path");
+    }
 }

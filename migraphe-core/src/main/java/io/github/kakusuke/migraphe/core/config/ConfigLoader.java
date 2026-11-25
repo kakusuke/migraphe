@@ -5,7 +5,6 @@ import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import io.smallrye.config.source.yaml.YamlConfigSource;
@@ -17,7 +16,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
@@ -399,40 +397,47 @@ public class ConfigLoader {
      * @param mainConfig the merged main config, used to look up the target's type
      * @param pluginRegistry the registry used to resolve the plugin by type
      * @return the loaded task definition
-     * @throws ConfigurationException if its target type is unknown, or a value cannot be resolved
+     * @throws ConfigurationException naming {@code taskFile}, whatever stopped the load: a value
+     *     that cannot be resolved, no target, a target with no usable type or no plugin, or a field
+     *     the plugin's mapping rejects
      */
     public TaskDefinition<?> loadTaskDefinition(
             NodeId nodeId,
             Path taskFile,
             SmallRyeConfig mainConfig,
             PluginRegistry pluginRegistry) {
-        String prefix = MultiFileYamlConfigSource.taskKeyPrefix(nodeId);
-        PrefixedConfigSource taskSource;
         try {
-            taskSource = new PrefixedConfigSource(mainConfig, prefix);
-        } catch (NoSuchElementException e) {
+            return mapTaskDefinition(nodeId, taskFile, mainConfig, pluginRegistry);
+        } catch (ConfigurationException e) {
+            throw e;
+        } catch (RuntimeException e) {
             throw new ConfigurationException(
-                    "Failed to resolve a value in task file: " + taskFile + ": " + e.getMessage(),
-                    e);
+                    "Failed to load task file: " + taskFile + ": " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Does the work of {@link #loadTaskDefinition}, throwing whatever SmallRye or the registry
+     * throws; the caller is what puts the task file's name on it.
+     */
+    private TaskDefinition<?> mapTaskDefinition(
+            NodeId nodeId,
+            Path taskFile,
+            SmallRyeConfig mainConfig,
+            PluginRegistry pluginRegistry) {
+        PrefixedConfigSource taskSource =
+                new PrefixedConfigSource(
+                        mainConfig, MultiFileYamlConfigSource.taskKeyPrefix(nodeId));
 
         // 1. Read only the target field first.
-        SmallRyeConfig targetOnlyConfig =
-                new SmallRyeConfigBuilder()
-                        .withSources(taskSource)
-                        .withMapping(TaskTargetOnly.class)
-                        .withValidateUnknown(false)
-                        .build();
-
-        TaskTargetOnly targetOnly = targetOnlyConfig.getConfigMapping(TaskTargetOnly.class);
-        String targetId = targetOnly.target();
-
-        // 2. Look up the target's type.
-        String type = mainConfig.getValue("target." + targetId + ".type", String.class);
-        if (type == null) {
-            throw new ConfigurationException(
-                    "Target type not found for target: " + targetId + " in file: " + taskFile);
+        String targetId = taskSource.getValue("target");
+        if (targetId == null || targetId.isEmpty()) {
+            throw new ConfigurationException("Task file has no target: " + taskFile);
         }
+
+        // 2. Look up the target's type. A required read, so that a type that is missing or
+        // cannot be resolved says which.
+        String type = mainConfig.getValue("target." + targetId + ".type", String.class);
 
         // 3. Resolve the plugin.
         MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
@@ -446,19 +451,5 @@ public class ConfigLoader {
                         .build();
 
         return taskConfig.getConfigMapping(plugin.taskDefinitionClass());
-    }
-
-    /**
-     * Minimal {@code @ConfigMapping} used to read only a task's {@code target} field, so the full
-     * plugin-specific mapping can be selected before the task's keys are mapped a second time.
-     */
-    @ConfigMapping(prefix = "")
-    interface TaskTargetOnly {
-        /**
-         * The id of the target this task runs against.
-         *
-         * @return the target id
-         */
-        String target();
     }
 }

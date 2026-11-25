@@ -2,6 +2,18 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-11-25 (Session 83)
+
+**Session 82 の修正を 2 回目のコードレビューにかけ、挙がった 10 件のうち 5 件に対応した（修正 3 件、取り下げ 1 件、整理 1 件）。**
+
+- **CLI は `migraphe.yaml` に `!raw` があると全コマンドが落ちていた**。プラグイン解決のために `ConfigLoader` より先に走る `PluginConfigPreParser` が素の SnakeYAML で読んでおり、未知のタグとして拒否していた。Gradle プラグインは同じファイルを読めていた。事前パーサは何も展開しないので、`!raw` のスカラーをその文字列として読む。
+- **`target:` が無い、または定義されていない target を指す task のエラーに、task ファイル名を付けた**。前者は `ConfigValidationException`、後者は素の `NoSuchElementException` で、どちらもファイルを示さなかった。ファイル名を付けるはずだった `type == null` の分岐は、`getValue` が先に例外を投げるので到達しないコードだった。`target` を読むためだけの使い捨てマッピング `TaskTargetOnly` と、そのための `SmallRyeConfig` 構築を削除した（値は `PrefixedConfigSource` が既に持っている）。
+- **自分自身を参照する `${...}` のエラーにも task ファイル名を付けた**。SmallRye は循環を `IllegalArgumentException`（SRCFG00025）で知らせるので、Session 82 の `NoSuchElementException` の捕捉をすり抜けていた。
+- **「`!raw` を含むリストは、カンマ結合されたキーが壊れる」という指摘は、実測して取り下げた**。インデックス、`getValues`、変換器（`String[]`）のどの読み方でも要素は書いたとおりに返る。結合キーを 1 つの `String` として読んだときだけ `\$` が見えるが、これは結合形式についての SmallRye 自身のエンコードで、要素内のバックスラッシュやカンマも同じように現れ（`a\\b`、`a\,b`）、タグなしで `\$` と書いた要素でも同じ結果になる。直さず、決定 37 に測定結果を書き、リストとしての読みをテストで固定した。
+- **3 回目のレビューを受けて、task 1 件の読み込み全体を 1 か所で包む形に改めた**。上の 2 件はファイル名の付与を失敗箇所ごとに継ぎ足しており、`up:` が無い task やプラグイン未登録の type ではまだファイル名が出なかった。また target の `type` を `getConfigValue` で読むようにしたことで、`type: ${未定義}` が「Target type not found」と表示され、本当の原因が消えていた（Session 82 と同じ罠）。`loadTaskDefinition` が中身（`mapTaskDefinition`）の投げる例外をまとめて `ConfigurationException` に包み、`type` は必須の読み方に戻した。決定 37 の該当箇所は、成り立つ範囲に合わせて書き直し、不具合の経緯を理由として書いていた一節を削った。CLI の先読みは何も展開しないので、`plugins:` と `repositories:` に書いた `${...}` は展開されない。これも決定 37 に明記した（先読みが取り出す `project.scan-root` は、本番コードのどこからも読まれていない）。
+- **持ち越し**: target の読み込み（`loadTargetDefinition`）は、展開できない値・自己参照のどちらでもまだファイル名が付かない。実行経路は target を task より先に読むので、target の `type` が展開できない・プラグインが無い場合は、CLI や Gradle では今もファイル名のない target 側のエラーで止まる（task ファイル名が付くのは `loadTaskDefinitions` を直接呼んだときだけ）。未定義の target を指す task のエラーは task ファイル名とキー名を含むが、「target が定義されていない」という意味は SmallRye の文言（SRCFG00014）から読み取る形になった。スカラー以外に付けた `!raw` は、事前パーサでは `ClassCastException` になる。`target: " "`（空白のみ）は「target が無い」ではなく type の検索失敗として報告される。task ファイルのエラーは CLI ではスタックトレース付きで表示される（`ConfigurationException` 全般の扱い）。`ConfigLoaderTest` の準備コードの重複。壊れた `migraphe.yaml` に対する事前パーサの例外にファイル名が無い点は Session 82 のまま。2 回目のレビューの残り 5 件（`validate` の食い違い、overlay でのリスト上書きが要素ごとの合成になる、読み込みの二乗、YAML の二重解析、task キーの引用規則を SmallRye から手で写している）は次の PR。
+- Tests: 全モジュール 100% passing。TDD 4 サイクル、すべて cycle-verifier で closed。リストの読みを固定する 1 行は特性テストとして既存テストに追加（監査なし）。
+
 ### 2026-11-24 (Session 82)
 
 **task の変数展開（決定 37、Session 81）をコードレビューにかけ、読み込みまわりの不具合 4 件を直した。** あわせて main を取り込み、CHANGELOG の衝突を解消した（Session 番号が重なったので 11-13 の記録を 81 に振り直した）。

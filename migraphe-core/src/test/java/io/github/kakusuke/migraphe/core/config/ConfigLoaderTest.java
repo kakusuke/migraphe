@@ -591,6 +591,8 @@ class ConfigLoaderTest {
 
         assertThat(config.getValue("target.db1.hosts[0]", String.class)).isEqualTo("a$$b");
         assertThat(config.getValue("target.db1.hosts[1]", String.class)).isEqualTo("plain");
+        assertThat(config.getValue("target.db1.hosts", String[].class))
+                .containsExactly("a$$b", "plain");
     }
 
     @Test
@@ -667,6 +669,175 @@ class ConfigLoaderTest {
                 .isInstanceOf(ConfigurationException.class)
                 .hasMessageContaining(taskFile.toString())
                 .hasMessageContaining("placeholder");
+    }
+
+    @Test
+    void shouldNameTheTaskFileWhenItsTargetIsNotDefined(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Path taskFile = tasksDir.resolve("first.yaml");
+        Files.writeString(
+                taskFile,
+                """
+                name: first
+                target: db2
+                up: SELECT 1
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThatThrownBy(() -> loader.loadTaskDefinitions(tempDir, config, pluginRegistry))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining(taskFile.toString())
+                .hasMessageContaining("db2");
+    }
+
+    @Test
+    void shouldNameTheTaskFileWhenItHasNoTarget(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Path taskFile = tasksDir.resolve("first.yaml");
+        Files.writeString(
+                taskFile,
+                """
+                name: first
+                up: SELECT 1
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThatThrownBy(() -> loader.loadTaskDefinitions(tempDir, config, pluginRegistry))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining(taskFile.toString())
+                .hasMessageContaining("has no target");
+    }
+
+    @Test
+    void shouldNameTheTaskFileWhenAValueRefersToItself(@TempDir Path tempDir) throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Path taskFile = tasksDir.resolve("first.yaml");
+        Files.writeString(
+                taskFile,
+                """
+                name: first
+                target: db1
+                up: "SELECT ${task.db1/first.up}"
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThatThrownBy(() -> loader.loadTaskDefinitions(tempDir, config, pluginRegistry))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining(taskFile.toString());
+    }
+
+    @Test
+    void shouldNameTheTaskFileWhenARequiredFieldIsMissing(@TempDir Path tempDir)
+            throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: noop\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Path taskFile = tasksDir.resolve("first.yaml");
+        Files.writeString(
+                taskFile,
+                """
+                name: first
+                target: db1
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThatThrownBy(() -> loader.loadTaskDefinitions(tempDir, config, pluginRegistry))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining(taskFile.toString())
+                .hasMessageContaining("up");
+    }
+
+    @Test
+    void shouldNameTheTaskFileWhenItsTargetTypeCannotBeExpanded(@TempDir Path tempDir)
+            throws IOException {
+        Files.writeString(
+                tempDir.resolve("migraphe.yaml"),
+                """
+                project:
+                  name: test
+                history:
+                  target: db1
+                """);
+        Path targetsDir = tempDir.resolve("targets");
+        Files.createDirectories(targetsDir);
+        Files.writeString(targetsDir.resolve("db1.yaml"), "type: ${db.kind}\n");
+        Path tasksDir = tempDir.resolve("tasks/db1");
+        Files.createDirectories(tasksDir);
+        Path taskFile = tasksDir.resolve("first.yaml");
+        Files.writeString(
+                taskFile,
+                """
+                name: first
+                target: db1
+                up: SELECT 1
+                """);
+        PluginRegistry pluginRegistry = new PluginRegistry();
+        pluginRegistry.loadFromClasspath();
+        ConfigLoader loader = new ConfigLoader();
+        SmallRyeConfig config = loader.loadConfig(tempDir, null);
+
+        assertThatThrownBy(() -> loader.loadTaskDefinitions(tempDir, config, pluginRegistry))
+                .isInstanceOf(ConfigurationException.class)
+                .hasMessageContaining(taskFile.toString())
+                .hasMessageContaining("db.kind");
     }
 
     @Test
