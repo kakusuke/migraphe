@@ -14,9 +14,11 @@ import org.jspecify.annotations.Nullable;
  * <p>Target and task configuration lives under dynamic, per-id prefixes inside the merged config
  * (for example {@code target.db1.*}). To map such a slice onto a plugin's {@code @ConfigMapping}
  * interface — which expects un-prefixed keys — {@link ConfigLoader} wraps the merged {@link
- * SmallRyeConfig} in this source with the relevant prefix. Properties whose values resolve to
- * {@code null} are skipped, so {@code ${...}} expansion has already been applied by the underlying
- * config.
+ * SmallRyeConfig} in this source with the relevant prefix. Values are copied as the underlying
+ * config resolves them, so {@code ${...}} expansion has already been applied. A value written empty
+ * is kept as the empty string; a value that cannot be resolved fails the construction rather than
+ * leaving its key out, because a key that silently vanished would read as an optional field nobody
+ * wrote.
  *
  * <p>Example, with {@code prefix = "target.db1."}:
  *
@@ -44,10 +46,13 @@ public class PrefixedConfigSource implements ConfigSource {
         for (String propertyName : sourceConfig.getPropertyNames()) {
             if (propertyName.startsWith(prefix)) {
                 String strippedName = propertyName.substring(prefix.length());
-                String value = sourceConfig.getValue(propertyName, String.class);
-                if (value != null) {
-                    properties.put(strippedName, value);
+                String value = sourceConfig.getConfigValue(propertyName).getValue();
+                if (value == null) {
+                    // A listed property has no value only when it could not be resolved;
+                    // getConfigValue keeps the reason to itself, getValue throws it.
+                    value = sourceConfig.getValue(propertyName, String.class);
                 }
+                properties.put(strippedName, value);
             }
         }
     }

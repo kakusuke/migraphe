@@ -70,6 +70,14 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   for two independent reasons — the `else` branch's own `propagateFailure` can throw and re-enter the
   `catch` after its `add` already succeeded, *and* another node's `propagateFailure` can add this one
   concurrently
+- **SmallRye reports an unresolvable `${...}` only through a non-optional `getValue`.**
+  `getConfigValue(name).getValue()` returns `null` with the reason held in package-private
+  `problems`, and `getOptionalValue` discards those problems and returns empty (3.9.1, read from the
+  bytecode of `SmallRyeConfig.convertValue`). Either one turns "could not expand" into "key absent",
+  which an optional field such as `down:` then reads as "not written". The converse trap:
+  `getValue(name, String.class)` throws SRCFG00040 for a value that is merely empty
+  (`dependencies: []`). `PrefixedConfigSource` reads with `getConfigValue` and falls back to
+  `getValue` on `null` for exactly this pair — do not collapse it to either call alone
 - **Every plugin-supplied accessor `recordSuccess` calls is a new fault path, and they do not all
   degrade alike.** `fingerprintOf` catches and returns `null`, so a broken accessor costs the token
   but keeps the success record — the DDL is already committed and losing the record re-applies it.
@@ -433,7 +441,7 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   `JdbcMigrationNode.builder()` chain; only the environment cast and the exception type differ. A
   field added to `SqlTaskDefinition` and wired into one of them **compiles and goes green while doing
   nothing on the other two** — the two DB-specific plugins are the ones real projects use, and
-  `withValidateUnknown(false)` at `ConfigLoader.java:430` means an unread key is dropped rather than
+  `withValidateUnknown(false)` in `ConfigLoader.loadTaskDefinition` means an unread key is dropped rather than
   reported, so it fails at execution and stays silent in `validate`. After touching any of the three,
   grep the other two. Collapsing them into one is a design decision, not a tidy: they differ in the
   environment type they demand and in which `JdbcException` subclass they throw.
@@ -654,6 +662,20 @@ a smell, check how its siblings do it — the "smell" is usually the file's esta
   payload, ms)` overload builds an *incomplete* row: use it only when the test is about that, and
   pass a token otherwise. Two dozen fixture rows across `DownServiceTest` and
   `DagExecutorRollbackTest` used the short form and froze the moment the rule landed
+
+- **A `!raw` value survives only because expansion runs exactly once, in `mainConfig`.** The YAML
+  loader escapes every `$` of a `!raw` scalar as `\$`, and that one expansion consumes the escape. A
+  config built over `PrefixedConfigSource` (the per-target and per-task mapping configs) must **not**
+  call `addDefaultInterceptors()`: a second expansion sees the bare `$$` and `${` again, turns `$$` into
+  `$`, and fails on a value holding an unclosed `${` — or, for an optional field, silently drops it. Likewise, a new site that reads a YAML file
+  must go through the `!raw`-aware loader — a bare `new YamlConfigSource(url)` throws on the tag.
+
+- **`ConfigValidator` swallows most read failures, so an "accepts X" test cannot show its checks
+  ran.** `validateWithPlugin` drops any exception whose message lacks "required", and
+  `extractTaskInfo` returns `null` and the task silently leaves cycle detection. A file one of them
+  cannot read therefore *passes* `validate` with those checks skipped. When changing how the validator
+  reads a file, pin each read site with a test that expects that site's error, not only one that
+  expects a clean result.
 
 ## A node has more than one history row
 

@@ -67,6 +67,68 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldAcceptATargetWithARawTaggedValue() throws IOException {
+        // Given: !raw タグ付きの値を持つ target
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("targets").resolve("test-db.yaml"),
+                """
+                type: postgresql
+                jdbc_url: jdbc:postgresql://localhost:5432/test
+                username: test
+                password: !raw "pa$$word"
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void shouldAcceptATaskWithARawTaggedValue() throws IOException {
+        // Given: !raw タグ付きの up: を持つタスク
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("001_create_users.yaml"),
+                """
+                name: Create users table
+                target: test-db
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                down: DROP TABLE users;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.errors()).isEmpty();
+    }
+
+    @Test
+    void shouldDetectARawTaggedTaskThatNeitherRollsBackNorSaysWhyNot() throws IOException {
+        // Given: !raw タグ付きの up: を持ち、down: も no_way_back: も無いタスク
+        createValidProject(tempDir);
+        Files.writeString(
+                tempDir.resolve("tasks").resolve("test-db").resolve("002_do_block.yaml"),
+                """
+                name: Run a DO block
+                target: test-db
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.contains("no_way_back"));
+    }
+
+    @Test
     void shouldDetectATaskThatNeitherRollsBackNorSaysWhyNot() throws IOException {
         // Given: down: も no_way_back: も無いタスク
         createValidProject(tempDir);
@@ -141,6 +203,40 @@ class ConfigValidatorTest {
     }
 
     @Test
+    void shouldDetectCircularDependencyBetweenRawTaggedTasks() throws IOException {
+        // Given: !raw タグ付きの up: を持つタスク同士の循環依存
+        createProjectWithCircularDependency(tempDir);
+        Path tasksDir = tempDir.resolve("tasks").resolve("test-db");
+        Files.writeString(
+                tasksDir.resolve("a.yaml"),
+                """
+                name: Task A
+                target: test-db
+                dependencies:
+                  - test-db/b
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                down: SELECT 1;
+                """);
+        Files.writeString(
+                tasksDir.resolve("b.yaml"),
+                """
+                name: Task B
+                target: test-db
+                dependencies:
+                  - test-db/a
+                up: !raw "DO $$ BEGIN NULL; END $$;"
+                down: SELECT 1;
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir);
+
+        // Then
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errors()).anyMatch(e -> e.toLowerCase(Locale.ROOT).contains("circular"));
+    }
+
+    @Test
     void shouldAccumulateMultipleErrors() throws IOException {
         // Given: 複数のエラー
         createProjectWithMultipleErrors(tempDir);
@@ -198,6 +294,28 @@ class ConfigValidatorTest {
         // Then
         assertThat(result.isValid()).isFalse();
         assertThat(result.errors()).anyMatch(e -> e.contains("prodction"));
+    }
+
+    @Test
+    void shouldAcceptAnEnvironmentOverlayWithARawTaggedValue() throws IOException {
+        // Given: !raw タグ付きの値を持つオーバーレイ
+        createValidProject(tempDir);
+        Path environmentsDir = tempDir.resolve("environments");
+        Files.createDirectories(environmentsDir);
+        Files.writeString(
+                environmentsDir.resolve("production.yaml"),
+                """
+                target:
+                  test-db:
+                    password: !raw "pa$$word"
+                """);
+
+        // When
+        ConfigValidator.ValidationOutput result = validator.validate(tempDir, "production");
+
+        // Then
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.errors()).isEmpty();
     }
 
     @Test

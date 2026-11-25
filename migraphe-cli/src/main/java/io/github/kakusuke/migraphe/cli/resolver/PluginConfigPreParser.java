@@ -10,7 +10,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.jspecify.annotations.Nullable;
+import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
+import org.yaml.snakeyaml.nodes.Tag;
 
 /**
  * Pre-parses the {@code plugins:} and {@code repositories:} sections of {@code migraphe.yaml}.
@@ -42,7 +45,7 @@ public final class PluginConfigPreParser {
             return new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
         }
         try (InputStream in = Files.newInputStream(migrapheYaml)) {
-            Yaml yaml = new Yaml();
+            Yaml yaml = new Yaml(new RawAwareConstructor());
             Map<String, Object> root = yaml.load(in);
             if (root == null) {
                 return new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
@@ -53,6 +56,18 @@ public final class PluginConfigPreParser {
             return new PluginConfigParseResult(repositories, plugins, scanRoot);
         } catch (IOException e) {
             return new PluginConfigParseResult(List.of(), List.of(), Optional.empty());
+        }
+    }
+
+    /**
+     * Reads a {@code !raw} scalar as its text. The tag only tells the config loader not to expand
+     * the value, and nothing is expanded here; without this SnakeYAML rejects the tag and no
+     * command could start on a {@code migraphe.yaml} that uses it.
+     */
+    private static final class RawAwareConstructor extends Constructor {
+        RawAwareConstructor() {
+            super(new LoaderOptions());
+            yamlConstructors.put(new Tag("!raw"), new ConstructYamlStr());
         }
     }
 

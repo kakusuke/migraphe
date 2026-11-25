@@ -5,7 +5,6 @@ import io.github.kakusuke.migraphe.api.spi.MigraphePlugin;
 import io.github.kakusuke.migraphe.api.spi.TargetDefinition;
 import io.github.kakusuke.migraphe.api.spi.TaskDefinition;
 import io.github.kakusuke.migraphe.core.plugin.PluginRegistry;
-import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import io.smallrye.config.source.yaml.YamlConfigSource;
@@ -20,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.jspecify.annotations.Nullable;
+import org.yaml.snakeyaml.error.YAMLException;
 
 /**
  * Loads Migraphe's multi-file YAML configuration into a {@link SmallRyeConfig}.
@@ -145,10 +145,11 @@ public class ConfigLoader {
 
         if (envFile != null) {
             try {
-                YamlConfigSource envSource = new YamlConfigSource(envFile.toUri().toURL(), 500);
+                YamlConfigSource envSource =
+                        MultiFileYamlConfigSource.rawAwareYamlSource(envFile, 500);
                 // Register the environment file and the MultiFileYamlConfigSource together.
                 builder.withSources(envSource, multiFileSource);
-            } catch (IOException e) {
+            } catch (IOException | YAMLException e) {
                 throw new ConfigurationException("Failed to load environment file: " + envFile, e);
             }
         } else {
@@ -210,17 +211,18 @@ public class ConfigLoader {
     }
 
     /**
-     * Loads every {@link TaskDefinition} from the {@code tasks/} directory.
+     * Loads a {@link TaskDefinition} for every file under the {@code tasks/} directory.
      *
-     * <p>For each task file, the {@code target} field selects a target whose {@code type}
-     * identifies the plugin; the file is then mapped onto that plugin's task-definition type.
+     * <p>The files only say which tasks exist; each task's values are read from its keys in {@code
+     * mainConfig} (see {@link #loadTaskDefinition}), so they are expanded and can be overridden.
      *
      * @param baseDir the project base directory (the scan root is resolved internally from {@code
      *     project.scan-root})
-     * @param mainConfig the merged main config, used to look up target types
+     * @param mainConfig the merged main config holding the {@code task.*} and {@code target.*} keys
      * @param pluginRegistry the registry used to resolve plugins by type
      * @return a map from task {@link NodeId} to its loaded {@link TaskDefinition}, in scan order
-     * @throws ConfigurationException if a task file cannot be loaded or its target type is unknown
+     * @throws ConfigurationException if a task's target type is unknown or one of its values cannot
+     *     be resolved
      */
     public Map<NodeId, TaskDefinition<?>> loadTaskDefinitions(
             Path baseDir, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
@@ -237,7 +239,8 @@ public class ConfigLoader {
 
         for (Path taskFile : taskFiles) {
             NodeId nodeId = idGenerator.generateTaskId(scanRoot, taskFile);
-            TaskDefinition<?> taskDef = loadTaskDefinition(taskFile, mainConfig, pluginRegistry);
+            TaskDefinition<?> taskDef =
+                    loadTaskDefinition(nodeId, taskFile, mainConfig, pluginRegistry);
             taskDefinitions.put(nodeId, taskDef);
         }
 
@@ -381,72 +384,72 @@ public class ConfigLoader {
     }
 
     /**
-     * Loads a single {@link TaskDefinition} from a task file.
+     * Loads a single {@link TaskDefinition} from the task's {@code task.<id>.} keys in {@code
+     * mainConfig}.
      *
      * <p>First reads just the {@code target} field, looks up that target's {@code type} in {@code
-     * mainConfig}, resolves the plugin, then maps the file onto the plugin's task-definition type.
+     * mainConfig}, resolves the plugin, then maps the task's keys onto the plugin's task-definition
+     * type. Reading them from {@code mainConfig} rather than from the file is what lets a task's
+     * values be expanded and overridden the way a target's are.
      *
-     * @param taskFile the path to the task file
+     * @param nodeId the task's id, which names its {@code task.<id>.} keys in {@code mainConfig}
+     * @param taskFile the path to the task file, named in error messages
      * @param mainConfig the merged main config, used to look up the target's type
      * @param pluginRegistry the registry used to resolve the plugin by type
      * @return the loaded task definition
-     * @throws ConfigurationException if the file cannot be read or its target type is unknown
+     * @throws ConfigurationException naming {@code taskFile}, whatever stopped the load: a value
+     *     that cannot be resolved, no target, a target with no usable type or no plugin, or a field
+     *     the plugin's mapping rejects
      */
     public TaskDefinition<?> loadTaskDefinition(
-            Path taskFile, SmallRyeConfig mainConfig, PluginRegistry pluginRegistry) {
-
+            NodeId nodeId,
+            Path taskFile,
+            SmallRyeConfig mainConfig,
+            PluginRegistry pluginRegistry) {
         try {
-            YamlConfigSource taskSource = new YamlConfigSource(taskFile.toUri().toURL());
-
-            // 1. Read only the target field first.
-            SmallRyeConfig targetOnlyConfig =
-                    new SmallRyeConfigBuilder()
-                            .withSources(taskSource)
-                            .withMapping(TaskTargetOnly.class)
-                            .withValidateUnknown(false)
-                            .build();
-
-            TaskTargetOnly targetOnly = targetOnlyConfig.getConfigMapping(TaskTargetOnly.class);
-            String targetId = targetOnly.target();
-
-            // 2. Look up the target's type.
-            String type = mainConfig.getValue("target." + targetId + ".type", String.class);
-            if (type == null) {
-                throw new ConfigurationException(
-                        "Target type not found for target: " + targetId + " in file: " + taskFile);
-            }
-
-            // 3. Resolve the plugin.
-            MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
-
-            // 4. Map onto the plugin's TaskDefinition class.
-            // Note: recreate the YamlConfigSource (SmallRyeConfig consumes its sources).
-            YamlConfigSource taskSource2 = new YamlConfigSource(taskFile.toUri().toURL());
-            SmallRyeConfig taskConfig =
-                    new SmallRyeConfigBuilder()
-                            .withSources(taskSource2)
-                            .withMapping(plugin.taskDefinitionClass())
-                            .withValidateUnknown(false)
-                            .build();
-
-            return taskConfig.getConfigMapping(plugin.taskDefinitionClass());
-
-        } catch (IOException e) {
-            throw new ConfigurationException("Failed to load task file: " + taskFile, e);
+            return mapTaskDefinition(nodeId, taskFile, mainConfig, pluginRegistry);
+        } catch (ConfigurationException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            throw new ConfigurationException(
+                    "Failed to load task file: " + taskFile + ": " + e.getMessage(), e);
         }
     }
 
     /**
-     * Minimal {@code @ConfigMapping} used to read only a task file's {@code target} field, so the
-     * full plugin-specific mapping can be selected before the file is mapped a second time.
+     * Does the work of {@link #loadTaskDefinition}, throwing whatever SmallRye or the registry
+     * throws; the caller is what puts the task file's name on it.
      */
-    @ConfigMapping(prefix = "")
-    interface TaskTargetOnly {
-        /**
-         * The id of the target this task runs against.
-         *
-         * @return the target id
-         */
-        String target();
+    private TaskDefinition<?> mapTaskDefinition(
+            NodeId nodeId,
+            Path taskFile,
+            SmallRyeConfig mainConfig,
+            PluginRegistry pluginRegistry) {
+        PrefixedConfigSource taskSource =
+                new PrefixedConfigSource(
+                        mainConfig, MultiFileYamlConfigSource.taskKeyPrefix(nodeId));
+
+        // 1. Read only the target field first.
+        String targetId = taskSource.getValue("target");
+        if (targetId == null || targetId.isEmpty()) {
+            throw new ConfigurationException("Task file has no target: " + taskFile);
+        }
+
+        // 2. Look up the target's type. A required read, so that a type that is missing or
+        // cannot be resolved says which.
+        String type = mainConfig.getValue("target." + targetId + ".type", String.class);
+
+        // 3. Resolve the plugin.
+        MigraphePlugin<?> plugin = pluginRegistry.getRequiredPlugin(type);
+
+        // 4. Map onto the plugin's TaskDefinition class.
+        SmallRyeConfig taskConfig =
+                new SmallRyeConfigBuilder()
+                        .withSources(taskSource)
+                        .withMapping(plugin.taskDefinitionClass())
+                        .withValidateUnknown(false)
+                        .build();
+
+        return taskConfig.getConfigMapping(plugin.taskDefinitionClass());
     }
 }

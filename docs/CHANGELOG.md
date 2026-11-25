@@ -2,6 +2,45 @@
 
 Claude session records. Newest entries first. This is the only place session records live — [CLAUDE.md](../CLAUDE.md) holds norms, not history.
 
+### 2026-11-25 (Session 83)
+
+**Session 82 の修正を 2 回目のコードレビューにかけ、挙がった 10 件のうち 5 件に対応した（修正 3 件、取り下げ 1 件、整理 1 件）。**
+
+- **CLI は `migraphe.yaml` に `!raw` があると全コマンドが落ちていた**。プラグイン解決のために `ConfigLoader` より先に走る `PluginConfigPreParser` が素の SnakeYAML で読んでおり、未知のタグとして拒否していた。Gradle プラグインは同じファイルを読めていた。事前パーサは何も展開しないので、`!raw` のスカラーをその文字列として読む。
+- **`target:` が無い、または定義されていない target を指す task のエラーに、task ファイル名を付けた**。前者は `ConfigValidationException`、後者は素の `NoSuchElementException` で、どちらもファイルを示さなかった。ファイル名を付けるはずだった `type == null` の分岐は、`getValue` が先に例外を投げるので到達しないコードだった。`target` を読むためだけの使い捨てマッピング `TaskTargetOnly` と、そのための `SmallRyeConfig` 構築を削除した（値は `PrefixedConfigSource` が既に持っている）。
+- **自分自身を参照する `${...}` のエラーにも task ファイル名を付けた**。SmallRye は循環を `IllegalArgumentException`（SRCFG00025）で知らせるので、Session 82 の `NoSuchElementException` の捕捉をすり抜けていた。
+- **「`!raw` を含むリストは、カンマ結合されたキーが壊れる」という指摘は、実測して取り下げた**。インデックス、`getValues`、変換器（`String[]`）のどの読み方でも要素は書いたとおりに返る。結合キーを 1 つの `String` として読んだときだけ `\$` が見えるが、これは結合形式についての SmallRye 自身のエンコードで、要素内のバックスラッシュやカンマも同じように現れ（`a\\b`、`a\,b`）、タグなしで `\$` と書いた要素でも同じ結果になる。直さず、決定 37 に測定結果を書き、リストとしての読みをテストで固定した。
+- **3 回目のレビューを受けて、task 1 件の読み込み全体を 1 か所で包む形に改めた**。上の 2 件はファイル名の付与を失敗箇所ごとに継ぎ足しており、`up:` が無い task やプラグイン未登録の type ではまだファイル名が出なかった。また target の `type` を `getConfigValue` で読むようにしたことで、`type: ${未定義}` が「Target type not found」と表示され、本当の原因が消えていた（Session 82 と同じ罠）。`loadTaskDefinition` が中身（`mapTaskDefinition`）の投げる例外をまとめて `ConfigurationException` に包み、`type` は必須の読み方に戻した。決定 37 の該当箇所は、成り立つ範囲に合わせて書き直し、不具合の経緯を理由として書いていた一節を削った。CLI の先読みは何も展開しないので、`plugins:` と `repositories:` に書いた `${...}` は展開されない。これも決定 37 に明記した（先読みが取り出す `project.scan-root` は、本番コードのどこからも読まれていない）。
+- **持ち越し**: target の読み込み（`loadTargetDefinition`）は、展開できない値・自己参照のどちらでもまだファイル名が付かない。実行経路は target を task より先に読むので、target の `type` が展開できない・プラグインが無い場合は、CLI や Gradle では今もファイル名のない target 側のエラーで止まる（task ファイル名が付くのは `loadTaskDefinitions` を直接呼んだときだけ）。未定義の target を指す task のエラーは task ファイル名とキー名を含むが、「target が定義されていない」という意味は SmallRye の文言（SRCFG00014）から読み取る形になった。スカラー以外に付けた `!raw` は、事前パーサでは `ClassCastException` になる。`target: " "`（空白のみ）は「target が無い」ではなく type の検索失敗として報告される。task ファイルのエラーは CLI ではスタックトレース付きで表示される（`ConfigurationException` 全般の扱い）。`ConfigLoaderTest` の準備コードの重複。壊れた `migraphe.yaml` に対する事前パーサの例外にファイル名が無い点は Session 82 のまま。2 回目のレビューの残り 5 件（`validate` の食い違い、overlay でのリスト上書きが要素ごとの合成になる、読み込みの二乗、YAML の二重解析、task キーの引用規則を SmallRye から手で写している）は次の PR。
+- Tests: 全モジュール 100% passing。TDD 4 サイクル、すべて cycle-verifier で closed。リストの読みを固定する 1 行は特性テストとして既存テストに追加（監査なし）。
+
+### 2026-11-24 (Session 82)
+
+**task の変数展開（決定 37、Session 81）をコードレビューにかけ、読み込みまわりの不具合 4 件を直した。** あわせて main を取り込み、CHANGELOG の衝突を解消した（Session 番号が重なったので 11-13 の記録を 81 に振り直した）。
+
+- **空で書いた値で全コマンドが落ちていた**。`dependencies: []` や `description: ""` は空文字のキーになり、`PrefixedConfigSource` の `getValue(name, String.class)` が SRCFG00040 を投げていた。空の値は「書かれていない」として読む。target も同じ経路なので同時に直っている。
+- **展開できない値のエラーに task ファイル名を付けた**。未定義の `${name}` や閉じていない `${` は、ファイル名のない `NoSuchElementException` で止まっていた。`ConfigurationException` に包んでファイルを示す。target 側はまだファイル名が付かない。
+- **「閉じていない `${` は値がエラーなしで消える」という記述は、task・target の読み込みでは成り立っていなかった**（Session 81 の時点から読み込みエラー）。SmallRye は展開の失敗を、必須の読み方（`getValue`）では例外にし、任意の読み方（`getOptionalValue`・`getConfigValue`）では値なしとして返す。記述は後者での測定だった。ARCHITECTURE 決定 37、USER_GUIDE（日英）、tidy-notes を書き換えた。1 件目の修正を `getConfigValue` だけで書いたところ、実際に `down:` が黙って消える状態を一度作っており、2 件目のテストで見つけて塞いだ。罠として tidy-notes に記録。
+- **YAML の構文エラーからファイル名が消えていた**。`!raw` のために SnakeYAML で先に読むようになり、その `YAMLException` が呼び出し側の `catch (IOException)` をすり抜けていた。実行時の読み込み 4 か所（`migraphe.yaml`・target・task・overlay）で捕まえる。共通関数の中で `IOException` に変える案は、`validate` の表示が「Invalid YAML」から「Failed to load」に変わるので退けた。
+- **overlay の `task:` ブロックが task を上書きできていなかった**。task ファイルのキーは `task."db1/greet".name`、overlay の YAML が平坦化されるキーは `task.db1/greet.name` で、別物だった（YAML 側で引用符を付けても同じ）。task のキーを SmallRye の平坦化と同じ形（id にドットがあるときだけ引用符）に揃えた。決定 37 が保留していた「overlay の YAML が task キーに届くか」への答え。これまで `task.*` キーを読むものは無かったので、互換性の問題は無い。
+- **決定 37 の冒頭が修正前の状態を現在形で書いていた**のを書き直した。`loadTaskDefinitions` と `PrefixedConfigSource` の Javadoc も同様。
+- **持ち越し**（レビューと監査が挙げたもの）: CLI の `PluginConfigPreParser` が壊れた `migraphe.yaml` でファイル名のない SnakeYAML 例外を出す（`ConfigLoader` より先に走るので、今回の修正が CLI では効かない）。id にドットを含む target（`targets/db.v2.yaml`）は `extractTargetIds` が最初のドットで切る。スカラー以外に付けた `!raw` のエラーが分かりにくい。task 数に対して読み込みが二乗。`validate` の作り直しと task の発見元は Session 81 のとおり次の PR。
+- Tests: 全モジュール 100% passing。TDD 4 サイクル、すべて cycle-verifier で closed。
+
+### 2026-11-13 (Session 81)
+
+**task ファイルの `${...}` を展開するようにし、展開させない値のための `!raw` タグを入れた（決定 37）。** あわせて、seed のような環境限定のタスクを書く `enabled:`（決定 38）を設計として決めた。`enabled:` の実装は次の PR。
+
+- **task ファイルの `${...}` は一度も展開されていなかった**。`ConfigLoader.loadTaskDefinition` が task ファイル単体を interceptor なしで読んでいたため。USER_GUIDE は解決順に `tasks` を挙げていたので、仕様に対する不具合として扱った。経緯は Phase 10-1 で変数展開を target 向けに先送りし、Phase 12 で target だけが `mainConfig` 経由になって直った、というもの。task は target と同じく `mainConfig` の `task."<id>".` から結び付けるようにした。
+- **D は「実行時の設定で解決した定義」と決めた**。実行・fingerprint・rollback payload・`enabled:` がすべて展開後の同じテキストを見る。fingerprint だけ展開前にする案、payload を展開前にする案は、H の 1 行の中で食い違うので退けた。値を変えると `[!]` になるのは、適用済みと今実行される内容が実際に違うからで、定義どおり。
+- **SmallRye の展開は `${...}` 以外も変える**（3.9.1 で実測）。`$$`→`$`、`$` の前の `\` が消える、閉じていない `${` は値がエラーなしで消える、`${a::b}` は secret handler を探して失敗する。止めるフラグも値ごとの指定も無い。PostgreSQL の `DO $$` や関数本体、MySQL の `DELIMITER $$` がそのままでは壊れる。
+- **`!raw` タグ**: YAML のスカラーに `!raw` を付けると書いたとおりの値になる。SnakeYAML（`smallrye-config-source-yaml` の compile 依存で既に同梱）でノードに組み立て、`!raw` の値の `$` を `\$` にエスケープして書き戻し、`YamlConfigSource` に渡す。展開は `mainConfig` で 1 回だけなので元の文字列に戻る（`$$`・`${x}`・閉じていない `${`・`\$`・`::` で実測）。`migraphe.yaml`・target・task・overlay のすべてと `validate` の読み込みに適用し、リストの要素にも効く。`.raw` サフィックス案（予約語と ordinal の問題）や、`${...}` だけを自前で展開する案（target と構文が分かれる）は退けた。
+- **互換性を壊す変更**: `$$`・`\$`・`${` を本文に含む task は意味が変わる。`!raw` を付けて移行する。CLI テスト 3 件（PostgreSQL の DO ブロック・`$$` 関数、MySQL の `DELIMITER $$`）を `up: !raw |` に移した。閉じていない `${` で値が消えるのは SmallRye の仕様として受け入れた。
+- **`validate` の読み込みも揃えた**が、値は展開も上書きもしないまま検査している（`target: ${t}` を「無い」と報告する）。task を `task.*` キーから見つける部分（決定 37 で選んだ方式）とあわせて、次の PR で `validate` を解決済みの設定の上に作り直す。
+- **`validate` は読み込みの失敗を握りつぶす箇所がある**（`validateWithPlugin`、`extractTaskInfo`）。「受け付ける」テストだけでは検査が走ったか分からないので、読み込み箇所ごとにエラーを期待するテストで固定した。一度 Verify に over-implementation と指摘され、テストの無い置き換え 2 か所を戻してから入れ直している。tidy-notes に罠として記録。
+- **ついでの修正**: `Environment`→`Target` の一括リネームで壊れた Javadoc 4 か所（`MapConfigSource` は「`target.` 接頭辞」と事実と逆のことを書いていた）。
+- Tests: core・cli・gradle-plugin 100% passing。TDD 11 サイクル、すべて cycle-verifier で closed（途中で破棄した 1 サイクルは除く）。
+
 ### 2026-11-11 (Session 80)
 
 **#94 `rebuild` で戻すものが無いとき、「All migrations are up to date.」と出た直後に適用が走っていた（CLI・Gradle）。** ロールバック対象が空でも DOWN の `DagExecutor` を回しており、その完了通知で listener が「何も実行していない」側の文言を出していた。対象が空ならロールバックの段ごと飛ばすようにした。`DagExecutor.execute` は空集合だと `onCompleted` を呼んで返すだけで履歴を読み書きしないので、飛ばしても失うものは無い（issue で確認が必要とされていた点）。

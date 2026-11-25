@@ -3,6 +3,9 @@ package io.github.kakusuke.migraphe.core.config;
 import io.github.kakusuke.migraphe.api.graph.NodeId;
 import io.smallrye.config.source.yaml.YamlConfigSource;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.StringWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -10,6 +13,14 @@ import java.util.Map;
 import java.util.Set;
 import org.eclipse.microprofile.config.spi.ConfigSource;
 import org.jspecify.annotations.Nullable;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
 
 /**
  * A {@link ConfigSource} that merges Migraphe's several YAML files into a single flat key space.
@@ -18,15 +29,15 @@ import org.jspecify.annotations.Nullable;
  * according to the file's role, so that the combined config can be addressed by a single set of
  * property names. The merge happens eagerly in the constructor; the resulting map is exposed at
  * ordinal {@code 100}, the lowest tier in the layering, so that environment files, system
- * properties, OS target and explicit variables can all override it.
+ * properties, OS environment variables and explicit variables can all override it.
  *
  * <p>Prefixing strategy:
  *
  * <ul>
  *   <li>{@code migraphe.yaml} &rarr; no prefix ({@code project.*}, {@code history.*})
  *   <li>{@code targets/db1.yaml} &rarr; {@code "target.db1.*"} prefix
- *   <li>{@code tasks/db1/create_users.yaml} &rarr; {@code "task.\"db1/create_users\".*"} prefix
- *       (the task id is quoted so embedded slashes are not treated as key separators)
+ *   <li>{@code tasks/db1/create_users.yaml} &rarr; {@code "task.db1/create_users.*"} prefix (see
+ *       {@link #taskKeyPrefix(NodeId)})
  * </ul>
  */
 public class MultiFileYamlConfigSource implements ConfigSource {
@@ -59,9 +70,9 @@ public class MultiFileYamlConfigSource implements ConfigSource {
      */
     private void loadProjectConfig(Path file) {
         try {
-            YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
+            YamlConfigSource yamlSource = rawAwareYamlSource(file);
             properties.putAll(yamlSource.getProperties());
-        } catch (IOException e) {
+        } catch (IOException | YAMLException e) {
             throw new ConfigurationException("Failed to load project config: " + file, e);
         }
     }
@@ -80,23 +91,21 @@ public class MultiFileYamlConfigSource implements ConfigSource {
                 String targetId = file.getFileName().toString().replaceAll("\\.yaml$", "");
 
                 // Load the YAML.
-                YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
+                YamlConfigSource yamlSource = rawAwareYamlSource(file);
 
                 // Merge in with the prefix applied.
                 for (Map.Entry<String, String> entry : yamlSource.getProperties().entrySet()) {
                     String prefixedKey = "target." + targetId + "." + entry.getKey();
                     properties.put(prefixedKey, entry.getValue());
                 }
-            } catch (IOException e) {
+            } catch (IOException | YAMLException e) {
                 throw new ConfigurationException("Failed to load target config: " + file, e);
             }
         }
     }
 
     /**
-     * Loads each task file under a {@code "task.\"<taskId>\".*"} prefix. The task id is quoted so
-     * that ids containing slashes (such as {@code db1/create_users}) are not split into nested
-     * keys.
+     * Loads each task file under its {@link #taskKeyPrefix(NodeId)}.
      *
      * @param taskFiles the task files keyed by their {@link NodeId}
      * @throws ConfigurationException if any YAML file cannot be read
@@ -108,18 +117,101 @@ public class MultiFileYamlConfigSource implements ConfigSource {
 
             try {
                 // Load the YAML.
-                YamlConfigSource yamlSource = new YamlConfigSource(file.toUri().toURL());
+                YamlConfigSource yamlSource = rawAwareYamlSource(file);
 
                 // Merge in with the prefix applied.
-                // When a task id contains slashes, the form is "task.\"db1/create_users\".*".
                 for (Map.Entry<String, String> prop : yamlSource.getProperties().entrySet()) {
-                    String prefixedKey = "task.\"" + taskId.value() + "\"." + prop.getKey();
+                    String prefixedKey = taskKeyPrefix(taskId) + prop.getKey();
                     properties.put(prefixedKey, prop.getValue());
                 }
-            } catch (IOException e) {
+            } catch (IOException | YAMLException e) {
                 throw new ConfigurationException("Failed to load task config: " + file, e);
             }
         }
+    }
+
+    /**
+     * Returns the prefix a task's keys carry in the merged config: {@code task.<id>.}, with the id
+     * quoted only when it contains a dot ({@code task."db1/v1.0_seed".}).
+     *
+     * <p>This is the key {@link YamlConfigSource} itself produces for {@code task: {<id>: {...}}},
+     * so a {@code task:} block in an environment overlay lands on the same keys a task file
+     * registers and overrides them. A slash is not a key separator and needs no quoting.
+     *
+     * @param taskId the task's id
+     * @return the prefix, including the trailing {@code "."}
+     */
+    static String taskKeyPrefix(NodeId taskId) {
+        String id = taskId.value();
+        return id.contains(".") ? "task.\"" + id + "\"." : "task." + id + ".";
+    }
+
+    /**
+     * Loads a YAML file, first rewriting every {@code !raw} scalar so that expansion yields it
+     * verbatim.
+     *
+     * <p>{@link YamlConfigSource} rejects an unknown tag, so the file is composed into nodes, the
+     * tagged scalars are replaced, and the result is serialized back for {@link YamlConfigSource}
+     * to flatten as usual.
+     *
+     * @param file the YAML file
+     * @param ordinal the ordinal of the returned source
+     * @return the loaded source
+     * @throws IOException if the file cannot be read
+     */
+    static YamlConfigSource rawAwareYamlSource(Path file, int ordinal) throws IOException {
+        Yaml yaml = new Yaml();
+        StringWriter rewritten = new StringWriter();
+        try (Reader reader = Files.newBufferedReader(file)) {
+            for (Node document : yaml.composeAll(reader)) {
+                rewritten.write("---\n");
+                yaml.serialize(escapeRawScalars(document), rewritten);
+            }
+        }
+        return new YamlConfigSource(file.toUri().toString(), rewritten.toString(), ordinal);
+    }
+
+    /**
+     * Loads a YAML file as {@link #rawAwareYamlSource(Path, int)} does, at this source's ordinal —
+     * for callers that only read the file's properties.
+     *
+     * @param file the YAML file
+     * @return the loaded source
+     * @throws IOException if the file cannot be read
+     */
+    static YamlConfigSource rawAwareYamlSource(Path file) throws IOException {
+        return rawAwareYamlSource(file, ORDINAL);
+    }
+
+    /**
+     * Replaces each {@code !raw} scalar under {@code node} with a plain string whose every {@code
+     * $} is escaped as {@code \$}, which the one expansion in the main config turns back into the
+     * original text.
+     *
+     * @param node the node to rewrite
+     * @return the rewritten node
+     */
+    private static Node escapeRawScalars(Node node) {
+        if (node instanceof ScalarNode scalar && scalar.getTag().getValue().equals("!raw")) {
+            return new ScalarNode(
+                    Tag.STR,
+                    scalar.getValue().replace("$", "\\$"),
+                    scalar.getStartMark(),
+                    scalar.getEndMark(),
+                    scalar.getScalarStyle());
+        }
+        if (node instanceof MappingNode mapping) {
+            mapping.getValue()
+                    .replaceAll(
+                            tuple ->
+                                    new NodeTuple(
+                                            tuple.getKeyNode(),
+                                            escapeRawScalars(tuple.getValueNode())));
+        }
+        if (node instanceof SequenceNode sequence) {
+            sequence.getValue().replaceAll(MultiFileYamlConfigSource::escapeRawScalars);
+        }
+        return node;
     }
 
     @Override

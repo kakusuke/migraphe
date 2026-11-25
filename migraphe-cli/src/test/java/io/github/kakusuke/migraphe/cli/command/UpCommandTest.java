@@ -356,7 +356,7 @@ class UpCommandTest {
                 """
                 name: Seed via DO block
                 target: test-db
-                up: |
+                up: !raw |
                   CREATE TABLE do_block_target (id INT PRIMARY KEY, val VARCHAR(50));
                   DO $$
                   BEGIN
@@ -416,7 +416,7 @@ class UpCommandTest {
                 """
                 name: Create function
                 target: test-db
-                up: |
+                up: !raw |
                   CREATE FUNCTION f(a int, b int) RETURNS int AS $$
                   DECLARE
                     result int;

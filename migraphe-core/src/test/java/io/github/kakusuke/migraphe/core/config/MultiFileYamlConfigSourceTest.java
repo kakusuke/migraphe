@@ -117,10 +117,10 @@ class MultiFileYamlConfigSourceTest {
                 new MultiFileYamlConfigSource(projectConfig, List.of(), Map.of(taskId, taskConfig));
 
         // Then: task.{taskId}.* プレフィックスでロード
-        assertThat(configSource.getValue("task.\"db1/create_users\".name"))
+        assertThat(configSource.getValue("task.db1/create_users.name"))
                 .isEqualTo("Create users table");
-        assertThat(configSource.getValue("task.\"db1/create_users\".target")).isEqualTo("db1");
-        assertThat(configSource.getValue("task.\"db1/create_users\".up.sql"))
+        assertThat(configSource.getValue("task.db1/create_users.target")).isEqualTo("db1");
+        assertThat(configSource.getValue("task.db1/create_users.up.sql"))
                 .isEqualTo("CREATE TABLE users;");
     }
 
@@ -184,7 +184,7 @@ class MultiFileYamlConfigSourceTest {
                 new MultiFileYamlConfigSource(projectConfig, List.of(), Map.of(taskId, taskConfig));
 
         // Then: スラッシュを含むキーも正しくロードできる
-        assertThat(configSource.getValue("task.\"db1/subfolder/add_index\".name"))
+        assertThat(configSource.getValue("task.db1/subfolder/add_index.name"))
                 .isEqualTo("Add index");
     }
 }
